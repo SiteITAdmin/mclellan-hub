@@ -222,12 +222,14 @@
   <pre id="doc-viewer-body"></pre>
 </div>
 
+<script>
+  window.CONV_ID = '<%= convId || "" %>';
+  window.PROJECT_SLUG = '<%= activeProject?.slug || "" %>';
+</script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
 <script src="/hub-chat.js"></script>
 <script>
-  window.CONV_ID = '<%= convId || "" %>';
-  window.PROJECT_SLUG = '<%= activeProject?.slug || "" %>';
 
   // New project modal
   (function() {

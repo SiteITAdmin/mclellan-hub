@@ -679,6 +679,7 @@ async function loadDocs() {
   const countEl = document.getElementById('docs-count');
   try {
     const res = await fetch(`/api/projects/${slug}/documents`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const docs = data.documents || [];
     countEl.textContent = `(${docs.length})`;
@@ -692,7 +693,9 @@ async function loadDocs() {
     listEl.querySelectorAll('.doc-link').forEach(a => a.addEventListener('click', viewDoc));
     listEl.querySelectorAll('.doc-delete').forEach(b => b.addEventListener('click', deleteDoc));
   } catch (err) {
+    console.error('[docs] load failed:', err);
     countEl.textContent = '(error)';
+    listEl.innerHTML = '<li style="padding:8px 12px;color:var(--error);font-size:13px;">Could not load project documents.</li>';
   }
 }
 
@@ -724,6 +727,8 @@ async function deleteDoc(e) {
   const btn = document.getElementById('docs-upload-here');
   const input = document.getElementById('docs-upload-input');
   const slug = panel.dataset.slug;
+  const listEl = document.getElementById('docs-list');
+  const countEl = document.getElementById('docs-count');
   btn.addEventListener('click', () => input.click());
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
@@ -731,9 +736,18 @@ async function deleteDoc(e) {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('projectSlug', slug);
-    const res = await fetch('/api/upload', { method: 'POST', body: fd });
-    if (res.ok) loadDocs();
-    input.value = '';
+    countEl.textContent = 'uploading...';
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadDocs();
+    } catch (err) {
+      console.error('[docs] upload failed:', err);
+      countEl.textContent = '(error)';
+      listEl.innerHTML = '<li style="padding:8px 12px;color:var(--error);font-size:13px;">Could not upload document.</li>';
+    } finally {
+      input.value = '';
+    }
   });
 
   // Doc viewer close
