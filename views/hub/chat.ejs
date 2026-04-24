@@ -91,11 +91,23 @@
     <div class="project-docs-head">
       <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-3px">description</span>
       <strong>Documents</strong>
-      <span class="docs-count" id="docs-count">loading…</span>
+      <span class="docs-count" id="docs-count">(<%= (projectDocs || []).length %>)</span>
       <button type="button" class="docs-upload-btn" id="docs-upload-here">+ Upload</button>
       <input type="file" id="docs-upload-input" accept=".docx,.pdf,.txt,.md,.csv" hidden>
     </div>
-    <ul class="docs-list" id="docs-list"></ul>
+    <ul class="docs-list" id="docs-list">
+      <% if ((projectDocs || []).length === 0) { %>
+        <li style="padding:8px 12px;color:var(--text-muted);font-size:13px;">No documents yet.</li>
+      <% } else { %>
+        <% for (const d of projectDocs) { %>
+          <li class="doc-item" data-id="<%= d.id %>">
+            <a class="doc-link" href="#" data-id="<%= d.id %>" data-filename="<%= d.filename %>">📄 <%= d.filename %></a>
+            <span class="doc-size"><%= ((d.size_bytes || 0) / 1024).toFixed(1) %> KB</span>
+            <button class="doc-delete" data-id="<%= d.id %>" title="Delete">×</button>
+          </li>
+        <% } %>
+      <% } %>
+    </ul>
   </div>
   <% } %>
 
@@ -228,7 +240,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
-<script src="/hub-chat.js"></script>
+<script src="/hub-chat.js?v=20260424-project-docs"></script>
 <script>
 
   // New project modal

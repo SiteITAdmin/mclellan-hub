@@ -214,6 +214,9 @@ router.get('/p/:slug', requireAuth, (req, res) => {
   if (!project) return res.redirect('/');
 
   const fresh = req.query.new === '1';
+  const projectDocs = hub.prepare(
+    'SELECT id, filename, size_bytes, uploaded_at FROM documents WHERE project_id = ? ORDER BY uploaded_at DESC'
+  ).all(project.id);
   const messages = fresh ? [] : hub.prepare(`
     SELECT m.*, rl.rating
       FROM messages m
@@ -238,6 +241,7 @@ router.get('/p/:slug', requireAuth, (req, res) => {
     messages: fresh ? [] : messages.reverse(),
     convId: null,
     activeProject: project,
+    projectDocs,
     availableModels: listModelsForUser(req.hubUser),
   });
 });
