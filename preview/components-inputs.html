@@ -1,0 +1,45 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Manrope:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 14px 16px; background: #fff; font-family: 'Inter', sans-serif; }
+  .section-label { font-size: 9px; color: #bbb; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+  .col { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .row { display: flex; gap: 8px; align-items: stretch; }
+  .divider { height: 1px; background: #f2f2f2; margin: 4px 0 14px; }
+  /* Hub inputs — light representation */
+  .hub-textarea { width: 100%; background: #f5f5f8; border: 1px solid #e0e0e8; color: #1a1a1f; padding: 10px 14px; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 13px; resize: none; box-sizing: border-box; outline: none; }
+  .hub-input { flex: 1; background: #f5f5f8; border: 1px solid #e0e0e8; color: #1a1a1f; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-family: 'Inter', sans-serif; outline: none; min-width: 0; }
+  .hub-select { background: #f5f5f8; border: 1px solid #e0e0e8; color: #333; padding: 8px 10px; border-radius: 8px; font-size: 12px; font-family: 'Inter', sans-serif; }
+  .hub-send { background: #7c6af5; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; font-family: 'Inter', sans-serif; white-space: nowrap; }
+  /* Portfolio inputs */
+  .pf-textarea { width: 100%; padding: 10px 14px; border: 1px solid #c7c4d7; border-radius: 8px; font-family: 'Manrope', sans-serif; font-size: 13px; color: #1b1b23; background: #fff; box-sizing: border-box; outline: none; resize: none; }
+  .pf-input { flex: 1; padding: 9px 13px; border: 1px solid #c7c4d7; border-radius: 8px; font-family: 'Manrope', sans-serif; font-size: 13px; color: #1b1b23; outline: none; min-width: 0; }
+  .pf-send { background: #4648d4; color: #fff; border: none; padding: 9px 16px; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer; font-family: 'Manrope', sans-serif; white-space: nowrap; }
+</style></head><body>
+
+<div class="section-label">Hub — Chat Inputs</div>
+<div class="col">
+  <textarea class="hub-textarea" rows="2" placeholder="Message… (Shift+Enter for new line)"></textarea>
+  <div class="row">
+    <input class="hub-input" type="password" placeholder="Passphrase…">
+    <select class="hub-select">
+      <option>Claude Sonnet 4.6</option>
+      <option>DeepSeek V3</option>
+      <option>Grok Fast</option>
+    </select>
+    <button class="hub-send">Send</button>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="section-label">Portfolio — Inputs</div>
+<div class="col">
+  <textarea class="pf-textarea" rows="2" placeholder="Paste job description here…"></textarea>
+  <div class="row">
+    <input class="pf-input" placeholder="Ask about my work…">
+    <button class="pf-send">Send</button>
+  </div>
+</div>
+
+</body></html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= project.name %> memory — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1><%= project.name %> <span style="font-family:var(--mono);font-weight:400;opacity:.6;">/<%= project.slug %></span></h1>
+  <a href="/admin"><button type="button">← Back</button></a>
+</header>
+
+<section class="admin-section">
+  <h2>Documents (<%= documents.length %>)</h2>
+  <p>Uploaded files converted to markdown. Injected as context on every <code>/<%= project.slug %></code> query.</p>
+  <% if (documents.length === 0) { %>
+    <p>No documents yet. Upload from chat while viewing <code>/<%= project.slug %></code>.</p>
+  <% } else { %>
+  <table class="admin-table">
+    <thead><tr><th>Filename</th><th>Size</th><th>Uploaded</th><th></th></tr></thead>
+    <tbody>
+    <% for (const d of documents) { %>
+    <tr>
+      <td><a href="/admin/documents/<%= d.id %>" target="_blank"><%= d.filename %></a></td>
+      <td><%= (d.size_bytes / 1024).toFixed(1) %> KB</td>
+      <td><%= new Date(d.uploaded_at * 1000).toISOString().replace('T',' ').slice(0,19) %></td>
+      <td>
+        <form method="POST" action="/admin/documents/<%= d.id %>/delete" style="display:inline" onsubmit="return confirm('Delete <%= d.filename %>?')">
+          <button type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+    <% } %>
+    </tbody>
+  </table>
+  <% } %>
+</section>
+
+<section class="admin-section">
+  <h2>Memory (<%= memories.length %> messages)</h2>
+  <% if (memories.length === 0) { %>
+    <p>No memory yet. Type <code>/<%= project.slug %> your message…</code> in chat to start.</p>
+  <% } %>
+  <% for (const m of memories) { %>
+    <article style="border:1px solid var(--border,#e5e3f0);border-radius:12px;padding:12px 14px;margin:10px 0;background:var(--surface,#fff);">
+      <header style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-family:var(--mono);opacity:.7;margin-bottom:6px;">
+        <span><%= m.role %><% if (m.model) { %> · <%= m.model %><% } %></span>
+        <span><%= new Date(m.ts * 1000).toISOString().replace('T',' ').slice(0,19) %> UTC</span>
+      </header>
+      <pre style="white-space:pre-wrap;font-family:var(--font);margin:0;"><%= m.content %></pre>
+      <form method="POST" action="/admin/memories/<%= m.id %>/delete" style="margin-top:8px;" onsubmit="return confirm('Delete this memory?')">
+        <button type="submit">Delete</button>
+      </form>
+    </article>
+  <% } %>
+</section>
+
+</body>
+</html>

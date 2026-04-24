@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat logs — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+.log-controls {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  margin-bottom: 20px; font-size: 13px;
+}
+.log-controls label { color: var(--text-dim); margin-right: 4px; }
+.log-controls select, .log-controls a {
+  font-size: 13px; color: var(--text-dim); text-decoration: none;
+  padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface);
+}
+.log-controls a:hover, .log-controls a.active { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+.log-controls select { cursor: pointer; }
+.log-controls form { display: contents; }
+.divider { color: var(--border-strong); }
+
+.log-grid { display: flex; flex-direction: column; gap: 14px; }
+.log-card {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px; background: var(--surface);
+}
+.log-card.error { border-color: #e06c6c; }
+.log-meta {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-bottom: 10px; font-size: 12px; font-family: var(--mono);
+}
+.log-time { color: var(--text-dim); }
+.log-model { color: var(--accent); font-weight: 600; }
+.log-model-id { color: var(--text-muted); font-weight: 400; }
+.log-free { color: #4caf85; font-weight: 600; }
+.log-cost { color: var(--text-dim); }
+.log-duration { color: var(--text-dim); }
+.log-status-error { color: #e06c6c; font-weight: 600; }
+.log-stars { display: flex; gap: 1px; margin-left: auto; font-size: 15px; }
+.log-stars .s-filled { color: #f5a623; }
+.log-stars .s-empty  { color: var(--border-strong); }
+
+.log-qa { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 2px; }
+@media (max-width: 700px) { .log-qa { grid-template-columns: 1fr; } }
+.log-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--text-muted); font-family: var(--mono); margin-bottom: 4px; }
+.log-text { color: var(--text); font-size: 13px; line-height: 1.5;
+            white-space: pre-wrap; word-break: break-word; }
+.log-error-msg { color: #e06c6c; font-size: 13px; font-family: var(--mono); }
+.empty { color: var(--text-muted); font-size: 14px; padding: 24px 0; }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Chat logs — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+
+  <div class="log-controls">
+    <!-- Rating filter -->
+    <label>Rating</label>
+    <a href="?sort=<%= sort %>&limit=<%= limit %>" class="<%= rating === null ? 'active' : '' %>">All</a>
+    <% for (let r = 5; r >= 1; r--) { %>
+      <a href="?rating=<%= r %>&sort=<%= sort %>&limit=<%= limit %>" class="<%= rating === r ? 'active' : '' %>">
+        <%= '★'.repeat(r) %>
+      </a>
+    <% } %>
+    <a href="?rating=0&sort=<%= sort %>&limit=<%= limit %>" class="<%= rating === 0 ? 'active' : '' %>">Unrated</a>
+
+    <span class="divider">|</span>
+
+    <!-- Sort -->
+    <label>Sort</label>
+    <a href="?<%= rating !== null ? 'rating=' + rating + '&' : '' %>sort=newest&limit=<%= limit %>" class="<%= sort === 'newest' ? 'active' : '' %>">Newest</a>
+    <a href="?<%= rating !== null ? 'rating=' + rating + '&' : '' %>sort=rating_desc&limit=<%= limit %>" class="<%= sort === 'rating_desc' ? 'active' : '' %>">★ High</a>
+    <a href="?<%= rating !== null ? 'rating=' + rating + '&' : '' %>sort=rating_asc&limit=<%= limit %>"  class="<%= sort === 'rating_asc'  ? 'active' : '' %>">★ Low</a>
+
+    <span class="divider">|</span>
+
+    <!-- Limit -->
+    <label>Show</label>
+    <% for (const n of [25, 50, 100, 250]) { %>
+      <a href="?<%= rating !== null ? 'rating=' + rating + '&' : '' %>sort=<%= sort %>&limit=<%= n %>" class="<%= limit === n ? 'active' : '' %>"><%= n %></a>
+    <% } %>
+
+    <span style="margin-left:4px;color:var(--text-muted);">— <%= logs.length %> result<%= logs.length !== 1 ? 's' : '' %></span>
+  </div>
+
+  <% if (!logs.length) { %>
+    <p class="empty">No chats match this filter.</p>
+  <% } else { %>
+  <div class="log-grid">
+  <% for (const r of logs) {
+       const d = new Date(r.ts * 1000);
+       const time = d.toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+       const isFree = r.model_key === 'free';
+       const resolvedModelId = r.model_id && r.model_id !== r.model_key ? r.model_id : null;
+       const durStr = r.duration_ms == null ? '—' : r.duration_ms >= 1000 ? (r.duration_ms/1000).toFixed(1) + 's' : r.duration_ms + 'ms';
+       const q = r.question ? r.question.slice(0, 300) + (r.question.length > 300 ? '…' : '') : null;
+       const a = r.answer   ? r.answer.slice(0, 400)   + (r.answer.length   > 400 ? '…' : '') : null;
+  %>
+  <div class="log-card <%= r.status === 'error' ? 'error' : '' %>">
+    <div class="log-meta">
+      <span class="log-time"><%= time %></span>
+      <span class="log-model"><%= r.model_key %><% if (resolvedModelId) { %> <span class="log-model-id">· <%= resolvedModelId %></span><% } %></span>
+      <% if (isFree) { %>
+        <span class="log-free">Free</span>
+      <% } else if (r.cost_usd) { %>
+        <span class="log-cost">$<%= r.cost_usd.toFixed(5) %></span>
+      <% } %>
+      <span class="log-duration"><%= durStr %></span>
+      <% if (r.tokens_in || r.tokens_out) { %><span class="log-duration"><%= r.tokens_in %>↑ <%= r.tokens_out %>↓</span><% } %>
+      <% if (r.project_slug) { %><span class="log-duration">/<%= r.project_slug %></span><% } %>
+      <% if (r.status === 'error') { %><span class="log-status-error">error</span><% } %>
+      <span class="log-stars">
+        <% for (let i = 1; i <= 5; i++) { %>
+          <span class="<%= i <= (r.rating || 0) ? 's-filled' : 's-empty' %>">★</span>
+        <% } %>
+      </span>
+    </div>
+
+    <% if (r.status === 'error' && r.error_msg) { %>
+      <div class="log-error-msg"><%= r.error_msg %></div>
+    <% } else { %>
+    <div class="log-qa">
+      <div>
+        <div class="log-label">Question</div>
+        <div class="log-text"><%= q || '—' %></div>
+      </div>
+      <div>
+        <div class="log-label">Answer</div>
+        <div class="log-text"><%= a || '—' %></div>
+      </div>
+    </div>
+    <% } %>
+  </div>
+  <% } %>
+  </div>
+  <% } %>
+</section>
+</body>
+</html>

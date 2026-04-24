@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+</head>
+<body class="hub-page">
+
+<nav class="sidebar">
+  <div class="sidebar-header">
+    <span class="logo">McLellan Hub</span>
+    <span class="user-badge"><%= user %></span>
+  </div>
+
+  <div class="sidebar-section">
+    <a href="/c" class="new-chat-btn">+ New chat</a>
+  </div>
+
+  <div class="sidebar-section">
+    <h3>Projects <button type="button" class="sidebar-new-btn" id="new-project-btn" title="New project">+</button></h3>
+    <ul class="project-list">
+      <% for (const p of projects) { %>
+      <li><a href="/p/<%= p.slug %>">/<%= p.slug %></a></li>
+      <% } %>
+    </ul>
+  </div>
+
+  <div class="sidebar-section">
+    <h3>Recent</h3>
+    <ul class="conv-list">
+      <% for (const c of recentConvs) { %>
+      <li><a href="/c/<%= c.id %>"><%= c.title || 'Untitled' %></a></li>
+      <% } %>
+    </ul>
+  </div>
+
+  <div class="sidebar-footer">
+    <form method="POST" action="/logout">
+      <button type="submit" class="logout-btn">Sign out</button>
+    </form>
+  </div>
+</nav>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<main class="main-area">
+  <div class="mobile-topbar">
+    <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menu">☰</button>
+    <span class="logo">McLellan Hub</span>
+  </div>
+  <div class="hub-home">
+    <section class="welcome welcome-panel">
+      <div class="welcome-copy">
+        <span class="welcome-kicker">Project workspace</span>
+        <h2>Good to have you back, <%= user.charAt(0).toUpperCase() + user.slice(1) %>.</h2>
+        <p>Use this space like a launcher, not a blank page. Start a focused chat, add source material to a project, or jump in with <code>/slug message</code> when you already know where you want to work.</p>
+      </div>
+      <div class="welcome-stats">
+        <div class="welcome-stat">
+          <strong><%= projects.length %></strong>
+          <span>Projects ready</span>
+        </div>
+        <div class="welcome-stat">
+          <strong><%= recentConvs.length %></strong>
+          <span>Recent chats</span>
+        </div>
+        <div class="welcome-stat">
+          <strong><%= recentDocuments.length %></strong>
+          <span>Recent uploads</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-kicker">Quick start</span>
+          <h3>Chat about a project</h3>
+        </div>
+        <a href="/c" class="section-link">Open a blank conversation</a>
+      </div>
+      <div class="project-button-row">
+        <% for (const p of projects) { %>
+        <a href="/p/<%= p.slug %>?new=1" class="project-cta">
+          <span class="project-cta-label">Chat about <%= p.name %></span>
+          <span class="project-cta-meta">/<%= p.slug %> · <%= p.message_count %> messages</span>
+        </a>
+        <% } %>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-kicker">Project intake</span>
+          <h3>Add source material</h3>
+        </div>
+        <p class="section-note">Upload files to a project, convert them to markdown, and make them available in future chats.</p>
+      </div>
+      <div class="project-grid">
+        <% for (const p of projects) { %>
+        <article class="project-card">
+          <div class="project-card-head">
+            <div>
+              <span class="project-slug">/<%= p.slug %></span>
+              <h4><%= p.name %></h4>
+            </div>
+            <span class="project-doc-count"><%= p.document_count %> docs</span>
+          </div>
+          <p>Use this project as a working folder for briefs, PDFs, notes, spreadsheets, and anything you want analysed in context.</p>
+          <div class="project-card-actions">
+            <a href="/p/<%= p.slug %>?new=1" class="project-card-btn project-card-btn-primary">Open project chat</a>
+            <button type="button" class="project-card-btn project-card-btn-secondary upload-project-trigger" data-project-slug="<%= p.slug %>" data-project-name="<%= p.name %>">Add files to project</button>
+          </div>
+        </article>
+        <% } %>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-kicker">Recent material</span>
+          <h3>Latest project documents</h3>
+        </div>
+      </div>
+      <% if (recentDocuments.length === 0) { %>
+      <div class="empty-state">
+        <p>No project documents yet. Start with a CV, brief, PDF, spreadsheet, or notes file and attach it to the right project.</p>
+      </div>
+      <% } else { %>
+      <div class="recent-docs">
+        <% for (const doc of recentDocuments) { %>
+        <a href="/p/<%= doc.slug %>" class="recent-doc">
+          <div>
+            <strong><%= doc.filename %></strong>
+            <span>/<%= doc.slug %> · <%= doc.name %></span>
+          </div>
+          <em><%= (doc.size_bytes / 1024).toFixed(1) %> KB</em>
+        </a>
+        <% } %>
+      </div>
+      <% } %>
+    </section>
+  </div>
+</main>
+
+<div class="upload-modal-backdrop" id="upload-modal-backdrop"></div>
+<div class="upload-modal" id="upload-modal" role="dialog" aria-hidden="true">
+  <h3>Add source material to a project</h3>
+  <p style="color:var(--text-dim);font-size:13px;">Uploads are converted to markdown and stored with the project so they can be referenced later in chat.</p>
+  <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">Project</label>
+  <select id="upload-project-select">
+    <% for (const p of projects) { %>
+      <option value="<%= p.slug %>">/<%= p.slug %> — <%= p.name %></option>
+    <% } %>
+  </select>
+  <label style="display:block;margin-top:14px;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">File (.docx, .pdf, .txt, .md, .csv)</label>
+  <input type="file" id="upload-modal-file" accept=".docx,.pdf,.txt,.md,.csv">
+  <div id="upload-modal-status" style="font-size:13px;color:var(--text-dim);margin-top:8px;min-height:18px;"></div>
+  <div class="upload-modal-actions">
+    <button type="button" id="upload-modal-cancel">Cancel</button>
+    <button type="button" id="upload-modal-submit">Upload</button>
+  </div>
+</div>
+
+<!-- New project modal -->
+<div class="upload-modal-backdrop" id="np-backdrop"></div>
+<div class="upload-modal" id="np-modal" role="dialog" aria-hidden="true">
+  <h3>New project</h3>
+  <p style="color:var(--text-dim);font-size:13px;">Give it a name — the slug is generated automatically. You can refine settings in Admin later.</p>
+  <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">Project name</label>
+  <input type="text" id="np-name" placeholder="e.g. Client Research" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--font);background:var(--bg);color:var(--text);">
+  <div id="np-status" style="font-size:13px;color:var(--text-dim);margin-top:8px;min-height:18px;"></div>
+  <div class="upload-modal-actions">
+    <button type="button" id="np-cancel">Cancel</button>
+    <button type="button" id="np-submit">Create</button>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const btn = document.getElementById('mobile-menu-btn');
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (!btn) return;
+    function close() { sidebar.classList.remove('open'); overlay.classList.remove('active'); }
+    btn.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    });
+    overlay.addEventListener('click', close);
+  })();
+
+  (function() {
+    const openBtn = document.getElementById('new-project-btn');
+    const modal = document.getElementById('np-modal');
+    const backdrop = document.getElementById('np-backdrop');
+    const cancelBtn = document.getElementById('np-cancel');
+    const submitBtn = document.getElementById('np-submit');
+    const nameInput = document.getElementById('np-name');
+    const statusEl = document.getElementById('np-status');
+    if (!openBtn) return;
+    function open() { modal.classList.add('open'); backdrop.classList.add('active'); nameInput.value = ''; statusEl.textContent = ''; setTimeout(() => nameInput.focus(), 80); }
+    function close() { modal.classList.remove('open'); backdrop.classList.remove('active'); submitBtn.disabled = false; submitBtn.textContent = 'Create'; }
+    openBtn.addEventListener('click', open);
+    cancelBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', close);
+    nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitBtn.click(); });
+    submitBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      if (!name) { statusEl.textContent = 'Enter a project name.'; return; }
+      submitBtn.disabled = true; submitBtn.textContent = 'Creating…';
+      try {
+        const r = await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+        const d = await r.json();
+        if (!r.ok) { statusEl.textContent = '✖ ' + (d.error || 'Failed'); submitBtn.disabled = false; submitBtn.textContent = 'Create'; return; }
+        window.location.href = '/p/' + d.project.slug;
+      } catch (err) { statusEl.textContent = '✖ ' + err.message; submitBtn.disabled = false; submitBtn.textContent = 'Create'; }
+    });
+  })();
+
+  (function() {
+    const triggers = document.querySelectorAll('.upload-project-trigger');
+    const modal = document.getElementById('upload-modal');
+    const backdrop = document.getElementById('upload-modal-backdrop');
+    const cancelBtn = document.getElementById('upload-modal-cancel');
+    const submitBtn = document.getElementById('upload-modal-submit');
+    const fileInput = document.getElementById('upload-modal-file');
+    const projectSel = document.getElementById('upload-project-select');
+    const statusEl = document.getElementById('upload-modal-status');
+    if (!modal || !backdrop || !cancelBtn || !submitBtn || !fileInput || !projectSel || !statusEl) return;
+
+    function open(slug) {
+      if (slug) projectSel.value = slug;
+      modal.classList.add('open');
+      backdrop.classList.add('active');
+      statusEl.textContent = '';
+    }
+
+    function close() {
+      modal.classList.remove('open');
+      backdrop.classList.remove('active');
+      fileInput.value = '';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Upload';
+    }
+
+    triggers.forEach(trigger => {
+      trigger.addEventListener('click', () => open(trigger.dataset.projectSlug));
+    });
+
+    cancelBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', close);
+
+    submitBtn.addEventListener('click', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      const slug = projectSel.value;
+      if (!file) {
+        statusEl.textContent = 'Pick a file first.';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Uploading…';
+      statusEl.textContent = `Uploading ${file.name} to /${slug}…`;
+
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('projectSlug', slug);
+
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+          statusEl.textContent = `✖ ${data.error || 'Upload failed'}`;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Upload';
+          return;
+        }
+
+        statusEl.textContent = `✓ Saved ${data.document.filename} to /${data.document.project}`;
+        setTimeout(() => window.location.reload(), 700);
+      } catch (err) {
+        statusEl.textContent = `✖ ${err.message}`;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Upload';
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

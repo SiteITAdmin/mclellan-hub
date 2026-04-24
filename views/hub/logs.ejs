@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Request logs — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+.logs-header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid var(--border); }
+.logs-header h1 { font-size:16px; font-weight:600; margin:0; }
+.logs-header nav { display:flex; gap:16px; align-items:center; font-size:13px; }
+.logs-header nav a { color:var(--text-dim); text-decoration:none; }
+.logs-header nav a:hover { color:var(--text); }
+.logs-wrap { padding:24px; overflow-x:auto; }
+.log-table { width:100%; border-collapse:collapse; font-size:12px; font-family:var(--font-mono, monospace); }
+.log-table th { text-align:left; padding:6px 10px; border-bottom:2px solid var(--border); color:var(--text-dim); font-weight:600; white-space:nowrap; }
+.log-table td { padding:5px 10px; border-bottom:1px solid var(--border); vertical-align:top; white-space:nowrap; }
+.log-table tr:hover td { background:var(--surface-2, rgba(255,255,255,0.03)); }
+.status-ok  { color:#4caf85; }
+.status-err { color:#e06c6c; }
+.search-yes { color:#7c6af5; }
+.dim { color:var(--text-dim); }
+.conv-link { color:var(--accent, #7c6af5); text-decoration:none; }
+.conv-link:hover { text-decoration:underline; }
+.limit-bar { display:flex; gap:8px; margin-bottom:16px; align-items:center; font-size:13px; color:var(--text-dim); }
+.limit-bar a { color:var(--accent, #7c6af5); text-decoration:none; }
+.limit-bar a:hover { text-decoration:underline; }
+.limit-bar strong { color:var(--text); }
+</style>
+</head>
+<body>
+
+<header class="logs-header">
+  <h1>Request logs — <%= user %></h1>
+  <nav>
+    <a href="/api/logs?limit=<%= limit %>">JSON</a>
+    <a href="/">← Hub</a>
+  </nav>
+</header>
+
+<div class="logs-wrap">
+  <div class="limit-bar">
+    Showing last <strong><%= logs.length %></strong> requests &nbsp;·&nbsp;
+    <a href="/logs?limit=50">50</a>
+    <a href="/logs?limit=100">100</a>
+    <a href="/logs?limit=250">250</a>
+    <a href="/logs?limit=500">500</a>
+  </div>
+
+  <% if (logs.length === 0) { %>
+    <p class="dim">No requests logged yet.</p>
+  <% } else { %>
+  <table class="log-table">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Status</th>
+        <th>User</th>
+        <th>Model key</th>
+        <th>Model ID</th>
+        <th>Endpoint</th>
+        <th>Search</th>
+        <th>Ctx msgs</th>
+        <th>Msg chars</th>
+        <th>Tokens in</th>
+        <th>Tokens out</th>
+        <th>Cost $</th>
+        <th>Duration</th>
+        <th>Project</th>
+        <th>Conv</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+    <% for (const r of logs) {
+         const d = new Date(r.ts * 1000);
+         const time = d.toLocaleString('en-GB', { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+    %>
+      <tr>
+        <td class="dim"><%= time %></td>
+        <td class="status-<%= r.status === 'ok' ? 'ok' : 'err' %>"><%= r.status %></td>
+        <td><%= r.user %></td>
+        <td><strong><%= r.model_key || '—' %></strong></td>
+        <td class="dim"><%= r.model_id || '—' %></td>
+        <td class="dim"><%= r.endpoint || '—' %></td>
+        <td class="<%= r.search_used ? 'search-yes' : 'dim' %>"><%= r.search_provider || '—' %><%= r.search_used ? ' ✓' : '' %></td>
+        <td class="dim"><%= r.context_count ?? '—' %></td>
+        <td class="dim"><%= r.msg_chars ?? '—' %></td>
+        <td><%= r.tokens_in || '—' %></td>
+        <td><%= r.tokens_out || '—' %></td>
+        <td class="dim"><%= r.cost_usd ? '$' + r.cost_usd.toFixed(5) : '—' %></td>
+        <td class="dim"><%= r.duration_ms != null ? r.duration_ms + 'ms' : '—' %></td>
+        <td class="dim"><%= r.project_slug || '—' %></td>
+        <td><% if (r.conv_id) { %><a class="conv-link" href="/c/<%= r.conv_id %>"><%= r.conv_id.slice(0,8) %>…</a><% } else { %>—<% } %></td>
+        <td class="status-err" style="max-width:240px;white-space:normal"><%= r.error_msg || '' %></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+</body>
+</html>

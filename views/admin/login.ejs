@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — McLellan</title>
+<link rel="stylesheet" href="/portfolio.css">
+</head>
+<body class="login-page">
+<div class="login-box">
+  <h1>Portfolio Admin</h1>
+  <p class="sub"><%= user %></p>
+  <% if (error) { %><p class="error"><%= error %></p><% } %>
+  <a class="login-google-btn" href="/admin/auth/google">Sign in with Google Workspace</a>
+</div>
+</body>
+</html>

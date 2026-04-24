@@ -1,0 +1,39 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 16px; background: #0f0f11; font-family: 'Inter', sans-serif; }
+  .messages { display: flex; flex-direction: column; gap: 16px; }
+  .message { max-width: 500px; }
+  .message-user { align-self: flex-end; margin-left: auto; }
+  .message-user .message-content { background: #4a3fa0; color: #fff; padding: 12px 16px; border-radius: 16px 16px 4px 16px; font-size: 14px; }
+  .message-assistant .message-content { background: #1a1a1f; border: 1px solid #2e2e36; padding: 14px 18px; border-radius: 4px 16px 16px 16px; font-size: 14px; color: #e8e8ec; }
+  .message-content p { margin: 0 0 6px; }
+  .message-content p:last-child { margin: 0; }
+  .message-content pre { background: #1e1e2e; padding: 10px; border-radius: 6px; margin: 8px 0; overflow-x: auto; }
+  .message-content code { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c0c1ff; }
+  .meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .tag { font-size: 10px; padding: 2px 7px; border-radius: 100px; border: 1px solid #2e2e36; color: #888; }
+  .search-tag { color: #4caf8a; border-color: #4caf8a; }
+  .export-btn { font-size: 11px; padding: 3px 8px; border-radius: 5px; background: #242429; border: 1px solid #2e2e36; color: #e8e8ec; cursor: pointer; font-family: 'Inter', sans-serif; }
+</style></head><body>
+<div class="messages">
+  <div class="message message-user">
+    <div class="message-content">Can you summarise the key risks from this quarter's audit?</div>
+  </div>
+  <div class="message message-assistant">
+    <div class="message-content">
+      <p>Based on the Q3 audit findings, the primary risks are:</p>
+      <p>1. <strong>Liquidity concentration</strong> — 68% exposure in two counterparties</p>
+      <p>2. <strong>Regulatory reporting lag</strong> — 4 filings exceeded the 30-day window</p>
+      <pre><code>audit.getRisks({ quarter: 'Q3', severity: 'high' })</code></pre>
+    </div>
+    <div class="meta">
+      <span class="tag">claude-sonnet</span>
+      <span class="search-tag tag">search</span>
+      <span class="tag">$0.0032</span>
+      <button class="export-btn">Word</button>
+      <button class="export-btn">PDF</button>
+    </div>
+  </div>
+</div>
+</body></html>

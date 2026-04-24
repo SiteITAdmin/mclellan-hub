@@ -1,0 +1,150 @@
+/* ============================================================
+   McLellan Hub — Design Tokens
+   Two palettes: --hub-* (dark chat app) and --pf-* (portfolio light)
+   Semantic aliases exposed at :root for whichever surface you're on.
+   ============================================================ */
+
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+
+/* ── Hub dark palette ── */
+:root {
+  --hub-bg:           #0f0f11;
+  --hub-surface:      #1a1a1f;
+  --hub-surface2:     #242429;
+  --hub-border:       #2e2e36;
+  --hub-accent:       #7c6af5;
+  --hub-accent-dim:   #4a3fa0;
+  --hub-text:         #e8e8ec;
+  --hub-text-dim:     #888888;
+  --hub-error:        #e05252;
+  --hub-success:      #4caf8a;
+  --hub-user-bubble:  #4a3fa0;
+
+  /* typography */
+  --hub-font:         'Inter', system-ui, -apple-system, sans-serif;
+  --hub-mono:         'JetBrains Mono', 'Fira Code', monospace;
+  --hub-sidebar-w:    240px;
+}
+
+/* ── Portfolio v2 "Intellectual Quietude" palette ── */
+:root {
+  --pf-bg:                    #fcf8ff;
+  --pf-surface:               #ffffff;
+  --pf-surface-dim:           #dbd8e4;
+  --pf-surface-low:           #f5f2fe;
+  --pf-surface-container:     #efecf8;
+  --pf-surface-container-high:#e9e6f3;
+  --pf-surface-highest:       #e4e1ed;
+  --pf-surface-variant:       #e4e1ed;
+
+  --pf-primary:               #4648d4;
+  --pf-primary-container:     #6063ee;
+  --pf-primary-fixed:         #e1e0ff;
+  --pf-primary-fixed-dim:     #c0c1ff;
+  --pf-inverse-primary:       #c0c1ff;
+  --pf-on-primary:            #ffffff;
+  --pf-on-primary-container:  #fffbff;
+
+  --pf-secondary:             #4e45d5;
+  --pf-secondary-container:   #6860ef;
+  --pf-on-secondary:          #ffffff;
+
+  --pf-tertiary:              #904900;
+  --pf-tertiary-container:    #b55d00;
+  --pf-on-tertiary:           #ffffff;
+
+  --pf-on-surface:            #1b1b23;
+  --pf-on-surface-variant:    #464554;
+  --pf-outline:               #767586;
+  --pf-outline-variant:       #c7c4d7;
+  --pf-inverse-surface:       #303038;
+  --pf-surface-tint:          #494bd6;
+
+  --pf-error:                 #ba1a1a;
+  --pf-error-container:       #ffdad6;
+
+  /* typography */
+  --pf-font-serif:    'Noto Serif', Georgia, serif;
+  --pf-font-sans:     'Manrope', system-ui, sans-serif;
+
+  /* spacing */
+  --pf-space-base:    4px;
+  --pf-space-xs:      8px;
+  --pf-space-sm:      16px;
+  --pf-space-md:      24px;
+  --pf-space-lg:      48px;
+  --pf-space-xl:      80px;
+  --pf-space-gutter:  24px;
+  --pf-space-margin:  64px;
+
+  /* radii */
+  --pf-radius-sm:     4px;
+  --pf-radius:        8px;
+  --pf-radius-md:     12px;
+  --pf-radius-lg:     16px;
+  --pf-radius-xl:     24px;
+  --pf-radius-full:   9999px;
+}
+
+/* ── Semantic aliases: Hub surface ── */
+.surface-hub {
+  --bg:         var(--hub-bg);
+  --surface:    var(--hub-surface);
+  --surface2:   var(--hub-surface2);
+  --border:     var(--hub-border);
+  --accent:     var(--hub-accent);
+  --accent-dim: var(--hub-accent-dim);
+  --text:       var(--hub-text);
+  --text-dim:   var(--hub-text-dim);
+  --font:       var(--hub-font);
+  --mono:       var(--hub-mono);
+  background:   var(--bg);
+  color:        var(--text);
+  font-family:  var(--font);
+}
+
+/* ── Semantic aliases: Portfolio surface ── */
+.surface-portfolio {
+  --bg:               var(--pf-bg);
+  --surface:          var(--pf-surface);
+  --border:           var(--pf-outline-variant);
+  --accent:           var(--pf-primary);
+  --accent-light:     var(--pf-primary-fixed);
+  --text:             var(--pf-on-surface);
+  --text-dim:         var(--pf-on-surface-variant);
+  --font:             var(--pf-font-sans);
+  --font-display:     var(--pf-font-serif);
+  background:         var(--bg);
+  color:              var(--text);
+  font-family:        var(--font);
+}
+
+/* ── Typography: Hub ── */
+.hub-h1  { font-family: var(--hub-font); font-size: 24px; font-weight: 700; line-height: 1.3; }
+.hub-h2  { font-family: var(--hub-font); font-size: 18px; font-weight: 600; line-height: 1.4; }
+.hub-h3  { font-family: var(--hub-font); font-size: 15px; font-weight: 600; line-height: 1.5; }
+.hub-body { font-family: var(--hub-font); font-size: 15px; font-weight: 400; line-height: 1.6; }
+.hub-small { font-family: var(--hub-font); font-size: 13px; font-weight: 400; line-height: 1.5; }
+.hub-label { font-family: var(--hub-font); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.hub-mono  { font-family: var(--hub-mono); font-size: 13px; font-weight: 400; }
+
+/* ── Typography: Portfolio v2 ── */
+.pf-h1    { font-family: var(--pf-font-serif); font-size: 48px; font-weight: 400; line-height: 1.2; letter-spacing: -0.02em; }
+.pf-h2    { font-family: var(--pf-font-serif); font-size: 32px; font-weight: 400; line-height: 1.3; letter-spacing: -0.01em; }
+.pf-h3    { font-family: var(--pf-font-serif); font-size: 24px; font-weight: 500; line-height: 1.4; letter-spacing: 0; }
+.pf-body-lg  { font-family: var(--pf-font-sans); font-size: 18px; font-weight: 400; line-height: 1.6; }
+.pf-body-md  { font-family: var(--pf-font-sans); font-size: 16px; font-weight: 400; line-height: 1.5; }
+.pf-label-sm { font-family: var(--pf-font-sans); font-size: 12px; font-weight: 600; line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
+
+/* ── Utility resets ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── Material Symbols helper ── */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+}

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Models — Chat Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+  .model-row.shared { opacity: 0.65; }
+  .tier-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    background: rgba(70,72,212,0.1); color: var(--primary, #4648d4);
+  }
+  .endpoint-tag {
+    font-family: var(--mono, monospace); font-size: 11px;
+    background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px;
+  }
+  .key-set {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600;
+    background: rgba(76,175,138,0.12); color: #2e7d60;
+  }
+
+  /* ── Add / Edit model form ── */
+  .model-form {
+    display: flex; flex-direction: column; gap: 16px;
+    max-width: 560px; margin-top: 16px;
+  }
+  .form-row { display: flex; gap: 12px; }
+  .form-row .field { flex: 1; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-dim, #464554);
+  }
+  .field input, .field select {
+    padding: 9px 12px; font-size: 13px; font-family: var(--font, sans-serif);
+    border: 1px solid var(--outline, #767586); border-radius: 8px;
+    background: var(--bg, #fcf8ff); color: var(--text, #1b1b23);
+    outline: none; transition: border-color 0.15s;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--primary, #4648d4);
+    box-shadow: 0 0 0 3px rgba(70,72,212,0.12);
+  }
+  .field .hint {
+    font-size: 12px; color: var(--text-dim, #767586); margin-top: 2px;
+  }
+  .form-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .section-divider {
+    border: none; border-top: 1px solid var(--border, #c7c4d7);
+    margin: 4px 0 8px;
+  }
+  .form-section-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim, #767586);
+    margin-bottom: 4px;
+  }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Models — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/models" style="font-weight:600">Models</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+  <h2>How this works</h2>
+  <p>The chat dropdown is built from this list. Shared defaults (greyed) are available to both dchat and nchat. Models you add are visible only in <strong><%= user %></strong>'s chat.</p>
+  <p>For non-OpenRouter providers (Perplexity, Groq, OpenAI direct, Mistral, DeepSeek direct), pick <code>custom-openai</code>, set the base URL, and paste the API key directly below — no SSH needed.</p>
+</section>
+
+<section class="admin-section">
+  <h2>Current models</h2>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Label / Model ID</th><th>Key</th><th>Endpoint</th>
+        <th>Tier</th><th>Search</th><th>API key</th><th>On/off</th><th>Edit</th>
+      </tr>
+    </thead>
+    <tbody>
+    <% for (const m of models) { %>
+      <tr class="model-row <%= m.user ? 'owned' : 'shared' %>">
+        <td>
+          <strong><%= m.label %></strong>
+          <div style="font-family:var(--mono,monospace);font-size:11px;color:var(--text-dim,#767586);margin-top:2px;word-break:break-all;"><%= m.model_id %></div>
+        </td>
+        <td style="font-family:var(--mono,monospace);font-size:12px;"><%= m.key %></td>
+        <td><span class="endpoint-tag"><%= m.endpoint %></span></td>
+        <td><span class="tier-tag"><%= m.tier %></span></td>
+        <td><%= m.search %></td>
+        <td><% if (m.api_key) { %><span class="key-set">stored</span><% } else if (m.api_key_env) { %><span class="endpoint-tag"><%= m.api_key_env %></span><% } else { %>–<% } %></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <form method="POST" action="/admin/models/<%= m.key %>/toggle" style="display:inline">
+              <button type="submit"><%= m.enabled ? '✓ on' : '× off' %></button>
+            </form>
+            <% if (!m.enabled) { %>
+            <form method="POST" action="/admin/models/<%= m.key %>/delete" style="display:inline" onsubmit="return confirm('Delete model <%= m.key %>?')">
+              <button type="submit" style="background:transparent;color:#ba1a1a;border:1px solid #ffdad6;padding:5px 10px;font-size:12px;">Delete</button>
+            </form>
+            <% } %>
+          </div>
+        </td>
+        <td>
+          <details>
+            <summary>Edit</summary>
+            <form method="POST" action="/admin/models/<%= m.key %>" class="model-form">
+              <div class="form-row">
+                <div class="field">
+                  <label>Label</label>
+                  <input name="label" value="<%= m.label %>" required>
+                </div>
+                <div class="field">
+                  <label>Model ID</label>
+                  <input name="model_id" value="<%= m.model_id %>" required>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label>Tier</label>
+                  <select name="tier">
+                    <% for (const t of ['everyday','superior','coding','project','research','image']) { %>
+                      <option value="<%= t %>" <%= m.tier === t ? 'selected' : '' %>><%= t %></option>
+                    <% } %>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Search</label>
+                  <select name="search">
+                    <% for (const s of ['web-plugin','native','none']) { %>
+                      <option value="<%= s %>" <%= m.search === s ? 'selected' : '' %>><%= s %></option>
+                    <% } %>
+                  </select>
+                </div>
+              </div>
+              <hr class="section-divider">
+              <p class="form-section-label">Custom provider (leave blank for OpenRouter)</p>
+              <div class="field">
+                <label>Base URL</label>
+                <input name="base_url" value="<%= m.base_url || '' %>" placeholder="https://api.perplexity.ai">
+              </div>
+              <div class="field">
+                <label>API key</label>
+                <input type="password" name="api_key" placeholder="<%= m.api_key ? 'leave blank to keep existing' : 'paste key here' %>">
+                <span class="hint">Stored securely in the database. Leave blank to keep the existing key.</span>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label>Enabled</label>
+                  <select name="enabled">
+                    <option value="1" <%= m.enabled ? 'selected' : '' %>>Yes</option>
+                    <option value="" <%= !m.enabled ? 'selected' : '' %>>No</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit">Save</button>
+              </div>
+            </form>
+          </details>
+        </td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+</section>
+
+<section class="admin-section">
+  <h2>Add a model</h2>
+  <form method="POST" action="/admin/models" class="model-form">
+    <div class="form-row">
+      <div class="field">
+        <label>Key <span style="font-weight:400;text-transform:none">(unique, internal)</span></label>
+        <input name="key" pattern="[a-z0-9-]+" placeholder="perplexity-sonar-pro" required>
+      </div>
+      <div class="field">
+        <label>Label <span style="font-weight:400;text-transform:none">(shown in dropdown)</span></label>
+        <input name="label" placeholder="Perplexity Sonar Pro" required>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Endpoint</label>
+        <select name="endpoint" required>
+          <option value="openrouter">openrouter</option>
+          <option value="custom-openai">custom-openai (OpenAI-compatible)</option>
+          <option value="google-ai">google-ai (image)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Model ID <span style="font-weight:400;text-transform:none">(provider's identifier)</span></label>
+        <input name="model_id" placeholder="sonar-pro" required>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Tier</label>
+        <select name="tier" required>
+          <option value="everyday">everyday</option>
+          <option value="superior">superior</option>
+          <option value="coding">coding</option>
+          <option value="web-search">web-search (built-in search)</option>
+          <option value="project">project (confirms before use)</option>
+          <option value="research">research</option>
+          <option value="image">image</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Search mode</label>
+        <select name="search">
+          <option value="web-plugin">Tool — OpenRouter web search tool (recommended default)</option>
+          <option value="native">Native — model has built-in search always on</option>
+          <option value="none">None — no search</option>
+        </select>
+        <span class="hint">OpenRouter can add web search to models that do not support it natively. Use `none` for coding or image models.</span>
+      </div>
+    </div>
+    <hr class="section-divider">
+    <p class="form-section-label">Custom provider — only needed for non-OpenRouter models</p>
+    <div class="field">
+      <label>Base URL</label>
+      <input name="base_url" placeholder="https://api.perplexity.ai">
+    </div>
+    <div class="field">
+      <label>API key</label>
+      <input type="password" name="api_key" placeholder="sk-…  paste key here, stored in database">
+      <span class="hint">Stored in the database — no need to SSH to the server.</span>
+    </div>
+    <div class="form-actions">
+      <button type="submit">Add model</button>
+    </div>
+  </form>
+</section>
+
+</body>
+</html>

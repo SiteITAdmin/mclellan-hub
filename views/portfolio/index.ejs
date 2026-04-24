@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= user === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan' %></title>
+<link rel="stylesheet" href="/portfolio.css">
+</head>
+<body>
+
+<% const fullName = user === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan';
+   const firstName = user === 'douglas' ? 'Douglas' : 'Nakai';
+   const emailAddress = profile.email || (user === 'douglas' ? 'douglas@mclellan.scot' : '');
+   const phonePublic = profile.phone_public || (user === 'douglas' ? '+353 (0) 896003148' : '');
+   const phoneEncoded = phonePublic ? Buffer.from(phonePublic.split('').reverse().join('')).toString('base64') : '';
+   const roleLabel = cv.role_label || (user === 'douglas' ? 'Product & Technology Leader' : 'Senior Internal Audit Leader');
+   const heroTitle = cv.hero_title || (user === 'douglas' ? 'Product & Technology Leader.' : 'Head of Internal Audit & Regional Lead.');
+   const credentials = (cv.credentials || (user === 'nakai' ? 'FCCA CIA CAMS MSc' : '')).trim();
+   const tagline = cv.tagline || (user === 'nakai'
+     ? 'Senior executive specialising in audit, risk management, and regulatory compliance within high-growth financial technology and investment services.'
+     : 'Building products at the intersection of AI, developer tooling, and enterprise software.');
+   const visionTitle = cv.vision_title || (user === 'nakai' ? 'The Vision of Audit' : 'Product as Practice');
+   const visionBody1 = cv.vision_body1 || (user === 'nakai'
+     ? 'With over a decade of leadership in regulated financial services, I operate as a pragmatic business partner and change agent. My approach transcends traditional compliance; it is about building resilient frameworks that enable innovation.'
+     : 'I build durable products by pairing first-principles engineering with clear user intent — and I lead teams that do the same.');
+   const visionBody2 = cv.vision_body2 || (user === 'nakai'
+     ? 'Having spearheaded audit functions at global leaders like Block and Maples Group, I specialize in navigating the intricate intersections of traditional finance and the digital asset frontier.'
+     : 'Across founder, operator, and executive roles, I have shipped AI-native tools, developer platforms, and enterprise software at scale.');
+   const essayTitle = cv.essay_title || 'Governance in the Age of Agility';
+   const essayBody = cv.essay_body || 'I believe that effective audit isn\'t about finding what\'s wrong, but about verifying what\'s right — providing the confidence for businesses to take calculated risks and scale with velocity.';
+   const stat1Num = cv.stat1_num || '10+';
+   const stat1Label = cv.stat1_label || 'Years experience';
+   const stat2Num = cv.stat2_num || '3';
+   const stat2Label = cv.stat2_label || 'Global markets';
+   const strongSkills = skills.filter(s => s.level === 'strong').slice(0, 3);
+%>
+
+<!-- Nav -->
+<header class="pf-nav">
+  <div class="pf-nav-inner">
+    <a href="/" class="pf-nav-brand"><%= fullName %></a>
+    <nav class="pf-nav-links">
+      <a href="/" class="active">Portfolio</a>
+      <a href="#experience">Experience</a>
+      <a href="#capability">Capability</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <div class="pf-nav-right">
+      <button class="pf-theme-btn" id="theme-toggle" aria-label="Toggle dark mode"><span class="material-symbols-outlined" id="theme-icon">dark_mode</span></button>
+      <button class="pf-cta" id="open-chat">Ask About Me</button>
+    </div>
+  </div>
+</header>
+
+<!-- Hero -->
+<section class="hero">
+  <div>
+    <% if (credentials) { %>
+      <span class="hero-credentials"><%= credentials %></span>
+    <% } %>
+    <h1><%= heroTitle %></h1>
+    <p class="tagline"><%= tagline %></p>
+   <div class="hero-actions">
+      <a href="/executive-summary" class="btn-primary">Download Executive Summary PDF</a>
+      <a href="#contact" class="btn-ghost">Contact Douglas</a>
+    </div>
+  </div>
+  <div class="hero-portrait">
+    <% if (cv.portrait_url) { %>
+      <img src="<%= cv.portrait_url %>" alt="<%= fullName %>">
+    <% } else { %>
+      <div class="placeholder">Portrait</div>
+    <% } %>
+  </div>
+</section>
+
+<!-- Candidate Analysis -->
+<section class="candidate-analysis-band" id="candidate-analysis">
+  <div class="section candidate-analysis-shell">
+    <div class="candidate-analysis-copy">
+      <span class="eyebrow">Recruiter tool</span>
+      <h2>Candidate Analysis</h2>
+      <p>Paste a role description to compare it against Douglas&apos;s skills, experience, and operating range. The assessment is written for recruiters and hiring managers deciding whether to make contact.</p>
+      <ul class="analysis-points">
+        <li>Highlights the strongest matching strengths and relevant evidence.</li>
+        <li>Calls out gaps or weak spots without overselling.</li>
+        <li>Ends with a practical recommendation on whether Douglas is worth approaching.</li>
+      </ul>
+      <p class="analysis-note">No IP address or other identifying details are stored.</p>
+    </div>
+    <div class="candidate-analysis-tool">
+      <label for="jd-input" class="analysis-label">Role description</label>
+      <textarea id="jd-input" placeholder="Paste the job description, brief, or recruiter notes here…" rows="8"></textarea>
+      <div class="candidate-analysis-actions">
+        <button id="analyse-btn">Assess candidate fit</button>
+        <span class="analysis-helper">Built for recruiter-side screening, not candidate self-scoring.</span>
+      </div>
+      <div id="jd-result" class="jd-result" style="display:none"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Vision band -->
+<section class="vision-band">
+  <div class="vision-inner">
+    <h2 class="vision-title"><%= visionTitle %></h2>
+    <div class="vision-body">
+      <p><%= visionBody1 %></p>
+      <p><%= visionBody2 %></p>
+    </div>
+    <button class="ask-ai-btn" id="open-chat-2">
+      <span class="material-symbols-outlined">chat</span>
+      Ask About Me
+    </button>
+  </div>
+</section>
+
+<!-- Experience Matrix -->
+<section class="section" id="experience">
+  <div class="section-head">
+    <span class="eyebrow">Career Trajectory</span>
+    <h2>Experience Matrix</h2>
+  </div>
+  <div class="timeline">
+    <% experiences.forEach((exp, i) => { %>
+      <div class="timeline-item <%= i === 0 ? 'current' : '' %>">
+        <div>
+          <div class="timeline-dates">
+            <%= exp.start_date %> — <%= exp.end_date || 'Present' %>
+          </div>
+          <h3 class="timeline-role"><%= exp.role %></h3>
+          <div class="timeline-company"><%= exp.company %></div>
+        </div>
+        <div class="timeline-desc"><%= exp.description %></div>
+      </div>
+    <% }) %>
+  </div>
+</section>
+
+<!-- Capability & Innovation -->
+<section class="capability">
+  <div class="section" id="capability">
+    <div class="section-head">
+      <span class="eyebrow">Competency Map</span>
+      <h2>Capability &amp; Innovation</h2>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-eyebrow"><span class="material-symbols-outlined">check_circle</span> Strong Proficiency</div>
+        <ul class="card-skills">
+          <% if (strongSkills.length === 0) { %>
+            <li>Executive Management</li>
+            <li>Auditing</li>
+            <li>Risk Management</li>
+          <% } else { strongSkills.forEach(s => { %>
+            <li><%= s.name %></li>
+          <% }) } %>
+        </ul>
+      </div>
+      <div class="card card-filled">
+        <div class="card-eyebrow"><span class="material-symbols-outlined">insights</span> AI &amp; Analytics</div>
+        <h3 class="card-title">Data-driven Assurance</h3>
+        <p class="card-body">Implementing predictive risk models and automated control testing.</p>
+        <div class="card-chips">
+          <span class="chip">Data Analytics</span>
+          <span class="chip">AI Governance</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-eyebrow"><span class="material-symbols-outlined">build</span> Toolkit</div>
+        <h3 class="card-title">Candidate Analysis</h3>
+        <p class="card-body">Give recruiters a fast, evidence-led read on how Douglas lines up against a role and whether it is worth reaching out.</p>
+        <a href="#candidate-analysis" class="card-btn-dark">Open Tool <span class="material-symbols-outlined">arrow_outward</span></a>
+      </div>
+    </div>
+    <div class="focus-bar">
+      <div class="focus-text">
+        <span class="eyebrow">Strategic Focus 2024+</span>
+        <h3>Regulatory Change Management in Digital Assets</h3>
+      </div>
+      <div class="focus-progress">
+        Active Research Area
+        <div class="bar"><span></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Governance essay -->
+<section class="section">
+  <div class="essay">
+    <div>
+      <h2><%= essayTitle %></h2>
+      <p><%= essayBody %></p>
+      <div class="essay-stats">
+        <div>
+          <div class="stat-num"><%= stat1Num %></div>
+          <div class="stat-label"><%= stat1Label %></div>
+        </div>
+        <div>
+          <div class="stat-num"><%= stat2Num %></div>
+          <div class="stat-label"><%= stat2Label %></div>
+        </div>
+      </div>
+    </div>
+    <div class="essay-images">
+      <div class="img-tile">
+        <span class="img-tile-label">Operating style</span>
+        <strong>Security-first delivery</strong>
+        <p>Calm systems, dependable operations, and practical AI adoption without unnecessary theatre.</p>
+      </div>
+      <div class="img-tile">
+        <span class="img-tile-label">Why this matters</span>
+        <strong>Useful leadership signal</strong>
+        <p>This space now surfaces actual positioning instead of empty placeholder tiles.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="pf-footer" id="contact">
+  <div class="pf-contact">
+    <span class="copy">© 2026 <%= fullName.toUpperCase() %> · <%= roleLabel.toUpperCase() %></span>
+    <div class="pf-contact-actions">
+      <% if (emailAddress) { %>
+      <a href="mailto:<%= emailAddress %>" class="contact-chip">Email <%= emailAddress %></a>
+      <% } %>
+      <% if (phoneEncoded) { %>
+      <button type="button" class="contact-chip contact-phone-btn" id="contact-phone-btn" data-phone="<%= phoneEncoded %>">Reveal phone</button>
+      <a href="#" class="contact-chip contact-phone-link" id="contact-phone-link" hidden></a>
+      <% } else { %>
+      <span class="contact-chip contact-chip-muted">Phone available on request</span>
+      <% } %>
+    </div>
+  </div>
+  <div class="pf-footer-links">
+    <% if (cv.linkedin_url) { %>
+    <a href="<%= cv.linkedin_url %>" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+    <% } %>
+    <a href="/executive-summary">Executive Summary PDF</a>
+    <% if (emailAddress) { %>
+    <a href="mailto:<%= emailAddress %>">Email</a>
+    <% } %>
+  </div>
+</footer>
+
+<!-- Chat drawer -->
+<div class="chat-drawer" id="chat-drawer" aria-hidden="true">
+  <div class="drawer-header">
+    <span>Chat with <%= firstName %></span>
+    <select id="drawer-model" title="AI model" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.15);color:#fff;cursor:pointer;max-width:140px;">
+      <% for (const m of availableModels) { %>
+      <option value="<%= m.key %>"><%= m.label %></option>
+      <% } %>
+    </select>
+    <button class="drawer-close" id="close-chat">✕</button>
+  </div>
+  <div class="drawer-messages" id="drawer-messages"></div>
+  <div class="drawer-input">
+    <input type="text" id="drawer-input" placeholder="Ask about my work, experience, availability…">
+    <button id="drawer-send">Send</button>
+  </div>
+</div>
+<div class="drawer-overlay" id="drawer-overlay"></div>
+
+<script>
+  (function() {
+    const root = document.documentElement;
+    const saved = localStorage.getItem('pf-theme');
+    if (saved === 'dark') root.setAttribute('data-theme', 'dark');
+    const icon = document.getElementById('theme-icon');
+    function syncIcon() {
+      if (!icon) return;
+      icon.textContent = root.getAttribute('data-theme') === 'dark' ? 'light_mode' : 'dark_mode';
+    }
+    syncIcon();
+    const btn = document.getElementById('theme-toggle');
+    if (btn) btn.addEventListener('click', () => {
+      const next = root.getAttribute('data-theme') === 'dark' ? null : 'dark';
+      if (next) root.setAttribute('data-theme', next); else root.removeAttribute('data-theme');
+      localStorage.setItem('pf-theme', next || 'light');
+      syncIcon();
+    });
+  })();
+
+  (function() {
+    const btn = document.getElementById('contact-phone-btn');
+    const link = document.getElementById('contact-phone-link');
+    if (!btn || !link) return;
+    btn.addEventListener('click', () => {
+      const decoded = atob(btn.dataset.phone || '').split('').reverse().join('');
+      if (!decoded) return;
+      link.textContent = decoded;
+      link.href = `tel:${decoded.replace(/\s+/g, '')}`;
+      link.hidden = false;
+      btn.hidden = true;
+    });
+  })();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<script src="/portfolio-chat.js"></script>
+
+</body>
+</html>

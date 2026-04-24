@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Chat Admin — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+  <h2>Projects</h2>
+  <p>Projects store chat memory. When a user types <code>/slug</code> at the start or end of a message, that exchange is tagged to the project.</p>
+  <table class="admin-table">
+    <thead>
+      <tr><th>Name</th><th>Slug</th><th>Depth</th><th>Memories</th><th>Last activity</th><th>CV</th><th></th></tr>
+    </thead>
+    <tbody>
+    <% for (const p of projects) { %>
+    <tr>
+      <td><a href="/admin/projects/<%= p.slug %>"><%= p.name %></a></td>
+      <td style="font-family:var(--mono);">/<%= p.slug %></td>
+      <td><%= p.context_depth %></td>
+      <td><%= p.memory_count %></td>
+      <td><%= p.last_activity ? new Date(p.last_activity * 1000).toISOString().slice(0,16).replace('T',' ') : '–' %></td>
+      <td><%= p.is_cv_context ? '✓' : '–' %></td>
+      <td>
+        <details>
+          <summary>Edit</summary>
+          <form method="POST" action="/admin/projects/<%= p.id %>" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+            <input name="name" value="<%= p.name %>" required>
+            <input name="slug" value="<%= p.slug %>" required>
+            <input name="context_depth" type="number" value="<%= p.context_depth %>" style="width:70px">
+            <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" name="is_cv_context" value="1" <%= p.is_cv_context ? 'checked' : '' %>> CV</label>
+            <button type="submit">Save</button>
+          </form>
+          <form method="POST" action="/admin/projects/<%= p.id %>/delete" style="margin-top:6px;" onsubmit="return confirm('Delete project <%= p.slug %> and its memories?')">
+            <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" name="keep_messages" value="1"> Keep messages (untag)</label>
+            <button type="submit">Delete</button>
+          </form>
+        </details>
+      </td>
+    </tr>
+    <% } %>
+    </tbody>
+  </table>
+
+  <details class="add-form">
+    <summary>Add project</summary>
+    <form method="POST" action="/admin/projects">
+      <input name="name" placeholder="Name (e.g. Beacon)" required>
+      <input name="slug" placeholder="slug (e.g. beacon)" required pattern="[a-z0-9-]+">
+      <input name="context_depth" type="number" placeholder="Context depth" value="20">
+      <label><input type="checkbox" name="is_cv_context" value="1"> Include in CV context</label>
+      <button type="submit">Add</button>
+    </form>
+  </details>
+</section>
+
+<section class="admin-section">
+  <h2>MCP endpoints</h2>
+  <p>For a future MCP server to read this project memory. Send <code>Authorization: Bearer &lt;token&gt;</code> (set <code><%= user === 'douglas' ? 'DCHAT_MCP_TOKEN' : 'NCHAT_MCP_TOKEN' %></code> in the server <code>.env</code>).</p>
+  <ul style="font-family:var(--mono);font-size:13px;">
+    <li>GET <code>/mcp/projects</code> — list projects with memory counts</li>
+    <li>GET <code>/mcp/projects/:slug</code> — fetch memories (query: <code>?since=unix_ts&amp;limit=500</code>)</li>
+  </ul>
+</section>
+
+</body>
+</html>

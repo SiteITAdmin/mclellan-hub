@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Model settings — <%= user %></h1>
+  <a href="/">← Back to hub</a>
+</header>
+
+<section class="admin-section">
+  <h2>Models</h2>
+  <p style="color:var(--text-dim);font-size:13px;margin-bottom:20px">
+    Update OpenRouter model IDs here without redeploying. Find valid IDs at
+    <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a>.
+  </p>
+  <table class="admin-table">
+    <thead><tr><th>Key</th><th>Tier</th><th>Model ID</th><th>Enabled</th><th></th></tr></thead>
+    <tbody>
+    <% for (const m of models) { %>
+    <tr>
+      <td><code><%= m.key %></code></td>
+      <td><%= m.tier %></td>
+      <td>
+        <form method="POST" action="/settings/models/<%= m.key %>" style="display:flex;gap:8px;align-items:center">
+          <input name="model_id" value="<%= m.model_id %>" style="width:340px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-family:var(--mono);font-size:12px">
+          <input type="hidden" name="label" value="<%= m.label %>">
+          <input type="hidden" name="enabled" value="<%= m.enabled %>">
+          <button type="submit" style="background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px">Save</button>
+      </td>
+      <td><%= m.enabled ? '✓' : '–' %></td>
+      <td></form></td>
+    </tr>
+    <% } %>
+    </tbody>
+  </table>
+</section>
+
+</body>
+</html>

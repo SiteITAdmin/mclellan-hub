@@ -1,0 +1,48 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 16px; background: #fff; font-family: 'Inter', sans-serif; }
+  .section-label { font-size: 9px; color: #999; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin: 12px 0 8px; }
+  .section-label:first-child { margin-top: 0; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .chip { width: 52px; height: 52px; border-radius: 10px; }
+  .label { font-size: 9px; color: #555; text-align: center; font-weight: 600; max-width: 58px; }
+  .val { font-size: 8px; color: #aaa; font-family: monospace; }
+  /* Hero accent banner */
+  .hero { border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; background: linear-gradient(135deg, #7c6af5 0%, #4a3fa0 100%); display: flex; align-items: center; justify-content: space-between; }
+  .hero-name { color: #fff; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; }
+  .hero-hex { color: rgba(255,255,255,0.65); font-size: 11px; font-family: monospace; }
+  .hero-dots { display: flex; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+</style></head><body>
+
+<div class="hero">
+  <div>
+    <div class="hero-name">Accent Violet</div>
+    <div class="hero-hex">#7c6af5 → #4a3fa0</div>
+  </div>
+  <div class="hero-dots">
+    <div class="dot" style="background:#7c6af5;box-shadow:0 0 8px #7c6af5"></div>
+    <div class="dot" style="background:#6357d9"></div>
+    <div class="dot" style="background:#4a3fa0"></div>
+  </div>
+</div>
+
+<div class="section-label">Dark Surfaces</div>
+<div class="row">
+  <div class="swatch"><div class="chip" style="background:#0f0f11;box-shadow:0 2px 8px rgba(0,0,0,0.18)"></div><div class="label">BG</div><div class="val">#0f0f11</div></div>
+  <div class="swatch"><div class="chip" style="background:#1a1a1f;box-shadow:0 2px 6px rgba(0,0,0,0.14)"></div><div class="label">Surface</div><div class="val">#1a1a1f</div></div>
+  <div class="swatch"><div class="chip" style="background:#242429;box-shadow:0 2px 6px rgba(0,0,0,0.12)"></div><div class="label">Surface 2</div><div class="val">#242429</div></div>
+  <div class="swatch"><div class="chip" style="background:#2e2e36;box-shadow:0 2px 6px rgba(0,0,0,0.10)"></div><div class="label">Border</div><div class="val">#2e2e36</div></div>
+</div>
+
+<div class="section-label">Text</div>
+<div class="row">
+  <div class="swatch"><div class="chip" style="background:#e8e8ec;box-shadow:0 1px 4px rgba(0,0,0,0.08)"></div><div class="label">Text</div><div class="val">#e8e8ec</div></div>
+  <div class="swatch"><div class="chip" style="background:#888;box-shadow:0 1px 4px rgba(0,0,0,0.06)"></div><div class="label">Text Dim</div><div class="val">#888</div></div>
+  <div class="swatch"><div class="chip" style="background:#e05252;box-shadow:0 2px 8px rgba(224,82,82,0.3)"></div><div class="label">Error</div><div class="val">#e05252</div></div>
+  <div class="swatch"><div class="chip" style="background:#4caf8a;box-shadow:0 2px 8px rgba(76,175,138,0.3)"></div><div class="label">Success</div><div class="val">#4caf8a</div></div>
+</div>
+
+</body></html>

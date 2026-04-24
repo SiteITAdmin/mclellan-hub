@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+  .tabs { display:flex; gap:4px; flex-wrap:wrap; padding:16px 32px 0; border-bottom:1px solid var(--border); background:var(--surface); }
+  .tabs a { padding:10px 14px; border-radius:10px 10px 0 0; font-size:14px; color:var(--text-dim); font-weight:600; border:1px solid transparent; border-bottom:none; }
+  .tabs a.active { background:var(--bg); color:var(--accent); border-color:var(--border); position:relative; top:1px; }
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+  .field { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  .field label { font-size:11px; font-weight:700; letter-spacing:0.08em; color:var(--text-muted); text-transform:uppercase; }
+  .field input, .field textarea, .field select { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface2, var(--surface-low)); color:var(--text); font-family:var(--font); font-size:14px; }
+  .field input:focus, .field textarea:focus, .field select:focus { outline:2px solid var(--accent); outline-offset:1px; border-color:transparent; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  @media (max-width:700px) { .two-col, .three-col { grid-template-columns:1fr; } }
+  .slider-row { display:flex; align-items:center; gap:12px; }
+  .slider-row input[type=range] { flex:1; accent-color:var(--accent); }
+  .slider-val { font-family:var(--mono); font-weight:600; min-width:40px; text-align:center; }
+  .checkbox-row { display:flex; flex-wrap:wrap; gap:12px; }
+  .checkbox-row label { display:flex; align-items:center; gap:6px; font-size:14px; color:var(--text); font-weight:400; text-transform:none; letter-spacing:0; }
+  details.edit-row summary { cursor:pointer; color:var(--accent); font-size:13px; }
+  details.edit-row[open] > summary { margin-bottom:10px; }
+  .save-btn { background:var(--accent); color:var(--on-accent, #fff); border:none; padding:10px 20px; border-radius:8px; font-weight:600; cursor:pointer; }
+  .save-btn:hover { background:var(--accent-hover); }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Portfolio Admin — <%= user %></h1>
+  <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+</header>
+
+<nav class="tabs" id="tabs">
+  <a href="#profile">Profile</a>
+  <a href="#experience">Experience (<%= experiences.length %>)</a>
+  <a href="#skills">Skills (<%= skills.length %>)</a>
+  <a href="#skill-candidates">Detected topics (<%= skillCandidates.length %>)</a>
+  <a href="#gaps">Gaps (<%= gaps.length %>)</a>
+  <a href="#values">Values &amp; Culture</a>
+  <a href="#faq">FAQ (<%= faqs.length %>)</a>
+  <a href="#ai">AI Instructions</a>
+  <a href="#jd-submissions">Candidate Analysis (<%= jdSubmissions.length %>)</a>
+  <a href="#cv">CV copy</a>
+  <a href="#hub">Hub projects</a>
+</nav>
+
+<!-- ══════ PROFILE ══════ -->
+<section class="admin-section tab-panel" id="profile">
+  <h2>Profile</h2>
+  <form method="POST" action="/admin/profile">
+    <div class="two-col">
+      <div class="field"><label>Full name</label><input name="full_name" value="<%= profile.full_name || '' %>"></div>
+      <div class="field"><label>Email</label><input name="email" type="email" value="<%= profile.email || '' %>"></div>
+      <div class="field"><label>Current title</label><input name="current_title" value="<%= profile.current_title || '' %>"></div>
+      <div class="field"><label>Location</label><input name="location" value="<%= profile.location || '' %>"></div>
+    </div>
+    <div class="field"><label>Public phone (shown behind reveal button)</label><input name="phone_public" value="<%= profile.phone_public || '' %>"></div>
+    <div class="field"><label>Target titles (comma-separated)</label><input name="target_titles" value="<%= profile.target_titles || '' %>"></div>
+    <div class="field">
+      <label>Target company stages</label>
+      <div class="checkbox-row">
+        <% const stages = (profile.target_company_stages || '').split(',').map(s => s.trim()); %>
+        <% for (const s of ['Seed','Series A','Series B','Series C','Series D','Public']) { %>
+          <label><input type="checkbox" name="target_company_stages" value="<%= s %>" <%= stages.includes(s) ? 'checked' : '' %>> <%= s %></label>
+        <% } %>
+      </div>
+    </div>
+    <div class="field"><label>Elevator pitch (2-3 sentences)</label><textarea name="elevator_pitch" rows="3"><%= profile.elevator_pitch || '' %></textarea></div>
+    <div class="field"><label>Career narrative (your story)</label><textarea name="career_narrative" rows="6"><%= profile.career_narrative || '' %></textarea></div>
+    <div class="two-col">
+      <div class="field"><label>What you're looking for</label><textarea name="looking_for" rows="4"><%= profile.looking_for || '' %></textarea></div>
+      <div class="field"><label>What you're NOT looking for</label><textarea name="not_looking_for" rows="4"><%= profile.not_looking_for || '' %></textarea></div>
+    </div>
+    <div class="two-col">
+      <div class="field"><label>Management style (if applicable)</label><textarea name="management_style" rows="3"><%= profile.management_style || '' %></textarea></div>
+      <div class="field"><label>Work style preferences</label><textarea name="work_style" rows="3"><%= profile.work_style || '' %></textarea></div>
+    </div>
+    <div class="three-col">
+      <div class="field"><label>Salary min (€)</label><input name="salary_min" type="number" value="<%= profile.salary_min || '' %>"></div>
+      <div class="field"><label>Salary max (€)</label><input name="salary_max" type="number" value="<%= profile.salary_max || '' %>"></div>
+      <div class="field"><label>Currency</label><input name="salary_currency" value="<%= profile.salary_currency || 'EUR' %>"></div>
+    </div>
+    <div class="three-col">
+      <div class="field">
+        <label>Availability status</label>
+        <select name="availability_status">
+          <% const as = profile.availability_status || ''; %>
+          <option value="">—</option>
+          <option value="Open to opportunities" <%= as==='Open to opportunities'?'selected':'' %>>Open to opportunities</option>
+          <option value="Open to conversations" <%= as==='Open to conversations'?'selected':'' %>>Open to conversations</option>
+          <option value="Not looking" <%= as==='Not looking'?'selected':'' %>>Not looking</option>
+        </select>
+      </div>
+      <div class="field"><label>Available starting</label><input name="available_from" type="date" value="<%= profile.available_from || '' %>"></div>
+      <div class="field">
+        <label>Remote preference</label>
+        <select name="remote_preference">
+          <% const rp = profile.remote_preference || ''; %>
+          <option value="">—</option>
+          <% for (const o of ['Remote','Hybrid','On-site']) { %>
+            <option value="<%= o %>" <%= rp===o?'selected':'' %>><%= o %></option>
+          <% } %>
+        </select>
+      </div>
+    </div>
+    <!-- hidden fields preserved on profile save so Values & AI tabs share one row -->
+    <input type="hidden" name="must_haves" value="<%= profile.must_haves || '' %>">
+    <input type="hidden" name="dealbreakers" value="<%= profile.dealbreakers || '' %>">
+    <input type="hidden" name="mgmt_prefs" value="<%= profile.mgmt_prefs || '' %>">
+    <input type="hidden" name="team_size_prefs" value="<%= profile.team_size_prefs || '' %>">
+    <input type="hidden" name="conflict_handling" value="<%= profile.conflict_handling || '' %>">
+    <input type="hidden" name="ambiguity_handling" value="<%= profile.ambiguity_handling || '' %>">
+    <input type="hidden" name="failure_handling" value="<%= profile.failure_handling || '' %>">
+    <input type="hidden" name="honesty_level" value="<%= profile.honesty_level || 7 %>">
+    <button type="submit" class="save-btn">Save profile</button>
+  </form>
+</section>
+
+<!-- ══════ EXPERIENCE ══════ -->
+<section class="admin-section tab-panel" id="experience">
+  <h2>Experience</h2>
+  <table class="admin-table">
+    <thead><tr><th>Role</th><th>Company</th><th>Dates</th><th>CV</th><th></th></tr></thead>
+    <tbody>
+    <% for (const e of experiences) { %>
+    <tr>
+      <td><%= e.role %></td><td><%= e.company %></td>
+      <td><%= e.start_date %> – <%= e.end_date || 'Present' %></td>
+      <td><%= e.is_cv_context ? '✓' : '–' %></td>
+      <td>
+        <form method="POST" action="/admin/experiences/<%= e.id %>/delete" style="display:inline">
+          <button type="submit" onclick="return confirm('Delete?')">Delete</button>
+        </form>
+      </td>
+    </tr>
+    <% } %>
+    </tbody>
+  </table>
+  <details class="add-form">
+    <summary>Add experience</summary>
+    <form method="POST" action="/admin/experiences">
+      <input name="company" placeholder="Company" required>
+      <input name="role" placeholder="Role" required>
+      <input name="start_date" placeholder="Start (e.g. Jan 2020)">
+      <input name="end_date" placeholder="End (blank = Present)">
+      <textarea name="description" placeholder="Description" rows="4"></textarea>
+      <label><input type="checkbox" name="is_cv_context" value="1" checked> Include in CV context</label>
+      <input name="display_order" type="number" placeholder="Order" value="0">
+      <button type="submit">Add</button>
+    </form>
+  </details>
+</section>
+
+<!-- ══════ SKILLS ══════ -->
+<section class="admin-section tab-panel" id="skills">
+  <h2>Skills</h2>
+  <table class="admin-table">
+    <thead><tr><th>Name</th><th>Level</th><th>Rating</th><th>Years</th><th></th></tr></thead>
+    <tbody>
+    <% for (const s of skills) { %>
+    <tr>
+      <td><%= s.name %></td>
+      <td><%= s.level %></td>
+      <td><%= s.self_rating != null ? s.self_rating + '/5' : '–' %></td>
+      <td><%= s.years_experience ?? '–' %></td>
+      <td>
+        <details class="edit-row">
+          <summary>Edit</summary>
+          <form method="POST" action="/admin/skills/<%= s.id %>">
+            <div class="two-col">
+              <div class="field"><label>Name</label><input name="name" value="<%= s.name %>" required></div>
+              <div class="field"><label>Category</label><input name="category" value="<%= s.category || '' %>"></div>
+            </div>
+            <div class="two-col">
+              <div class="field">
+                <label>Level</label>
+                <select name="level">
+                  <% for (const l of ['strong','moderate','gap']) { %>
+                    <option value="<%= l %>" <%= s.level===l?'selected':'' %>><%= l %></option>
+                  <% } %>
+                </select>
+              </div>
+              <div class="field"><label>Display order</label><input name="display_order" type="number" value="<%= s.display_order || 0 %>"></div>
+            </div>
+            <div class="field">
+              <label>Self rating: <span class="slider-val" data-for="rating-<%= s.id %>"><%= s.self_rating || 3 %></span> / 5</label>
+              <div class="slider-row">
+                <input type="range" min="1" max="5" step="1" name="self_rating" id="rating-<%= s.id %>" value="<%= s.self_rating || 3 %>" oninput="this.closest('.field').querySelector('.slider-val').textContent=this.value">
+              </div>
+            </div>
+            <div class="field"><label>Evidence (projects, years, certifications)</label><textarea name="evidence" rows="2"><%= s.evidence || '' %></textarea></div>
+            <div class="field"><label>Honest notes (e.g. "haven't used this in 2 years")</label><textarea name="honest_notes" rows="2"><%= s.honest_notes || '' %></textarea></div>
+            <div class="two-col">
+              <div class="field"><label>Years of experience</label><input name="years_experience" type="number" value="<%= s.years_experience || '' %>"></div>
+              <div class="field"><label>Last used</label><input name="last_used" type="date" value="<%= s.last_used || '' %>"></div>
+            </div>
+            <button type="submit" class="save-btn">Save skill</button>
+          </form>
+          <form method="POST" action="/admin/skills/<%= s.id %>/delete" style="display:inline;margin-left:8px">
+            <button type="submit" onclick="return confirm('Delete?')">Delete</button>
+          </form>
+        </details>
+      </td>
+    </tr>
+    <% } %>
+    </tbody>
+  </table>
+  <details class="add-form">
+    <summary>Add skill</summary>
+    <form method="POST" action="/admin/skills">
+      <input name="name" placeholder="Skill name" required>
+      <select name="level" required>
+        <option value="strong">Strong</option><option value="moderate">Moderate</option><option value="gap">Gap</option>
+      </select>
+      <input name="category" placeholder="Category (optional)">
+      <input name="display_order" type="number" placeholder="Order" value="0">
+      <button type="submit">Add</button>
+    </form>
+  </details>
+</section>
+
+<!-- ══════ SKILL CANDIDATES ══════ -->
+<section class="admin-section tab-panel" id="skill-candidates">
+  <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+    <div>
+      <h2>Detected topics from CV context</h2>
+      <p>Repeated topics found in CV-tagged hub chats and documents. Promote them into the JD Analyzer, keep them for portfolio chat only, or dismiss them.</p>
+    </div>
+    <form method="POST" action="/admin/skill-candidates/rescan">
+      <button type="submit" class="save-btn">Rescan CV context</button>
+    </form>
+  </div>
+  <% if (skillCandidates.length === 0) { %>
+    <p style="color:var(--text-dim);font-size:14px;">No repeated topics detected yet.</p>
+  <% } else { %>
+    <% for (const item of skillCandidates) { %>
+      <details class="edit-row" style="margin-bottom:12px;border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface);" <%= item.status === 'pending' ? 'open' : '' %>>
+        <summary>
+          <strong><%= item.term %></strong>
+          <span style="color:var(--text-dim);margin-left:8px;"><%= item.occurrences %> mentions</span>
+          <span style="margin-left:8px;font-size:12px;color:<%= item.status === 'promoted_jd' ? 'var(--accent)' : item.status === 'chat_only' ? 'var(--success)' : item.status === 'dismissed' ? '#ba1a1a' : 'var(--text-muted)' %>;">
+            <%= item.status === 'promoted_jd' ? 'In JD Analyzer' : item.status === 'chat_only' ? 'Portfolio chat only' : item.status === 'dismissed' ? 'Dismissed' : 'Pending review' %>
+          </span>
+        </summary>
+        <div class="field" style="margin-top:12px;">
+          <label>Evidence</label>
+          <textarea rows="8" readonly><%= item.evidence || '' %></textarea>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <% if (item.status !== 'promoted_jd') { %>
+          <form method="POST" action="/admin/skill-candidates/<%= item.id %>/promote-jd" style="display:inline;">
+            <button type="submit" class="save-btn">Add to JD Analyzer</button>
+          </form>
+          <% } %>
+          <% if (item.status !== 'chat_only') { %>
+          <form method="POST" action="/admin/skill-candidates/<%= item.id %>/promote-chat" style="display:inline;">
+            <button type="submit" class="save-btn" style="background:var(--surface-container);color:var(--text);">Add to portfolio chat only</button>
+          </form>
+          <% } %>
+          <% if (item.status !== 'dismissed') { %>
+          <form method="POST" action="/admin/skill-candidates/<%= item.id %>/dismiss" style="display:inline;">
+            <button type="submit">Dismiss</button>
+          </form>
+          <% } %>
+          <% if (item.status !== 'pending') { %>
+          <form method="POST" action="/admin/skill-candidates/<%= item.id %>/reset" style="display:inline;">
+            <button type="submit">Reset to pending</button>
+          </form>
+          <% } %>
+        </div>
+      </details>
+    <% } %>
+  <% } %>
+</section>
+
+<!-- ══════ GAPS ══════ -->
+<section class="admin-section tab-panel" id="gaps">
+  <h2>Gaps</h2>
+  <p>Be honest about your gaps — this is what makes the AI valuable.</p>
+  <% for (const g of gaps) { %>
+    <details class="edit-row" style="margin-bottom:10px;border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface);">
+      <summary><strong><%= g.gap_type %></strong> — <%= g.description || '(no description)' %></summary>
+      <form method="POST" action="/admin/gaps/<%= g.id %>">
+        <div class="field">
+          <label>Gap type</label>
+          <select name="gap_type">
+            <% for (const t of ['Skill gap','Experience gap','Environment mismatch','Role type mismatch']) { %>
+              <option value="<%= t %>" <%= g.gap_type===t?'selected':'' %>><%= t %></option>
+            <% } %>
+          </select>
+        </div>
+        <div class="field"><label>Description</label><textarea name="description" rows="2"><%= g.description || '' %></textarea></div>
+        <div class="field"><label>Why it's a gap (be specific)</label><textarea name="why" rows="3"><%= g.why || '' %></textarea></div>
+        <label><input type="checkbox" name="interested_in_learning" value="1" <%= g.interested_in_learning?'checked':'' %>> Interested in learning</label>
+        <input type="hidden" name="display_order" value="<%= g.display_order || 0 %>">
+        <button type="submit" class="save-btn" style="margin-top:10px">Save</button>
+      </form>
+      <form method="POST" action="/admin/gaps/<%= g.id %>/delete" style="display:inline;margin-top:8px">
+        <button type="submit" onclick="return confirm('Delete gap?')">Delete</button>
+      </form>
+    </details>
+  <% } %>
+  <details class="add-form">
+    <summary>Add gap</summary>
+    <form method="POST" action="/admin/gaps">
+      <select name="gap_type" required>
+        <% for (const t of ['Skill gap','Experience gap','Environment mismatch','Role type mismatch']) { %>
+          <option value="<%= t %>"><%= t %></option>
+        <% } %>
+      </select>
+      <textarea name="description" placeholder="Description" rows="2"></textarea>
+      <textarea name="why" placeholder="Why it's a gap" rows="3"></textarea>
+      <label><input type="checkbox" name="interested_in_learning" value="1"> Interested in learning</label>
+      <button type="submit">Add gap</button>
+    </form>
+  </details>
+</section>
+
+<!-- ══════ VALUES & CULTURE ══════ -->
+<section class="admin-section tab-panel" id="values">
+  <h2>Values &amp; Culture</h2>
+  <form method="POST" action="/admin/profile">
+    <!-- re-emit all profile fields as hidden so we don't wipe them on save -->
+    <% const hidden = ['full_name','email','current_title','location','target_titles','target_company_stages','elevator_pitch','career_narrative','looking_for','not_looking_for','management_style','work_style','salary_min','salary_max','salary_currency','availability_status','available_from','remote_preference','phone_public','honesty_level']; %>
+    <% for (const f of hidden) { %><input type="hidden" name="<%= f %>" value="<%= profile[f] || '' %>"><% } %>
+    <div class="two-col">
+      <div class="field"><label>Must-haves in a company</label><textarea name="must_haves" rows="4"><%= profile.must_haves || '' %></textarea></div>
+      <div class="field"><label>Dealbreakers</label><textarea name="dealbreakers" rows="4"><%= profile.dealbreakers || '' %></textarea></div>
+    </div>
+    <div class="field"><label>Management style preferences (what you want from a manager)</label><textarea name="mgmt_prefs" rows="3"><%= profile.mgmt_prefs || '' %></textarea></div>
+    <div class="field"><label>Team size preferences</label><input name="team_size_prefs" value="<%= profile.team_size_prefs || '' %>"></div>
+    <div class="field"><label>How do you handle conflict?</label><textarea name="conflict_handling" rows="3"><%= profile.conflict_handling || '' %></textarea></div>
+    <div class="field"><label>How do you handle ambiguity?</label><textarea name="ambiguity_handling" rows="3"><%= profile.ambiguity_handling || '' %></textarea></div>
+    <div class="field"><label>How do you handle failure?</label><textarea name="failure_handling" rows="3"><%= profile.failure_handling || '' %></textarea></div>
+    <button type="submit" class="save-btn">Save values</button>
+  </form>
+</section>
+
+<!-- ══════ FAQ ══════ -->
+<section class="admin-section tab-panel" id="faq">
+  <h2>FAQ</h2>
+  <p>Seed common questions so the AI answers them consistently.</p>
+  <% for (const f of faqs) { %>
+    <details class="edit-row" style="margin-bottom:10px;border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface);">
+      <summary><strong><%= f.question %></strong> <% if (f.is_common) { %><span style="font-size:11px;color:var(--accent)">· common</span><% } %></summary>
+      <form method="POST" action="/admin/faqs/<%= f.id %>">
+        <div class="field"><label>Question</label><input name="question" value="<%= f.question %>" required></div>
+        <div class="field"><label>Your answer</label><textarea name="answer" rows="5"><%= f.answer || '' %></textarea></div>
+        <label><input type="checkbox" name="is_common" value="1" <%= f.is_common?'checked':'' %>> Mark as common question</label>
+        <input type="hidden" name="display_order" value="<%= f.display_order || 0 %>">
+        <button type="submit" class="save-btn" style="margin-top:10px">Save</button>
+      </form>
+      <form method="POST" action="/admin/faqs/<%= f.id %>/delete" style="display:inline;margin-top:8px">
+        <button type="submit" onclick="return confirm('Delete FAQ?')">Delete</button>
+      </form>
+    </details>
+  <% } %>
+  <details class="add-form">
+    <summary>Add FAQ</summary>
+    <form method="POST" action="/admin/faqs">
+      <input name="question" placeholder="Question" required>
+      <textarea name="answer" placeholder="Your answer" rows="4"></textarea>
+      <label><input type="checkbox" name="is_common" value="1"> Mark as common question</label>
+      <button type="submit">Add FAQ</button>
+    </form>
+  </details>
+</section>
+
+<!-- ══════ AI INSTRUCTIONS ══════ -->
+<section class="admin-section tab-panel" id="ai">
+  <h2>AI Instructions</h2>
+  <p>Tell the AI how to behave when answering on your behalf.</p>
+
+  <form method="POST" action="/admin/profile" style="margin-bottom:20px;">
+    <% const hidden2 = ['full_name','email','current_title','location','target_titles','target_company_stages','elevator_pitch','career_narrative','looking_for','not_looking_for','management_style','work_style','salary_min','salary_max','salary_currency','availability_status','available_from','remote_preference','phone_public','must_haves','dealbreakers','mgmt_prefs','team_size_prefs','conflict_handling','ambiguity_handling','failure_handling']; %>
+    <% for (const f of hidden2) { %><input type="hidden" name="<%= f %>" value="<%= profile[f] || '' %>"><% } %>
+    <div class="field">
+      <label>Honesty level: <span class="slider-val"><%= profile.honesty_level || 7 %></span> / 10</label>
+      <div class="slider-row">
+        <span style="font-size:12px;color:var(--text-dim)">Diplomatic</span>
+        <input type="range" min="1" max="10" step="1" name="honesty_level" value="<%= profile.honesty_level || 7 %>" oninput="this.closest('.field').querySelector('.slider-val').textContent=this.value">
+        <span style="font-size:12px;color:var(--text-dim)">Brutally honest</span>
+      </div>
+    </div>
+    <button type="submit" class="save-btn">Save honesty level</button>
+  </form>
+
+  <h3 style="font-size:14px;margin-bottom:10px;">Instructions</h3>
+  <% if (aiInstructions.length === 0) { %>
+    <p style="color:var(--text-dim);font-size:13px;">Examples: "Never oversell me" · "If they need X and I don't have it, say so directly" · "Use 'I'm probably not your person' when appropriate" · "Don't hedge — be direct" · "It's okay to recommend they not hire me"</p>
+  <% } %>
+  <ul style="list-style:none;padding:0;">
+    <% for (const i of aiInstructions) { %>
+      <li style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;background:var(--surface);">
+        <span style="flex:1"><%= i.text %></span>
+        <form method="POST" action="/admin/ai-instructions/<%= i.id %>/delete" style="display:inline">
+          <button type="submit" onclick="return confirm('Remove?')">×</button>
+        </form>
+      </li>
+    <% } %>
+  </ul>
+  <details class="add-form">
+    <summary>Add instruction</summary>
+    <form method="POST" action="/admin/ai-instructions">
+      <textarea name="text" placeholder="e.g. Don't hedge — be direct" rows="2" required></textarea>
+      <button type="submit">Add</button>
+    </form>
+  </details>
+</section>
+
+<!-- ══════ JD SUBMISSIONS ══════ -->
+<section class="admin-section tab-panel" id="jd-submissions">
+  <h2>Candidate Analysis submissions</h2>
+  <p>Saved role descriptions and the generated recruiter-facing assessment.</p>
+  <% if (jdSubmissions.length === 0) { %>
+    <p style="color:var(--text-dim);font-size:14px;">No submissions yet.</p>
+  <% } else { %>
+    <% for (const item of jdSubmissions) { %>
+      <details class="edit-row" style="margin-bottom:12px;border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface);">
+        <summary>
+          <strong><%= new Date(item.created_at * 1000).toISOString().replace('T',' ').slice(0,16) %></strong>
+          <span style="color:var(--text-dim);margin-left:8px;"><%= (item.job_description || '').slice(0, 90) %><%= (item.job_description || '').length > 90 ? '…' : '' %></span>
+        </summary>
+        <div class="field" style="margin-top:12px;">
+          <label>Job description</label>
+          <textarea rows="8" readonly><%= item.job_description || '' %></textarea>
+        </div>
+        <div class="field">
+          <label>AI response</label>
+          <textarea rows="12" readonly><%= item.ai_response || '' %></textarea>
+        </div>
+      </details>
+    <% } %>
+  <% } %>
+</section>
+
+<!-- ══════ CV COPY (legacy editable content) ══════ -->
+<section class="admin-section tab-panel" id="cv">
+  <h2>CV page copy</h2>
+  <p>Text shown on the public portfolio page.</p>
+  <table class="admin-table">
+    <thead><tr><th>Section</th><th>Content</th><th></th></tr></thead>
+    <tbody>
+    <% for (const row of cvRows) { %>
+    <tr>
+      <td style="font-family:var(--mono);white-space:nowrap;"><%= row.section %></td>
+      <td style="width:60%;">
+        <form method="POST" action="/admin/cv" style="display:flex;gap:8px;">
+          <input type="hidden" name="section" value="<%= row.section %>">
+          <% if ((row.content || '').length > 80) { %>
+            <textarea name="content" rows="3" style="flex:1"><%= row.content %></textarea>
+          <% } else { %>
+            <input name="content" value="<%= row.content %>" style="flex:1">
+          <% } %>
+          <button type="submit">Save</button>
+        </form>
+      </td>
+      <td>
+        <form method="POST" action="/admin/cv/<%= row.section %>/delete" style="display:inline">
+          <button type="submit" onclick="return confirm('Delete?')">Delete</button>
+        </form>
+      </td>
+    </tr>
+    <% } %>
+    </tbody>
+  </table>
+  <details class="add-form">
+    <summary>Add section</summary>
+    <form method="POST" action="/admin/cv">
+      <input name="section" placeholder="Section key (e.g. hero_title)" required>
+      <textarea name="content" placeholder="Content" rows="4"></textarea>
+      <button type="submit">Add</button>
+    </form>
+  </details>
+</section>
+
+<!-- ══════ HUB PROJECTS ══════ -->
+<section class="admin-section tab-panel" id="hub">
+  <h2>Hub projects — CV context flag</h2>
+  <p>Toggle which hub projects feed into the public AI chat context.</p>
+  <table class="admin-table">
+    <thead><tr><th>Project</th><th>Slug</th><th>CV context</th><th></th></tr></thead>
+    <tbody>
+    <% for (const p of projects) { %>
+    <tr>
+      <td><%= p.name %></td>
+      <td>/<%= p.slug %></td>
+      <td><%= p.is_cv_context ? '✓ Active' : '–' %></td>
+      <td>
+        <form method="POST" action="/admin/projects/<%= p.id %>/toggle-cv">
+          <button type="submit"><%= p.is_cv_context ? 'Remove' : 'Enable' %></button>
+        </form>
+      </td>
+    </tr>
+    <% } %>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  // Simple hash-based tabs
+  (function() {
+    const panels = document.querySelectorAll('.tab-panel');
+    const tabs = document.querySelectorAll('#tabs a');
+    function activate(id) {
+      panels.forEach(p => p.classList.toggle('active', '#' + p.id === id));
+      tabs.forEach(t => t.classList.toggle('active', t.getAttribute('href') === id));
+    }
+    tabs.forEach(t => t.addEventListener('click', e => { activate(t.getAttribute('href')); }));
+    const initial = location.hash && document.querySelector(location.hash) ? location.hash : '#profile';
+    activate(initial);
+  })();
+</script>
+</body>
+</html>

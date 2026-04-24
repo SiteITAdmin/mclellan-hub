@@ -1,0 +1,13 @@
+node_modules/
+data/
+exports/
+.env
+.env.*
+!.env.example
+config/google-service-account.json
+*.db
+*.sqlite
+.DS_Store
+.claude/
+*.zip
+Untitled.rtf
