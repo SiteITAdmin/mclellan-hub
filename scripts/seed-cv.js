@@ -4,6 +4,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const { uuid } = require('../lib/id');
+const { getAiAssistedBuildsText } = require('../lib/aiBuilds');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 
@@ -97,6 +98,7 @@ const CV = {
       portrait_url: '/img/douglas.png',
       education: 'Bachelor\'s Degree (Open), The Open University · Inverkeithing High School',
       linkedin_url: 'https://www.linkedin.com/in/douglasmclellan',
+      ai_assisted_app_builds: getAiAssistedBuildsText(),
     },
     experiences: [
       {
