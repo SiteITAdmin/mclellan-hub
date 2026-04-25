@@ -865,6 +865,30 @@ router.post('/api/crm/webhook', async (req, res) => {
   }
 });
 
+// On-demand briefing push (callable from Google Chat bot or Hermes)
+router.post('/api/crm/briefing-push', async (req, res) => {
+  const secret = process.env.HERMES_WEBHOOK_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Not configured' });
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { user } = req.body;
+  if (!user) return res.status(400).json({ error: 'user required' });
+
+  try {
+    const { sendDailyBriefing } = require('../lib/crm');
+    const db = require('../lib/db').hub();
+    // Clear today's log so it re-sends even if already sent
+    db.prepare('DELETE FROM crm_briefing_log WHERE user = ? AND date_str = ?')
+      .run(user, new Date().toLocaleDateString('en-GB'));
+    await sendDailyBriefing(user);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[crm briefing-push]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Message rating ────────────────────────────────────────────────────────────
 router.post('/api/messages/:msgId/rate', requireAuth, requireSameOrigin, (req, res) => {
   const rating = parseInt(req.body.rating);
