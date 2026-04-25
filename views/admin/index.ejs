@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin — <%= user %></title>
+<title>Admin — <%= displayUser || user %></title>
 <link rel="stylesheet" href="/portfolio.css">
 <style>
   .tabs { display:flex; gap:4px; flex-wrap:wrap; padding:16px 32px 0; border-bottom:1px solid var(--border); background:var(--surface); }
@@ -32,7 +32,7 @@
 <body class="admin-page">
 
 <header class="admin-header">
-  <h1>Portfolio Admin — <%= user %></h1>
+  <h1>Portfolio Admin — <%= displayUser || user %></h1>
   <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
 </header>
 
@@ -40,13 +40,13 @@
   <a href="#profile">Profile</a>
   <a href="#experience">Experience (<%= experiences.length %>)</a>
   <a href="#skills">Skills (<%= skills.length %>)</a>
+  <a href="#cv">CV copy</a>
   <a href="#skill-candidates">Detected topics (<%= skillCandidates.length %>)</a>
   <a href="#gaps">Gaps (<%= gaps.length %>)</a>
   <a href="#values">Values &amp; Culture</a>
   <a href="#faq">FAQ (<%= faqs.length %>)</a>
   <a href="#ai">AI Instructions</a>
   <a href="#jd-submissions">Candidate Analysis (<%= jdSubmissions.length %>)</a>
-  <a href="#cv">CV copy</a>
   <a href="#hub">Hub projects</a>
 </nav>
 
@@ -231,6 +231,46 @@
       </select>
       <input name="category" placeholder="Category (optional)">
       <input name="display_order" type="number" placeholder="Order" value="0">
+      <button type="submit">Add</button>
+    </form>
+  </details>
+</section>
+
+<!-- ══════ CV COPY (legacy editable content) ══════ -->
+<section class="admin-section tab-panel" id="cv">
+  <h2>CV page copy</h2>
+  <p>Text shown on the public portfolio page.</p>
+  <table class="admin-table">
+    <thead><tr><th>Section</th><th>Content</th><th></th></tr></thead>
+    <tbody>
+    <% for (const row of cvRows) { %>
+    <tr>
+      <td style="font-family:var(--mono);white-space:nowrap;"><%= row.section %></td>
+      <td style="width:60%;">
+        <form method="POST" action="/admin/cv" style="display:flex;gap:8px;">
+          <input type="hidden" name="section" value="<%= row.section %>">
+          <% if ((row.content || '').length > 80) { %>
+            <textarea name="content" rows="3" style="flex:1"><%= row.content %></textarea>
+          <% } else { %>
+            <input name="content" value="<%= row.content %>" style="flex:1">
+          <% } %>
+          <button type="submit">Save</button>
+        </form>
+      </td>
+      <td>
+        <form method="POST" action="/admin/cv/<%= row.section %>/delete" style="display:inline">
+          <button type="submit" onclick="return confirm('Delete?')">Delete</button>
+        </form>
+      </td>
+    </tr>
+    <% } %>
+    </tbody>
+  </table>
+  <details class="add-form">
+    <summary>Add section</summary>
+    <form method="POST" action="/admin/cv">
+      <input name="section" placeholder="Section key (e.g. hero_title)" required>
+      <textarea name="content" placeholder="Content" rows="4"></textarea>
       <button type="submit">Add</button>
     </form>
   </details>
@@ -451,46 +491,6 @@
   <% } %>
 </section>
 
-<!-- ══════ CV COPY (legacy editable content) ══════ -->
-<section class="admin-section tab-panel" id="cv">
-  <h2>CV page copy</h2>
-  <p>Text shown on the public portfolio page.</p>
-  <table class="admin-table">
-    <thead><tr><th>Section</th><th>Content</th><th></th></tr></thead>
-    <tbody>
-    <% for (const row of cvRows) { %>
-    <tr>
-      <td style="font-family:var(--mono);white-space:nowrap;"><%= row.section %></td>
-      <td style="width:60%;">
-        <form method="POST" action="/admin/cv" style="display:flex;gap:8px;">
-          <input type="hidden" name="section" value="<%= row.section %>">
-          <% if ((row.content || '').length > 80) { %>
-            <textarea name="content" rows="3" style="flex:1"><%= row.content %></textarea>
-          <% } else { %>
-            <input name="content" value="<%= row.content %>" style="flex:1">
-          <% } %>
-          <button type="submit">Save</button>
-        </form>
-      </td>
-      <td>
-        <form method="POST" action="/admin/cv/<%= row.section %>/delete" style="display:inline">
-          <button type="submit" onclick="return confirm('Delete?')">Delete</button>
-        </form>
-      </td>
-    </tr>
-    <% } %>
-    </tbody>
-  </table>
-  <details class="add-form">
-    <summary>Add section</summary>
-    <form method="POST" action="/admin/cv">
-      <input name="section" placeholder="Section key (e.g. hero_title)" required>
-      <textarea name="content" placeholder="Content" rows="4"></textarea>
-      <button type="submit">Add</button>
-    </form>
-  </details>
-</section>
-
 <!-- ══════ HUB PROJECTS ══════ -->
 <section class="admin-section tab-panel" id="hub">
   <h2>Hub projects — CV context flag</h2>
@@ -515,15 +515,35 @@
 </section>
 
 <script>
-  // Simple hash-based tabs
   (function() {
     const panels = document.querySelectorAll('.tab-panel');
     const tabs = document.querySelectorAll('#tabs a');
+
     function activate(id) {
       panels.forEach(p => p.classList.toggle('active', '#' + p.id === id));
       tabs.forEach(t => t.classList.toggle('active', t.getAttribute('href') === id));
     }
-    tabs.forEach(t => t.addEventListener('click', e => { activate(t.getAttribute('href')); }));
+
+    function currentAdminUrl() {
+      const hash = location.hash && document.querySelector(location.hash) ? location.hash : '#profile';
+      return '/admin' + hash;
+    }
+
+    document.querySelectorAll('form').forEach(form => {
+      if (form.method.toLowerCase() !== 'post') return;
+      form.addEventListener('submit', () => {
+        let input = form.querySelector('input[name="return_to"]');
+        if (!input) {
+          input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'return_to';
+          form.appendChild(input);
+        }
+        input.value = currentAdminUrl();
+      });
+    });
+
+    tabs.forEach(t => t.addEventListener('click', () => { activate(t.getAttribute('href')); }));
     const initial = location.hash && document.querySelector(location.hash) ? location.hash : '#profile';
     activate(initial);
   })();

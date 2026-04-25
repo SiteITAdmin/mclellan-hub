@@ -9,7 +9,7 @@
 <body class="login-page">
 <div class="login-box">
   <h1>Portfolio Admin</h1>
-  <p class="sub"><%= user %></p>
+  <p class="sub"><%= displayUser || user %></p>
   <% if (error) { %><p class="error"><%= error %></p><% } %>
   <a class="login-google-btn" href="/admin/auth/google">Sign in with Google Workspace</a>
 </div>
