@@ -145,6 +145,25 @@
       <td><%= e.start_date %> – <%= e.end_date || 'Present' %></td>
       <td><%= e.is_cv_context ? '✓' : '–' %></td>
       <td>
+        <details class="edit-row">
+          <summary>Edit</summary>
+          <form method="POST" action="/admin/experiences/<%= e.id %>">
+            <div class="two-col">
+              <div class="field"><label>Company</label><input name="company" value="<%= e.company || '' %>" required></div>
+              <div class="field"><label>Role</label><input name="role" value="<%= e.role || '' %>" required></div>
+            </div>
+            <div class="three-col">
+              <div class="field"><label>Start date</label><input name="start_date" value="<%= e.start_date || '' %>"></div>
+              <div class="field"><label>End date</label><input name="end_date" value="<%= e.end_date || '' %>"></div>
+              <div class="field"><label>Display order</label><input name="display_order" type="number" value="<%= e.display_order || 0 %>"></div>
+            </div>
+            <div class="field"><label>Description</label><textarea name="description" rows="5"><%= e.description || '' %></textarea></div>
+            <div class="field">
+              <label><input type="checkbox" name="is_cv_context" value="1" <%= e.is_cv_context ? 'checked' : '' %>> Include in CV context</label>
+            </div>
+            <button type="submit" class="save-btn">Save experience</button>
+          </form>
+        </details>
         <form method="POST" action="/admin/experiences/<%= e.id %>/delete" style="display:inline">
           <button type="submit" onclick="return confirm('Delete?')">Delete</button>
         </form>
