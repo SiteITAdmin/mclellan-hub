@@ -22,8 +22,15 @@ const publicAiLimiter = createRateLimiter({
   keyPrefix: 'portfolio-ai',
   message: 'Too many AI requests from this connection, please try again shortly.',
 });
+const contactLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyPrefix: 'portfolio-contact',
+  message: 'Too many contact attempts from this connection, please try again later.',
+});
 const PORTFOLIO_CHAT_GUARD = buildPromptInjectionGuard('the public portfolio chat');
 const JD_ANALYSER_GUARD = buildPromptInjectionGuard('the public recruiter-facing job description analyser');
+let nodemailer;
 
 function shouldShowAiBuilds(user) {
   return user === 'douglas';
@@ -218,6 +225,26 @@ function getPublicPhone(user, profile) {
   return profile.phone_public || (user === 'douglas' ? '+353 (0) 896003148' : '');
 }
 
+function cleanContactField(value, maxLength) {
+  return String(value || '').trim().slice(0, maxLength);
+}
+
+function getGmailTransport() {
+  const user = process.env.GMAIL_SMTP_USER;
+  const pass = process.env.GMAIL_SMTP_APP_PASSWORD;
+  if (!user || !pass) return null;
+  try {
+    if (!nodemailer) nodemailer = require('nodemailer');
+  } catch (err) {
+    console.error('[nakai-contact] nodemailer is not installed', err);
+    return null;
+  }
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user, pass },
+  });
+}
+
 // ── Public portfolio ──────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
   const pdb = db.portfolio(req.portfolioUser);
@@ -245,6 +272,70 @@ router.get('/', (req, res) => {
     aiBuildProjects: shouldShowAiBuilds(req.portfolioUser) ? AI_ASSISTED_APP_BUILDS_PROJECTS : [],
     availableModels: getChatModels(req.portfolioUser),
   });
+});
+
+router.post('/contact', requireSameOrigin, contactLimiter, async (req, res) => {
+  if (req.portfolioUser !== 'nakai') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const honeypot = cleanContactField(req.body.website, 200);
+  if (honeypot) {
+    return res.json({ ok: true, message: 'Thanks, your message has been sent.' });
+  }
+
+  const name = cleanContactField(req.body.name, 120);
+  const email = cleanContactField(req.body.email, 180);
+  const phone = cleanContactField(req.body.phone, 80);
+  const message = cleanContactField(req.body.message, 2000);
+
+  if (!name || !message) {
+    return res.status(400).json({ error: 'Please include your name and a short message.' });
+  }
+  if (!email && !phone) {
+    return res.status(400).json({ error: 'Please include either an email address or phone number.' });
+  }
+
+  const profile = db.portfolio(req.portfolioUser).prepare('SELECT email FROM profile WHERE id = 1').get() || {};
+  const recipient = cleanContactField(profile.email, 180);
+  if (!recipient) {
+    return res.status(503).json({ error: 'Nakai contact email is not configured yet.' });
+  }
+
+  const transport = getGmailTransport();
+  if (!transport) {
+    return res.status(503).json({ error: 'Contact email service is not configured yet.' });
+  }
+
+  const smtpUser = process.env.GMAIL_SMTP_USER;
+  const fromName = cleanContactField(process.env.CONTACT_FROM_NAME || 'Nakai portfolio', 120);
+  const timestamp = new Date().toISOString();
+  const text = [
+    'CONTACT FORM COMPLETED',
+    '',
+    `Name: ${name}`,
+    `Email: ${email || '(not provided)'}`,
+    `Phone: ${phone || '(not provided)'}`,
+    `Source: ${req.hostname}`,
+    `Timestamp: ${timestamp}`,
+    '',
+    'Message:',
+    message,
+  ].join('\n');
+
+  try {
+    await transport.sendMail({
+      to: recipient,
+      from: `"${fromName.replace(/"/g, "'")}" <${smtpUser}>`,
+      replyTo: email || undefined,
+      subject: 'CONTACT FORM COMPLETED',
+      text,
+    });
+    return res.json({ ok: true, message: 'Thanks, your message has been sent.' });
+  } catch (err) {
+    console.error('[nakai-contact]', err);
+    return res.status(502).json({ error: 'Could not send the message just now. Please try LinkedIn instead.' });
+  }
 });
 
 router.get('/executive-summary', (req, res) => {
