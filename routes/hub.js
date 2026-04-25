@@ -853,8 +853,21 @@ router.post('/api/crm/webhook', async (req, res) => {
   const auth = req.headers.authorization || '';
   if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { text, user, source = 'hermes' } = req.body;
+  const { text, user, source = 'hermes', dedup_key } = req.body;
   if (!text || !user) return res.status(400).json({ error: 'text and user required' });
+
+  // Dedup: reject retries from the same message ID within 5 minutes
+  if (dedup_key) {
+    const hub = db.hub();
+    const dedupCtxKey = `_dedup_${dedup_key.replace(/[^a-z0-9_/-]/gi, '_')}`;
+    const existing = hub.prepare('SELECT value FROM crm_context WHERE user = ? AND key = ?').get(user, dedupCtxKey);
+    if (existing && (Date.now() - parseInt(existing.value)) < 5 * 60 * 1000) {
+      return res.json({ ok: true, message: 'Duplicate ignored' });
+    }
+    hub.prepare(`INSERT INTO crm_context (id, user, key, value) VALUES (?, ?, ?, ?)
+      ON CONFLICT(user, key) DO UPDATE SET value = excluded.value`)
+      .run(uuid(), user, dedupCtxKey, Date.now().toString());
+  }
 
   try {
     const result = await processCrmCommand(user, text, source);
