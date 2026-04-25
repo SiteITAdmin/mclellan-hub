@@ -97,7 +97,18 @@
           <option value="Not looking" <%= as==='Not looking'?'selected':'' %>>Not looking</option>
         </select>
       </div>
-      <div class="field"><label>Available starting</label><input name="available_from" type="date" value="<%= profile.available_from || '' %>"></div>
+      <div class="field">
+        <label>Notice period</label>
+        <select name="available_from">
+          <% const np = profile.available_from || ''; %>
+          <option value="">—</option>
+          <% if (np && !['1 month notice','3 months notice'].includes(np)) { %>
+            <option value="<%= np %>" selected><%= np %></option>
+          <% } %>
+          <option value="1 month notice" <%= np==='1 month notice'?'selected':'' %>>1 month notice</option>
+          <option value="3 months notice" <%= np==='3 months notice'?'selected':'' %>>3 months notice</option>
+        </select>
+      </div>
       <div class="field">
         <label>Remote preference</label>
         <select name="remote_preference">

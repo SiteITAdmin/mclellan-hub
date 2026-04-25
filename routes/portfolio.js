@@ -5,6 +5,11 @@ const { routeMessage } = require('../lib/router');
 const { uuid } = require('../lib/id');
 const PDFDocument = require('pdfkit');
 const {
+  AI_ASSISTED_APP_BUILDS_INTRO,
+  AI_ASSISTED_APP_BUILDS_PROJECTS,
+  getAiAssistedBuildsText,
+} = require('../lib/aiBuilds');
+const {
   buildPromptInjectionGuard,
   createRateLimiter,
   requireSameOrigin,
@@ -19,6 +24,23 @@ const publicAiLimiter = createRateLimiter({
 });
 const PORTFOLIO_CHAT_GUARD = buildPromptInjectionGuard('the public portfolio chat');
 const JD_ANALYSER_GUARD = buildPromptInjectionGuard('the public recruiter-facing job description analyser');
+
+function shouldShowAiBuilds(user) {
+  return user === 'douglas';
+}
+
+function ensureAiBuildsCv(cv, user) {
+  if (shouldShowAiBuilds(user) && !cv.ai_assisted_app_builds) {
+    cv.ai_assisted_app_builds = getAiAssistedBuildsText();
+  }
+  return cv;
+}
+
+function getAiBuildsCvBlock(cvRows, user) {
+  if (!shouldShowAiBuilds(user)) return '';
+  const hasDbRow = cvRows.some((row) => row.section === 'ai_assisted_app_builds' && row.content);
+  return hasDbRow ? '' : getAiAssistedBuildsText();
+}
 
 // ── Pull chat-capable models from hub DB ─────────────────────────────────────
 function getChatModels(user) {
@@ -47,6 +69,9 @@ function getExecutiveSummaryText({ user, profile, cv, experiences }) {
   const topExperience = experiences.slice(0, 5).map(exp =>
     `- ${exp.role}, ${exp.company} (${exp.start_date || '?'} – ${exp.end_date || 'Present'})${exp.description ? ': ' + exp.description : ''}`
   ).join('\n');
+  const aiBuilds = shouldShowAiBuilds(user)
+    ? AI_ASSISTED_APP_BUILDS_PROJECTS.map(project => `- ${project.name}: ${project.summary}`).join('\n')
+    : '';
 
   return [
     `# ${fullName}`,
@@ -63,6 +88,8 @@ function getExecutiveSummaryText({ user, profile, cv, experiences }) {
     '',
     '## Selected Experience',
     topExperience || '- Experience available on request.',
+    aiBuilds ? '\n## AI-Assisted App Builds' : null,
+    aiBuilds || null,
   ].filter(Boolean).join('\n');
 }
 
@@ -141,6 +168,23 @@ async function buildExecutiveSummaryPdf({ user, profile, cv, experiences }) {
       if (idx < highlights.length - 1) doc.moveDown(0.8);
     });
 
+    if (shouldShowAiBuilds(user)) {
+      doc.moveDown(1);
+      drawRule();
+      doc.fillColor('#4648d4').font('Helvetica-Bold').fontSize(11).text('AI-ASSISTED APP BUILDS');
+      doc.moveDown(0.45);
+      AI_ASSISTED_APP_BUILDS_PROJECTS.forEach((project, idx) => {
+        doc.fillColor('#1b1b23').font('Helvetica-Bold').fontSize(10.5).text(project.name);
+        doc.moveDown(0.12);
+        doc.fillColor('#1b1b23').font('Helvetica').fontSize(9.5)
+          .text(project.summary, { lineGap: 2 });
+        doc.moveDown(0.12);
+        doc.fillColor('#5f5b74').font('Helvetica').fontSize(8.5)
+          .text(project.stack, { lineGap: 1 });
+        if (idx < AI_ASSISTED_APP_BUILDS_PROJECTS.length - 1) doc.moveDown(0.55);
+      });
+    }
+
     doc.moveDown(0.9);
     drawRule();
     doc.fillColor('#5f5b74').font('Helvetica').fontSize(9)
@@ -187,9 +231,9 @@ router.get('/', (req, res) => {
   const skills = pdb.prepare(
     'SELECT * FROM skills ORDER BY level, display_order'
   ).all();
-  const cv = pdb.prepare(
+  const cv = ensureAiBuildsCv(pdb.prepare(
     'SELECT * FROM cv_context'
-  ).all().reduce((acc, row) => { acc[row.section] = row.content; return acc; }, {});
+  ).all().reduce((acc, row) => { acc[row.section] = row.content; return acc; }, {}), req.portfolioUser);
 
   res.render('portfolio/index', {
     user: req.portfolioUser,
@@ -197,6 +241,8 @@ router.get('/', (req, res) => {
     experiences,
     skills,
     cv,
+    aiBuildsIntro: shouldShowAiBuilds(req.portfolioUser) ? AI_ASSISTED_APP_BUILDS_INTRO : '',
+    aiBuildProjects: shouldShowAiBuilds(req.portfolioUser) ? AI_ASSISTED_APP_BUILDS_PROJECTS : [],
     availableModels: getChatModels(req.portfolioUser),
   });
 });
@@ -210,8 +256,8 @@ router.get('/executive-summary', (req, res) => {
   const experiences = pdb.prepare(
     'SELECT role, company, start_date, end_date, description FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC'
   ).all();
-  const cv = pdb.prepare('SELECT * FROM cv_context').all()
-    .reduce((acc, row) => { acc[row.section] = row.content; return acc; }, {});
+  const cv = ensureAiBuildsCv(pdb.prepare('SELECT * FROM cv_context').all()
+    .reduce((acc, row) => { acc[row.section] = row.content; return acc; }, {}), req.portfolioUser);
 
   const fullName = profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
   const filename = `${fullName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-executive-summary.pdf`;
@@ -286,7 +332,7 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
 - Management style: ${profile.management_style || ''}
 - Work style: ${profile.work_style || ''}
 - Salary expectation: ${profile.salary_min || '?'}–${profile.salary_max || '?'} ${profile.salary_currency || 'EUR'}
-- Availability: ${profile.availability_status || ''}${profile.available_from ? ' (from ' + profile.available_from + ')' : ''}
+- Availability: ${profile.availability_status || ''}${profile.available_from ? ' (notice period: ' + profile.available_from + ')' : ''}
 - Remote preference: ${profile.remote_preference || ''}` : '';
 
   const valuesBlock = (profile.must_haves || profile.dealbreakers || profile.mgmt_prefs) ? `## Values & Culture
@@ -301,6 +347,7 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
   const cvContext = [
     profileBlock,
     cvRows.length ? '## CV copy\n' + cvRows.map(r => `**${r.section}:** ${r.content}`).join('\n') : '',
+    getAiBuildsCvBlock(cvRows, req.portfolioUser),
     expRows.length ? '## Experience\n' + expRows.map(e => `- **${e.role}**, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n') : '',
     skillRows.length ? '## Skills\n' + skillRows.map(s => {
       const bits = [`${s.name} (${s.level}`];
@@ -410,6 +457,7 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
   ).all();
   const cvContext = [
     cvRows.map(r => `**${r.section}:** ${r.content}`).join('\n'),
+    getAiBuildsCvBlock(cvRows, req.portfolioUser),
     'Experience:\n' + expRows.map(e => `- ${e.role}, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n'),
     'Skills:\n' + skillRows.map(s => `- ${s.name} (${s.level})`).join('\n'),
   ].filter(Boolean).join('\n\n');

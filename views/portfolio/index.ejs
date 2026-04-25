@@ -33,6 +33,9 @@
    const stat2Num = cv.stat2_num || '3';
    const stat2Label = cv.stat2_label || 'Global markets';
    const strongSkills = skills.filter(s => s.level === 'strong').slice(0, 3);
+   const availabilityStatus = (profile.availability_status || '').trim();
+   const noticePeriod = (profile.available_from || '').trim();
+   const remotePreference = (profile.remote_preference || '').trim();
 %>
 
 <!-- Nav -->
@@ -42,6 +45,9 @@
     <nav class="pf-nav-links">
       <a href="/" class="active">Portfolio</a>
       <a href="#experience">Experience</a>
+      <% if (aiBuildProjects && aiBuildProjects.length) { %>
+      <a href="#ai-builds">AI Builds</a>
+      <% } %>
       <a href="#capability">Capability</a>
       <a href="#contact">Contact</a>
     </nav>
@@ -65,11 +71,26 @@
       <a href="#contact" class="btn-ghost">Contact Douglas</a>
     </div>
   </div>
-  <div class="hero-portrait">
-    <% if (cv.portrait_url) { %>
-      <img src="<%= cv.portrait_url %>" alt="<%= fullName %>">
-    <% } else { %>
-      <div class="placeholder">Portrait</div>
+  <div class="hero-media">
+    <div class="hero-portrait">
+      <% if (cv.portrait_url) { %>
+        <img src="<%= cv.portrait_url %>" alt="<%= fullName %>">
+      <% } else { %>
+        <div class="placeholder">Portrait</div>
+      <% } %>
+    </div>
+    <% if (availabilityStatus || noticePeriod || remotePreference) { %>
+      <div class="hero-profile-details" aria-label="Profile details">
+        <% if (availabilityStatus) { %>
+          <div><span>Availability</span><strong><%= availabilityStatus %></strong></div>
+        <% } %>
+        <% if (noticePeriod) { %>
+          <div><span>Notice period</span><strong><%= noticePeriod %></strong></div>
+        <% } %>
+        <% if (remotePreference) { %>
+          <div><span>Work pattern</span><strong><%= remotePreference %></strong></div>
+        <% } %>
+      </div>
     <% } %>
   </div>
 </section>
@@ -114,6 +135,38 @@
     </button>
   </div>
 </section>
+
+<% if (aiBuildProjects && aiBuildProjects.length) { %>
+<!-- AI-assisted app builds -->
+<section class="ai-builds-band" id="ai-builds">
+  <div class="section">
+    <div class="section-head">
+      <span class="eyebrow">Selected Projects</span>
+      <h2>AI-Assisted App Builds</h2>
+      <p class="section-lede"><%= aiBuildsIntro %></p>
+    </div>
+    <div class="ai-builds-grid">
+      <% aiBuildProjects.forEach((project) => { %>
+        <article class="ai-build-card">
+          <div class="ai-build-card-head">
+            <h3><%= project.name %></h3>
+            <a href="<%= project.url %>" target="_blank" rel="noopener noreferrer" aria-label="Open <%= project.name %> on GitHub">
+              <span class="material-symbols-outlined">arrow_outward</span>
+            </a>
+          </div>
+          <p class="ai-build-summary"><%= project.summary %></p>
+          <div class="ai-build-stack"><%= project.stack %></div>
+          <ul class="ai-build-points">
+            <% project.bullets.slice(0, 3).forEach((bullet) => { %>
+              <li><%= bullet %></li>
+            <% }) %>
+          </ul>
+        </article>
+      <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
 
 <!-- Experience Matrix -->
 <section class="section" id="experience">

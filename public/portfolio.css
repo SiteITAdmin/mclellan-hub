@@ -153,6 +153,11 @@ a { color: inherit; text-decoration: none; }
 }
 .btn-ghost:hover { background: var(--surface); border-color: var(--text-muted); }
 
+.hero-media {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
 .hero-portrait {
   position: relative; width: 100%; aspect-ratio: 4/5;
 }
@@ -170,6 +175,40 @@ a { color: inherit; text-decoration: none; }
   display: flex; align-items: center; justify-content: center;
   color: var(--text-muted); font-size: 13px; letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+.hero-profile-details {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.hero-profile-details div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.hero-profile-details div:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.hero-profile-details span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.hero-profile-details strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: right;
 }
 
 /* ── Candidate analysis band ── */
@@ -296,6 +335,102 @@ a { color: inherit; text-decoration: none; }
   font-family: var(--font-serif);
   font-size: 34px; font-weight: 400; line-height: 1.2;
   letter-spacing: -0.01em; color: var(--text); margin-top: 6px;
+}
+.section-lede {
+  max-width: 880px;
+  margin-top: 16px;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* ── AI-assisted builds ── */
+.ai-builds-band {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.ai-builds-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.ai-build-card {
+  background: var(--surface-low);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 420px;
+}
+.ai-build-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ai-build-card h3 {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text);
+}
+.ai-build-card-head a {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.ai-build-card-head a:hover {
+  background: var(--accent-light);
+}
+.ai-build-card-head .material-symbols-outlined {
+  font-size: 18px;
+}
+.ai-build-summary {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.ai-build-stack {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.ai-build-points {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+}
+.ai-build-points li {
+  list-style: none;
+  position: relative;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ai-build-points li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* ── Experience Matrix ── */
@@ -772,6 +907,8 @@ a { color: inherit; text-decoration: none; }
   .vision-title { padding-left: 16px; font-size: 22px; }
   .ask-ai-btn { width: 72px; height: 72px; align-self: flex-start; }
   .timeline-item { grid-template-columns: 1fr; gap: 10px; }
+  .ai-builds-grid { grid-template-columns: 1fr; }
+  .ai-build-card { min-height: auto; }
   .cards { grid-template-columns: 1fr; }
   .essay { grid-template-columns: 1fr; gap: 32px; }
   .essay-images .img-tile:nth-child(2) { margin-top: 0; }
