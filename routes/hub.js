@@ -912,6 +912,16 @@ router.get('/crm', requireAuth, (req, res) => {
   res.render('hub/crm', { user: req.hubUser, projects, recentConvs, context, contacts });
 });
 
+// Delete a contact and all their facts
+router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!contact) return res.status(404).json({ ok: false, message: 'Not found' });
+  hub.prepare('DELETE FROM crm_facts WHERE contact_id = ?').run(req.params.id);
+  hub.prepare('DELETE FROM contacts WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 // Delete a CRM fact
 router.post('/api/crm/facts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
