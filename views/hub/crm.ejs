@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+.crm-wrap { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+.crm-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+.crm-header h1 { font-size: 20px; font-weight: 600; margin: 0; }
+.crm-header nav { display: flex; gap: 16px; font-size: 13px; }
+.crm-header nav a { color: var(--text-dim); text-decoration: none; }
+.crm-header nav a:hover { color: var(--text); }
+
+.crm-context-bar { background: var(--surface-2, rgba(255,255,255,0.04)); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 28px; font-size: 13px; }
+.crm-context-bar h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin: 0 0 8px; }
+.context-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.context-pill { background: var(--surface-3, rgba(255,255,255,0.07)); border-radius: 20px; padding: 3px 10px; font-size: 12px; color: var(--text-dim); }
+.context-pill strong { color: var(--text); }
+
+.add-note-bar { display: flex; gap: 8px; margin-bottom: 32px; }
+.add-note-bar input { flex: 1; background: var(--surface-2, rgba(255,255,255,0.04)); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 14px; color: var(--text); }
+.add-note-bar input:focus { outline: none; border-color: var(--accent, #7c6af5); }
+.add-note-bar button { background: var(--accent, #7c6af5); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.add-note-bar button:hover { opacity: .85; }
+
+.contact-grid { display: grid; gap: 16px; }
+.contact-card { background: var(--surface-2, rgba(255,255,255,0.04)); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; }
+.contact-card.has-meeting { border-color: var(--accent, #7c6af5); }
+.contact-name { font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.contact-name .meeting-badge { font-size: 11px; font-weight: 500; background: var(--accent, #7c6af5); color: #fff; border-radius: 20px; padding: 2px 8px; }
+.fact-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.fact-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
+.fact-tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; border-radius: 4px; padding: 2px 6px; white-space: nowrap; margin-top: 1px; }
+.tag-active   { background: rgba(76,175,133,.15); color: #4caf85; }
+.tag-followup { background: rgba(124,106,245,.15); color: var(--accent, #7c6af5); }
+.tag-done     { background: rgba(255,255,255,.06); color: var(--text-dim); }
+.tag-closed   { background: rgba(255,255,255,.04); color: var(--text-dim); opacity: .5; }
+.fact-text { flex: 1; line-height: 1.4; }
+.fact-text.done-text { text-decoration: line-through; color: var(--text-dim); }
+.fact-source { font-size: 11px; color: var(--text-dim); margin-left: auto; white-space: nowrap; padding-top: 2px; }
+.fact-date { font-size: 11px; color: var(--text-dim); white-space: nowrap; padding-top: 2px; }
+
+.show-history { background: none; border: none; color: var(--text-dim); font-size: 12px; cursor: pointer; padding: 4px 0; margin-top: 6px; }
+.show-history:hover { color: var(--text); }
+.history-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+.empty-state { text-align: center; padding: 60px 24px; color: var(--text-dim); }
+.empty-state p { margin: 0 0 8px; }
+.empty-state code { font-size: 13px; color: var(--text); }
+
+.crm-add-bar { display: flex; gap: 8px; margin-bottom: 32px; }
+.crm-add-bar input { flex: 1; background: var(--surface-2, rgba(255,255,255,.04)); border: 1px solid var(--border); border-radius: 6px; padding: 9px 14px; font-size: 14px; color: var(--text); font-family: inherit; }
+.crm-add-bar input::placeholder { color: var(--text-dim); }
+.crm-add-bar input:focus { outline: none; border-color: var(--accent, #7c6af5); }
+.crm-add-bar button { background: var(--accent, #7c6af5); color: #fff; border: none; border-radius: 6px; padding: 9px 18px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.crm-add-bar button:hover { opacity: .85; }
+.crm-add-bar button:disabled { opacity: .5; cursor: default; }
+.crm-feedback { font-size: 13px; margin-bottom: 16px; min-height: 18px; color: #4caf85; }
+.crm-feedback.error { color: #e06c6c; }
+</style>
+</head>
+<body class="hub-page">
+
+<nav class="sidebar">
+  <div class="sidebar-header">
+    <span class="logo">McLellan Hub</span>
+    <span class="user-badge"><%= user %></span>
+  </div>
+  <div class="sidebar-section">
+    <a href="/c" class="new-chat-btn">+ New chat</a>
+  </div>
+  <div class="sidebar-section">
+    <h3>Projects</h3>
+    <ul class="project-list">
+      <% for (const p of projects) { %>
+      <li><a href="/p/<%= p.slug %>">/<%= p.slug %></a></li>
+      <% } %>
+    </ul>
+  </div>
+  <div class="sidebar-section">
+    <h3>Recent</h3>
+    <ul class="conv-list">
+      <% for (const c of recentConvs) { %>
+      <li><a href="/c/<%= c.id %>"><%= c.title || 'Untitled' %></a></li>
+      <% } %>
+    </ul>
+  </div>
+  <div class="sidebar-footer">
+    <form method="POST" action="/logout">
+      <button type="submit" class="logout-btn">Sign out</button>
+    </form>
+  </div>
+</nav>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<main class="main-area">
+  <div class="mobile-topbar">
+    <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Menu">☰</button>
+    <span class="logo">People</span>
+  </div>
+
+  <div class="crm-wrap">
+    <div class="crm-header">
+      <h1>People</h1>
+      <nav>
+        <a href="/">← Hub</a>
+      </nav>
+    </div>
+
+    <% if (context.length) { %>
+    <div class="crm-context-bar">
+      <h3>Known context</h3>
+      <div class="context-pills">
+        <% for (const c of context) { %>
+        <% if (!c.key.startsWith('_')) { %>
+        <span class="context-pill"><strong><%= c.key %></strong> = <%= c.value %></span>
+        <% } %>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+
+    <div id="crm-feedback" class="crm-feedback"></div>
+    <div class="crm-add-bar">
+      <input type="text" id="crm-input" placeholder='e.g. "Tom needs to know about Copilot" or "told Tom about it"' autocomplete="off">
+      <button type="button" id="crm-submit">Save</button>
+    </div>
+
+    <% if (!contacts.length) { %>
+    <div class="empty-state">
+      <p>No contacts yet.</p>
+      <p>Type a note above or use <code>/crm [note]</code> in any chat.</p>
+    </div>
+    <% } else { %>
+    <div class="contact-grid">
+      <% for (const contact of contacts) { %>
+      <%
+        const activeFacts   = contact.facts.filter(f => f.status === 'active');
+        const followUps     = contact.facts.filter(f => f.status === 'follow_up');
+        const doneFacts     = contact.facts.filter(f => f.status === 'done' || f.status === 'closed');
+        const openCount     = activeFacts.length + followUps.length;
+      %>
+      <div class="contact-card">
+        <div class="contact-name">
+          <%= contact.name %>
+          <% if (openCount > 0) { %>
+          <span style="font-size:12px;color:var(--text-dim);font-weight:400;"><%= openCount %> open</span>
+          <% } %>
+        </div>
+
+        <% if (!openCount && !doneFacts.length) { %>
+        <p style="font-size:13px;color:var(--text-dim);margin:0;">No notes yet.</p>
+        <% } %>
+
+        <% if (activeFacts.length || followUps.length) { %>
+        <ul class="fact-list">
+          <% for (const f of [...followUps, ...activeFacts]) { %>
+          <li class="fact-item">
+            <span class="fact-tag <%= f.status === 'follow_up' ? 'tag-followup' : 'tag-active' %>">
+              <%= f.status === 'follow_up' ? 'follow-up' : 'action' %>
+            </span>
+            <span class="fact-text"><%= f.fact %></span>
+            <span class="fact-source"><%= f.source %></span>
+          </li>
+          <% } %>
+        </ul>
+        <% } %>
+
+        <% if (doneFacts.length) { %>
+        <button class="show-history" onclick="this.nextElementSibling.hidden=!this.nextElementSibling.hidden;this.textContent=this.nextElementSibling.hidden?'Show <%= doneFacts.length %> done':'Hide history'">
+          Show <%= doneFacts.length %> done
+        </button>
+        <div class="history-section" hidden>
+          <ul class="fact-list">
+            <% for (const f of doneFacts) { %>
+            <li class="fact-item">
+              <span class="fact-tag <%= f.status === 'closed' ? 'tag-closed' : 'tag-done' %>"><%= f.status %></span>
+              <span class="fact-text done-text"><%= f.fact %></span>
+              <span class="fact-source"><%= f.source %></span>
+            </li>
+            <% } %>
+          </ul>
+        </div>
+        <% } %>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+  </div>
+</main>
+
+<script>
+// Quick-add CRM note from the page
+const input = document.getElementById('crm-input');
+const btn   = document.getElementById('crm-submit');
+const fb    = document.getElementById('crm-feedback');
+
+async function submitCrm() {
+  const text = input.value.trim();
+  if (!text) return;
+  btn.disabled = true;
+  fb.textContent = 'Saving…';
+  fb.className = 'crm-feedback';
+  try {
+    const r = await fetch('/api/crm/note', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ text }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      fb.textContent = d.message.replace(/\*\*/g, '').replace(/~~/g, '');
+      input.value = '';
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      fb.textContent = d.message || 'Error';
+      fb.className = 'crm-feedback error';
+    }
+  } catch(e) {
+    fb.textContent = 'Network error';
+    fb.className = 'crm-feedback error';
+  }
+  btn.disabled = false;
+}
+
+btn.addEventListener('click', submitCrm);
+input.addEventListener('keydown', e => { if (e.key === 'Enter') submitCrm(); });
+
+// Sidebar toggle (mobile)
+document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
+  document.querySelector('.sidebar')?.classList.toggle('open');
+  document.getElementById('sidebar-overlay')?.classList.toggle('active');
+});
+document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
+  document.querySelector('.sidebar')?.classList.remove('open');
+  document.getElementById('sidebar-overlay')?.classList.remove('active');
+});
+</script>
+</body>
+</html>

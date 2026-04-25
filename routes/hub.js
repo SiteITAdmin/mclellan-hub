@@ -889,6 +889,29 @@ router.post('/api/crm/briefing-push', async (req, res) => {
   }
 });
 
+// ── CRM view page ─────────────────────────────────────────────────────────────
+router.get('/crm', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  const recentConvs = hub.prepare('SELECT * FROM conversations WHERE user = ? ORDER BY created_at DESC LIMIT 20').all(req.hubUser);
+  const context = hub.prepare('SELECT key, value FROM crm_context WHERE user = ? ORDER BY key').all(req.hubUser);
+  const contacts = listContacts(req.hubUser);
+  res.render('hub/crm', { user: req.hubUser, projects, recentConvs, context, contacts });
+});
+
+// Quick-add CRM note from the web UI
+router.post('/api/crm/note', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const { text } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ ok: false, message: 'No text provided' });
+  try {
+    const result = await processCrmCommand(req.hubUser, text.trim(), 'web');
+    res.json(result);
+  } catch (err) {
+    console.error('[crm note]', err);
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
 // ── Message rating ────────────────────────────────────────────────────────────
 router.post('/api/messages/:msgId/rate', requireAuth, requireSameOrigin, (req, res) => {
   const rating = parseInt(req.body.rating);
