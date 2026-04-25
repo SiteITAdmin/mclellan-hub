@@ -41,6 +41,9 @@
 .fact-text.done-text { text-decoration: line-through; color: var(--text-dim); }
 .fact-source { font-size: 11px; color: var(--text-dim); margin-left: auto; white-space: nowrap; padding-top: 2px; }
 .fact-date { font-size: 11px; color: var(--text-dim); white-space: nowrap; padding-top: 2px; }
+.fact-delete { background: none; border: none; color: var(--text-dim); font-size: 14px; cursor: pointer; padding: 0 0 0 8px; line-height: 1; opacity: 0; transition: opacity 0.15s, color 0.15s; flex-shrink: 0; }
+.fact-item:hover .fact-delete { opacity: 1; }
+.fact-delete:hover { color: #e06c6c; }
 
 .show-history { background: none; border: none; color: var(--text-dim); font-size: 12px; cursor: pointer; padding: 4px 0; margin-top: 6px; }
 .show-history:hover { color: var(--text); }
@@ -157,12 +160,13 @@
         <% if (activeFacts.length || followUps.length) { %>
         <ul class="fact-list">
           <% for (const f of [...followUps, ...activeFacts]) { %>
-          <li class="fact-item">
+          <li class="fact-item" data-fact-id="<%= f.id %>">
             <span class="fact-tag <%= f.status === 'follow_up' ? 'tag-followup' : 'tag-active' %>">
               <%= f.status === 'follow_up' ? 'follow-up' : 'action' %>
             </span>
             <span class="fact-text"><%= f.fact %></span>
             <span class="fact-source"><%= f.source %></span>
+            <button class="fact-delete" title="Delete" onclick="deleteFact('<%= f.id %>', this)">×</button>
           </li>
           <% } %>
         </ul>
@@ -175,10 +179,11 @@
         <div class="history-section" hidden>
           <ul class="fact-list">
             <% for (const f of doneFacts) { %>
-            <li class="fact-item">
+            <li class="fact-item" data-fact-id="<%= f.id %>">
               <span class="fact-tag <%= f.status === 'closed' ? 'tag-closed' : 'tag-done' %>"><%= f.status %></span>
               <span class="fact-text done-text"><%= f.fact %></span>
               <span class="fact-source"><%= f.source %></span>
+              <button class="fact-delete" title="Delete" onclick="deleteFact('<%= f.id %>', this)">×</button>
             </li>
             <% } %>
           </ul>
@@ -227,6 +232,23 @@ async function submitCrm() {
 
 btn.addEventListener('click', submitCrm);
 input.addEventListener('keydown', e => { if (e.key === 'Enter') submitCrm(); });
+
+async function deleteFact(id, btn) {
+  if (!confirm('Delete this fact?')) return;
+  try {
+    const r = await fetch('/api/crm/facts/' + id + '/delete', {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    const d = await r.json();
+    if (d.ok) {
+      const li = btn.closest('li');
+      li.style.opacity = '0';
+      li.style.transition = 'opacity 0.2s';
+      setTimeout(() => li.remove(), 200);
+    }
+  } catch(e) { alert('Delete failed'); }
+}
 
 // Sidebar toggle (mobile)
 document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {

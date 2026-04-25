@@ -912,6 +912,15 @@ router.get('/crm', requireAuth, (req, res) => {
   res.render('hub/crm', { user: req.hubUser, projects, recentConvs, context, contacts });
 });
 
+// Delete a CRM fact
+router.post('/api/crm/facts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const fact = hub.prepare('SELECT id FROM crm_facts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!fact) return res.status(404).json({ ok: false, message: 'Not found' });
+  hub.prepare('DELETE FROM crm_facts WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 // Quick-add CRM note from the web UI
 router.post('/api/crm/note', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   const { text } = req.body;
