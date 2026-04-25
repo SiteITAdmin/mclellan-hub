@@ -7,6 +7,7 @@ const { exportDocx, exportPdf, exportGoogleDoc } = require('../lib/exports');
 const { fileToMarkdown, withProjectFrontmatter, SUPPORTED_EXTS, fetchUrl } = require('../lib/extract');
 const { uuid } = require('../lib/id');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
+const { processCrmCommand, listContacts, buildBriefingText } = require('../lib/crm');
 const {
   buildPromptInjectionGuard,
   createRateLimiter,
@@ -115,7 +116,12 @@ router.get('/login', (req, res) => {
 });
 
 router.get('/auth/google', (req, res, next) =>
-  startGoogleAuth({ purpose: 'hub', user: req.hubUser, callbackPath: '/auth/google/callback' })(req, res, next)
+  startGoogleAuth({
+    purpose: 'hub',
+    user: req.hubUser,
+    callbackPath: '/auth/google/callback',
+    extraScopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+  })(req, res, next)
 );
 
 router.get('/auth/google/callback', (req, res, next) =>
@@ -267,6 +273,37 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
     WHERE id = ?
   `);
   insertLog.run(logId, req.hubUser, existingConvId || null, projectSlug || null, model || 'default', searchProvider || 'openrouter', (content || '').length);
+
+  // Detect /crm command — parse and store relationship facts
+  const crmCmd = content.match(/^\/crm\s+([\s\S]+)$/i);
+  if (crmCmd) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    const convId = existingConvId || uuid();
+    if (!existingConvId) {
+      db.hub().prepare('INSERT INTO conversations (id, user, title) VALUES (?, ?, ?)').run(convId, req.hubUser, content.slice(0, 60));
+    }
+    res.write(`data: ${JSON.stringify({ convId, userMsgId: uuid(), projectSlug: null })}\n\n`);
+    db.hub().prepare(
+      `INSERT INTO messages (id, conversation_id, role, content, user) VALUES (?, ?, 'user', ?, ?)`
+    ).run(uuid(), convId, content, req.hubUser);
+    try {
+      const result = await processCrmCommand(req.hubUser, crmCmd[1].trim());
+      const asstMsgId = uuid();
+      db.hub().prepare(
+        `INSERT INTO messages (id, conversation_id, role, content, user, model) VALUES (?, ?, 'assistant', ?, ?, 'crm')`
+      ).run(asstMsgId, convId, result.message, req.hubUser);
+      res.write(`data: ${JSON.stringify({ chunk: '\x00' + result.message })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, convId, msgId: asstMsgId, model: 'crm', projectSlug: null })}\n\n`);
+    } catch (err) {
+      console.error('[crm] command error', err);
+      res.write(`data: ${JSON.stringify({ chunk: '\x00' + '_CRM error: ' + err.message + '_' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, convId, model: 'crm', projectSlug: null })}\n\n`);
+    }
+    try { res.end(); } catch (_) {}
+    return;
+  }
 
   // Detect /recall command before slug matching so it doesn't get treated as a project slug
   // Syntax:  /recall <terms>          → show matching past conversations
@@ -793,6 +830,39 @@ router.post('/settings/models/:key', requireAuth, requireSameOrigin, writeLimite
     'UPDATE model_config SET model_id = ?, label = ?, enabled = ? WHERE key = ?'
   ).run(model_id, label, enabled ? 1 : 0, req.params.key);
   res.redirect('/settings');
+});
+
+// ── CRM endpoints ─────────────────────────────────────────────────────────────
+
+// List all contacts with their open facts
+router.get('/api/crm/contacts', requireAuth, (req, res) => {
+  res.json(listContacts(req.hubUser));
+});
+
+// Preview today's briefing
+router.get('/api/crm/briefing', requireAuth, (req, res) => {
+  const text = buildBriefingText(req.hubUser);
+  res.json({ text: text || '_No open items._' });
+});
+
+// Hermes (or any external agent) posts a /crm note here
+// Secured by a shared secret: Authorization: Bearer <HERMES_WEBHOOK_SECRET>
+router.post('/api/crm/webhook', async (req, res) => {
+  const secret = process.env.HERMES_WEBHOOK_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Webhook not configured' });
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { text, user, source = 'hermes' } = req.body;
+  if (!text || !user) return res.status(400).json({ error: 'text and user required' });
+
+  try {
+    const result = await processCrmCommand(user, text, source);
+    res.json(result);
+  } catch (err) {
+    console.error('[crm webhook]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Message rating ────────────────────────────────────────────────────────────
