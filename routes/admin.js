@@ -11,8 +11,18 @@ function requireAdmin(req, res, next) {
   res.redirect('/admin/login');
 }
 
+function getAdminReturnTo(req, fallback = '/admin') {
+  const value = req.body?.return_to || fallback;
+  return /^\/admin(#[a-z0-9-]+)?$/i.test(value) ? value : fallback;
+}
+
+function getPortfolioDisplayName(user) {
+  const names = { douglas: 'Douglas', nakai: 'Nakai' };
+  return names[user] || user;
+}
+
 router.get('/admin/login', (req, res) => {
-  res.render('admin/login', { user: req.portfolioUser, error: null });
+  res.render('admin/login', { user: req.portfolioUser, displayUser: getPortfolioDisplayName(req.portfolioUser), error: null });
 });
 
 router.get('/admin/auth/google', (req, res, next) =>
@@ -30,7 +40,17 @@ router.post('/admin/logout', requireSameOrigin, (req, res) => {
 
 router.use((req, res, next) => {
   if (req.method === 'POST' && req.path.startsWith('/admin') && req.path !== '/admin/login' && req.path !== '/admin/logout') {
-    return requireSameOrigin(req, res, next);
+    return requireSameOrigin(req, res, () => {
+      const originalRedirect = res.redirect.bind(res);
+      res.redirect = (...args) => {
+        const target = args[args.length - 1];
+        if (typeof target === 'string' && target.startsWith('/admin')) {
+          args[args.length - 1] = getAdminReturnTo(req, target);
+        }
+        return originalRedirect(...args);
+      };
+      next();
+    });
   }
   return next();
 });
@@ -65,6 +85,7 @@ router.get('/admin', requireAdmin, (req, res) => {
 
   res.render('admin/index', {
     user: req.portfolioUser,
+    displayUser: getPortfolioDisplayName(req.portfolioUser),
     experiences, skills, cvRows, profile, gaps, faqs, aiInstructions, jdSubmissions, skillCandidates, projects,
   });
 });
