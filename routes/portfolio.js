@@ -30,6 +30,7 @@ const contactLimiter = createRateLimiter({
 });
 const PORTFOLIO_CHAT_GUARD = buildPromptInjectionGuard('the public portfolio chat');
 const JD_ANALYSER_GUARD = buildPromptInjectionGuard('the public recruiter-facing job description analyser');
+const NAKAI_LINKEDIN_MESSAGE_URL = 'https://www.linkedin.com/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAA39lEcBJ03ZBpjopopuTRqOb7MPhcYh1i0&recipient=ACoAAA39lEcBJ03ZBpjopopuTRqOb7MPhcYh1i0&screenContext=NON_SELF_PROFILE_VIEW&interop=msgOverlay&lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base%3B9jQrKoazSu6GcMh2jmrkWg%3D%3D';
 let nodemailer;
 
 function shouldShowAiBuilds(user) {
@@ -201,7 +202,15 @@ async function buildExecutiveSummaryPdf({ user, profile, cv, experiences }) {
   });
 }
 
-function getAnalyserContactBlock(resultContent, { email, phone }) {
+function getAnalyserContactBlock(resultContent, { user, email, phone }) {
+  if (user === 'nakai') {
+    return [
+      '',
+      '### Contact Nakai',
+      `- [Contact Nakai about this or other opportunities via LinkedIn](${NAKAI_LINKEDIN_MESSAGE_URL})`,
+    ].join('\n');
+  }
+
   const lower = String(resultContent || '').toLowerCase();
   let lead = `If this specific brief is not the right fit, you can still reach out to Douglas about related opportunities.`;
   if (lower.includes('strong outreach')) {
@@ -231,7 +240,7 @@ function cleanContactField(value, maxLength) {
 
 function getGmailTransport() {
   const user = process.env.GMAIL_SMTP_USER;
-  const pass = process.env.GMAIL_SMTP_APP_PASSWORD;
+  const pass = String(process.env.GMAIL_SMTP_APP_PASSWORD || '').replace(/\s+/g, '');
   if (!user || !pass) return null;
   try {
     if (!nodemailer) nodemailer = require('nodemailer');
@@ -590,6 +599,7 @@ Provide:
       onChunk: (chunk) => res.write(`data: ${JSON.stringify({ chunk })}\n\n`),
     });
     const contactBlock = getAnalyserContactBlock(result.content, {
+      user: req.portfolioUser,
       email: profile.email || (req.portfolioUser === 'douglas' ? 'douglas@mclellan.scot' : ''),
       phone: getPublicPhone(req.portfolioUser, profile),
     });
