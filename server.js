@@ -8,6 +8,7 @@ const hubRouter = require('./routes/hub');
 const hubAdminRouter = require('./routes/hub-admin');
 const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
+const { sendDailyBriefing } = require('./lib/crm');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -93,3 +94,17 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`mclellan-hub listening on port ${PORT}`);
 });
+
+// ── Daily CRM briefing ────────────────────────────────────────────────────────
+// Runs every minute, fires at BRIEFING_HOUR:BRIEFING_MINUTE in Europe/London time
+const BRIEFING_HOUR = parseInt(process.env.BRIEFING_HOUR || '7');
+const BRIEFING_MINUTE = parseInt(process.env.BRIEFING_MINUTE || '30');
+const BRIEFING_USERS = (process.env.BRIEFING_USERS || 'douglas,nakai').split(',').map(u => u.trim()).filter(Boolean);
+
+setInterval(async () => {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/London' }));
+  if (now.getHours() !== BRIEFING_HOUR || now.getMinutes() !== BRIEFING_MINUTE) return;
+  for (const user of BRIEFING_USERS) {
+    sendDailyBriefing(user).catch(err => console.error(`[crm] briefing error for ${user}:`, err));
+  }
+}, 60 * 1000);

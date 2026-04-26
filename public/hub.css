@@ -123,6 +123,12 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01e
   transition: background 0.15s;
 }
 .new-chat-btn:hover { background: var(--accent-hover); color: var(--accent-ink); text-decoration: none; }
+.sidebar-nav-link {
+  display: block; padding: 7px 10px; border-radius: 8px;
+  font-size: 13px; color: var(--text-dim); font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+}
+.sidebar-nav-link:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
 
 .project-list, .conv-list { list-style: none; display: flex; flex-direction: column; gap: 1px; }
 .project-list li a, .conv-list li a {
@@ -164,6 +170,11 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01e
   display: flex;
   flex-direction: column;
   gap: 28px;
+}
+.crm-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .welcome { padding: 60px 40px; max-width: 640px; }
 .welcome h2 { font-size: 30px; margin-bottom: 12px; font-family: var(--serif); }
