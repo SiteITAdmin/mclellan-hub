@@ -297,7 +297,10 @@ router.post('/contact', requireSameOrigin, contactLimiter, async (req, res) => {
   }
 
   const profile = db.portfolio(req.portfolioUser).prepare('SELECT email FROM profile WHERE id = 1').get() || {};
-  const recipient = cleanContactField(profile.email, 180);
+  const recipient = cleanContactField(
+    profile.email || process.env.NAKAI_CONTACT_TO || process.env.GMAIL_SMTP_USER,
+    180
+  );
   if (!recipient) {
     return res.status(503).json({ error: 'Nakai contact email is not configured yet.' });
   }
