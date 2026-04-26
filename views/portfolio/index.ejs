@@ -71,7 +71,7 @@
    <div class="hero-actions">
       <a href="/executive-summary" class="btn-primary">Download Executive Summary PDF</a>
       <% if (isNakai) { %>
-      <button type="button" class="btn-ghost" data-open-contact>Contact Nakai</button>
+      <a href="<%= nakaiLinkedInMessageUrl %>" class="btn-ghost" target="_blank" rel="noopener noreferrer">Contact Nakai via LinkedIn</a>
       <% } else { %>
       <a href="#contact" class="btn-ghost">Contact Douglas</a>
       <% } %>
@@ -289,8 +289,7 @@
       <button type="button" class="contact-chip contact-phone-btn" id="contact-phone-btn" data-phone="<%= phoneEncoded %>">Reveal phone</button>
       <a href="#" class="contact-chip contact-phone-link" id="contact-phone-link" hidden></a>
       <% } else if (isNakai) { %>
-      <button type="button" class="contact-chip" data-open-contact>Open contact form</button>
-      <a href="<%= nakaiLinkedInMessageUrl %>" class="contact-chip" target="_blank" rel="noopener noreferrer">Message on LinkedIn</a>
+      <a href="<%= nakaiLinkedInMessageUrl %>" class="contact-chip" target="_blank" rel="noopener noreferrer">Contact Nakai via LinkedIn</a>
       <% } else { %>
       <span class="contact-chip contact-chip-muted">Phone available on request</span>
       <% } %>
@@ -306,47 +305,6 @@
     <% } %>
   </div>
 </footer>
-
-<% if (isNakai) { %>
-<!-- Nakai contact modal -->
-<div class="contact-modal-backdrop" id="contact-modal-backdrop" aria-hidden="true">
-  <div class="contact-modal" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title">
-    <div class="contact-modal-header">
-      <div>
-        <span class="eyebrow">Contact</span>
-        <h2 id="contact-modal-title">Message Nakai</h2>
-      </div>
-      <button type="button" class="contact-modal-close" id="contact-modal-close" aria-label="Close contact form">✕</button>
-    </div>
-    <form class="contact-form" id="nakai-contact-form">
-      <input type="text" name="website" tabindex="-1" autocomplete="off" class="contact-honeypot" aria-hidden="true">
-      <div class="field">
-        <label for="contact-name">Name</label>
-        <input id="contact-name" name="name" autocomplete="name" required maxlength="120">
-      </div>
-      <div class="two-col contact-form-grid">
-        <div class="field">
-          <label for="contact-email">Email</label>
-          <input id="contact-email" name="email" type="email" autocomplete="email" maxlength="180">
-        </div>
-        <div class="field">
-          <label for="contact-phone">Phone</label>
-          <input id="contact-phone" name="phone" autocomplete="tel" maxlength="80">
-        </div>
-      </div>
-      <div class="field">
-        <label for="contact-message">Message</label>
-        <textarea id="contact-message" name="message" rows="5" required maxlength="2000"></textarea>
-      </div>
-      <p class="contact-form-status" id="contact-form-status" role="status" aria-live="polite"></p>
-      <div class="contact-modal-actions">
-        <button type="submit" class="btn-primary">Send message</button>
-        <a href="<%= nakaiLinkedInMessageUrl %>" class="btn-ghost" target="_blank" rel="noopener noreferrer">Message me on LinkedIn</a>
-      </div>
-    </form>
-  </div>
-</div>
-<% } %>
 
 <!-- Chat drawer -->
 <div class="chat-drawer" id="chat-drawer" aria-hidden="true">
@@ -448,75 +406,6 @@
     });
   })();
 
-  (function() {
-    const backdrop = document.getElementById('contact-modal-backdrop');
-    const form = document.getElementById('nakai-contact-form');
-    if (!backdrop || !form) return;
-
-    const closeBtn = document.getElementById('contact-modal-close');
-    const status = document.getElementById('contact-form-status');
-    const openers = document.querySelectorAll('[data-open-contact]');
-    const firstInput = form.querySelector('input[name="name"]');
-    let previousFocus = null;
-
-    function setStatus(message, type) {
-      status.textContent = message || '';
-      status.dataset.state = type || '';
-    }
-
-    function openModal() {
-      previousFocus = document.activeElement;
-      backdrop.classList.add('active');
-      backdrop.removeAttribute('aria-hidden');
-      document.body.classList.add('modal-open');
-      setTimeout(() => firstInput?.focus(), 0);
-    }
-
-    function closeModal() {
-      backdrop.classList.remove('active');
-      backdrop.setAttribute('aria-hidden', 'true');
-      document.body.classList.remove('modal-open');
-      previousFocus?.focus?.();
-    }
-
-    openers.forEach(btn => btn.addEventListener('click', openModal));
-    closeBtn?.addEventListener('click', closeModal);
-    backdrop.addEventListener('click', (event) => {
-      if (event.target === backdrop) closeModal();
-    });
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && backdrop.classList.contains('active')) closeModal();
-    });
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const data = Object.fromEntries(new FormData(form).entries());
-      if (!String(data.email || '').trim() && !String(data.phone || '').trim()) {
-        setStatus('Please include either an email address or phone number.', 'error');
-        return;
-      }
-
-      const submitBtn = form.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-      setStatus('Sending...', 'pending');
-
-      try {
-        const response = await fetch('/contact', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || 'Could not send the message.');
-        form.reset();
-        setStatus(result.message || 'Thanks, your message has been sent.', 'success');
-      } catch (err) {
-        setStatus(err.message || 'Could not send the message. Please try LinkedIn instead.', 'error');
-      } finally {
-        submitBtn.disabled = false;
-      }
-    });
-  })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script src="/portfolio-chat.js"></script>
