@@ -7,7 +7,7 @@ const { exportDocx, exportPdf, exportGoogleDoc } = require('../lib/exports');
 const { fileToMarkdown, withProjectFrontmatter, SUPPORTED_EXTS, fetchUrl } = require('../lib/extract');
 const { uuid } = require('../lib/id');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
-const { processCrmCommand, listContacts, buildBriefingText } = require('../lib/crm');
+const { processCrmCommand, listContacts, buildBriefingText, fetchTodayCalendarEvents } = require('../lib/crm');
 const {
   buildPromptInjectionGuard,
   createRateLimiter,
@@ -24,6 +24,11 @@ function buildHubMsg(researchMode = false) {
   const base = [
     buildPromptInjectionGuard('the authenticated McClellan Hub chat'),
     `Today's date is ${today}.`,
+    'You have access to a web search tool. Use your own judgement about when to use it:',
+    '• USE search: queries needing current information (recent events, rulings, software versions, prices, new legislation), jurisdiction-specific context you may lack, or anything where your training data is likely stale or incomplete.',
+    '• SKIP search: summarising or analysing a document already provided in context, stable technical questions (regex, SQL syntax, standard PowerShell/bash commands), pure reasoning or maths tasks.',
+    '• If unclear whether current data would materially change the answer, err on the side of searching rather than asking.',
+    'When you do search, say so in one brief italicised line before your answer (e.g. "_Searching for recent CBI decisions…_"). Do not narrate each individual search step.',
     'When your response draws on web search results, cite each source inline with [n] (e.g. "Starmer faced criticism this week [1][3]…") where n matches the numbered Sources list at the end of your response. Use dates from the live search results, not from training-data memory.',
     'The Sources list must use Markdown links in this exact style: [1] [Source title](https://example.com/page). Do not list bare titles without a clickable URL when a URL is available.',
   ];
@@ -840,8 +845,9 @@ router.get('/api/crm/contacts', requireAuth, (req, res) => {
 });
 
 // Preview today's briefing
-router.get('/api/crm/briefing', requireAuth, (req, res) => {
-  const text = buildBriefingText(req.hubUser);
+router.get('/api/crm/briefing', requireAuth, async (req, res) => {
+  const calendarEvents = await fetchTodayCalendarEvents(req.hubUser);
+  const text = buildBriefingText(req.hubUser, calendarEvents);
   res.json({ text: text || '_No open items._' });
 });
 
