@@ -20,30 +20,66 @@
  *   node scripts/vault.js status
  */
 
-require('dotenv').config();
+// Load .env — walk up from __dirname until we find one
+const path = require('path');
+const fs0  = require('fs');
+let envPath = path.resolve(__dirname, '.env');
+for (let i = 0; i < 6; i++) {
+  const candidate = path.resolve(__dirname, '../'.repeat(i) + '.env');
+  if (fs0.existsSync(candidate)) { envPath = candidate; break; }
+}
+require('dotenv').config({ path: envPath });
+
 const fetch  = require('node-fetch');
 const fs     = require('fs');
-const path   = require('path');
 const vault  = require('../lib/vault');
-const { DEFAULT_MODELS, fetchOpenRouterFull } = require('../lib/router');
 
-const HUB_URL       = (process.env.HUB_URL || 'https://mclellan.scot').replace(/\/$/, '');
+// ── Inline model registry (mirrors lib/router.js DEFAULT_MODELS) ─────────────
+const MODELS = {
+  'free':             'openrouter/free',
+  'deepseek-v3':      'deepseek/deepseek-v3.2',
+  'mistral-small':    'mistralai/mistral-small-2603',
+  'grok-fast':        'x-ai/grok-3-mini',
+  'claude-opus':      'anthropic/claude-opus-4.7',
+  'sonar':            'perplexity/sonar',
+  'gemini-25-pro':    'google/gemini-2.5-pro-preview',
+  'claude-sonnet':    'anthropic/claude-sonnet-4.6',
+  'o3':               'openai/o3',
+};
+
+async function fetchOpenRouterFull(modelId, messages) {
+  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://mclellan.scot',
+      'X-Title': 'McLellan Hub',
+      'X-OpenRouter-Cache': 'true',
+    },
+    body: JSON.stringify({ model: modelId, messages, stream: false }),
+  });
+  if (!r.ok) throw new Error(`OpenRouter ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+const HUB_URL        = (process.env.HUB_URL || 'https://mclellan.scot').replace(/\/$/, '');
 const VAULT_SYNC_KEY = process.env.VAULT_SYNC_KEY || '';
 
 // ── Arg parsing ───────────────────────────────────────────────────────────────
-const args    = process.argv.slice(2);
-const command = args[0];
+const args     = process.argv.slice(2);
+const command  = args[0];
 const modelArg = args[indexOf('--model') + 1] || null;
 
 function indexOf(flag) {
   const i = args.indexOf(flag);
-  return i === -1 ? args.length : i;  // safe: args.length+1 → undefined key → ''
+  return i === -1 ? args.length : i;
 }
 
 function modelId(key) {
-  const def = DEFAULT_MODELS[key];
-  if (!def) { console.error(`Unknown model key: ${key}. Available: ${Object.keys(DEFAULT_MODELS).join(', ')}`); process.exit(1); }
-  return def.id;
+  const id = MODELS[key];
+  if (!id) { console.error(`Unknown model key: ${key}. Available: ${Object.keys(MODELS).join(', ')}`); process.exit(1); }
+  return id;
 }
 
 // ── Hub API helpers ───────────────────────────────────────────────────────────
@@ -316,7 +352,7 @@ function cmdStatus() {
     case 'status':  cmdStatus();        break;
     default:
       console.log(`Usage: node scripts/vault.js <pull|push|process|link|status> [--model <key>]`);
-      console.log(`\nAvailable models: ${Object.keys(DEFAULT_MODELS).join(', ')}`);
+      console.log(`\nAvailable models: ${Object.keys(MODELS).join(', ')}`);
       process.exit(1);
   }
 })().catch(err => {
