@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const db = require('../lib/db');
 const { routeMessage, tagConversation } = require('../lib/router');
+const { searchDocuments } = require('../lib/db');
 const { exportDocx, exportPdf, exportGoogleDoc } = require('../lib/exports');
 const { fileToMarkdown, withProjectFrontmatter, SUPPORTED_EXTS, fetchUrl } = require('../lib/extract');
 const { uuid } = require('../lib/id');
@@ -317,6 +318,13 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
   let recallOnly = false;
   const recallCmd = content.match(/^\/recall\s+([^\n]+)(?:\n([\s\S]*))?$/i);
 
+  // Detect /kb command — search knowledge base (all documents cross-project)
+  // Syntax:  /kb <terms>             → show matching documents
+  //          /kb <terms>\n<question> → inject matching docs then answer question
+  let kbQuery = null;
+  let kbOnly  = false;
+  const kbCmd = content.match(/^\/kb\s+([^\n]+)(?:\n([\s\S]*))?$/i);
+
   // Resolve project from leading or trailing /slug, or explicit projectSlug param
   let project = null;
   let messageContent = content;
@@ -326,6 +334,11 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
     const followup = recallCmd[2]?.trim();
     recallOnly = !followup;
     messageContent = followup || recallQuery;
+  } else if (kbCmd) {
+    kbQuery = kbCmd[1].trim();
+    const followup = kbCmd[2]?.trim();
+    kbOnly  = !followup;
+    messageContent = followup || kbQuery;
   } else {
     const leadMatch = content.match(/^\/([a-z0-9-]+)\s+([\s\S]*)$/i);
     const trailMatch = content.match(/^([\s\S]*?)\s+\/([a-z0-9-]+)\s*$/i);
@@ -458,6 +471,48 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
     safeWrite(`data: ${JSON.stringify({ done: true, convId, msgId: asstMsgId, model: 'recall', projectSlug: project?.slug || null })}\n\n`);
     try { res.end(); } catch (_) {}
     return;
+  }
+
+  // ── /kb-only: format knowledge-base matches and stream directly ──────────────
+  if (kbOnly) {
+    const docs = searchDocuments(kbQuery, 5);
+    let formatted;
+    if (!docs.length) {
+      formatted = `**KB: "${kbQuery}"** — no matches found.\n\nNo documents across any project match that query.`;
+    } else {
+      const lines = [`**KB: "${kbQuery}"** — ${docs.length} match${docs.length !== 1 ? 'es' : ''}\n`];
+      for (const d of docs) {
+        const proj = d.project_name ? ` · *${d.project_name}*` : '';
+        const preview = d.markdown.slice(0, 400).replace(/\n+/g, ' ');
+        lines.push(`---\n**${d.filename}**${proj}\n\n${preview}${d.markdown.length > 400 ? '…' : ''}\n`);
+      }
+      formatted = lines.join('\n');
+    }
+    safeWrite(`data: ${JSON.stringify({ chunk: '\x00' + formatted })}\n\n`);
+    const asstMsgId = uuid();
+    hub.prepare(
+      `INSERT INTO messages (id, conversation_id, project_id, role, content, user, model)
+       VALUES (?, ?, ?, 'assistant', ?, ?, 'kb')`
+    ).run(asstMsgId, convId, project?.id || null, formatted, req.hubUser);
+    updateLog.run(convId, 'kb', 'local', 0, 0, 0, 0, 0, Date.now() - startMs, 'ok', null, asstMsgId, logId);
+    safeWrite(`data: ${JSON.stringify({ done: true, convId, msgId: asstMsgId, model: 'kb', projectSlug: project?.slug || null })}\n\n`);
+    try { res.end(); } catch (_) {}
+    return;
+  }
+
+  // ── /kb with follow-up question: inject matching docs as context ──────────────
+  if (kbQuery) {
+    const docs = searchDocuments(kbQuery, 4);
+    if (docs.length > 0) {
+      const docBlob = docs.map(d => {
+        const proj = d.project_name ? `[${d.project_name}] ` : '';
+        return wrapUntrustedBlock('knowledge_document', `${proj}${d.filename}\n\n${d.markdown.slice(0, 1200)}`);
+      }).join('\n\n');
+      contextMessages = [
+        { role: 'system', content: `The user is asking a question. Here are relevant documents from the knowledge base matching "${kbQuery}":\n\n${docBlob}\n\nUse these as grounding context when answering.` },
+        ...contextMessages,
+      ];
+    }
   }
 
   // ── /recall with follow-up question: inject matching history as context ───────
@@ -960,6 +1015,67 @@ router.post('/api/messages/:msgId/rate', requireAuth, requireSameOrigin, (req, r
   hub.prepare('UPDATE request_logs SET rating = ? WHERE asst_msg_id = ? AND user = ?')
      .run(rating, req.params.msgId, req.hubUser);
   res.json({ ok: true, rating });
+});
+
+// ── Vault sync endpoints ──────────────────────────────────────────────────────
+// Authenticated with VAULT_SYNC_KEY header (Bearer token) rather than OAuth session.
+// Used by scripts/vault.js running locally to pull/push between vault and dchat.
+
+function requireVaultKey(req, res, next) {
+  const key = process.env.VAULT_SYNC_KEY;
+  if (!key) return res.status(503).json({ error: 'VAULT_SYNC_KEY not configured on server' });
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${key}`) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
+// GET /api/vault/documents — returns all documents across all projects
+router.get('/api/vault/documents', requireVaultKey, (req, res) => {
+  const docs = db.hub().prepare(`
+    SELECT d.id, d.filename, d.mimetype, d.size_bytes, d.markdown, d.uploaded_at,
+           p.slug AS project_slug, p.name AS project_name
+    FROM documents d
+    LEFT JOIN projects p ON d.project_id = p.id
+    ORDER BY p.slug, d.uploaded_at ASC
+  `).all();
+  res.json({ documents: docs });
+});
+
+// POST /api/vault/documents — upsert a document into a named project (creates project if needed)
+router.post('/api/vault/documents', requireVaultKey, (req, res) => {
+  const { project_slug, project_name, filename, markdown, mimetype } = req.body;
+  if (!project_slug || !filename || !markdown)
+    return res.status(400).json({ error: 'project_slug, filename, markdown required' });
+
+  const hub  = db.hub();
+  const user = req.body.user || 'douglas';
+
+  // Ensure project exists
+  let project = hub.prepare('SELECT id FROM projects WHERE slug = ? AND user = ?')
+                   .get(project_slug, user);
+  if (!project) {
+    const projId = require('../lib/id').uuid();
+    hub.prepare('INSERT INTO projects (id, user, name, slug) VALUES (?, ?, ?, ?)')
+       .run(projId, user, project_name || project_slug, project_slug);
+    project = { id: projId };
+  }
+
+  // Upsert document — match on project + filename
+  const existing = hub.prepare(
+    'SELECT id FROM documents WHERE project_id = ? AND filename = ?'
+  ).get(project.id, filename);
+
+  if (existing) {
+    hub.prepare('UPDATE documents SET markdown = ?, size_bytes = ?, uploaded_at = unixepoch() WHERE id = ?')
+       .run(markdown, Buffer.byteLength(markdown), existing.id);
+    return res.json({ ok: true, action: 'updated', id: existing.id });
+  }
+
+  const docId = require('../lib/id').uuid();
+  hub.prepare(
+    'INSERT INTO documents (id, user, project_id, filename, mimetype, size_bytes, markdown) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(docId, user, project.id, filename, mimetype || 'text/markdown', Buffer.byteLength(markdown), markdown);
+  res.json({ ok: true, action: 'created', id: docId });
 });
 
 module.exports = router;
