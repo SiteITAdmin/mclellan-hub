@@ -8,6 +8,9 @@ const { fileToMarkdown, withProjectFrontmatter, SUPPORTED_EXTS, fetchUrl } = req
 const { uuid } = require('../lib/id');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { processCrmCommand, listContacts, buildBriefingText, fetchTodayCalendarEvents } = require('../lib/crm');
+const { compactProject } = require('../lib/memory-compactor');
+const { ingestWorkdayInterview } = require('../lib/workday-ingest');
+const { listNotes, readNote, searchNotes, writeNote } = require('../lib/obsidian-vault');
 const {
   buildPromptInjectionGuard,
   createRateLimiter,
@@ -16,6 +19,7 @@ const {
 } = require('../lib/security');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 const chatLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 80, keyPrefix: 'hub-chat' });
 const uploadLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'hub-upload' });
 const writeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 40, keyPrefix: 'hub-write' });
@@ -115,6 +119,29 @@ function requireAuth(req, res, next) {
   res.redirect('/login');
 }
 
+function validWorkdayWebhookAuth(req) {
+  const secret = process.env.WORKDAY_WEBHOOK_SECRET || process.env.HERMES_WEBHOOK_SECRET;
+  const mobileSecret = process.env.WORKDAY_MOBILE_TOKEN;
+  if (!secret && !mobileSecret) return { ok: false, configured: false };
+  const auth = req.headers.authorization || '';
+  const token = req.headers['x-workday-token'];
+  return {
+    ok:
+      (!!secret && auth === `Bearer ${secret}`) ||
+      (!!mobileSecret && auth === `Bearer ${mobileSecret}`) ||
+      (!!mobileSecret && token === mobileSecret),
+    configured: true,
+  };
+}
+
+function requireHermesAuth(req, res, next) {
+  const secret = process.env.HERMES_WEBHOOK_SECRET || process.env.WORKDAY_WEBHOOK_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Hermes auth not configured' });
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
 // ── Login ─────────────────────────────────────────────────────────────────────
 router.get('/login', (req, res) => {
   res.render('hub/login', { user: req.hubUser, error: null });
@@ -125,12 +152,16 @@ router.get('/auth/google', (req, res, next) =>
     purpose: 'hub',
     user: req.hubUser,
     callbackPath: '/auth/google/callback',
-    extraScopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+    extraScopes: [
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/gmail.modify',
+      'https://www.googleapis.com/auth/drive.readonly',
+    ],
   })(req, res, next)
 );
 
 router.get('/auth/google/callback', (req, res, next) =>
-  finishGoogleAuth({ purpose: 'hub', user: req.hubUser, callbackPath: '/auth/google/callback', sessionKey: 'hubUser' })(req, res, next)
+  finishGoogleAuth({ purpose: 'hub', user: req.hubUser, callbackPath: '/auth/google/callback', sessionKey: 'hubUser', returnTo: '/c' })(req, res, next)
 );
 
 router.post('/logout', requireSameOrigin, (req, res) => {
@@ -138,7 +169,9 @@ router.post('/logout', requireSameOrigin, (req, res) => {
 });
 
 // ── Hub index ─────────────────────────────────────────────────────────────────
-router.get('/', requireAuth, (req, res) => {
+router.get('/', requireAuth, (req, res) => res.redirect('/c'));
+
+router.get('/_home', requireAuth, (req, res) => {
   const hub = db.hub();
   const projects = hub.prepare(
     `SELECT
@@ -179,6 +212,7 @@ router.get('/', requireAuth, (req, res) => {
 
   res.render('hub/index', { user: req.hubUser, projects, recentConvs, recentDocuments });
 });
+
 
 // ── Start or resume a conversation ───────────────────────────────────────────
 router.get('/c/:convId?', requireAuth, (req, res) => {
@@ -222,19 +256,25 @@ router.get('/p/:slug', requireAuth, (req, res) => {
     'SELECT * FROM projects WHERE user = ? AND slug = ?'
   ).get(req.hubUser, req.params.slug);
 
-  if (!project) return res.redirect('/');
+  if (!project) return res.redirect('/c');
 
-  const fresh = req.query.new === '1';
+  // Load history only when explicitly requested via ?history=1
+  const loadHistory = req.query.history === '1';
   const projectDocs = hub.prepare(
     'SELECT id, filename, size_bytes, uploaded_at FROM documents WHERE project_id = ? ORDER BY uploaded_at DESC'
   ).all(project.id);
-  const messages = fresh ? [] : hub.prepare(`
+
+  const historyCount = hub.prepare(
+    'SELECT COUNT(*) AS n FROM messages WHERE project_id = ? AND user = ?'
+  ).get(project.id, req.hubUser).n;
+
+  const messages = loadHistory ? hub.prepare(`
     SELECT m.*, rl.rating
       FROM messages m
       LEFT JOIN request_logs rl ON rl.asst_msg_id = m.id
      WHERE m.project_id = ?
      ORDER BY m.ts DESC LIMIT ?`
-  ).all(project.id, project.context_depth * 5);
+  ).all(project.id, project.context_depth * 5).reverse() : [];
 
   const projects = hub.prepare(
     'SELECT * FROM projects WHERE user = ? ORDER BY name'
@@ -249,10 +289,12 @@ router.get('/p/:slug', requireAuth, (req, res) => {
     projects,
     recentConvs,
     conv: null,
-    messages: fresh ? [] : messages.reverse(),
+    messages,
     convId: null,
     activeProject: project,
     projectDocs,
+    projectHistoryCount: historyCount,
+    projectHistoryLoaded: loadHistory,
     availableModels: listModelsForUser(req.hubUser),
   });
 });
@@ -525,6 +567,14 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
       projectSlug: project?.slug || null,
     })}\n\n`);
 
+    // Fire-and-forget: compact project memory if window is full
+    if (project?.id) {
+      setImmediate(() => {
+        try { compactProject(project.id, req.hubUser, project.context_depth || 20); }
+        catch (e) { console.error('[memory] compaction error:', e.message); }
+      });
+    }
+
     // Fire-and-forget: index this Q&A for future /recall searches
     // Skip recall exchanges themselves to avoid polluting the index
     if (!recallQuery) {
@@ -713,6 +763,142 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, upload
   res.end();
 });
 
+// ── Workday interview ingest ──────────────────────────────────────────────────
+// Accepts either:
+// - multipart/form-data with text fields: transcript, title, source, model
+// - multipart/form-data with audio file field: file
+//
+// The resulting note is saved as a project document under /workday and mirrored
+// into the Synthadoc/Obsidian vault at raw_sources/workday/.
+router.post('/api/workday/interview', requireAuth, requireSameOrigin, uploadLimiter, audioUpload.single('file'), async (req, res) => {
+  try {
+    const result = await ingestWorkdayInterview({
+      user: req.hubUser,
+      transcript: req.body.transcript,
+      audioBuffer: req.file?.buffer,
+      audioFilename: req.file?.originalname,
+      audioMimetype: req.file?.mimetype,
+      title: req.body.title,
+      source: req.body.source || (req.file ? 'browser-audio' : 'manual'),
+      projectSlug: req.body.projectSlug || 'workday',
+      projectName: req.body.projectName || 'Workday Journal',
+      model: req.body.model,
+      synthadoc: req.body.synthadoc !== '0',
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[workday interview]', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// External capture endpoint for Siri Shortcuts or trusted agents.
+// Secured by Authorization: Bearer <WORKDAY_WEBHOOK_SECRET>, falling back to
+// HERMES_WEBHOOK_SECRET if a dedicated secret is not set.
+router.post('/api/workday/webhook', uploadLimiter, audioUpload.single('file'), async (req, res) => {
+  const auth = validWorkdayWebhookAuth(req);
+  if (!auth.configured) return res.status(503).json({ error: 'Workday webhook not configured' });
+  if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const rawAudio = Buffer.isBuffer(req.body) ? req.body : null;
+    const result = await ingestWorkdayInterview({
+      user: req.body.user || 'douglas',
+      transcript: req.body.transcript || req.body.text,
+      audioBuffer: req.file?.buffer || rawAudio,
+      audioFilename: req.file?.originalname || req.headers['x-workday-filename'] || 'workday-audio.m4a',
+      audioMimetype: req.file?.mimetype || req.headers['content-type'],
+      title: req.body.title,
+      source: req.body.source || (req.file || rawAudio ? 'shortcut-audio' : 'shortcut-transcript'),
+      projectSlug: req.body.projectSlug || 'workday',
+      projectName: req.body.projectName || 'Workday Journal',
+      model: req.body.model,
+      synthadoc: req.body.synthadoc !== '0',
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[workday webhook]', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/api/workday/audio', uploadLimiter, express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {
+  const auth = validWorkdayWebhookAuth(req);
+  if (!auth.configured) return res.status(503).json({ error: 'Workday audio endpoint not configured' });
+  if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    return res.status(400).json({ error: 'Audio body required' });
+  }
+
+  try {
+    const result = await ingestWorkdayInterview({
+      user: req.headers['x-workday-user'] || 'douglas',
+      audioBuffer: req.body,
+      audioFilename: req.headers['x-workday-filename'] || 'workday-audio.m4a',
+      audioMimetype: req.headers['content-type'] || 'audio/mp4',
+      title: req.headers['x-workday-title'] || 'Drive home audio debrief',
+      source: req.headers['x-workday-source'] || 'iphone-shortcut-audio',
+      projectSlug: req.headers['x-workday-project'] || 'workday',
+      projectName: 'Workday Journal',
+      synthadoc: req.headers['x-workday-synthadoc'] !== '0',
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[workday audio]', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── Obsidian vault API for Hermes/trusted local agents ────────────────────────
+router.get('/api/obsidian/notes', requireHermesAuth, (req, res) => {
+  try {
+    res.json({
+      notes: listNotes({
+        prefix: req.query.prefix || '',
+        limit: req.query.limit || 100,
+      }),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/api/obsidian/search', requireHermesAuth, (req, res) => {
+  try {
+    res.json({
+      results: searchNotes({
+        query: req.query.q || req.query.query || '',
+        limit: req.query.limit || 20,
+      }),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/api/obsidian/note', requireHermesAuth, (req, res) => {
+  try {
+    const note = readNote(req.query.path);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    res.json(note);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/api/obsidian/note', requireHermesAuth, writeLimiter, (req, res) => {
+  try {
+    const result = writeNote({
+      notePath: req.body.path,
+      content: req.body.content,
+      mode: req.body.mode || 'create',
+    });
+    res.json({ ok: true, note: result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ── Documents (user-facing) ───────────────────────────────────────────────────
 router.get('/api/projects/:slug/documents', requireAuth, (req, res) => {
   const hub = db.hub();
@@ -742,6 +928,45 @@ router.post('/api/documents/:id/delete', requireAuth, requireSameOrigin, writeLi
   if (!doc) return res.status(404).json({ error: 'Not found' });
   hub.prepare('DELETE FROM documents WHERE id = ?').run(doc.id);
   res.json({ ok: true });
+});
+
+// ── Save a single Q&A pair from a chat into a project ────────────────────────
+router.post('/api/messages/:msgId/save-to-project', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const { projectSlug } = req.body;
+  if (!projectSlug) return res.status(400).json({ error: 'projectSlug required' });
+
+  const project = hub.prepare('SELECT * FROM projects WHERE user = ? AND slug = ?')
+                     .get(req.hubUser, projectSlug);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  // Find the assistant message
+  const asstMsg = hub.prepare('SELECT * FROM messages WHERE id = ? AND user = ? AND role = ?')
+                     .get(req.params.msgId, req.hubUser, 'assistant');
+  if (!asstMsg) return res.status(404).json({ error: 'Message not found' });
+
+  // Find the user message immediately before it in the same conversation/project
+  const userMsg = hub.prepare(`
+    SELECT * FROM messages
+     WHERE user = ? AND role = 'user'
+       AND (conversation_id = ? OR project_id = ?)
+       AND ts < ?
+     ORDER BY ts DESC LIMIT 1
+  `).get(req.hubUser, asstMsg.conversation_id, asstMsg.project_id, asstMsg.ts);
+
+  const question = userMsg?.content || '(no question)';
+  const answer   = asstMsg.content || '(no answer)';
+  const title    = question.slice(0, 60).replace(/\n/g, ' ').replace(/[^\w\s-]/g, '') || 'Chat note';
+  const markdown = `# ${title}\n\n**Q:** ${question}\n\n**A:** ${answer}`;
+  const filename = `${title.slice(0, 50)} [chat].md`;
+
+  const docId = require('crypto').randomUUID();
+  hub.prepare(`
+    INSERT INTO documents (id, user, project_id, filename, mimetype, size_bytes, markdown)
+    VALUES (?, ?, ?, ?, 'text/markdown', ?, ?)
+  `).run(docId, req.hubUser, project.id, filename, Buffer.byteLength(markdown), markdown);
+
+  res.json({ ok: true, projectSlug, filename });
 });
 
 // ── Move conversation into a project ─────────────────────────────────────────

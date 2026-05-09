@@ -1,13 +1,35 @@
-// McLellan Hub — Google Chat CRM Bot
-// Paste this into a new Google Apps Script project at script.google.com
+// McLellan Hub — Hermes Google Chat Bot
+// Paste this into a Google Apps Script Chat app project.
+//
+// Required Script Properties:
+// - DCHAT_WEBHOOK=https://dchat.mclellan.scot/api/crm/webhook
+// - DCHAT_SECRET=<HERMES_WEBHOOK_SECRET>
+// - DCHAT_USER=douglas
+// - GCHAT_REPLY_WEBHOOK=<Google Chat incoming webhook URL for replies>
+//
+// Optional Script Properties:
+// - DCHAT_BASE=https://dchat.mclellan.scot
 
-var DCHAT_WEBHOOK = 'https://dchat.mclellan.scot/api/crm/webhook';
-var DCHAT_SECRET  = 'REDACTED_HERMES_WEBHOOK_SECRET';
-var DCHAT_USER    = 'douglas';
+function prop(name, fallback) {
+  var value = PropertiesService.getScriptProperties().getProperty(name);
+  return value || fallback || '';
+}
 
-// Incoming webhook — used to post replies back to the CRM space
-// This is the same webhook already used for morning briefings
-var GCHAT_REPLY_WEBHOOK = 'https://chat.googleapis.com/v1/spaces/AAQAjlR2tlk/messages?key=REDACTED_GOOGLE_API_KEY&token=REDACTED_GCHAT_WEBHOOK_TOKEN';
+function dchatBase() {
+  return prop('DCHAT_BASE', 'https://dchat.mclellan.scot').replace(/\/+$/, '');
+}
+
+function dchatWebhook() {
+  return prop('DCHAT_WEBHOOK', dchatBase() + '/api/crm/webhook');
+}
+
+function dchatSecret() {
+  return prop('DCHAT_SECRET');
+}
+
+function dchatUser() {
+  return prop('DCHAT_USER', 'douglas');
+}
 
 // ── Received a message ────────────────────────────────────────────────────────
 function onMessage(event) {
@@ -22,16 +44,10 @@ function onMessage(event) {
     var raw = msg.text || msg.argumentText || '';
     console.log('raw: [' + raw + ']');
 
-    var text = raw.replace(/@[^\s]+/g, '').trim().replace(/^\/crm\s*/i, '').trim();
+    var text = raw.replace(/@[^\s]+/g, '').trim().replace(/^\/(crm|hermes)\s*/i, '').trim();
+    var response = routeCommand(text, msg.name);
 
-    var response;
-    if (!text)                                                                    response = '💬 Send me a note, e.g. "Tom needs to know about Copilot"';
-    else if (text.toLowerCase() === 'help')                                       response = helpText();
-    else if (text.toLowerCase() === 'briefing' || text.toLowerCase() === 'brief') response = getBriefingText();
-    else                                                                          response = forwardToCrm(text, msg.name);
-
-    postReply(response);
-
+    if (response) postReply(response);
   } catch (err) {
     console.log('ERROR: ' + err.message);
     postReply('❌ ' + err.message);
@@ -39,14 +55,36 @@ function onMessage(event) {
   return {};
 }
 
-// ── Post reply via incoming webhook (no OAuth needed) ─────────────────────────
+function routeCommand(text, msgName) {
+  if (!text) return '💬 Send a note, or try "search Dad sore back", "today", "briefing", or "remember ...".';
+
+  var lower = text.toLowerCase();
+  if (lower === 'help') return helpText();
+  if (lower === 'briefing' || lower === 'brief') return getBriefingText();
+  if (lower === 'today' || lower === 'daily') return getDailyNote();
+  if (lower.indexOf('search ') === 0) return searchVault(text.slice(7).trim());
+  if (lower.indexOf('find ') === 0) return searchVault(text.slice(5).trim());
+  if (lower.indexOf('read ') === 0) return readVaultNote(text.slice(5).trim());
+  if (lower.indexOf('remember ') === 0) return appendToToday(text.slice(9).trim(), 'Remembered');
+  if (lower.indexOf('follow up ') === 0) return appendToToday(text.slice(10).trim(), 'Follow-ups');
+
+  return forwardToCrm(text, msgName);
+}
+
+// ── Google Chat reply via incoming webhook ────────────────────────────────────
 function postReply(text) {
-  console.log('replying: [' + text.slice(0, 100) + ']');
+  var webhook = prop('GCHAT_REPLY_WEBHOOK');
+  if (!webhook) {
+    console.log('GCHAT_REPLY_WEBHOOK not configured');
+    return;
+  }
+
+  console.log('replying: [' + String(text).slice(0, 100) + ']');
   try {
-    UrlFetchApp.fetch(GCHAT_REPLY_WEBHOOK, {
+    UrlFetchApp.fetch(webhook, {
       method: 'post',
       contentType: 'application/json',
-      payload: JSON.stringify({ text: text }),
+      payload: JSON.stringify({ text: String(text).slice(0, 3500) }),
       muteHttpExceptions: true,
     });
   } catch (err) {
@@ -54,22 +92,19 @@ function postReply(text) {
   }
 }
 
-// ── Forward note to dchat ─────────────────────────────────────────────────────
+// ── dchat / CRM ───────────────────────────────────────────────────────────────
 function forwardToCrm(text, msgName) {
-  console.log('forwarding: [' + text + ']');
+  console.log('forwarding CRM note: [' + text + ']');
   try {
-    var response = UrlFetchApp.fetch(DCHAT_WEBHOOK, {
-      method: 'post',
-      contentType: 'application/json',
-      headers: { 'Authorization': 'Bearer ' + DCHAT_SECRET },
-      payload: JSON.stringify({ text: text, user: DCHAT_USER, source: 'google-chat', dedup_key: msgName || null }),
-      muteHttpExceptions: true,
+    var response = fetchDchat(dchatWebhook(), {
+      text: text,
+      user: dchatUser(),
+      source: 'google-chat',
+      dedup_key: msgName || null,
     });
-    var code = response.getResponseCode();
-    var body = response.getContentText();
-    console.log('dchat: ' + code + ' | ' + body);
-    if (code !== 200) return '❌ dchat error (' + code + ')';
-    var result = JSON.parse(body);
+    if (response.code !== 200) return '❌ dchat error (' + response.code + ')';
+    var result = JSON.parse(response.body);
+    if (result.message === 'Duplicate ignored') return null;
     return result.ok ? '✅ ' + stripMarkdown(result.message) : '⚠️ ' + result.message;
   } catch (err) {
     console.log('forwardToCrm error: ' + err.message);
@@ -77,42 +112,101 @@ function forwardToCrm(text, msgName) {
   }
 }
 
-// ── Trigger briefing push ─────────────────────────────────────────────────────
 function getBriefingText() {
   try {
-    var response = UrlFetchApp.fetch(DCHAT_WEBHOOK.replace('/webhook', '/briefing-push'), {
-      method: 'post',
-      contentType: 'application/json',
-      headers: { 'Authorization': 'Bearer ' + DCHAT_SECRET },
-      payload: JSON.stringify({ user: DCHAT_USER }),
-      muteHttpExceptions: true,
+    var response = fetchDchat(dchatWebhook().replace('/webhook', '/briefing-push'), {
+      user: dchatUser(),
     });
-    var code = response.getResponseCode();
-    return code === 200 ? '📋 Briefing incoming.' : '⚠️ Could not push briefing (' + code + ')';
+    return response.code === 200 ? '📋 Briefing incoming.' : '⚠️ Could not push briefing (' + response.code + ')';
   } catch (err) {
     return '❌ ' + err.message;
   }
 }
 
-// ── Bot added to a space ──────────────────────────────────────────────────────
+// ── Obsidian / vault commands ────────────────────────────────────────────────
+function searchVault(query) {
+  if (!query) return 'Search for what? Example: search Dad sore back';
+  var url = dchatBase() + '/api/obsidian/search?q=' + encodeURIComponent(query) + '&limit=5';
+  var response = getDchat(url);
+  if (response.code !== 200) return '❌ Vault search error (' + response.code + ')';
+  var data = JSON.parse(response.body);
+  var results = data.results || [];
+  if (!results.length) return 'No vault matches for: ' + query;
+  return results.map(function (r, i) {
+    return (i + 1) + '. ' + r.path + '\n' + (r.excerpt || '').slice(0, 280);
+  }).join('\n\n');
+}
+
+function readVaultNote(notePath) {
+  if (!notePath) return 'Read which note? Example: read Daily/2026-05-09.md';
+  var url = dchatBase() + '/api/obsidian/note?path=' + encodeURIComponent(notePath);
+  var response = getDchat(url);
+  if (response.code === 404) return 'No such vault note: ' + notePath;
+  if (response.code !== 200) return '❌ Vault read error (' + response.code + ')';
+  var data = JSON.parse(response.body);
+  return data.path + '\n\n' + String(data.content || '').slice(0, 3000);
+}
+
+function getDailyNote() {
+  return readVaultNote('Daily/' + todayIso() + '.md');
+}
+
+function appendToToday(text, section) {
+  if (!text) return 'Append what?';
+  var content = '\n## Hermes ' + section + '\n- ' + text + '\n';
+  var response = fetchDchat(dchatBase() + '/api/obsidian/note', {
+    path: 'Daily/' + todayIso() + '.md',
+    mode: 'append',
+    content: content,
+  });
+  if (response.code !== 200) return '❌ Could not append to today (' + response.code + ')';
+  return '✅ Added to Daily/' + todayIso() + '.md';
+}
+
+// ── Bot lifecycle ─────────────────────────────────────────────────────────────
 function onAddedToSpace(event) {
-  postReply('👋 *McLellan CRM Bot* connected.\n\n• ' + helpText());
+  postReply('👋 *Hermes* connected.\n\n• ' + helpText());
   return {};
 }
 
-// ── Bot removed ───────────────────────────────────────────────────────────────
 function onRemovedFromSpace(event) {
   console.log('removed from space');
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
+function getDchat(url) {
+  var response = UrlFetchApp.fetch(url, {
+    method: 'get',
+    headers: { 'Authorization': 'Bearer ' + dchatSecret() },
+    muteHttpExceptions: true,
+  });
+  return { code: response.getResponseCode(), body: response.getContentText() };
+}
+
+function fetchDchat(url, payload) {
+  var response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'Authorization': 'Bearer ' + dchatSecret() },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+  return { code: response.getResponseCode(), body: response.getContentText() };
+}
+
+function todayIso() {
+  return Utilities.formatDate(new Date(), 'Europe/Dublin', 'yyyy-MM-dd');
+}
+
 function helpText() {
   return [
-    '"Tom needs to know about Copilot" — saves an action',
-    '"told Tom about Copilot" — marks done, creates follow-up',
-    '"Tom said he loved it" — closes the follow-up',
-    '"Beacon is my employer" — saves world context',
-    '"briefing" — push today\'s open items here',
+    '"Tom needs to know about Copilot" — saves a CRM note',
+    '"briefing" — push today\'s open CRM items',
+    '"today" — read today\'s Obsidian daily note',
+    '"search Dad sore back" — search the vault',
+    '"read Daily/2026-05-09.md" — read a vault note',
+    '"remember ..." — append to today\'s Daily note',
+    '"follow up ..." — append a follow-up to today\'s Daily note',
   ].join('\n• ');
 }
 
