@@ -354,17 +354,25 @@ a:hover { text-decoration: underline; }
   font-size: 14px;
   font-family: var(--font);
 }
-.login-card button {
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   width: 100%;
-  padding: 10px;
-  border: none;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
+  background: #fff;
+  color: var(--text);
   font-weight: 600;
   font-size: 14px;
+  font-family: var(--font);
+  text-decoration: none;
   cursor: pointer;
+  transition: box-shadow .15s;
 }
+.google-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,.12); text-decoration: none; }
 
 /* ── Footer ───────────────────────────────────────────────────────────── */
 .wiki-footer { padding: 16px 24px; border-top: 1px solid var(--line); text-align: right; }
