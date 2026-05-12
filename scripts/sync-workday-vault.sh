@@ -88,5 +88,15 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
   # ── 3. Rebuild workday daily index ───────────────────────────────────────
   /usr/bin/env node "$ROOT/scripts/build-workday-daily-index.js"
 
+  # ── 4. Daily topic digest (once per day) ─────────────────────────────────
+  DIGEST_STAMP="$LOG_DIR/.digest-last-run"
+  TODAY="$(date -u '+%Y-%m-%d')"
+  if [ "$(cat "$DIGEST_STAMP" 2>/dev/null)" != "$TODAY" ]; then
+    printf '[%s] running daily digest\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    /usr/bin/env node "$ROOT/scripts/daily-digest.js" --days=7 --user=douglas \
+      && echo "$TODAY" > "$DIGEST_STAMP" \
+      || printf '[%s] digest failed\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  fi
+
   printf '[%s] sync ok -> %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$VAULT_ROOT"
 } >> "$LOG_DIR/workday-vault-sync.log" 2>&1
