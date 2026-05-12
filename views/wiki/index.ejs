@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= q ? q + ' — ' : '' %>McLellan Wiki</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/wiki.css">
+</head>
+<body>
+<%- include('_nav', { page: 'home', q }) %>
+
+<main class="wiki-main">
+  <div class="wiki-hero">
+    <form class="wiki-search-form" id="search-form">
+      <input
+        id="search-input"
+        type="search"
+        name="q"
+        placeholder="Ask anything — searches your videos, newsletters, and documents"
+        value="<%= q %>"
+        autofocus
+      />
+      <button type="submit">Ask</button>
+    </form>
+    <p class="wiki-stats"><%= total %> knowledge pages</p>
+  </div>
+
+  <div id="results">
+    <% if (q && pages.length === 0) { %>
+      <p class="wiki-empty">No pages matched "<%= q %>"</p>
+    <% } %>
+    <% if (!q) { %>
+      <h2 class="wiki-section-head">Recently added</h2>
+    <% } %>
+    <div class="wiki-cards" id="page-cards">
+      <% for (const p of pages) { %>
+        <a href="/page/<%= encodeURIComponent(p.slug) %>" class="wiki-card">
+          <h3><%= p.title %></h3>
+          <p><%= p.content.replace(/^#+ .+\n*/m, '').replace(/\[\[([^\]]+)\]\]/g, '$1').slice(0, 120) %>…</p>
+          <div class="wiki-card-tags">
+            <% for (const t of (p.tags || []).slice(0, 4)) { %>
+              <span class="tag"><%= t %></span>
+            <% } %>
+          </div>
+        </a>
+      <% } %>
+    </div>
+
+    <div id="synthesis-wrap" style="display:none">
+      <div class="wiki-synthesis">
+        <div class="synthesis-label">Answer from your knowledge base</div>
+        <div id="synthesis-body"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+document.getElementById('search-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+  history.pushState({}, '', '/?q=' + encodeURIComponent(q));
+
+  document.getElementById('page-cards').innerHTML = '<p class="wiki-loading">Searching…</p>';
+  document.getElementById('synthesis-wrap').style.display = 'none';
+
+  const res = await fetch('/api/search?q=' + encodeURIComponent(q));
+  const data = await res.json();
+
+  const cards = document.getElementById('page-cards');
+  if (!data.results.length && !(data.emailMatches || []).length) {
+    cards.innerHTML = '<p class="wiki-empty">No matches for "' + q + '"</p>';
+    return;
+  }
+
+  cards.innerHTML = data.results.map(p => `
+    <a href="/page/${encodeURIComponent(p.slug)}" class="wiki-card">
+      <h3>${p.title}</h3>
+      <p>${p.excerpt.replace(/\[\[([^\]]+)\]\]/g, '$1')}…</p>
+      <div class="wiki-card-tags">${(p.tags||[]).slice(0,4).map(t => '<span class="tag">' + t + '</span>').join('')}</div>
+    </a>
+  `).join('') + (data.emailMatches||[]).map(e => `
+    <div class="wiki-card wiki-card-email">
+      <h3>📧 ${e.subject}</h3>
+      <p>${e.summary}</p>
+    </div>
+  `).join('');
+
+  if (data.synthesis) {
+    document.getElementById('synthesis-body').textContent = data.synthesis;
+    document.getElementById('synthesis-wrap').style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>
