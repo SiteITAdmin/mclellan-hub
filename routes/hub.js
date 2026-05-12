@@ -974,6 +974,32 @@ router.post('/api/synthadoc/ingest-url', async (req, res) => {
   }
 });
 
+// ── URL ingest via session auth (browser dchat) ───────────────────────────────
+router.post('/api/synthadoc/ingest-url/session', requireAuth, requireSameOrigin, async (req, res) => {
+  const { url, projectSlug } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  const user = req.hubUser || 'douglas';
+  try {
+    const fs = require('fs');
+    const pathMod = require('path');
+    const vaultBase = vaultRoot();
+    const queueDir = pathMod.join(vaultBase, 'raw_sources', 'ingest-queue');
+    fs.mkdirSync(queueDir, { recursive: true });
+    const slug = (projectSlug || 'general').replace(/[^a-z0-9-]/gi, '-');
+    const ts = Date.now();
+    fs.writeFileSync(
+      pathMod.join(queueDir, `${ts}-${slug}.url`),
+      JSON.stringify({ url, projectSlug, user, queuedAt: new Date().toISOString() }),
+      'utf8'
+    );
+    console.log(`[synthadoc] URL queued via session: ${url} → ${slug}`);
+    res.json({ ok: true, message: 'URL queued for ingest' });
+  } catch (err) {
+    console.error('[synthadoc ingest-url/session]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Obsidian vault API for Hermes/trusted local agents ────────────────────────
 router.get('/api/obsidian/notes', requireHermesAuth, (req, res) => {
   try {

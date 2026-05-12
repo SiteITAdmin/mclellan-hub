@@ -93,6 +93,7 @@ const ICON_PATHS = {
   people: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm14 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   x: 'M18 6L6 18M6 6l12 12',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
+  link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
 };
 
 const Icon = ({ name, size = 18 }) => (
@@ -766,6 +767,35 @@ function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
     else if (recState === 'idle') startRecording();
   }
 
+  // ── URL ingest ──────────────────────────────────────────────────────────────
+  const [urlBarOpen, setUrlBarOpen] = React.useState(false);
+  const [urlVal, setUrlVal] = React.useState('');
+  const [urlStatus, setUrlStatus] = React.useState('');
+  const urlInputRef = React.useRef(null);
+
+  async function queueUrl() {
+    const url = urlVal.trim();
+    if (!url) return;
+    setUrlStatus('Queuing…');
+    try {
+      const res = await fetch('/api/synthadoc/ingest-url/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setUrlStatus('✓ Queued');
+      setUrlVal('');
+      setTimeout(() => { setUrlStatus(''); setUrlBarOpen(false); }, 2500);
+    } catch (err) {
+      setUrlStatus('✖ ' + err.message);
+    }
+  }
+
+  React.useEffect(() => {
+    if (urlBarOpen && urlInputRef.current) urlInputRef.current.focus();
+  }, [urlBarOpen]);
+
   // Auto-grow textarea
   React.useEffect(() => {
     if (!textRef.current) return;
@@ -821,6 +851,20 @@ function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
           <Icon name="shield" size={14} /> Sensitive mode — web search off; prompt stays on-server.
         </div>
       )}
+      {urlBarOpen && (
+        <div className="comp-url-bar">
+          <input
+            ref={urlInputRef}
+            type="url"
+            placeholder="Paste YouTube or article URL to queue for knowledge ingest…"
+            value={urlVal}
+            onChange={e => setUrlVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') queueUrl(); if (e.key === 'Escape') { setUrlBarOpen(false); setUrlVal(''); setUrlStatus(''); } }}
+          />
+          <button onClick={queueUrl} disabled={!urlVal.trim()}>Queue</button>
+          {urlStatus && <span className="url-status">{urlStatus}</span>}
+        </div>
+      )}
       <div className={'composer ' + (val ? 'has-text' : '')}>
         <textarea
           ref={textRef}
@@ -852,6 +896,14 @@ function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
             style={{ display: 'none' }}
             onChange={e => handleFile(e.target.files?.[0])}
           />
+
+          <button
+            className={'comp-btn' + (urlBarOpen ? ' is-on' : '')}
+            title="Queue URL for knowledge ingest"
+            onClick={() => { setUrlBarOpen(o => !o); setUrlVal(''); setUrlStatus(''); }}
+          >
+            <Icon name="link" size={16} />
+          </button>
 
           <button
             className={'comp-btn comp-toggle ' + (opts.search !== 'off' ? 'is-on' : '')}
