@@ -1079,7 +1079,7 @@ router.get('/api/crm/briefing', requireAuth, async (req, res) => {
 // Hermes (or any external agent) posts a /crm note here
 // Secured by a shared secret: Authorization: Bearer <HERMES_WEBHOOK_SECRET>
 router.post('/api/crm/webhook', async (req, res) => {
-  const secret = process.env.HERMES_WEBHOOK_SECRET;
+  const secret = process.env.HERMES_WEBHOOK_SECRET || process.env.WORKDAY_WEBHOOK_SECRET;
   if (!secret) return res.status(503).json({ error: 'Webhook not configured' });
   const auth = req.headers.authorization || '';
   if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
@@ -1111,7 +1111,7 @@ router.post('/api/crm/webhook', async (req, res) => {
 
 // On-demand briefing push (callable from Google Chat bot or Hermes)
 router.post('/api/crm/briefing-push', async (req, res) => {
-  const secret = process.env.HERMES_WEBHOOK_SECRET;
+  const secret = process.env.HERMES_WEBHOOK_SECRET || process.env.WORKDAY_WEBHOOK_SECRET;
   if (!secret) return res.status(503).json({ error: 'Not configured' });
   const auth = req.headers.authorization || '';
   if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
