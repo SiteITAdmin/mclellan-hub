@@ -67,6 +67,8 @@ function routeCommand(text, msgName) {
   if (lower.indexOf('read ') === 0) return readVaultNote(text.slice(5).trim());
   if (lower.indexOf('remember ') === 0) return appendToToday(text.slice(9).trim(), 'Remembered');
   if (lower.indexOf('follow up ') === 0) return appendToToday(text.slice(10).trim(), 'Follow-ups');
+  if (lower.indexOf('youtube ') === 0) return ingestYouTube(text.slice(8).trim());
+  if (lower.indexOf('yt ') === 0) return ingestYouTube(text.slice(3).trim());
 
   return forwardToCrm(text, msgName);
 }
@@ -151,6 +153,16 @@ function getDailyNote() {
   return readVaultNote('Daily/' + todayIso() + '.md');
 }
 
+function ingestYouTube(url) {
+  if (!url) return 'Ingest which YouTube URL? Example: youtube https://youtu.be/abc123';
+  var response = fetchDchat(dchatBase() + '/api/synthadoc/ingest-url', {
+    url: url,
+    user: dchatUser(),
+  });
+  if (response.code === 202 || response.code === 200) return '📥 YouTube queued for ingest: ' + url;
+  return '❌ Ingest failed (' + response.code + ')';
+}
+
 function appendToToday(text, section) {
   if (!text) return 'Append what?';
   var content = '\n## Hermes ' + section + '\n- ' + text + '\n';
@@ -218,6 +230,7 @@ function helpText() {
     '"read Daily/2026-05-09.md" — read a vault note',
     '"remember ..." — append to today\'s Daily note',
     '"follow up ..." — append a follow-up to today\'s Daily note',
+    '"youtube <url>" — queue a YouTube video for vault ingest',
   ].join('\n• ');
 }
 

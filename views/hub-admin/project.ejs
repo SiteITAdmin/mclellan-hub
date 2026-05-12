@@ -16,8 +16,20 @@
 <section class="admin-section">
   <h2>Documents (<%= documents.length %>)</h2>
   <p>Uploaded files converted to markdown. Injected as context on every <code>/<%= project.slug %></code> query.</p>
+
+  <details style="margin-bottom:12px;">
+    <summary style="cursor:pointer;font-weight:500;">↑ Import from Google Drive</summary>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input id="drive-url-input" type="url" placeholder="Paste Google Drive / Docs / Sheets link…"
+             style="flex:1;min-width:260px;" />
+      <button type="button" id="drive-import-btn" onclick="importFromDrive()">Import &amp; convert</button>
+      <span id="drive-status" style="font-size:13px;color:var(--text-muted);"></span>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;">Supports Google Docs, Sheets, and regular Drive files (.docx, .pdf, .txt, .md, .csv).</p>
+  </details>
+
   <% if (documents.length === 0) { %>
-    <p>No documents yet. Upload from chat while viewing <code>/<%= project.slug %></code>.</p>
+    <p>No documents yet. Upload from chat while viewing <code>/<%= project.slug %></code>, or import from Drive above.</p>
   <% } else { %>
   <table class="admin-table">
     <thead><tr><th>Filename</th><th>Size</th><th>Uploaded</th><th></th></tr></thead>
@@ -41,6 +53,7 @@
 
 <section class="admin-section">
   <h2>Memory (<%= memories.length %> messages)</h2>
+  <p style="font-size:13px;color:var(--text-muted);">Active window: <%= project.context_depth || 20 %> messages. Older messages are automatically compacted into <em>_Project Memory.md</em> above so nothing is lost.</p>
   <% if (memories.length === 0) { %>
     <p>No memory yet. Type <code>/<%= project.slug %> your message…</code> in chat to start.</p>
   <% } %>
@@ -58,5 +71,33 @@
   <% } %>
 </section>
 
+<script>
+async function importFromDrive() {
+  const url = document.getElementById('drive-url-input').value.trim();
+  const status = document.getElementById('drive-status');
+  const btn = document.getElementById('drive-import-btn');
+  if (!url) { status.textContent = 'Paste a Drive link first.'; return; }
+  btn.disabled = true;
+  status.textContent = 'Downloading & converting…';
+  try {
+    const r = await fetch('/admin/projects/<%= project.slug %>/from-drive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ driveUrl: url }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = `✓ Imported "${d.filename}" (${Math.round(d.chars/1024*10)/10} KB)`;
+      document.getElementById('drive-url-input').value = '';
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      status.textContent = `Error: ${d.error}`;
+    }
+  } catch (e) {
+    status.textContent = `Failed: ${e.message}`;
+  }
+  btn.disabled = false;
+}
+</script>
 </body>
 </html>
