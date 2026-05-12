@@ -19,12 +19,6 @@
       <p>Paste a YouTube URL — the full transcript will be fetched and key concepts extracted.</p>
       <div class="ingest-form" id="yt-form">
         <input type="url" id="yt-url" placeholder="https://youtube.com/watch?v=…" />
-        <select id="yt-project">
-          <option value="">No project link</option>
-          <% for (const p of projects) { %>
-            <option value="<%= p.slug %>">/<%= p.slug %> — <%= p.name %></option>
-          <% } %>
-        </select>
         <button onclick="queueUrl('yt')">Queue video</button>
         <span class="ingest-status" id="yt-status"></span>
       </div>
@@ -35,12 +29,6 @@
       <p>Paste any URL — the page content will be fetched and summarised into the wiki.</p>
       <div class="ingest-form" id="web-form">
         <input type="url" id="web-url" placeholder="https://…" />
-        <select id="web-project">
-          <option value="">No project link</option>
-          <% for (const p of projects) { %>
-            <option value="<%= p.slug %>">/<%= p.slug %> — <%= p.name %></option>
-          <% } %>
-        </select>
         <button onclick="queueUrl('web')">Queue article</button>
         <span class="ingest-status" id="web-status"></span>
       </div>
@@ -63,7 +51,6 @@
 <script>
 async function queueUrl(type) {
   const urlInput = document.getElementById(type === 'yt' ? 'yt-url' : 'web-url');
-  const projectSel = document.getElementById(type === 'yt' ? 'yt-project' : 'web-project');
   const statusEl = document.getElementById(type === 'yt' ? 'yt-status' : 'web-status');
   const url = urlInput.value.trim();
   if (!url) return;
@@ -72,7 +59,7 @@ async function queueUrl(type) {
     const res = await fetch('/api/ingest/url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, projectSlug: projectSel.value || null }),
+      body: JSON.stringify({ url }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
