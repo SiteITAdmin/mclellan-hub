@@ -18,8 +18,9 @@ fi
 trap 'rmdir "$LOCK_DIR"' EXIT
 
 # ── Synthadoc env ─────────────────────────────────────────────────────────────
-SYNTHADOC_BIN="${SYNTHADOC_BIN:-$ROOT/.tools/synthadoc-venv/bin/synthadoc}"
-SYNTHADOC_CONFIG="${SYNTHADOC_CONFIG:-$ROOT/config/synthadoc.toml}"
+SYNTHADOC_PYTHON="${SYNTHADOC_PYTHON:-$ROOT/.tools/synthadoc-venv/bin/python}"
+SYNTHADOC_SRC="${SYNTHADOC_SRC:-$ROOT/.tools/synthadoc}"
+export PYTHONPATH="$SYNTHADOC_SRC"
 
 # Load local .env if present so OPENROUTER_API_KEY etc. are available
 if [ -f "$ROOT/.env" ]; then
@@ -55,13 +56,13 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
   # ── 2. Process ingest queue ───────────────────────────────────────────────
   QUEUE_DIR="$VAULT_ROOT/raw_sources/ingest-queue"
 
-  if [ -d "$QUEUE_DIR" ] && [ -x "$SYNTHADOC_BIN" ]; then
+  if [ -d "$QUEUE_DIR" ] && [ -x "$SYNTHADOC_PYTHON" ]; then
     # .path files → local file paths to ingest
     find "$QUEUE_DIR" -maxdepth 1 -name '*.path' | sort | while read -r qfile; do
       target="$(cat "$qfile" | tr -d '[:space:]')"
       if [ -f "$target" ]; then
         printf '[%s] ingest path: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$target"
-        "$SYNTHADOC_BIN" --config "$SYNTHADOC_CONFIG" ingest "$target" && rm -f "$qfile" \
+        (cd "$VAULT_ROOT" && "$SYNTHADOC_PYTHON" -m synthadoc ingest "$target") && rm -f "$qfile" \
           || printf '[%s] ingest failed: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$target"
       else
         printf '[%s] path not found (skipping): %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$target"
@@ -71,18 +72,18 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
 
     # .url files → JSON {"url":"..."} to ingest
     find "$QUEUE_DIR" -maxdepth 1 -name '*.url' | sort | while read -r qfile; do
-      url="$(python3 -c "import sys,json; print(json.load(open(sys.argv[1]))['url'])" "$qfile" 2>/dev/null || true)"
+      url="$("$SYNTHADOC_PYTHON" -c "import sys,json; print(json.load(open(sys.argv[1]))['url'])" "$qfile" 2>/dev/null || true)"
       if [ -n "$url" ]; then
         printf '[%s] ingest url: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$url"
-        "$SYNTHADOC_BIN" --config "$SYNTHADOC_CONFIG" ingest "$url" && rm -f "$qfile" \
+        (cd "$VAULT_ROOT" && "$SYNTHADOC_PYTHON" -m synthadoc ingest "$url") && rm -f "$qfile" \
           || printf '[%s] ingest url failed: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$url"
       else
         printf '[%s] malformed url file (skipping): %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$qfile"
         rm -f "$qfile"
       fi
     done
-  elif [ ! -x "$SYNTHADOC_BIN" ]; then
-    printf '[%s] synthadoc not found at %s — skipping queue\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$SYNTHADOC_BIN"
+  elif [ ! -x "$SYNTHADOC_PYTHON" ]; then
+    printf '[%s] synthadoc python not found at %s — skipping queue\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$SYNTHADOC_PYTHON"
   fi
 
   # ── 3. Rebuild workday daily index ───────────────────────────────────────
