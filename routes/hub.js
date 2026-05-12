@@ -922,6 +922,26 @@ router.post('/api/journal/audio', uploadLimiter, express.raw({ type: '*/*', limi
     .catch(err => console.error('[journal] processing failed:', err.message));
 });
 
+// ── Journal audio from browser (session auth) ─────────────────────────────────
+router.post('/api/journal/audio/session', requireAuth, requireSameOrigin, uploadLimiter, audioUpload.single('audio'), async (req, res) => {
+  if (!req.file || !req.file.buffer.length) {
+    return res.status(400).json({ error: 'Audio file required' });
+  }
+
+  res.status(202).json({ ok: true, message: 'Journal audio received — processing' });
+
+  const user = req.hubUser;
+  const { transcribeAudioBuffer } = require('../lib/workday-ingest');
+  transcribeAudioBuffer({ buffer: req.file.buffer, filename: req.file.originalname || 'journal.webm', mimetype: req.file.mimetype || 'audio/webm' })
+    .then(transcript => writeJournalEntry(user, transcript))
+    .then(({ notePath }) => {
+      console.log(`[journal] entry written for ${user}: ${notePath}`);
+      const { pushGoogleChatBriefing } = require('../lib/crm');
+      pushGoogleChatBriefing(user, `📓 *Journal saved* — ${notePath}`).catch(() => {});
+    })
+    .catch(err => console.error('[journal] processing failed:', err.message));
+});
+
 // ── YouTube / URL ingest queue ────────────────────────────────────────────────
 // Writes URL to vault ingest-queue so Mac Mini synthadoc picks it up on sync
 router.post('/api/synthadoc/ingest-url', async (req, res) => {
