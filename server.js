@@ -8,6 +8,7 @@ const hubRouter = require('./routes/hub');
 const hubAdminRouter = require('./routes/hub-admin');
 const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
+const wikiRouter = require('./routes/wiki');
 const { sendDailyBriefing, sendEmailBriefing } = require('./lib/crm');
 const { processNewEmails } = require('./lib/email-processor');
 
@@ -53,6 +54,10 @@ app.use(session({
 // ── Hostname router ───────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   const host = req.hostname;
+
+  if (host === 'wiki.mclellan.scot') {
+    return wikiRouter(req, res, next);
+  }
 
   if (host === 'dchat.mclellan.scot' || host === 'nchat.mclellan.scot') {
     req.hubUser = host.startsWith('d') ? 'douglas' : 'nakai';

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= page.title %> — McLellan Wiki</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/wiki.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css">
+</head>
+<body>
+<%- include('_nav', { page: '', q: '' }) %>
+<main class="wiki-main wiki-page-wrap">
+  <div class="wiki-page-meta">
+    <% for (const cat of page.categories) { %><span class="tag tag-cat"><%= cat %></span><% } %>
+    <% for (const t of page.tags) { %><span class="tag"><%= t %></span><% } %>
+    <% if (page.created) { %><span class="meta-date"><%= new Date(page.created).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) %></span><% } %>
+    <% if (page.confidence) { %><span class="meta-conf conf-<%= page.confidence %>"><%= page.confidence %></span><% } %>
+  </div>
+
+  <article class="wiki-article" id="article-body">
+    <p class="wiki-loading">Loading…</p>
+  </article>
+
+  <% if (page.sources && page.sources.length) { %>
+  <section class="wiki-sources">
+    <h3>Sources (<%= page.sources.length %>)</h3>
+    <ul>
+      <% for (const s of page.sources) { %>
+        <li class="source-item">
+          <% const name = (s.file || '').split('/').pop().replace(/\.md$/, ''); %>
+          <span class="source-name"><%= name %></span>
+          <% if (s.ingested) { %><span class="source-date"><%= new Date(s.ingested).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) %></span><% } %>
+        </li>
+      <% } %>
+    </ul>
+  </section>
+  <% } %>
+
+  <% if (related.length) { %>
+  <section class="wiki-related">
+    <h3>Related</h3>
+    <div class="wiki-cards wiki-cards-sm">
+      <% for (const r of related) { %>
+        <a href="/page/<%= encodeURIComponent(r.slug) %>" class="wiki-card">
+          <h3><%= r.title %></h3>
+          <div class="wiki-card-tags"><% for (const t of r.tags.slice(0,3)) { %><span class="tag tag-sm"><%= t %></span><% } %></div>
+        </a>
+      <% } %>
+    </div>
+  </section>
+  <% } %>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+<script>
+  const raw = <%- JSON.stringify(page.content) %>;
+  // Convert [[wikilinks]] to anchor tags
+  const linked = raw.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, slug, label) => {
+    const text = label || slug;
+    const href = '/page/' + encodeURIComponent(slug.toLowerCase().replace(/\s+/g, '-'));
+    return '[' + text + '](' + href + ')';
+  });
+  document.getElementById('article-body').innerHTML = marked.parse(linked);
+  document.getElementById('article-body').querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+</script>
+</body>
+</html>

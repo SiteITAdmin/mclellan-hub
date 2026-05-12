@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add — McLellan Wiki</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/wiki.css">
+</head>
+<body>
+<%- include('_nav', { page: 'ingest', q: '' }) %>
+<main class="wiki-main">
+  <h1 class="wiki-page-title">Add to knowledge base</h1>
+
+  <div class="ingest-grid">
+
+    <section class="ingest-card">
+      <h2>YouTube video</h2>
+      <p>Paste a YouTube URL — the full transcript will be fetched and key concepts extracted.</p>
+      <div class="ingest-form" id="yt-form">
+        <input type="url" id="yt-url" placeholder="https://youtube.com/watch?v=…" />
+        <select id="yt-project">
+          <option value="">No project link</option>
+          <% for (const p of projects) { %>
+            <option value="<%= p.slug %>">/<%= p.slug %> — <%= p.name %></option>
+          <% } %>
+        </select>
+        <button onclick="queueUrl('yt')">Queue video</button>
+        <span class="ingest-status" id="yt-status"></span>
+      </div>
+    </section>
+
+    <section class="ingest-card">
+      <h2>Article or webpage</h2>
+      <p>Paste any URL — the page content will be fetched and summarised into the wiki.</p>
+      <div class="ingest-form" id="web-form">
+        <input type="url" id="web-url" placeholder="https://…" />
+        <select id="web-project">
+          <option value="">No project link</option>
+          <% for (const p of projects) { %>
+            <option value="<%= p.slug %>">/<%= p.slug %> — <%= p.name %></option>
+          <% } %>
+        </select>
+        <button onclick="queueUrl('web')">Queue article</button>
+        <span class="ingest-status" id="web-status"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <% if (queued.length) { %>
+  <section class="ingest-queue">
+    <h2>Recently queued</h2>
+    <ul>
+      <% for (const f of queued) { %>
+        <li class="queue-item"><span class="queue-icon"><%= f.endsWith('.url') ? '🔗' : '📄' %></span> <%= f.replace(/^\d+-/, '').replace(/\.(url|path)$/, '') %></li>
+      <% } %>
+    </ul>
+  </section>
+  <% } %>
+</main>
+
+<script>
+async function queueUrl(type) {
+  const urlInput = document.getElementById(type === 'yt' ? 'yt-url' : 'web-url');
+  const projectSel = document.getElementById(type === 'yt' ? 'yt-project' : 'web-project');
+  const statusEl = document.getElementById(type === 'yt' ? 'yt-status' : 'web-status');
+  const url = urlInput.value.trim();
+  if (!url) return;
+  statusEl.textContent = 'Queuing…';
+  try {
+    const res = await fetch('/api/ingest/url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, projectSlug: projectSel.value || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    statusEl.textContent = '✓ Queued — will appear in Browse after next sync';
+    urlInput.value = '';
+  } catch(err) {
+    statusEl.textContent = '✖ ' + err.message;
+  }
+}
+</script>
+</body>
+</html>

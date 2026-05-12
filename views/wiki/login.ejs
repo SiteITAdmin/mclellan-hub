@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>McLellan Wiki — Sign in</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/wiki.css">
+</head>
+<body class="login-page">
+<div class="login-wrap">
+  <div class="login-card">
+    <h1>McLellan Wiki</h1>
+    <p class="login-sub">Knowledge base</p>
+    <% if (error) { %><p class="login-error"><%= error %></p><% } %>
+    <form method="POST" action="/login">
+      <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password" />
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>
