@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const db = require('../lib/db');
 const { vaultRoot } = require('../lib/obsidian-vault');
+const { startGoogleAuth, finishGoogleAuth } = require('../lib/google-auth');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
@@ -17,24 +18,30 @@ router.use(limiter);
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const WIKI_USER = 'douglas';
-const WIKI_PASSWORD = process.env.DOUGLAS_HUB_PASSWORD;
 
 function requireAuth(req, res, next) {
   if (req.session?.wikiAuthed) return next();
   res.redirect('/login');
 }
 
-router.get('/login', (req, res) => res.render('wiki/login', { error: null }));
+router.get('/login', (req, res) => res.render('wiki/login'));
 
-router.post('/login', express.urlencoded({ extended: false }), (req, res) => {
-  if (req.body.password === WIKI_PASSWORD) {
-    req.session.wikiAuthed = true;
-    return res.redirect('/');
-  }
-  res.render('wiki/login', { error: 'Wrong password' });
-});
+router.get('/auth/google', startGoogleAuth({
+  purpose: 'wiki',
+  user: WIKI_USER,
+  callbackPath: '/auth/google/callback',
+  returnTo: '/',
+}));
 
-router.post('/logout', requireAuth, (req, res) => {
+router.get('/auth/google/callback', finishGoogleAuth({
+  purpose: 'wiki',
+  user: WIKI_USER,
+  callbackPath: '/auth/google/callback',
+  sessionKey: 'wikiAuthed',
+  returnTo: '/',
+}));
+
+router.post('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/login'));
 });
 
