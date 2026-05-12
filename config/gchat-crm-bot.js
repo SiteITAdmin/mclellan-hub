@@ -159,6 +159,17 @@ function appendToToday(text, section) {
     mode: 'append',
     content: content,
   });
+  // Silently also try to route through CRM — ok if no contact is identified
+  try {
+    var crmText = section === 'Follow-ups' ? 'follow up: ' + text : text;
+    fetchDchat(dchatWebhook(), {
+      text: crmText,
+      user: dchatUser(),
+      source: 'hermes-remember',
+    });
+  } catch (e) {
+    console.log('CRM forward skipped: ' + e.message);
+  }
   if (response.code !== 200) return '❌ Could not append to today (' + response.code + ')';
   return '✅ Added to Daily/' + todayIso() + '.md';
 }
