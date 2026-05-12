@@ -145,7 +145,9 @@ router.get('/admin/projects/:slug', requireHubAdmin, (req, res) => {
      WHERE project_id = ?
   ORDER BY uploaded_at DESC
   `).all(project.id);
-  res.render('hub-admin/project', { user: req.hubUser, project, memories, documents });
+  const wikiTags = getAllWikiTags();
+  const matchedPages = getWikiPagesByTags(JSON.parse(project.wiki_tags || '[]'), { limit: 5 });
+  res.render('hub-admin/project', { user: req.hubUser, project, memories, documents, wikiTags, matchedPages });
 });
 
 router.post('/admin/documents/:id/delete', requireHubAdmin, (req, res) => {
@@ -179,6 +181,42 @@ router.post('/admin/memories/:id/delete', requireHubAdmin, (req, res) => {
     : null;
   hub.prepare('DELETE FROM messages WHERE id = ?').run(msg.id);
   res.redirect(project ? `/admin/projects/${project.slug}` : '/admin');
+});
+
+// ── Wiki tags API ─────────────────────────────────────────────────────────────
+const { getAllWikiTags, getWikiPagesByTags } = require('../lib/wiki-tags');
+
+router.get('/admin/api/wiki-tags', requireHubAdmin, (req, res) => {
+  res.json({ tags: getAllWikiTags() });
+});
+
+router.post('/admin/projects/:id/wiki-tags', requireHubAdmin, (req, res) => {
+  const tags = req.body.tags;
+  const arr = Array.isArray(tags) ? tags : (tags ? [tags] : []);
+  db.hub().prepare('UPDATE projects SET wiki_tags = ? WHERE id = ? AND user = ?')
+    .run(JSON.stringify(arr), req.params.id, req.hubUser);
+  res.redirect(`/admin`);
+});
+
+// ── CRM contacts admin ────────────────────────────────────────────────────────
+router.get('/admin/crm', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const contacts = hub.prepare(
+    'SELECT * FROM contacts WHERE user = ? ORDER BY name'
+  ).all(req.hubUser).map(c => ({
+    ...c,
+    matchedPages: getWikiPagesByTags(JSON.parse(c.wiki_tags || '[]'), { limit: 5 }),
+  }));
+  const wikiTags = getAllWikiTags();
+  res.render('hub-admin/crm', { user: req.hubUser, contacts, wikiTags });
+});
+
+router.post('/admin/contacts/:id/wiki-tags', requireHubAdmin, (req, res) => {
+  const tags = req.body.tags;
+  const arr = Array.isArray(tags) ? tags : (tags ? [tags] : []);
+  db.hub().prepare('UPDATE contacts SET wiki_tags = ? WHERE id = ? AND user = ?')
+    .run(JSON.stringify(arr), req.params.id, req.hubUser);
+  res.redirect('/admin/crm');
 });
 
 // ── Chat logs ─────────────────────────────────────────────────────────────────
