@@ -714,7 +714,15 @@ function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
         try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (_) {}
       }
       chunksRef.current = [];
-      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
+      const preferredType = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+        '',
+      ].find(t => t === '' || MediaRecorder.isTypeSupported(t));
+      const mrOpts = preferredType ? { mimeType: preferredType } : {};
+      const mr = new MediaRecorder(stream, mrOpts);
       mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); uploadJournal(chunksRef.current, mr.mimeType); };
       mr.start(1000);
@@ -723,8 +731,9 @@ function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
       setRecState('recording');
       timerRef.current = setInterval(() => setRecSecs(s => s + 1), 1000);
     } catch (err) {
+      console.error('[journal] mic error:', err.name, err.message);
       setRecState('error');
-      setTimeout(() => setRecState('idle'), 3000);
+      setTimeout(() => setRecState('idle'), 5000);
     }
   }
 
@@ -738,7 +747,7 @@ function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
     setRecState('uploading');
     try {
       const blob = new Blob(chunks, { type: mimeType });
-      const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
       const fd = new FormData();
       fd.append('audio', blob, `journal.${ext}`);
       const res = await fetch('/api/journal/audio/session', { method: 'POST', body: fd });
