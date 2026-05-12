@@ -534,14 +534,14 @@ scrollToBottom();
 
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+        status.textContent = `✖ ${err.error || 'Upload failed'}`;
+        return;
+      }
 
       // Project upload: JSON response, no streaming
       if (projectSlug) {
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: 'Upload failed' }));
-          status.textContent = `✖ ${err.error}`;
-          return;
-        }
         const data = await res.json();
         status.textContent = `✓ Saved ${data.document.filename} to /${data.document.project}`;
         input.value = '';
