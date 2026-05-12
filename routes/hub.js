@@ -10,7 +10,8 @@ const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { processCrmCommand, listContacts, buildBriefingText, fetchTodayCalendarEvents } = require('../lib/crm');
 const { compactProject } = require('../lib/memory-compactor');
 const { ingestWorkdayInterview } = require('../lib/workday-ingest');
-const { listNotes, readNote, searchNotes, writeNote } = require('../lib/obsidian-vault');
+const { writeJournalEntry } = require('../lib/journal');
+const { listNotes, readNote, searchNotes, writeNote, vaultRoot } = require('../lib/obsidian-vault');
 const {
   buildPromptInjectionGuard,
   createRateLimiter,
@@ -687,6 +688,22 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, upload
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(docId, req.hubUser, project.id, req.file.originalname, req.file.mimetype, req.file.size, md);
 
+    // Mirror to vault Projects/{slug}/raw_sources/ and queue for synthadoc
+    try {
+      const fs = require('fs');
+      const vaultBase = vaultRoot();
+      const rawDir = require('path').join(vaultBase, 'Projects', project.slug, 'raw_sources');
+      fs.mkdirSync(rawDir, { recursive: true });
+      const vaultFile = require('path').join(rawDir, req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_') + '.md');
+      fs.writeFileSync(vaultFile, md, 'utf8');
+      // Ingest queue for Mac Mini synthadoc
+      const queueDir = require('path').join(vaultBase, 'raw_sources', 'ingest-queue');
+      fs.mkdirSync(queueDir, { recursive: true });
+      fs.writeFileSync(require('path').join(queueDir, `${docId}.path`), vaultFile, 'utf8');
+    } catch (vaultErr) {
+      console.warn('[upload] vault mirror failed:', vaultErr.message);
+    }
+
     return res.json({
       ok: true,
       document: { id: docId, filename: req.file.originalname, size: req.file.size, project: project.slug },
@@ -876,6 +893,65 @@ router.post('/api/workday/audio', uploadLimiter, express.raw({ type: '*/*', limi
         .catch(() => {});
     })
     .catch(err => console.error('[workday audio] background processing failed:', err.message));
+});
+
+// ── Journal audio — personal diary entry from voice note ─────────────────────
+router.post('/api/journal/audio', uploadLimiter, express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {
+  const auth = validWorkdayWebhookAuth(req);
+  if (!auth.configured) return res.status(503).json({ error: 'Not configured' });
+  if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    return res.status(400).json({ error: 'Audio body required' });
+  }
+
+  res.status(202).json({ ok: true, message: 'Journal audio received — processing' });
+
+  const user = req.headers['x-workday-user'] || 'douglas';
+  const audioBuffer = req.body;
+  const filename = req.headers['x-workday-filename'] || 'journal-audio.m4a';
+  const mimetype = req.headers['content-type'] || 'audio/mp4';
+
+  const { transcribeAudioBuffer } = require('../lib/workday-ingest');
+  transcribeAudioBuffer({ buffer: audioBuffer, filename, mimetype })
+    .then(transcript => writeJournalEntry(user, transcript))
+    .then(({ notePath }) => {
+      console.log(`[journal] entry written for ${user}: ${notePath}`);
+      const { pushGoogleChatBriefing } = require('../lib/crm');
+      pushGoogleChatBriefing(user, `📓 *Journal saved* — ${notePath}`).catch(() => {});
+    })
+    .catch(err => console.error('[journal] processing failed:', err.message));
+});
+
+// ── YouTube / URL ingest queue ────────────────────────────────────────────────
+// Writes URL to vault ingest-queue so Mac Mini synthadoc picks it up on sync
+router.post('/api/synthadoc/ingest-url', async (req, res) => {
+  const secret = process.env.HERMES_WEBHOOK_SECRET || process.env.WORKDAY_WEBHOOK_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Not configured' });
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { url, projectSlug, user = 'douglas' } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  try {
+    const fs = require('fs');
+    const pathMod = require('path');
+    const vaultBase = vaultRoot();
+    const queueDir = pathMod.join(vaultBase, 'raw_sources', 'ingest-queue');
+    fs.mkdirSync(queueDir, { recursive: true });
+    const slug = (projectSlug || 'general').replace(/[^a-z0-9-]/gi, '-');
+    const ts = Date.now();
+    fs.writeFileSync(
+      pathMod.join(queueDir, `${ts}-${slug}.url`),
+      JSON.stringify({ url, projectSlug, user, queuedAt: new Date().toISOString() }),
+      'utf8'
+    );
+    console.log(`[synthadoc] URL queued for ingest: ${url} → ${slug}`);
+    res.json({ ok: true, message: 'URL queued for ingest' });
+  } catch (err) {
+    console.error('[synthadoc ingest-url]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Obsidian vault API for Hermes/trusted local agents ────────────────────────

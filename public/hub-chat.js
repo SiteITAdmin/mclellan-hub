@@ -254,6 +254,10 @@ document.getElementById('chat-form').addEventListener('submit', async function (
   let stopped = false;
   let sawDone = false;
   let pollingStarted = false;
+  // Capture the request start time now, before any async work.
+  // pollForSavedAnswer uses this so it searches from BEFORE the message was
+  // sent, not from the moment the screen comes back on (the old bug).
+  const requestStartSec = Math.floor(Date.now() / 1000);
 
   function showSavedAnswer(message) {
     contentEl.innerHTML = renderMarkdownSafe(message.content);
@@ -280,10 +284,14 @@ document.getElementById('chat-form').addEventListener('submit', async function (
     );
     scrollToBottom();
 
-    const pollSince = Math.floor((Date.now() - 5000) / 1000); // 5s grace window
+    // Use the time the request was sent (minus 10 s for clock skew), NOT the
+    // current time — this is the fix for the screen-off mobile bug where
+    // pollSince was set to "now" and missed answers saved while the screen was off.
+    const pollSince = requestStartSec - 10;
     const pollDeadline = Date.now() + 5 * 60 * 1000; // give up after 5 min
+    let pollTimer = null;
 
-    const pollTimer = setInterval(async () => {
+    async function attemptPoll() {
       if (Date.now() > pollDeadline) {
         clearInterval(pollTimer);
         contentEl.innerHTML = renderMarkdownSafe('*Answer timed out — reload the conversation to see it.*');
@@ -294,10 +302,23 @@ document.getElementById('chat-form').addEventListener('submit', async function (
         const pd = await pr.json();
         if (pd.message && pd.message.content) {
           clearInterval(pollTimer);
+          document.removeEventListener('visibilitychange', onVisible);
           showSavedAnswer(pd.message);
         }
       } catch (_) {}
-    }, 3000);
+    }
+
+    // Poll immediately (don't wait for first interval tick), then every 1.5 s.
+    attemptPoll();
+    pollTimer = setInterval(attemptPoll, 1500);
+
+    // When the screen comes back on, poll immediately rather than waiting for
+    // the next interval — this makes the answer appear as fast as possible
+    // after the phone is unlocked.
+    function onVisible() {
+      if (document.visibilityState === 'visible') attemptPoll();
+    }
+    document.addEventListener('visibilitychange', onVisible);
   }
 
   try {

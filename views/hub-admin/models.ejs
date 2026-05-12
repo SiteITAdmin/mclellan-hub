@@ -175,21 +175,33 @@
 
 <section class="admin-section">
   <h2>Add a model</h2>
-  <form method="POST" action="/admin/models" class="model-form">
+
+  <!-- ── OpenRouter model search picker ───────────────────────────────────── -->
+  <div style="margin-bottom:20px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:8px">
+      Browse OpenRouter catalogue
+    </div>
+    <input id="or-search" type="search" placeholder="Type to search OpenRouter models…"
+      style="width:100%;max-width:520px;padding:9px 12px;font-size:13px;border:1px solid var(--outline,#767586);border-radius:8px;background:var(--bg,#fcf8ff);color:var(--text,#1b1b23);outline:none;box-sizing:border-box">
+    <div id="or-results" style="display:none;margin-top:6px;border:1px solid var(--outline,#767586);border-radius:8px;overflow:hidden;max-width:520px;max-height:280px;overflow-y:auto;background:var(--bg,#fcf8ff)"></div>
+    <div id="or-status" style="font-size:12px;color:var(--text-dim);margin-top:6px"></div>
+  </div>
+
+  <form method="POST" action="/admin/models" class="model-form" id="add-model-form">
     <div class="form-row">
       <div class="field">
         <label>Key <span style="font-weight:400;text-transform:none">(unique, internal)</span></label>
-        <input name="key" pattern="[a-z0-9-]+" placeholder="perplexity-sonar-pro" required>
+        <input id="f-key" name="key" pattern="[a-z0-9-]+" placeholder="perplexity-sonar-pro" required>
       </div>
       <div class="field">
         <label>Label <span style="font-weight:400;text-transform:none">(shown in dropdown)</span></label>
-        <input name="label" placeholder="Perplexity Sonar Pro" required>
+        <input id="f-label" name="label" placeholder="Perplexity Sonar Pro" required>
       </div>
     </div>
     <div class="form-row">
       <div class="field">
         <label>Endpoint</label>
-        <select name="endpoint" required>
+        <select id="f-endpoint" name="endpoint" required>
           <option value="openrouter">openrouter</option>
           <option value="custom-openai">custom-openai (OpenAI-compatible)</option>
           <option value="google-ai">google-ai (image)</option>
@@ -197,7 +209,7 @@
       </div>
       <div class="field">
         <label>Model ID <span style="font-weight:400;text-transform:none">(provider's identifier)</span></label>
-        <input name="model_id" placeholder="sonar-pro" required>
+        <input id="f-model-id" name="model_id" placeholder="sonar-pro" required>
       </div>
     </div>
     <div class="form-row">
@@ -240,5 +252,111 @@
   </form>
 </section>
 
+<script>
+(function () {
+  const searchEl  = document.getElementById('or-search');
+  const resultsEl = document.getElementById('or-results');
+  const statusEl  = document.getElementById('or-status');
+  const fKey      = document.getElementById('f-key');
+  const fLabel    = document.getElementById('f-label');
+  const fModelId  = document.getElementById('f-model-id');
+  const fEndpoint = document.getElementById('f-endpoint');
+
+  let allModels = null;
+  let loadPromise = null;
+
+  function slugify(s) {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  }
+
+  function formatPrice(v) {
+    if (v === null || v === undefined) return '–';
+    const n = parseFloat(v);
+    return n === 0 ? 'free' : '$' + n.toFixed(n < 0.01 ? 4 : 2);
+  }
+
+  function loadModels() {
+    if (loadPromise) return loadPromise;
+    statusEl.textContent = 'Loading OpenRouter catalogue…';
+    loadPromise = fetch('/admin/openrouter-models')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        allModels = data;
+        statusEl.textContent = allModels.length + ' models available — type to filter';
+        return allModels;
+      })
+      .catch(err => {
+        statusEl.textContent = '⚠ Could not load catalogue: ' + err.message;
+        loadPromise = null;
+      });
+    return loadPromise;
+  }
+
+  function renderResults(query) {
+    if (!allModels) return;
+    const q = query.toLowerCase().trim();
+    const hits = q
+      ? allModels.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)).slice(0, 40)
+      : [];
+
+    if (!hits.length) {
+      resultsEl.style.display = 'none';
+      return;
+    }
+
+    resultsEl.style.display = 'block';
+    resultsEl.innerHTML = hits.map(m => `
+      <div class="or-result" data-id="${m.id}" data-name="${m.name.replace(/"/g,'&quot;')}"
+        style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--outline,#e0ddf0);display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px">
+        <div>
+          <div style="font-weight:600">${m.name}</div>
+          <div style="font-family:monospace;font-size:11px;color:var(--text-dim)">${m.id}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap;font-size:11px;color:var(--text-dim)">
+          <div>in ${formatPrice(m.inputPer1M)}/M</div>
+          <div>out ${formatPrice(m.outputPer1M)}/M</div>
+          ${m.context ? '<div>' + (m.context/1000).toFixed(0) + 'k ctx</div>' : ''}
+        </div>
+      </div>`).join('');
+
+    resultsEl.querySelectorAll('.or-result').forEach(el => {
+      el.addEventListener('mouseenter', () => el.style.background = 'rgba(70,72,212,0.07)');
+      el.addEventListener('mouseleave', () => el.style.background = '');
+      el.addEventListener('click', () => {
+        const id   = el.dataset.id;
+        const name = el.dataset.name;
+        fModelId.value  = id;
+        fLabel.value    = name;
+        fKey.value      = slugify(id);
+        fEndpoint.value = 'openrouter';
+        resultsEl.style.display = 'none';
+        searchEl.value = '';
+        statusEl.textContent = '✓ Filled in — review fields below and click Add model';
+        fKey.focus();
+      });
+    });
+  }
+
+  let debounce;
+  searchEl.addEventListener('focus', loadModels);
+  searchEl.addEventListener('input', () => {
+    clearTimeout(debounce);
+    const q = searchEl.value.trim();
+    if (!q) { resultsEl.style.display = 'none'; return; }
+    if (!allModels) {
+      loadModels().then(() => renderResults(q));
+      return;
+    }
+    debounce = setTimeout(() => renderResults(q), 120);
+  });
+
+  document.addEventListener('click', e => {
+    if (!resultsEl.contains(e.target) && e.target !== searchEl) {
+      resultsEl.style.display = 'none';
+    }
+  });
+})();
+</script>
 </body>
 </html>

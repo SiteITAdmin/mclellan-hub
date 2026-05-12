@@ -8,7 +8,8 @@ const hubRouter = require('./routes/hub');
 const hubAdminRouter = require('./routes/hub-admin');
 const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
-const { sendDailyBriefing } = require('./lib/crm');
+const { sendDailyBriefing, sendEmailBriefing } = require('./lib/crm');
+const { processNewEmails } = require('./lib/email-processor');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -95,16 +96,41 @@ app.listen(PORT, () => {
   console.log(`mclellan-hub listening on port ${PORT}`);
 });
 
-// ── Daily CRM briefing ────────────────────────────────────────────────────────
-// Runs every minute, fires at BRIEFING_HOUR:BRIEFING_MINUTE in Europe/London time
-const BRIEFING_HOUR = parseInt(process.env.BRIEFING_HOUR || '7');
-const BRIEFING_MINUTE = parseInt(process.env.BRIEFING_MINUTE || '30');
+// ── Scheduler helpers ─────────────────────────────────────────────────────────
+
+function nowIn(tz) {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+}
+
 const BRIEFING_USERS = (process.env.BRIEFING_USERS || 'douglas,nakai').split(',').map(u => u.trim()).filter(Boolean);
 
-setInterval(async () => {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/London' }));
+// ── Morning CRM briefing (07:30 Europe/London) ────────────────────────────────
+const BRIEFING_HOUR = parseInt(process.env.BRIEFING_HOUR || '7');
+const BRIEFING_MINUTE = parseInt(process.env.BRIEFING_MINUTE || '30');
+
+setInterval(() => {
+  const now = nowIn('Europe/London');
   if (now.getHours() !== BRIEFING_HOUR || now.getMinutes() !== BRIEFING_MINUTE) return;
   for (const user of BRIEFING_USERS) {
-    sendDailyBriefing(user).catch(err => console.error(`[crm] briefing error for ${user}:`, err));
+    sendDailyBriefing(user).catch(err => console.error(`[crm] morning briefing error for ${user}:`, err));
   }
 }, 60 * 1000);
+
+// ── Email digest (16:00 Europe/Dublin) ───────────────────────────────────────
+const EMAIL_BRIEFING_HOUR = parseInt(process.env.EMAIL_BRIEFING_HOUR || '16');
+const EMAIL_BRIEFING_MINUTE = parseInt(process.env.EMAIL_BRIEFING_MINUTE || '0');
+
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getHours() !== EMAIL_BRIEFING_HOUR || now.getMinutes() !== EMAIL_BRIEFING_MINUTE) return;
+  for (const user of BRIEFING_USERS) {
+    sendEmailBriefing(user).catch(err => console.error(`[email] digest error for ${user}:`, err));
+  }
+}, 60 * 1000);
+
+// ── Email processing (every 15 minutes) ──────────────────────────────────────
+setInterval(() => {
+  for (const user of BRIEFING_USERS) {
+    processNewEmails(user).catch(err => console.error(`[email] process error for ${user}:`, err));
+  }
+}, 15 * 60 * 1000);

@@ -31,7 +31,17 @@ router.get('/admin/login', (req, res) => {
 });
 
 router.get('/admin/auth/google', (req, res, next) =>
-  startGoogleAuth({ purpose: 'hub-admin', user: req.hubUser, callbackPath: '/admin/auth/google/callback', returnTo: '/admin' })(req, res, next)
+  startGoogleAuth({
+    purpose: 'hub-admin',
+    user: req.hubUser,
+    callbackPath: '/admin/auth/google/callback',
+    returnTo: '/admin',
+    extraScopes: [
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/gmail.modify',
+      'https://www.googleapis.com/auth/drive.readonly',
+    ],
+  })(req, res, next)
 );
 
 router.get('/admin/auth/google/callback', (req, res, next) =>
@@ -283,6 +293,35 @@ router.post('/admin/models/:key/delete', requireHubAdmin, (req, res) => {
   res.redirect('/admin/models');
 });
 
+// ── OpenRouter model catalogue proxy ─────────────────────────────────────────
+// Fetches the live OpenRouter model list server-side so the API key is never
+// exposed to the browser. Returns a simplified array for the search picker.
+router.get('/admin/openrouter-models', requireHubAdmin, async (req, res) => {
+  try {
+    const r = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://mclellan.scot',
+        'X-Title': 'McLellan Hub admin',
+      },
+    });
+    if (!r.ok) return res.status(r.status).json({ error: `OpenRouter ${r.status}` });
+    const data = await r.json();
+    const models = (data.data || [])
+      .map(m => ({
+        id: m.id,
+        name: m.name || m.id,
+        context: m.context_length || null,
+        inputPer1M:  m.pricing?.prompt      ? (parseFloat(m.pricing.prompt)      * 1_000_000).toFixed(4) : null,
+        outputPer1M: m.pricing?.completion  ? (parseFloat(m.pricing.completion)  * 1_000_000).toFixed(4) : null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json(models);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── MCP-friendly JSON API ─────────────────────────────────────────────────────
 // Stable schema for a future MCP server to consume.
 //
@@ -344,6 +383,69 @@ router.get('/mcp/projects/:slug/documents', requireMcpAuth, (req, res) => {
   ORDER BY d.uploaded_at ASC
   `).all(req.hubUser, req.params.slug);
   res.json({ project, documents });
+});
+
+// ── Google Drive → project document ──────────────────────────────────────────
+router.post('/admin/projects/:slug/from-drive', requireHubAdmin, async (req, res) => {
+  const { downloadDriveFile } = require('../lib/google-drive');
+  const { fileToMarkdown, withProjectFrontmatter } = require('../lib/extract');
+  const { uuid } = require('../lib/id');
+
+  const project = db.hub().prepare(
+    'SELECT * FROM projects WHERE user = ? AND slug = ?'
+  ).get(req.hubUser, req.params.slug);
+  if (!project) return res.status(404).json({ ok: false, error: 'Project not found' });
+
+  const { driveUrl } = req.body;
+  if (!driveUrl) return res.status(400).json({ ok: false, error: 'No Drive URL provided' });
+
+  try {
+    const { buffer, filename } = await downloadDriveFile(req.hubUser, driveUrl);
+    const { markdown } = await fileToMarkdown(filename, buffer);
+    const finalMarkdown = withProjectFrontmatter({ project, filename, markdown });
+
+    db.hub().prepare(
+      `INSERT INTO documents (id, user, project_id, filename, mimetype, size_bytes, markdown)
+       VALUES (?, ?, ?, ?, 'text/markdown', ?, ?)`
+    ).run(uuid(), req.hubUser, project.id, filename, Buffer.byteLength(finalMarkdown), finalMarkdown);
+
+    res.json({ ok: true, filename, chars: finalMarkdown.length });
+  } catch (err) {
+    console.error('[drive]', err.message);
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// ── Manual email fetch trigger ────────────────────────────────────────────────
+router.post('/admin/trigger-email-fetch', requireHubAdmin, async (req, res) => {
+  const { processNewEmails } = require('../lib/email-processor');
+  // Reset last-check to 24h ago so manual trigger always catches recent mail
+  db.hub().prepare(`
+    INSERT INTO crm_context (id, user, key, value) VALUES (?, ?, '_gmail_last_check_ts', ?)
+    ON CONFLICT(user, key) DO UPDATE SET value = excluded.value
+  `).run(require('../lib/id').uuid(), req.hubUser, String(Math.floor(Date.now() / 1000) - 24 * 3600));
+  try {
+    const result = await processNewEmails(req.hubUser);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// ── Manual email digest send ──────────────────────────────────────────────────
+router.post('/admin/trigger-email-digest', requireHubAdmin, async (req, res) => {
+  const { sendEmailBriefing, buildEmailBriefingText } = require('../lib/crm');
+  try {
+    const preview = buildEmailBriefingText(req.hubUser);
+    if (!preview) return res.json({ ok: true, message: 'No emails to digest yet.' });
+    // Force-send by clearing the log entry first
+    db.hub().prepare("DELETE FROM crm_briefing_log WHERE user = ? AND date_str = ?")
+      .run(req.hubUser, `email-${new Date().toLocaleDateString('en-GB')}`);
+    await sendEmailBriefing(req.hubUser);
+    res.json({ ok: true, preview });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
 
 module.exports = router;
