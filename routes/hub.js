@@ -800,21 +800,39 @@ router.post('/api/workday/webhook', uploadLimiter, audioUpload.single('file'), a
   if (!auth.configured) return res.status(503).json({ error: 'Workday webhook not configured' });
   if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
 
+  const hasAudio = !!(req.file || (Buffer.isBuffer(req.body) && req.body.length));
+  const user = req.body.user || 'douglas';
+  const opts = {
+    user,
+    transcript: req.body.transcript || req.body.text,
+    audioBuffer: req.file?.buffer || (Buffer.isBuffer(req.body) ? req.body : null),
+    audioFilename: req.file?.originalname || req.headers['x-workday-filename'] || 'workday-audio.m4a',
+    audioMimetype: req.file?.mimetype || req.headers['content-type'],
+    title: req.body.title,
+    source: req.body.source || (hasAudio ? 'shortcut-audio' : 'shortcut-transcript'),
+    projectSlug: req.body.projectSlug || 'workday',
+    projectName: req.body.projectName || 'Workday Journal',
+    model: req.body.model,
+    synthadoc: req.body.synthadoc !== '0',
+  };
+
+  // If audio is included, respond immediately and process in background
+  if (hasAudio && !opts.transcript) {
+    res.status(202).json({ ok: true, message: 'Audio received — processing in background' });
+    ingestWorkdayInterview(opts)
+      .then(result => {
+        console.log(`[workday webhook] done for ${user}: ${result.document?.filename}`);
+        const { pushGoogleChatBriefing } = require('../lib/crm');
+        pushGoogleChatBriefing(user, `✅ *Workday note saved:* ${opts.title || 'Workday interview'}\n_Stored in Workday Journal_`)
+          .catch(() => {});
+      })
+      .catch(err => console.error('[workday webhook] background processing failed:', err.message));
+    return;
+  }
+
+  // Transcript-only: fast enough to respond synchronously
   try {
-    const rawAudio = Buffer.isBuffer(req.body) ? req.body : null;
-    const result = await ingestWorkdayInterview({
-      user: req.body.user || 'douglas',
-      transcript: req.body.transcript || req.body.text,
-      audioBuffer: req.file?.buffer || rawAudio,
-      audioFilename: req.file?.originalname || req.headers['x-workday-filename'] || 'workday-audio.m4a',
-      audioMimetype: req.file?.mimetype || req.headers['content-type'],
-      title: req.body.title,
-      source: req.body.source || (req.file || rawAudio ? 'shortcut-audio' : 'shortcut-transcript'),
-      projectSlug: req.body.projectSlug || 'workday',
-      projectName: req.body.projectName || 'Workday Journal',
-      model: req.body.model,
-      synthadoc: req.body.synthadoc !== '0',
-    });
+    const result = await ingestWorkdayInterview(opts);
     res.json(result);
   } catch (err) {
     console.error('[workday webhook]', err);
@@ -830,23 +848,34 @@ router.post('/api/workday/audio', uploadLimiter, express.raw({ type: '*/*', limi
     return res.status(400).json({ error: 'Audio body required' });
   }
 
-  try {
-    const result = await ingestWorkdayInterview({
-      user: req.headers['x-workday-user'] || 'douglas',
-      audioBuffer: req.body,
-      audioFilename: req.headers['x-workday-filename'] || 'workday-audio.m4a',
-      audioMimetype: req.headers['content-type'] || 'audio/mp4',
-      title: req.headers['x-workday-title'] || 'Drive home audio debrief',
-      source: req.headers['x-workday-source'] || 'iphone-shortcut-audio',
-      projectSlug: req.headers['x-workday-project'] || 'workday',
-      projectName: 'Workday Journal',
-      synthadoc: req.headers['x-workday-synthadoc'] !== '0',
-    });
-    res.json(result);
-  } catch (err) {
-    console.error('[workday audio]', err);
-    res.status(400).json({ error: err.message });
-  }
+  // Respond immediately so the iOS Shortcut doesn't time out waiting for
+  // transcription + narrative generation (which can take 60–180 s).
+  res.status(202).json({ ok: true, message: 'Audio received — processing in background' });
+
+  const user = req.headers['x-workday-user'] || 'douglas';
+  const audioBuffer = req.body;
+  const opts = {
+    user,
+    audioBuffer,
+    audioFilename: req.headers['x-workday-filename'] || 'workday-audio.m4a',
+    audioMimetype: req.headers['content-type'] || 'audio/mp4',
+    title: req.headers['x-workday-title'] || 'Drive home audio debrief',
+    source: req.headers['x-workday-source'] || 'iphone-shortcut-audio',
+    projectSlug: req.headers['x-workday-project'] || 'workday',
+    projectName: 'Workday Journal',
+    synthadoc: req.headers['x-workday-synthadoc'] !== '0',
+  };
+
+  ingestWorkdayInterview(opts)
+    .then(result => {
+      console.log(`[workday audio] done for ${user}: ${result.document?.filename} (${result.transcriptChars} chars)`);
+      // Push a Google Chat notification if a webhook is configured
+      const { pushGoogleChatBriefing } = require('../lib/crm');
+      const title = opts.title;
+      pushGoogleChatBriefing(user, `✅ *Workday note saved:* ${title}\n_Transcribed and stored in Workday Journal_`)
+        .catch(() => {});
+    })
+    .catch(err => console.error('[workday audio] background processing failed:', err.message));
 });
 
 // ── Obsidian vault API for Hermes/trusted local agents ────────────────────────
