@@ -35,16 +35,16 @@ async function main() {
   const projects = hub.prepare('SELECT slug, name FROM projects WHERE user = ? ORDER BY name').all(USER);
   if (!projects.length) { console.log('[digest] no projects found'); return; }
 
-  // Load daily notes from the vault written in the last DAYS days
-  const dailyDir = path.join(VAULT, 'Daily');
+  // Load journal notes from the vault written in the last DAYS days
+  const journalDir = path.join(VAULT, 'Journal');
   const dailyNotes = [];
-  if (fs.existsSync(dailyDir)) {
-    for (const file of fs.readdirSync(dailyDir).sort().reverse()) {
+  if (fs.existsSync(journalDir)) {
+    for (const file of fs.readdirSync(journalDir).sort().reverse()) {
       if (!file.endsWith('.md')) continue;
-      const dateStr = file.replace('.md', '');
-      if (dateStr < new Date(cutoff * 1000).toISOString().slice(0, 10)) break;
+      const stat = fs.statSync(path.join(journalDir, file));
+      if (stat.mtimeMs < cutoff * 1000) break;
       try {
-        dailyNotes.push({ date: dateStr, content: fs.readFileSync(path.join(dailyDir, file), 'utf8') });
+        dailyNotes.push({ date: file.replace('.md', ''), content: fs.readFileSync(path.join(journalDir, file), 'utf8') });
       } catch (_) {}
     }
   }
