@@ -52,6 +52,35 @@
 </section>
 
 <section class="admin-section">
+  <h2>Knowledge tags</h2>
+  <p style="font-size:13px;color:var(--text-muted);">Tag this project with topics from the wiki. Matching pages will surface in the morning briefing and project context.</p>
+  <form method="POST" action="/admin/projects/<%= project.id %>/wiki-tags">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <% const projectTags = JSON.parse(project.wiki_tags || '[]'); %>
+      <% for (const tag of wikiTags) { %>
+        <label style="display:flex;align-items:center;gap:4px;background:var(--surface,#f9f9fb);border:1px solid var(--border,#e5e3f0);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px;">
+          <input type="checkbox" name="tags" value="<%= tag %>" <%= projectTags.includes(tag) ? 'checked' : '' %>>
+          <%= tag %>
+        </label>
+      <% } %>
+      <% if (!wikiTags.length) { %><span style="font-size:13px;color:var(--text-muted);">No wiki tags yet — add some content via wiki.mclellan.scot first.</span><% } %>
+    </div>
+    <button type="submit">Save tags</button>
+  </form>
+  <% if (matchedPages.length) { %>
+  <h3 style="font-size:13px;margin-top:16px;margin-bottom:8px;">Matching wiki pages</h3>
+  <ul style="list-style:none;display:flex;flex-direction:column;gap:4px;">
+    <% for (const p of matchedPages) { %>
+    <li style="font-size:13px;">
+      <a href="https://wiki.mclellan.scot/page/<%= p.slug %>" target="_blank"><%= p.title %></a>
+      <span style="color:var(--text-muted);margin-left:6px;"><%= p.matchedTags.join(', ') %></span>
+    </li>
+    <% } %>
+  </ul>
+  <% } %>
+</section>
+
+<section class="admin-section">
   <h2>Memory (<%= memories.length %> messages)</h2>
   <p style="font-size:13px;color:var(--text-muted);">Active window: <%= project.context_depth || 20 %> messages. Older messages are automatically compacted into <em>_Project Memory.md</em> above so nothing is lost.</p>
   <% if (memories.length === 0) { %>

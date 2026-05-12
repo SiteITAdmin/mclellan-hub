@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRM Contacts — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+.tag-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.tag-label { display: flex; align-items: center; gap: 4px; background: var(--surface,#f9f9fb); border: 1px solid var(--border,#e5e3f0); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+.tag-label input { margin: 0; }
+.contact-card { border: 1px solid var(--border,#e5e3f0); border-radius: 12px; padding: 16px 18px; margin: 10px 0; background: var(--surface,#fff); }
+.contact-card h3 { font-size: 15px; margin: 0 0 4px; }
+.contact-aliases { font-size: 12px; color: var(--text-muted,#888); margin-bottom: 10px; }
+.matched-pages { margin-top: 10px; font-size: 13px; }
+.matched-pages a { color: var(--accent,#5b4fcf); }
+.matched-pages span { color: var(--text-muted,#888); margin-left: 6px; }
+details summary { cursor: pointer; font-weight: 500; font-size: 13px; }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>CRM Contacts — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM contacts</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+  <h2>Contacts (<%= contacts.length %>)</h2>
+  <p style="font-size:13px;color:var(--text-muted);">Tag each contact with wiki topics. Matching wiki pages will surface in their section of the morning briefing.</p>
+
+  <% if (!wikiTags.length) { %>
+    <p style="font-size:13px;color:var(--text-muted);">No wiki tags yet — add some content via wiki.mclellan.scot first.</p>
+  <% } %>
+
+  <% for (const c of contacts) { %>
+  <%
+    const contactTags = JSON.parse(c.wiki_tags || '[]');
+    const aliases = JSON.parse(c.aliases || '[]');
+  %>
+  <div class="contact-card">
+    <h3><%= c.name %></h3>
+    <% if (aliases.length) { %><p class="contact-aliases">Also known as: <%= aliases.join(', ') %></p><% } %>
+
+    <details>
+      <summary>Knowledge tags (<%= contactTags.length %>)</summary>
+      <form method="POST" action="/admin/contacts/<%= c.id %>/wiki-tags" style="margin-top:10px;">
+        <div class="tag-grid">
+          <% for (const tag of wikiTags) { %>
+            <label class="tag-label">
+              <input type="checkbox" name="tags" value="<%= tag %>" <%= contactTags.includes(tag) ? 'checked' : '' %>>
+              <%= tag %>
+            </label>
+          <% } %>
+        </div>
+        <button type="submit" style="margin-top:4px;">Save tags</button>
+      </form>
+
+      <% if (contactTags.length) { %>
+      <div class="matched-pages">
+        <strong style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);">Matching wiki pages</strong>
+        <ul style="list-style:none;margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+          <% /* We can't call server functions from EJS directly, so pass matchedPages per contact */ %>
+          <% if (c.matchedPages && c.matchedPages.length) { %>
+            <% for (const p of c.matchedPages) { %>
+            <li><a href="https://wiki.mclellan.scot/page/<%= p.slug %>" target="_blank"><%= p.title %></a><span><%= p.matchedTags.join(', ') %></span></li>
+            <% } %>
+          <% } else { %>
+            <li style="color:var(--text-muted,#888);font-size:13px;">No matching pages yet.</li>
+          <% } %>
+        </ul>
+      </div>
+      <% } %>
+    </details>
+  </div>
+  <% } %>
+</section>
+
+</body>
+</html>
