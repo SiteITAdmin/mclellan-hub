@@ -140,13 +140,11 @@ router.get('/page/:slug', requireAuth, (req, res) => {
 });
 
 router.get('/ingest', requireAuth, (req, res) => {
-  const hub = db.hub();
-  const projects = hub.prepare('SELECT slug, name FROM projects WHERE user = ? ORDER BY name').all(WIKI_USER);
   const queueDir = path.join(vaultRoot(), 'raw_sources', 'ingest-queue');
   const queued = fs.existsSync(queueDir)
     ? fs.readdirSync(queueDir).filter(f => f.endsWith('.url') || f.endsWith('.path')).slice(-10).reverse()
     : [];
-  res.render('wiki/ingest', { projects, queued, status: req.query.status || null });
+  res.render('wiki/ingest', { queued, status: req.query.status || null });
 });
 
 // ── API: Queue URL ────────────────────────────────────────────────────────────
