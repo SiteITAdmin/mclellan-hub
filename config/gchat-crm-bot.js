@@ -8,8 +8,7 @@
 //
 // Optional Script Properties:
 // - DCHAT_BASE=https://dchat.mclellan.scot
-
-var CRM_BOT_WEBHOOK = 'https://chat.googleapis.com/v1/spaces/AAQAjlR2tlk/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=6dki0RUdGAc1VtCSYGMVTlzpd-i_j5JR4ItPoaaBe_4';
+// - GCHAT_REPLY_WEBHOOK=<Google Chat incoming webhook URL for async replies>
 
 function prop(name, fallback) {
   var value = PropertiesService.getScriptProperties().getProperty(name);
@@ -32,6 +31,10 @@ function dchatUser() {
   return prop('DCHAT_USER', 'douglas');
 }
 
+function replyWebhook() {
+  return prop('GCHAT_REPLY_WEBHOOK');
+}
+
 // ── Received a message ────────────────────────────────────────────────────────
 function onMessage(event) {
   try {
@@ -41,30 +44,47 @@ function onMessage(event) {
 
     if (!msg.sender || msg.sender.type !== 'HUMAN') return {};
 
-    var raw = msg.text || msg.argumentText || '';
+    var raw = msg.argumentText || msg.text || '';
     console.log('raw: [' + raw + ']');
 
-    var text = raw.replace(/@[^\s]+/g, '').trim().replace(/^\/(crm|hermes)\s*/i, '').trim();
+    var text = cleanInboundText(raw);
     var response = routeCommand(text, msg.name);
 
-    if (response) postReply(response);
+    if (response) return chatText(response);
   } catch (err) {
     console.log('ERROR: ' + err.message);
-    postReply('❌ ' + err.message);
+    return chatText('ERROR: ' + err.message);
   }
   return {};
 }
 
-function onAddedToSpace(event) {
-  postReply('👋 *McLellan CRM Bot* connected.\n\n• ' + helpText());
-  return {};
+function onAddToSpace(event) {
+  return chatText('McLellan CRM Bot connected.\n\n- ' + helpText());
 }
 
-function onRemovedFromSpace(event) {
+function onRemoveFromSpace(event) {
   console.log('removed from space');
 }
 
+// Backwards-compatible aliases for older deployments/config snippets.
+function onAddedToSpace(event) {
+  return onAddToSpace(event);
+}
+
+function onRemovedFromSpace(event) {
+  return onRemoveFromSpace(event);
+}
+
 // ── Routing ───────────────────────────────────────────────────────────────────
+function cleanInboundText(raw) {
+  return String(raw || '')
+    .replace(/<users\/[^>]+>/g, '')
+    .replace(/@[^\s]+/g, '')
+    .trim()
+    .replace(/^\/(crm|hermes)\s*/i, '')
+    .trim();
+}
+
 function extractYouTubeUrl(text) {
   var m = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?[^\s]*v=[a-zA-Z0-9_-]+|youtu\.be\/[a-zA-Z0-9_-]+)[^\s]*/);
   return m ? m[0] : null;
@@ -91,10 +111,19 @@ function routeCommand(text, msgName) {
 }
 
 // ── Reply ─────────────────────────────────────────────────────────────────────
+function chatText(text) {
+  return { text: String(text).slice(0, 3500) };
+}
+
 function postReply(text) {
+  var webhook = replyWebhook();
+  if (!webhook) {
+    console.log('No GCHAT_REPLY_WEBHOOK configured; reply was: [' + String(text).slice(0, 100) + ']');
+    return;
+  }
   console.log('replying: [' + String(text).slice(0, 100) + ']');
   try {
-    UrlFetchApp.fetch(CRM_BOT_WEBHOOK, {
+    UrlFetchApp.fetch(webhook, {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify({ text: String(text).slice(0, 3500) }),

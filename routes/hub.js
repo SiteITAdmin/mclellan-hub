@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const fetch = require('node-fetch');
+const { OAuth2Client } = require('google-auth-library');
 const db = require('../lib/db');
 const { routeMessage, tagConversation } = require('../lib/router');
 const { exportDocx, exportPdf, exportGoogleDoc } = require('../lib/exports');
@@ -25,6 +27,171 @@ const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize
 const chatLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 80, keyPrefix: 'hub-chat' });
 const uploadLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'hub-upload' });
 const writeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 40, keyPrefix: 'hub-write' });
+const googleChatClient = new OAuth2Client();
+const GOOGLE_CHAT_ADDON_EMAIL_RE = /^service-\d+@gcp-sa-gsuiteaddons\.iam\.gserviceaccount\.com$/;
+
+function chatResponse(text) {
+  return { text: String(text || '').slice(0, 3500) };
+}
+
+function isGoogleWorkspaceAddOnRequest(req) {
+  return Boolean(req.body?.chat || String(req.headers['user-agent'] || '').includes('Google-gsuiteaddons'));
+}
+
+function googleChatReply(req, text) {
+  const message = chatResponse(text);
+  if (!isGoogleWorkspaceAddOnRequest(req)) return message;
+  return {
+    hostAppDataAction: {
+      chatDataAction: {
+        createMessageAction: { message },
+      },
+    },
+  };
+}
+
+function todayIso() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+}
+
+function cleanGoogleChatText(raw) {
+  return String(raw || '')
+    .replace(/<users\/[^>]+>/g, '')
+    .replace(/@[^\s]+/g, '')
+    .trim()
+    .replace(/^\/(crm|hermes)\s*/i, '')
+    .trim();
+}
+
+function decodeJwtClaims(token) {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const padded = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=');
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+  } catch (_) {
+    return null;
+  }
+}
+
+async function verifyGoogleChatRequest(req) {
+  const skip = process.env.GOOGLE_CHAT_VERIFY === 'false';
+  if (skip) return true;
+
+  const auth = req.headers.authorization || '';
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!bearer) {
+    console.warn('[google-chat] auth failed: missing bearer token');
+    return false;
+  }
+
+  const audiences = [
+    process.env.GOOGLE_CHAT_AUTH_AUDIENCE,
+    process.env.GOOGLE_CHAT_PROJECT_NUMBER,
+    'https://dchat.mclellan.scot/api/google-chat/hermes',
+    '801490335247',
+  ].filter(Boolean);
+
+  const chatIssuer = 'chat@system.gserviceaccount.com';
+  const isAllowedGoogleChatEmail = (email) =>
+    email === chatIssuer || GOOGLE_CHAT_ADDON_EMAIL_RE.test(String(email || ''));
+
+  try {
+    for (const audience of audiences) {
+      try {
+        const ticket = await googleChatClient.verifyIdToken({ idToken: bearer, audience });
+        const payload = ticket.getPayload();
+        if (payload?.email_verified && isAllowedGoogleChatEmail(payload.email)) return true;
+      } catch (_) {}
+    }
+
+    const certResp = await fetch(`https://www.googleapis.com/service_accounts/v1/metadata/x509/${encodeURIComponent(chatIssuer)}`);
+    const certs = await certResp.json();
+    for (const audience of audiences) {
+      try {
+        await googleChatClient.verifySignedJwtWithCertsAsync(bearer, certs, audience, [chatIssuer]);
+        return true;
+      } catch (_) {}
+    }
+
+    const claims = decodeJwtClaims(bearer) || {};
+    console.warn(`[google-chat] auth failed: token did not verify for audiences ${audiences.join(', ')}; claims=${JSON.stringify({
+      iss: claims.iss,
+      aud: claims.aud,
+      email: claims.email,
+      azp: claims.azp,
+    })}`);
+    return false;
+  } catch (err) {
+    console.warn('[google-chat] auth failed:', err.message);
+    return false;
+  }
+}
+
+function helpText() {
+  return [
+    '"Had a call with Karol - she is pushing for June" saves a CRM note',
+    '"briefing" shows today\'s open CRM items',
+    '"today" reads today\'s Obsidian daily note',
+    '"search Dad physio" searches the vault',
+    '"read Daily/2026-05-13.md" reads a vault note',
+    '"remember ..." appends to today\'s daily note',
+    '"follow up ..." appends a follow-up to today\'s daily note',
+  ].join('\n- ');
+}
+
+async function handleGoogleChatCommand(user, text) {
+  if (!text) return helpText();
+  const lower = text.toLowerCase();
+
+  if (lower === 'help') return helpText();
+
+  if (lower === 'briefing' || lower === 'brief') {
+    const events = await fetchTodayCalendarEvents(user);
+    return buildBriefingText(user, events) || '_No open items._';
+  }
+
+  if (lower === 'today' || lower === 'daily') {
+    const note = readNote(`Daily/${todayIso()}.md`);
+    return note ? `${note.path}\n\n${note.content.slice(0, 3000)}` : `No daily note for ${todayIso()}.`;
+  }
+
+  if (lower.startsWith('search ') || lower.startsWith('find ')) {
+    const query = text.replace(/^(search|find)\s+/i, '').trim();
+    if (!query) return 'Search for what? Example: search Dad physio';
+    const results = searchNotes({ query, limit: 5 });
+    if (!results.length) return `No vault matches for: ${query}`;
+    return results.map((r, i) => `${i + 1}. ${r.path}\n${(r.excerpt || '').slice(0, 280)}`).join('\n\n');
+  }
+
+  if (lower.startsWith('read ')) {
+    const notePath = text.slice(5).trim();
+    if (!notePath) return 'Read which note? Example: read Daily/2026-05-13.md';
+    const note = readNote(notePath);
+    return note ? `${note.path}\n\n${note.content.slice(0, 3000)}` : `No such vault note: ${notePath}`;
+  }
+
+  if (lower.startsWith('remember ') || lower.startsWith('follow up ')) {
+    const isFollowUp = lower.startsWith('follow up ');
+    const body = text.slice(isFollowUp ? 10 : 9).trim();
+    if (!body) return 'Append what?';
+    const section = isFollowUp ? 'Follow-ups' : 'Remembered';
+    writeNote({
+      notePath: `Daily/${todayIso()}.md`,
+      mode: 'append',
+      content: `\n## ${section}\n- ${body}\n`,
+    });
+    try {
+      await processCrmCommand(user, isFollowUp ? `follow up: ${body}` : body, 'google-chat');
+    } catch (err) {
+      console.warn('[google-chat] CRM side-write skipped:', err.message);
+    }
+    return `Added to Daily/${todayIso()}.md`;
+  }
+
+  const result = await processCrmCommand(user, text, 'google-chat');
+  return result.ok ? result.message : result.message || 'Could not process that note.';
+}
 function buildHubMsg(researchMode = false) {
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const base = [
@@ -717,7 +884,7 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, upload
       // Ingest queue for Mac Mini synthadoc
       const queueDir = require('path').join(vaultBase, 'raw_sources', 'ingest-queue');
       fs.mkdirSync(queueDir, { recursive: true });
-      fs.writeFileSync(require('path').join(queueDir, `${docId}.path`), vaultFile, 'utf8');
+      fs.writeFileSync(require('path').join(queueDir, `${docId}.path`), require('path').relative(vaultBase, vaultFile), 'utf8');
     } catch (vaultErr) {
       console.warn('[upload] vault mirror failed:', vaultErr.message);
     }
@@ -1243,6 +1410,38 @@ router.get('/api/crm/briefing', requireAuth, async (req, res) => {
   const calendarEvents = await fetchTodayCalendarEvents(req.hubUser);
   const text = buildBriefingText(req.hubUser, calendarEvents);
   res.json({ text: text || '_No open items._' });
+});
+
+// Direct Google Chat HTTP endpoint. This bypasses Apps Script entirely:
+// configure Google Chat API connection settings to HTTP endpoint URL:
+// https://dchat.mclellan.scot/api/google-chat/hermes
+router.post('/api/google-chat/hermes', async (req, res) => {
+  const authed = await verifyGoogleChatRequest(req);
+  if (!authed) return res.status(401).json({ error: 'Unauthorized' });
+
+  const event = req.body?.chat || req.body || {};
+  const type = event.type || '';
+  const message = event.message || event.messagePayload?.message || {};
+  const user = process.env.GOOGLE_CHAT_USER || req.hubUser || 'douglas';
+
+  try {
+    if (type === 'ADDED_TO_SPACE' || event.addedToSpacePayload) {
+      return res.json(googleChatReply(req, 'McLellan Hermes connected.\n\n- ' + helpText()));
+    }
+
+    if (type === 'REMOVED_FROM_SPACE' || event.removedFromSpacePayload) {
+      console.log('[google-chat] removed from space', event.space?.name || '');
+      return res.json({});
+    }
+
+    const text = cleanGoogleChatText(message.argumentText || message.text || '');
+    const reply = await handleGoogleChatCommand(user, text);
+    console.log(`[google-chat] handled ${type || 'event'} addon=${isGoogleWorkspaceAddOnRequest(req)} text_chars=${text.length} reply_chars=${String(reply || '').length}`);
+    return res.json(googleChatReply(req, reply));
+  } catch (err) {
+    console.error('[google-chat]', err);
+    return res.json(googleChatReply(req, 'Error: ' + err.message));
+  }
 });
 
 // Hermes (or any external agent) posts a /crm note here
