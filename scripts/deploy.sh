@@ -67,6 +67,9 @@ rsync -avz --progress -e "$RSYNC_RSH" \
 echo "==> Installing dependencies..."
 "${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" "cd /app && npm install --production"
 
+echo "==> Updating nginx config..."
+"${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" "cp /app/nginx/mclellan.conf /etc/nginx/sites-enabled/mclellan.conf && nginx -t && systemctl reload nginx"
+
 echo "==> Restarting service..."
 "${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" "systemctl restart hub"
 
