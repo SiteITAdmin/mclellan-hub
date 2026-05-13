@@ -47,12 +47,16 @@ function onMessage(event) {
     var text = raw.replace(/@[^\s]+/g, '').trim().replace(/^\/(crm|hermes)\s*/i, '').trim();
     var response = routeCommand(text, msg.name);
 
-    if (response) postReply(response);
+    return response ? { text: response } : {};
   } catch (err) {
     console.log('ERROR: ' + err.message);
-    postReply('❌ ' + err.message);
+    return { text: '❌ ' + err.message };
   }
-  return {};
+}
+
+function extractYouTubeUrl(text) {
+  var m = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?[^\s]*v=[a-zA-Z0-9_-]+|youtu\.be\/[a-zA-Z0-9_-]+)[^\s]*/);
+  return m ? m[0] : null;
 }
 
 function routeCommand(text, msgName) {
@@ -67,8 +71,11 @@ function routeCommand(text, msgName) {
   if (lower.indexOf('read ') === 0) return readVaultNote(text.slice(5).trim());
   if (lower.indexOf('remember ') === 0) return appendToToday(text.slice(9).trim(), 'Remembered');
   if (lower.indexOf('follow up ') === 0) return appendToToday(text.slice(10).trim(), 'Follow-ups');
-  if (lower.indexOf('youtube ') === 0) return ingestYouTube(text.slice(8).trim());
-  if (lower.indexOf('yt ') === 0) return ingestYouTube(text.slice(3).trim());
+
+  // YouTube — accept: "youtube <url>", "yt <url>", or a bare YouTube URL
+  var ytPrefix = lower.indexOf('youtube ') === 0 ? 8 : lower.indexOf('yt ') === 0 ? 3 : 0;
+  var ytUrl = ytPrefix ? extractYouTubeUrl(text.slice(ytPrefix)) : extractYouTubeUrl(text);
+  if (ytUrl) return ingestYouTube(ytUrl);
 
   return forwardToCrm(text, msgName);
 }
