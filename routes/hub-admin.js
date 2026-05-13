@@ -71,7 +71,13 @@ router.get('/admin', requireHubAdmin, (req, res) => {
      WHERE p.user = ?
   ORDER BY p.name
   `).all(req.hubUser);
-  res.render('hub-admin/index', { user: req.hubUser, projects });
+  const { getAllWikiTags } = require('../lib/wiki-tags');
+  const wikiTags = getAllWikiTags();
+  const assignedTagSet = new Set(
+    projects.flatMap(p => JSON.parse(p.wiki_tags || '[]'))
+  );
+  const unassignedTags = wikiTags.filter(t => !assignedTagSet.has(t));
+  res.render('hub-admin/index', { user: req.hubUser, projects, wikiTags, unassignedTags });
 });
 
 // ── Projects CRUD ─────────────────────────────────────────────────────────────

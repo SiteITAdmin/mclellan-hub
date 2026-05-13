@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chat Admin — <%= user %></title>
 <link rel="stylesheet" href="/portfolio.css">
+<style>
+.tag-chip { display:inline-flex; align-items:center; gap:5px; background:var(--surface,#f4f3fb); border:1px solid var(--border,#e5e3f0); border-radius:20px; padding:2px 10px; font-size:12px; color:var(--text-2,#444); white-space:nowrap; }
+.tag-chip.unassigned { background:#fff; border-style:dashed; color:var(--text-muted,#888); }
+.tag-section { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:4px; }
+.tag-assign-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.tag-assign-row select { font-size:12px; padding:2px 6px; border-radius:6px; border:1px solid var(--border,#e5e3f0); }
+.tag-assign-row button { font-size:12px; padding:2px 8px; }
+</style>
 </head>
 <body class="admin-page">
 
@@ -24,13 +32,20 @@
   <p>Projects store chat memory. When a user types <code>/slug</code> at the start or end of a message, that exchange is tagged to the project.</p>
   <table class="admin-table">
     <thead>
-      <tr><th>Name</th><th>Slug</th><th>Depth</th><th>Memories</th><th>Last activity</th><th>CV</th><th></th></tr>
+      <tr><th>Name</th><th>Slug</th><th>Tags</th><th>Depth</th><th>Memories</th><th>Last activity</th><th>CV</th><th></th></tr>
     </thead>
     <tbody>
     <% for (const p of projects) { %>
+    <% const pTags = JSON.parse(p.wiki_tags || '[]'); %>
     <tr>
       <td><a href="/admin/projects/<%= p.slug %>"><%= p.name %></a></td>
       <td style="font-family:var(--mono);">/<%= p.slug %></td>
+      <td>
+        <div class="tag-section">
+          <% for (const t of pTags) { %><span class="tag-chip"><%= t %></span><% } %>
+          <% if (!pTags.length) { %><span style="font-size:12px;color:var(--text-muted,#aaa);">—</span><% } %>
+        </div>
+      </td>
       <td><%= p.context_depth %></td>
       <td><%= p.memory_count %></td>
       <td><%= p.last_activity ? new Date(p.last_activity * 1000).toISOString().slice(0,16).replace('T',' ') : '–' %></td>
@@ -69,6 +84,52 @@
 </section>
 
 <section class="admin-section">
+  <h2>Knowledge tags</h2>
+  <p style="font-size:13px;color:var(--text-muted);">Tags come from synthadoc-processed wiki pages. Assign them to projects so matching articles, videos, and journal entries surface in context.</p>
+
+  <% if (!wikiTags.length) { %>
+    <p style="font-size:13px;color:var(--text-muted);">No wiki tags yet — content needs to sync from the vault first.</p>
+  <% } else { %>
+
+  <% for (const p of projects) { %>
+  <% const pTags = JSON.parse(p.wiki_tags || '[]'); if (!pTags.length) continue; %>
+  <div style="margin-bottom:14px;">
+    <div style="font-size:13px;font-weight:600;margin-bottom:6px;"><a href="/admin/projects/<%= p.slug %>" style="color:inherit;"><%= p.name %></a></div>
+    <div class="tag-section">
+      <% for (const t of pTags) { %>
+      <span class="tag-chip">
+        <%= t %>
+        <button type="button" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:.5;padding:0;line-height:1;" onclick="removeTag('<%= p.id %>', '<%= p.slug %>', <%- JSON.stringify(pTags) %>, '<%= t %>')">✕</button>
+      </span>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (unassignedTags.length) { %>
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border,#e5e3f0);">
+    <div style="font-size:13px;font-weight:600;color:var(--text-muted,#888);margin-bottom:8px;">Unassigned (<%= unassignedTags.length %>)</div>
+    <div class="tag-section">
+      <% for (const t of unassignedTags) { %>
+      <span class="tag-chip unassigned" style="gap:8px;">
+        <%= t %>
+        <select class="tag-proj-select" data-tag="<%= t %>" style="font-size:11px;padding:1px 4px;border-radius:4px;border:1px solid var(--border,#ddd);">
+          <option value="">assign to…</option>
+          <% for (const p of projects) { %><option value="<%= p.id %>|<%= p.slug %>|<%- encodeURIComponent(JSON.stringify(JSON.parse(p.wiki_tags||'[]'))) %>"><%= p.name %></option><% } %>
+        </select>
+        <button type="button" style="font-size:11px;padding:1px 6px;" onclick="assignTag(this)">+</button>
+      </span>
+      <% } %>
+    </div>
+  </div>
+  <% } else { %>
+  <p style="font-size:13px;color:var(--text-muted);">All wiki tags are assigned to projects.</p>
+  <% } %>
+
+  <% } %>
+</section>
+
+<section class="admin-section">
   <h2>Email integration</h2>
   <p>Fetches new emails from Google, classifies them against your projects and contacts, and sends a digest to Google Chat at 4pm.</p>
   <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px;">
@@ -80,6 +141,30 @@
 </section>
 
 <script>
+async function assignTag(btn) {
+  const chip = btn.closest('.tag-chip');
+  const sel = chip.querySelector('select');
+  if (!sel.value) return;
+  const [projectId, projectSlug, encodedTags] = sel.value.split('|');
+  const tag = sel.dataset.tag || chip.querySelector('select').dataset.tag;
+  const currentTags = JSON.parse(decodeURIComponent(encodedTags));
+  if (currentTags.includes(tag)) { location.reload(); return; }
+  const newTags = [...currentTags, tag];
+  const fd = new FormData();
+  newTags.forEach(t => fd.append('tags', t));
+  await fetch(`/admin/projects/${projectId}/wiki-tags`, { method: 'POST', body: fd });
+  location.reload();
+}
+
+async function removeTag(projectId, projectSlug, currentTags, tagToRemove) {
+  if (!confirm(`Remove "${tagToRemove}" from this project?`)) return;
+  const newTags = currentTags.filter(t => t !== tagToRemove);
+  const fd = new FormData();
+  newTags.forEach(t => fd.append('tags', t));
+  await fetch(`/admin/projects/${projectId}/wiki-tags`, { method: 'POST', body: fd });
+  location.reload();
+}
+
 async function triggerEmailAction(action) {
   const status = document.getElementById('email-status');
   const result = document.getElementById('email-result');
