@@ -842,7 +842,12 @@ router.post('/api/export', requireAuth, requireSameOrigin, writeLimiter, async (
 //   message and stream the AI reply (SSE, same shape as /api/message).
 // - In a project: store as a document with YAML frontmatter. Documents are
 //   injected as system context on every subsequent /slug query.
-router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, upload.single('file'), async (req, res) => {
+router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, res, next) => {
+  upload.single('file')(req, res, err => {
+    if (err) return res.status(413).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File too large (max 10 MB)' : err.message });
+    next();
+  });
+}, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
 
   const { projectSlug, convId: existingConvId, model, autoAnalyse, analysisPrompt } = req.body;
