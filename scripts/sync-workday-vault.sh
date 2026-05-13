@@ -86,10 +86,17 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
     printf '[%s] synthadoc python not found at %s — skipping queue\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$SYNTHADOC_PYTHON"
   fi
 
-  # ── 3. Rebuild workday daily index ───────────────────────────────────────
+  # ── 3. Push compiled wiki pages back to VPS ──────────────────────────────
+  rsync -az \
+    -e "ssh -o StrictHostKeyChecking=accept-new" \
+    "$VAULT_ROOT/wiki/" \
+    "${VPS_USER}@${VPS_HOST}:${REMOTE_VAULT}/wiki/"
+  printf '[%s] wiki push ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  # ── 4. Rebuild workday daily index ───────────────────────────────────────
   /usr/bin/env node "$ROOT/scripts/build-workday-daily-index.js"
 
-  # ── 4. Daily topic digest (once per day) ─────────────────────────────────
+  # ── 5. Daily topic digest (once per day) ─────────────────────────────────
   DIGEST_STAMP="$LOG_DIR/.digest-last-run"
   TODAY="$(date -u '+%Y-%m-%d')"
   if [ "$(cat "$DIGEST_STAMP" 2>/dev/null)" != "$TODAY" ]; then
