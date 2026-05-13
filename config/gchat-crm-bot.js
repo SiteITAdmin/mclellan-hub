@@ -1,14 +1,15 @@
-// McLellan Hub — Hermes Google Chat Bot
-// Paste this into a Google Apps Script Chat app project.
+// McLellan Hub — CRM Bot
+// Paste into Google Apps Script Chat app project.
 //
 // Required Script Properties:
 // - DCHAT_WEBHOOK=https://dchat.mclellan.scot/api/crm/webhook
 // - DCHAT_SECRET=<HERMES_WEBHOOK_SECRET>
 // - DCHAT_USER=douglas
-// - GCHAT_REPLY_WEBHOOK=<Google Chat incoming webhook URL for replies>
 //
 // Optional Script Properties:
 // - DCHAT_BASE=https://dchat.mclellan.scot
+
+var CRM_BOT_WEBHOOK = 'https://chat.googleapis.com/v1/spaces/AAQAjlR2tlk/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=6dki0RUdGAc1VtCSYGMVTlzpd-i_j5JR4ItPoaaBe_4';
 
 function prop(name, fallback) {
   var value = PropertiesService.getScriptProperties().getProperty(name);
@@ -38,7 +39,6 @@ function onMessage(event) {
            || (event && event.chat && event.chat.messagePayload && event.chat.messagePayload.message)
            || {};
 
-    // Ignore bot/webhook messages — prevents reply loops
     if (!msg.sender || msg.sender.type !== 'HUMAN') return {};
 
     var raw = msg.text || msg.argumentText || '';
@@ -47,13 +47,24 @@ function onMessage(event) {
     var text = raw.replace(/@[^\s]+/g, '').trim().replace(/^\/(crm|hermes)\s*/i, '').trim();
     var response = routeCommand(text, msg.name);
 
-    return response ? { text: response } : {};
+    if (response) postReply(response);
   } catch (err) {
     console.log('ERROR: ' + err.message);
-    return { text: '❌ ' + err.message };
+    postReply('❌ ' + err.message);
   }
+  return {};
 }
 
+function onAddedToSpace(event) {
+  postReply('👋 *McLellan CRM Bot* connected.\n\n• ' + helpText());
+  return {};
+}
+
+function onRemovedFromSpace(event) {
+  console.log('removed from space');
+}
+
+// ── Routing ───────────────────────────────────────────────────────────────────
 function extractYouTubeUrl(text) {
   var m = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?[^\s]*v=[a-zA-Z0-9_-]+|youtu\.be\/[a-zA-Z0-9_-]+)[^\s]*/);
   return m ? m[0] : null;
@@ -72,7 +83,6 @@ function routeCommand(text, msgName) {
   if (lower.indexOf('remember ') === 0) return appendToToday(text.slice(9).trim(), 'Remembered');
   if (lower.indexOf('follow up ') === 0) return appendToToday(text.slice(10).trim(), 'Follow-ups');
 
-  // YouTube — accept: "youtube <url>", "yt <url>", or a bare YouTube URL
   var ytPrefix = lower.indexOf('youtube ') === 0 ? 8 : lower.indexOf('yt ') === 0 ? 3 : 0;
   var ytUrl = ytPrefix ? extractYouTubeUrl(text.slice(ytPrefix)) : extractYouTubeUrl(text);
   if (ytUrl) return ingestYouTube(ytUrl);
@@ -80,17 +90,11 @@ function routeCommand(text, msgName) {
   return forwardToCrm(text, msgName);
 }
 
-// ── Google Chat reply via incoming webhook ────────────────────────────────────
+// ── Reply ─────────────────────────────────────────────────────────────────────
 function postReply(text) {
-  var webhook = prop('GCHAT_REPLY_WEBHOOK');
-  if (!webhook) {
-    console.log('GCHAT_REPLY_WEBHOOK not configured');
-    return;
-  }
-
   console.log('replying: [' + String(text).slice(0, 100) + ']');
   try {
-    UrlFetchApp.fetch(webhook, {
+    UrlFetchApp.fetch(CRM_BOT_WEBHOOK, {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify({ text: String(text).slice(0, 3500) }),
@@ -101,7 +105,7 @@ function postReply(text) {
   }
 }
 
-// ── dchat / CRM ───────────────────────────────────────────────────────────────
+// ── CRM ───────────────────────────────────────────────────────────────────────
 function forwardToCrm(text, msgName) {
   console.log('forwarding CRM note: [' + text + ']');
   try {
@@ -132,7 +136,7 @@ function getBriefingText() {
   }
 }
 
-// ── Obsidian / vault commands ────────────────────────────────────────────────
+// ── Vault commands ────────────────────────────────────────────────────────────
 function searchVault(query) {
   if (!query) return 'Search for what? Example: search Dad sore back';
   var url = dchatBase() + '/api/obsidian/search?q=' + encodeURIComponent(query) + '&limit=5';
@@ -147,7 +151,7 @@ function searchVault(query) {
 }
 
 function readVaultNote(notePath) {
-  if (!notePath) return 'Read which note? Example: read Daily/2026-05-09.md';
+  if (!notePath) return 'Read which note? Example: read Daily/2026-05-13.md';
   var url = dchatBase() + '/api/obsidian/note?path=' + encodeURIComponent(notePath);
   var response = getDchat(url);
   if (response.code === 404) return 'No such vault note: ' + notePath;
@@ -172,13 +176,12 @@ function ingestYouTube(url) {
 
 function appendToToday(text, section) {
   if (!text) return 'Append what?';
-  var content = '\n## Hermes ' + section + '\n- ' + text + '\n';
+  var content = '\n## ' + section + '\n- ' + text + '\n';
   var response = fetchDchat(dchatBase() + '/api/obsidian/note', {
     path: 'Daily/' + todayIso() + '.md',
     mode: 'append',
     content: content,
   });
-  // Silently also try to route through CRM — ok if no contact is identified
   try {
     var crmText = section === 'Follow-ups' ? 'follow up: ' + text : text;
     fetchDchat(dchatWebhook(), {
@@ -191,16 +194,6 @@ function appendToToday(text, section) {
   }
   if (response.code !== 200) return '❌ Could not append to today (' + response.code + ')';
   return '✅ Added to Daily/' + todayIso() + '.md';
-}
-
-// ── Bot lifecycle ─────────────────────────────────────────────────────────────
-function onAddedToSpace(event) {
-  postReply('👋 *Hermes* connected.\n\n• ' + helpText());
-  return {};
-}
-
-function onRemovedFromSpace(event) {
-  console.log('removed from space');
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -230,14 +223,13 @@ function todayIso() {
 
 function helpText() {
   return [
-    '"Tom needs to know about Copilot" — saves a CRM note',
+    '"Had a call with Karol — she\'s pushing for June" — saves a CRM note',
     '"briefing" — push today\'s open CRM items',
     '"today" — read today\'s Obsidian daily note',
-    '"search Dad sore back" — search the vault',
-    '"read Daily/2026-05-09.md" — read a vault note',
-    '"remember ..." — append to today\'s Daily note',
-    '"follow up ..." — append a follow-up to today\'s Daily note',
-    '"youtube <url>" — queue a YouTube video for vault ingest',
+    '"search Dad physio" — search the vault',
+    '"remember ..." — append a note to today\'s daily note',
+    '"follow up ..." — append a follow-up to today\'s daily note',
+    '"youtube <url>" — queue a YouTube video for the wiki',
   ].join('\n• ');
 }
 
