@@ -57,9 +57,15 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
   QUEUE_DIR="$VAULT_ROOT/raw_sources/ingest-queue"
 
   if [ -d "$QUEUE_DIR" ] && [ -x "$SYNTHADOC_PYTHON" ]; then
-    # .path files → local file paths to ingest
+    # .path files → vault-relative (or absolute) paths to ingest
     find "$QUEUE_DIR" -maxdepth 1 -name '*.path' | sort | while read -r qfile; do
-      target="$(cat "$qfile" | tr -d '[:space:]')"
+      raw="$(cat "$qfile" | tr -d '[:space:]')"
+      # Resolve relative paths against the local vault root
+      if [[ "$raw" = /* ]]; then
+        target="$raw"
+      else
+        target="$VAULT_ROOT/$raw"
+      fi
       if [ -f "$target" ]; then
         printf '[%s] ingest path: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$target"
         (cd "$VAULT_ROOT" && "$SYNTHADOC_PYTHON" -m synthadoc ingest "$target") && rm -f "$qfile" \
