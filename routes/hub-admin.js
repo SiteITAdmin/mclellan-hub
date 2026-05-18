@@ -10,6 +10,20 @@ const multer = require('multer');
 const { fileToMarkdown: extractFileToMarkdown } = require('../lib/extract');
 const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// Ensure test_jobs table exists (safe to run every startup)
+try {
+  db.hub().prepare(`CREATE TABLE IF NOT EXISTS test_jobs (
+    id TEXT PRIMARY KEY,
+    user TEXT NOT NULL,
+    question TEXT NOT NULL,
+    combos TEXT NOT NULL,
+    results TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    completed_at INTEGER
+  )`).run();
+} catch (_) {}
+
 function defaultSearchModeForTier(tier) {
   try {
     const row = db.hub().prepare('SELECT search_default FROM model_tiers WHERE key = ?').get(tier);
@@ -725,6 +739,77 @@ async function runComboInternal(question, model, search) {
     model_id: model.model_id, model_label: model.label || model.key,
   };
 }
+
+// ── Async job runner — all combos in parallel, no client connection needed ────
+async function runJob(jobId, user, question, combos) {
+  const hub = db.hub();
+  const results = [];
+
+  const persist = () => {
+    try { hub.prepare('UPDATE test_jobs SET results = ? WHERE id = ?').run(JSON.stringify(results), jobId); } catch (_) {}
+  };
+
+  await Promise.allSettled(combos.map(async ({ modelKey, search }) => {
+    const model = hub.prepare('SELECT * FROM model_config WHERE key = ?').get(modelKey);
+    let entry;
+    if (!model) {
+      entry = { modelKey, search, error: `Unknown model: ${modelKey}` };
+    } else if (model.search === 'native' && search === 'web-plugin') {
+      entry = { modelKey, search, _skipped: true };
+    } else {
+      try {
+        entry = { modelKey, search, ...(await runComboInternal(question, model, search)) };
+      } catch (e) {
+        entry = { modelKey, search, error: e.message };
+      }
+    }
+    results.push(entry);
+    persist();
+  }));
+
+  hub.prepare('UPDATE test_jobs SET status = ?, completed_at = unixepoch(), results = ? WHERE id = ?')
+    .run('done', JSON.stringify(results), jobId);
+
+  // Prune old jobs — keep last 20 per user
+  hub.prepare(`DELETE FROM test_jobs WHERE user = ? AND id NOT IN (
+    SELECT id FROM test_jobs WHERE user = ? ORDER BY created_at DESC LIMIT 20
+  )`).run(user, user);
+}
+
+// Submit a test job — returns job ID immediately, runs all combos in parallel on server
+router.post('/admin/test/start', requireHubAdmin, (req, res) => {
+  const { question, combos } = req.body;
+  if (!question || !Array.isArray(combos) || !combos.length)
+    return res.status(400).json({ error: 'Missing question or combos' });
+
+  const jobId = require('crypto').randomBytes(8).toString('hex');
+  db.hub().prepare('INSERT INTO test_jobs (id, user, question, combos) VALUES (?, ?, ?, ?)')
+    .run(jobId, req.hubUser, question, JSON.stringify(combos));
+
+  res.json({ ok: true, jobId });
+
+  runJob(jobId, req.hubUser, question, combos).catch(e => {
+    console.error(`[test-arena] job ${jobId} error:`, e.message);
+    try { db.hub().prepare('UPDATE test_jobs SET status = ? WHERE id = ?').run('done', jobId); } catch (_) {}
+  });
+});
+
+// Poll job status
+router.get('/admin/test/jobs/:id', requireHubAdmin, (req, res) => {
+  const job = db.hub().prepare(
+    'SELECT id, status, results, combos, created_at, completed_at FROM test_jobs WHERE id = ? AND user = ?'
+  ).get(req.params.id, req.hubUser);
+  if (!job) return res.status(404).json({ error: 'Not found' });
+  // Treat stale running jobs (>10min) as done
+  const status = (job.status === 'running' && (Date.now() / 1000 - job.created_at) > 600)
+    ? 'done' : job.status;
+  res.json({
+    id: job.id, status,
+    results: JSON.parse(job.results || '[]'),
+    total: JSON.parse(job.combos || '[]').length,
+    created_at: job.created_at, completed_at: job.completed_at,
+  });
+});
 
 // Single-combo endpoint (kept for backwards compat / direct use)
 router.post('/admin/test/run', requireHubAdmin, async (req, res) => {
