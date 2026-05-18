@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admin — <%= displayUser || user %></title>
 <link rel="stylesheet" href="/portfolio.css">
@@ -259,6 +260,38 @@
 <section class="admin-section tab-panel" id="cv">
   <h2>CV page copy</h2>
   <p>Text shown on the public portfolio page.</p>
+  <div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface);margin-bottom:18px;">
+    <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+      <div style="max-width:680px;">
+        <h3 style="margin:0 0 6px;">Executive summary draft</h3>
+        <p style="margin:0 0 12px;color:var(--text-dim);font-size:14px;">Builds a draft from your profile, selected experience, reviewed skills, and reviewed detected topics. Saving replaces the <code>summary</code> CV section used by the PDF.</p>
+      </div>
+      <form method="POST" action="/admin/cv/summary-draft">
+        <button type="submit" class="save-btn">Draft from CV context</button>
+      </form>
+    </div>
+    <% if (summaryDraftError) { %>
+      <p style="color:#ba1a1a;font-size:14px;"><%= summaryDraftError %></p>
+    <% } %>
+    <div class="field" style="margin-top:12px;">
+      <label>Current live summary</label>
+      <textarea rows="4" readonly><%= cv.summary || profile.elevator_pitch || '' %></textarea>
+    </div>
+    <% if (summaryDraft && summaryDraft.content) { %>
+      <form method="POST" action="/admin/cv/summary-draft/save" style="margin-top:12px;">
+        <div class="field">
+          <label>Generated draft (<%= summaryDraft.topic_count || 0 %> reviewed topics, <%= summaryDraft.skill_count || 0 %> skills)</label>
+          <textarea name="content" rows="6"><%= summaryDraft.content %></textarea>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="submit" class="save-btn">Save as executive summary</button>
+        </div>
+      </form>
+      <form method="POST" action="/admin/cv/summary-draft/discard" style="margin-top:8px;">
+        <button type="submit">Discard draft</button>
+      </form>
+    <% } %>
+  </div>
   <table class="admin-table">
     <thead><tr><th>Section</th><th>Content</th><th></th></tr></thead>
     <tbody>

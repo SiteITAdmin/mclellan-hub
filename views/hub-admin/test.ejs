@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model Test Arena — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+  .arena-grid { display:grid; grid-template-columns:1fr 260px; gap:24px; align-items:start; }
+  .arena-main { min-width:0; }
+  .arena-sidebar { position:sticky; top:20px; }
+
+  .panel { background:var(--surface,#fff); border:1px solid var(--border,#e5e3f0); border-radius:14px; padding:20px; margin-bottom:16px; }
+  .panel h3 { margin:0 0 12px; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim,#888); }
+
+  .question-area { width:100%; box-sizing:border-box; min-height:80px; resize:vertical; font-size:15px; font-family:inherit; padding:12px 14px; border:1px solid var(--border,#e5e3f0); border-radius:10px; background:var(--bg,#f5f4fb); }
+  .question-area:focus { outline:none; border-color:var(--accent,#6b5ce7); box-shadow:0 0 0 3px rgba(107,92,231,.12); }
+
+  .attach-bar { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .improve-panel { margin-top:14px; border:1px solid var(--accent,#6b5ce7); border-radius:10px; overflow:hidden; background:var(--bg,#f5f4fb); }
+  .improve-panel-head { display:flex; justify-content:space-between; align-items:center; padding:9px 14px; background:rgba(107,92,231,.08); border-bottom:1px solid rgba(107,92,231,.15); }
+  .improve-panel-head span { font-size:12px; font-weight:700; color:var(--accent,#6b5ce7); text-transform:uppercase; letter-spacing:.05em; }
+  .improve-panel-actions { display:flex; gap:8px; }
+  .improve-use-btn { font-size:12px; font-weight:600; font-family:inherit; padding:4px 12px; border:none; background:var(--accent,#6b5ce7); color:#fff; border-radius:7px; cursor:pointer; }
+  .improve-use-btn:hover { opacity:.85; }
+  .improve-dismiss-btn { font-size:12px; font-family:inherit; padding:4px 10px; border:1px solid var(--border,#e5e3f0); background:transparent; color:var(--text-dim,#888); border-radius:7px; cursor:pointer; }
+  .improve-dismiss-btn:hover { color:var(--text,#15131e); }
+  .improve-text { padding:12px 14px; font-size:13px; line-height:1.65; white-space:pre-wrap; color:var(--text,#15131e); font-family:inherit; max-height:260px; overflow-y:auto; }
+  .attach-btn { font-size:12px; font-weight:600; font-family:inherit; padding:5px 12px; border:1px solid var(--border,#e5e3f0); border-radius:8px; background:var(--bg,#f5f4fb); color:var(--text-dim,#888); cursor:pointer; transition:border-color .15s,color .15s; }
+  .attach-btn:hover { border-color:var(--accent,#6b5ce7); color:var(--accent,#6b5ce7); }
+  .attach-pill { display:flex; align-items:center; gap:6px; font-size:12px; background:#e9f5ee; color:#1a7a45; border-radius:8px; padding:4px 10px; }
+  .attach-pill-remove { background:none; border:none; color:inherit; cursor:pointer; font-size:14px; line-height:1; padding:0 0 0 2px; opacity:.7; }
+  .attach-pill-remove:hover { opacity:1; }
+  .attach-uploading { font-size:12px; color:var(--text-dim,#888); font-style:italic; }
+
+  .run-btn { display:block; width:100%; padding:11px; background:var(--accent,#6b5ce7); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; transition:opacity .15s; margin-top:12px; }
+  .run-btn:hover { opacity:.88; }
+  .run-btn:disabled { opacity:.5; cursor:default; }
+
+  .model-group-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim,#888); margin:10px 0 4px; }
+  .model-check { display:flex; align-items:center; gap:6px; padding:4px 0; font-size:13px; cursor:pointer; }
+  .model-check input { cursor:pointer; }
+  .model-native-badge { font-size:10px; background:#e6f4fe; color:#1a7ab0; border-radius:4px; padding:1px 5px; font-weight:600; }
+
+  .search-checks { display:flex; flex-wrap:wrap; gap:8px; }
+  .search-check { display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;
+    background:var(--bg,#f5f4fb); border:1px solid var(--border,#e5e3f0); border-radius:8px; padding:5px 10px; }
+  .search-check input { cursor:pointer; }
+
+  /* Results */
+  .results-header { display:flex; justify-content:space-between; align-items:baseline; margin:24px 0 12px; }
+  .results-header h2 { margin:0; font-size:16px; }
+  .results-count { font-size:12px; color:var(--text-dim,#888); }
+
+  .result-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(380px,1fr)); gap:16px; }
+
+  .result-card { border:1px solid var(--border,#e5e3f0); border-radius:14px; overflow:hidden; background:var(--surface,#fff); }
+  .result-card.error { border-color:#fca5a5; background:#fff5f5; }
+  .result-card.running { border-color:var(--accent,#6b5ce7); }
+
+  .rc-head { padding:12px 14px; border-bottom:1px solid var(--border,#e5e3f0); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .rc-head-left { min-width:0; }
+  .rc-name { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rc-id { font-size:11px; font-family:var(--mono,monospace); color:var(--text-dim,#888); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rc-badges { display:flex; gap:4px; flex-shrink:0; }
+  .rc-badge { font-size:10px; font-weight:600; border-radius:5px; padding:2px 7px; white-space:nowrap; }
+  .rc-badge-native { background:#e6f4fe; color:#1a7ab0; }
+  .rc-badge-exa    { background:#e9f5ee; color:#1a7a45; }
+  .rc-badge-plugin { background:#fff3e0; color:#b45309; }
+  .rc-badge-none   { background:#f0f0f5; color:#666; }
+  .rc-badge-error  { background:#fee2e2; color:#dc2626; }
+
+  .rc-body { padding:14px; min-height:60px; }
+  .rc-body pre { margin:0; white-space:pre-wrap; font-family:var(--font,sans-serif); font-size:13px; line-height:1.6; color:var(--text,#15131e); }
+  .rc-spinner { display:flex; align-items:center; gap:8px; color:var(--text-dim,#888); font-size:13px; }
+  .spinner-dot { width:6px; height:6px; border-radius:50%; background:var(--accent,#6b5ce7); animation:pulse 1s infinite; }
+  .spinner-dot:nth-child(2) { animation-delay:.2s; }
+  .spinner-dot:nth-child(3) { animation-delay:.4s; }
+  @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+
+  .rc-foot { padding:8px 14px; border-top:1px solid var(--border,#e5e3f0); display:flex; gap:16px; flex-wrap:wrap; font-size:11px; color:var(--text-dim,#888); font-family:var(--mono,monospace); }
+  .rc-foot span b { color:var(--text,#15131e); }
+
+  /* Summary table */
+  .summary-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+  .summary-table th { text-align:left; padding:8px 10px; background:var(--bg,#f5f4fb); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim,#888); border-bottom:2px solid var(--border,#e5e3f0); }
+  .summary-table td { padding:8px 10px; border-bottom:1px solid var(--border,#e5e3f0); vertical-align:middle; }
+  .summary-table tr.winner td { background:rgba(107,92,231,.04); }
+  .summary-table tr.summary-pending td { color:var(--text-dim,#888); font-style:italic; }
+  .trophy { margin-right:4px; }
+
+  /* Log section */
+  .log-section { margin-top:40px; border-top:2px solid var(--border,#e5e3f0); padding-top:28px; }
+  .log-section-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
+  .log-section-header h2 { margin:0; font-size:16px; }
+  .log-section-header span { font-size:12px; color:var(--text-dim,#888); }
+
+  .log-entry { border:1px solid var(--border,#e5e3f0); border-radius:14px; margin-bottom:12px; overflow:hidden; background:var(--surface,#fff); }
+  .log-entry-head { padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .log-entry-head:hover { background:var(--bg,#f5f4fb); }
+  .log-question { font-size:14px; font-weight:500; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+  .log-meta { font-size:11px; color:var(--text-dim,#888); white-space:nowrap; font-family:var(--mono,monospace); cursor:pointer; }
+  .log-chevron { font-size:12px; color:var(--text-dim,#888); flex-shrink:0; transition:transform .2s; cursor:pointer; }
+  .log-entry-head.open .log-chevron { transform:rotate(90deg); }
+  .log-actions { display:flex; gap:6px; flex-shrink:0; }
+  .log-action-btn { font-size:11px; font-weight:600; font-family:inherit; padding:4px 9px; border-radius:7px; cursor:pointer; border:1px solid var(--border,#e5e3f0); background:transparent; color:var(--text-dim,#888); white-space:nowrap; transition:color .15s,border-color .15s; }
+  .log-action-btn:hover { color:var(--accent,#6b5ce7); border-color:var(--accent,#6b5ce7); }
+  .log-action-btn.rerun { background:var(--accent,#6b5ce7); color:#fff; border-color:var(--accent,#6b5ce7); }
+  .log-action-btn.rerun:hover { opacity:.85; }
+
+  .log-body { display:none; padding:16px; border-top:1px solid var(--border,#e5e3f0); }
+  .log-body.open { display:block; }
+  .log-combo-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:12px; margin-bottom:16px; }
+
+  @media(max-width:700px) {
+    .arena-grid { grid-template-columns:1fr; }
+    .arena-sidebar { position:static; }
+    .result-cards { grid-template-columns:1fr; }
+    .log-combo-cards { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Test Arena — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/shortcuts">Cards</a>
+    <a href="/admin/test" style="font-weight:600">Test</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<div class="admin-section" style="max-width:1400px;">
+
+<div class="arena-grid">
+
+  <!-- Main column: question + results -->
+  <div class="arena-main">
+    <div class="panel">
+      <h3>Question</h3>
+      <textarea id="question" class="question-area" placeholder="Ask something… e.g. 'What is the current inflation rate in Ireland?'"></textarea>
+      <div class="attach-bar">
+        <button type="button" class="attach-btn" id="improve-btn" onclick="improvePrompt()">✦ Improve prompt</button>
+        <button type="button" class="attach-btn" onclick="document.getElementById('file-input').click()">+ Attach document</button>
+        <input type="file" id="file-input" accept=".pdf,.docx" style="display:none" onchange="handleFileSelect(this)">
+        <div id="attach-status"></div>
+      </div>
+      <div class="improve-panel" id="improve-panel" style="display:none;">
+        <div class="improve-panel-head">
+          <span>Improved prompt</span>
+          <div class="improve-panel-actions">
+            <button class="improve-use-btn" onclick="useImprovedPrompt()">Use this</button>
+            <button class="improve-dismiss-btn" onclick="dismissImproved()">Dismiss</button>
+          </div>
+        </div>
+        <div class="improve-text" id="improve-text"></div>
+      </div>
+    </div>
+
+    <div id="results-area" style="display:none;">
+      <div class="results-header">
+        <h2>Results</h2>
+        <span class="results-count" id="results-count"></span>
+      </div>
+      <div class="result-cards" id="result-cards"></div>
+
+      <h3 style="margin:28px 0 10px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim,#888);">Summary</h3>
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>Model</th><th>Search</th><th>Time</th><th>Cost</th><th>Words</th><th>Tok in</th><th>Tok out</th>
+          </tr>
+        </thead>
+        <tbody id="summary-tbody"></tbody>
+      </table>
+      <p id="save-status" style="font-size:12px;color:var(--text-dim,#888);margin-top:10px;"></p>
+    </div>
+
+    <!-- ── Test logs ── -->
+    <% if (logs.length > 0) { %>
+    <div class="log-section" id="log-section">
+      <div class="log-section-header">
+        <h2>Test log</h2>
+        <span>Last <%= logs.length %> run<%= logs.length !== 1 ? 's' : '' %> — auto-pruned to 5</span>
+      </div>
+      <% for (const log of logs) { %>
+      <%
+        const logDate = new Date(log.run_at * 1000);
+        const logDateStr = logDate.toISOString().replace('T',' ').slice(0,16) + ' UTC';
+        const successCount = log.results.filter(r => !r.error).length;
+        const errorCount   = log.results.filter(r => r.error).length;
+      %>
+      <%
+        const logModels  = [...new Set(log.results.map(r => r.modelKey))];
+        const logSearches = [...new Set(log.results.map(r => r.search))];
+        const logQ = log.question.replace(/^\[[^\]]+\]\s*/, '');
+      %>
+      <div class="log-entry"
+        data-question="<%= JSON.stringify(logQ) %>"
+        data-models="<%= JSON.stringify(logModels) %>"
+        data-searches="<%= JSON.stringify(logSearches) %>">
+        <div class="log-entry-head">
+          <div class="log-question" onclick="toggleLog(this.closest('.log-entry-head'))" title="Click to expand"><%= log.question %></div>
+          <div class="log-meta" onclick="toggleLog(this.closest('.log-entry-head'))" style="cursor:pointer;"><%= logDateStr %> &nbsp;·&nbsp; <%= log.results.length %> combo<%= log.results.length !== 1 ? 's' : '' %><% if (errorCount) { %> · <span style="color:#dc2626"><%= errorCount %> err</span><% } %></div>
+          <div class="log-actions" onclick="event.stopPropagation()">
+            <button class="log-action-btn" onclick="copyLogPrompt(this)" title="Copy prompt">Copy</button>
+            <button class="log-action-btn rerun" onclick="rerunFromLog(this)" title="Reload this exact test">Rerun</button>
+          </div>
+          <div class="log-chevron" onclick="toggleLog(this.closest('.log-entry-head'))">›</div>
+        </div>
+        <div class="log-body">
+          <div class="log-combo-cards">
+            <% for (const r of log.results) { %>
+            <%
+              const searchLabel = { none:'None', exa:'Semantic Search', 'web-plugin':'Brave Search', native:'Native' }[r.search] || r.search;
+              const badgeCls    = { none:'rc-badge-none', exa:'rc-badge-exa', 'web-plugin':'rc-badge-plugin', native:'rc-badge-native' }[r.search] || '';
+            %>
+            <div class="result-card<%= r.error ? ' error' : '' %>">
+              <div class="rc-head">
+                <div class="rc-head-left">
+                  <div class="rc-name"><%= r.modelLabel || r.modelKey %></div>
+                  <div class="rc-id"><%= r.modelKey %></div>
+                </div>
+                <div class="rc-badges">
+                  <span class="rc-badge <%= badgeCls %>"><%= searchLabel %></span>
+                  <% if (r.error) { %><span class="rc-badge rc-badge-error">Error</span><% } %>
+                </div>
+              </div>
+              <div class="rc-body">
+                <pre><% if (r.error) { %><span style="color:#dc2626;"><%= r.error %></span><% } else { %><%= r.answer %><% } %></pre>
+              </div>
+              <% if (!r.error) { %>
+              <div class="rc-foot">
+                <span><b><%= (r.time_ms / 1000).toFixed(1) %>s</b> time</span>
+                <span><b><%= r.cost_usd != null ? '$' + r.cost_usd.toFixed(4) : '—' %></b> cost</span>
+                <span><b><%= r.word_count ?? '—' %></b> words</span>
+                <span><b><%= r.tokens_in ?? '—' %></b> tok in</span>
+                <span><b><%= r.tokens_out ?? '—' %></b> tok out</span>
+              </div>
+              <% } %>
+            </div>
+            <% } %>
+          </div>
+
+          <!-- Log summary table -->
+          <% const successRows = log.results.filter(r => !r.error); %>
+          <% if (successRows.length > 0) { %>
+          <table class="summary-table">
+            <thead><tr><th>Model</th><th>Search</th><th>Time</th><th>Cost</th><th>Words</th><th>Tok in</th><th>Tok out</th></tr></thead>
+            <tbody>
+              <% for (const r of log.results) { %>
+              <%
+                const sl = { none:'None', exa:'Semantic Search', 'web-plugin':'Brave Search', native:'Native' }[r.search] || r.search;
+                const bc = { none:'rc-badge-none', exa:'rc-badge-exa', 'web-plugin':'rc-badge-plugin', native:'rc-badge-native' }[r.search] || '';
+              %>
+              <tr>
+                <td><%= r.modelLabel || r.modelKey %></td>
+                <td><span class="rc-badge <%= bc %>"><%= sl %></span></td>
+                <% if (r.error) { %>
+                <td colspan="5" style="color:#dc2626;font-size:12px;"><%= r.error %></td>
+                <% } else { %>
+                <td><%= (r.time_ms / 1000).toFixed(1) %>s</td>
+                <td><%= r.cost_usd != null ? '$' + r.cost_usd.toFixed(4) : '—' %></td>
+                <td><%= r.word_count ?? '—' %></td>
+                <td><%= r.tokens_in ?? '—' %></td>
+                <td><%= r.tokens_out ?? '—' %></td>
+                <% } %>
+              </tr>
+              <% } %>
+            </tbody>
+          </table>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+
+  </div>
+
+  <!-- Sidebar: model + search selection -->
+  <div class="arena-sidebar">
+    <div class="panel">
+      <h3>Search modes</h3>
+      <div class="search-checks">
+        <label class="search-check"><input type="checkbox" name="search" value="none" checked> None</label>
+        <label class="search-check"><input type="checkbox" name="search" value="exa"> Semantic Search</label>
+        <label class="search-check"><input type="checkbox" name="search" value="web-plugin"> Brave Search</label>
+        <label class="search-check"><input type="checkbox" name="search" value="native"> Native</label>
+      </div>
+      <p style="font-size:11px;color:var(--text-dim,#888);margin:8px 0 0;">Native = model searches itself (Perplexity etc.). Non-native models ignore this mode.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Models</h3>
+      <label class="model-check" style="margin-bottom:6px;font-size:12px;">
+        <input type="checkbox" id="select-all"> <em>Select all</em>
+      </label>
+      <%
+        const tierMap = {};
+        for (const t of tiers) tierMap[t.key] = t.label;
+        const grouped = {};
+        for (const m of models) {
+          const g = tierMap[m.tier] || m.tier || 'Other';
+          if (!grouped[g]) grouped[g] = [];
+          grouped[g].push(m);
+        }
+      %>
+      <% for (const [tierLabel, tierModels] of Object.entries(grouped)) { %>
+        <div class="model-group-label"><%= tierLabel %></div>
+        <% for (const m of tierModels) { %>
+          <label class="model-check">
+            <input type="checkbox" class="model-cb" name="model" value="<%= m.key %>" data-native="<%= m.search === 'native' ? '1' : '' %>">
+            <%= m.label || m.key %>
+            <% if (m.search === 'native') { %><span class="model-native-badge">native</span><% } %>
+          </label>
+        <% } %>
+      <% } %>
+    </div>
+
+    <button class="run-btn" id="run-btn" onclick="runTest()">Run test</button>
+    <button class="run-btn" id="cancel-btn" onclick="cancelTest()" style="background:#dc2626;margin-top:8px;display:none;">Cancel</button>
+    <button class="run-btn" id="clear-btn" onclick="clearResults()" style="background:transparent;color:var(--text-dim,#888);border:1px solid var(--border,#e5e3f0);margin-top:8px;display:none;">Clear results</button>
+  </div>
+
+</div>
+</div>
+
+<script>
+const SEARCH_LABELS = { none: 'None', exa: 'Semantic Search', 'web-plugin': 'Brave Search', native: 'Native' };
+const BADGE_CLASS   = { none: 'rc-badge-none', exa: 'rc-badge-exa', 'web-plugin': 'rc-badge-plugin', native: 'rc-badge-native' };
+let summaryRows = {};
+
+document.getElementById('select-all').addEventListener('change', e => {
+  document.querySelectorAll('.model-cb').forEach(cb => cb.checked = e.target.checked);
+});
+
+function selectedModels() {
+  return [...document.querySelectorAll('.model-cb:checked')].map(cb => ({
+    key: cb.value,
+    native: cb.dataset.native === '1',
+    label: cb.closest('label').textContent.trim().replace(/native$/, '').trim(),
+  }));
+}
+
+function selectedSearchModes() {
+  return [...document.querySelectorAll('input[name="search"]:checked')].map(cb => cb.value);
+}
+
+function comboId(modelKey, search) {
+  return `${modelKey}__${search}`.replace(/[^a-z0-9_-]/gi, '_');
+}
+
+function runTest() {
+  const baseQuestion = document.getElementById('question').value.trim();
+  if (!baseQuestion) { alert('Enter a question first.'); return; }
+  const question = attachedDoc
+    ? `[Document: ${attachedDoc.filename}]\n\n${attachedDoc.text}\n\n---\n\n${baseQuestion}`
+    : baseQuestion;
+
+  const models   = selectedModels();
+  const searches = selectedSearchModes();
+  if (!models.length)   { alert('Select at least one model.'); return; }
+  if (!searches.length) { alert('Select at least one search mode.'); return; }
+
+  const combos = [];
+  for (const m of models) {
+    for (const s of searches) {
+      combos.push({ modelKey: m.key, modelLabel: m.label, search: s });
+    }
+  }
+
+  clearResults(true);
+  document.getElementById('results-area').style.display = '';
+  document.getElementById('results-count').textContent = `${combos.length} combo${combos.length !== 1 ? 's' : ''}`;
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('clear-btn').style.display = '';
+
+  const cards = document.getElementById('result-cards');
+  const tbody = document.getElementById('summary-tbody');
+
+  for (const combo of combos) {
+    const id = comboId(combo.modelKey, combo.search);
+
+    const card = document.createElement('div');
+    card.className = 'result-card running';
+    card.id = `card-${id}`;
+    card.innerHTML = `
+      <div class="rc-head">
+        <div class="rc-head-left">
+          <div class="rc-name">${esc(combo.modelLabel)}</div>
+          <div class="rc-id">${esc(combo.modelKey)}</div>
+        </div>
+        <div class="rc-badges">
+          <span class="rc-badge ${BADGE_CLASS[combo.search] || ''}">${SEARCH_LABELS[combo.search] || combo.search}</span>
+        </div>
+      </div>
+      <div class="rc-body">
+        <div class="rc-spinner">
+          <div class="spinner-dot"></div><div class="spinner-dot"></div><div class="spinner-dot"></div>
+          <span>Running…</span>
+        </div>
+      </div>
+      <div class="rc-foot" id="foot-${id}" style="display:none"></div>`;
+    cards.appendChild(card);
+
+    const tr = document.createElement('tr');
+    tr.id = `row-${id}`;
+    tr.className = 'summary-pending';
+    tr.innerHTML = `
+      <td>${esc(combo.modelLabel)}</td>
+      <td><span class="rc-badge ${BADGE_CLASS[combo.search] || ''}">${SEARCH_LABELS[combo.search] || combo.search}</span></td>
+      <td>…</td><td>…</td><td>…</td><td>…</td><td>…</td>`;
+    tbody.appendChild(tr);
+    summaryRows[id] = tr;
+  }
+
+  const results = [];
+  let _abortController = new AbortController();
+
+  document.getElementById('cancel-btn').style.display = '';
+
+  // Single SSE connection — server runs all combos and streams results back.
+  // iOS won't kill one persistent connection the way it kills sequential fetches.
+  (async () => {
+    try {
+      const resp = await fetch('/admin/test/run-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          combos: combos.map(c => ({ modelKey: c.modelKey, search: c.search })),
+        }),
+        signal: _abortController.signal,
+      });
+      if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            const ev = JSON.parse(raw);
+            if (ev.type === 'progress') {
+              document.getElementById('results-count').textContent =
+                `${ev.index + 1} / ${ev.total}`;
+            } else if (ev.type === 'result') {
+              const combo = combos.find(c => c.modelKey === ev.modelKey && c.search === ev.search);
+              if (combo) fillResult(comboId(ev.modelKey, ev.search), combo, ev, results);
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      const wasCancelled = e.name === 'AbortError';
+      for (const combo of combos) {
+        const card = document.getElementById(`card-${comboId(combo.modelKey, combo.search)}`);
+        if (card?.classList.contains('running'))
+          fillResult(comboId(combo.modelKey, combo.search), combo,
+            { error: wasCancelled ? 'Cancelled' : 'Connection lost: ' + e.message }, results);
+      }
+    }
+
+    document.getElementById('cancel-btn').style.display = 'none';
+    document.getElementById('results-count').textContent =
+      `${combos.length} combo${combos.length !== 1 ? 's' : ''} — done`;
+    document.getElementById('run-btn').disabled = false;
+    if (results.some(r => !r.error)) {
+      highlightWinner(results);
+      saveRun(baseQuestion, attachedDoc?.filename, results);
+    }
+  })();
+}
+
+function cancelTest() {
+  if (typeof _abortController !== 'undefined') _abortController.abort();
+}
+
+function fillResult(id, combo, data, results) {
+  const card = document.getElementById(`card-${id}`);
+  if (!card) return;
+  card.classList.remove('running');
+
+  if (data._skipped) {
+    card.classList.add('error');
+    card.querySelector('.rc-body').innerHTML = `<pre style="color:#9333ea;font-style:italic;">It already searches. That's literally its whole thing.</pre>`;
+    summaryRows[id].innerHTML = `
+      <td>${esc(combo.modelLabel)}</td>
+      <td><span class="rc-badge rc-badge-plugin">Web plugin</span></td>
+      <td colspan="5" style="color:#9333ea;font-style:italic;">No answer. You know why.</td>`;
+    summaryRows[id].className = '';
+    results.push({ id, combo, data: {}, modelKey: combo.modelKey, modelLabel: combo.modelLabel, search: combo.search, error: 'Skipped — native model + web-plugin' });
+    return;
+  }
+
+  if (data.error) {
+    card.classList.add('error');
+    card.querySelector('.rc-body').innerHTML = `<pre style="color:#dc2626;">${esc(data.error)}</pre>`;
+    summaryRows[id].innerHTML = `
+      <td>${esc(combo.modelLabel)}</td>
+      <td><span class="rc-badge ${BADGE_CLASS[combo.search] || ''}">${SEARCH_LABELS[combo.search] || combo.search}</span></td>
+      <td colspan="5" style="color:#dc2626;">Error: ${esc(data.error)}</td>`;
+    summaryRows[id].className = '';
+    results.push({ id, combo, data, modelKey: combo.modelKey, modelLabel: combo.modelLabel, search: combo.search, error: data.error });
+    return;
+  }
+
+  card.querySelector('.rc-body').innerHTML = `<pre>${esc(data.answer)}</pre>`;
+
+  const foot = document.getElementById(`foot-${id}`);
+  foot.style.display = '';
+  const timeSec = (data.time_ms / 1000).toFixed(1);
+  const costStr = data.cost_usd != null ? `$${data.cost_usd.toFixed(4)}` : '—';
+  foot.innerHTML = `
+    <span><b>${timeSec}s</b> time</span>
+    <span><b>${costStr}</b> cost</span>
+    <span><b>${data.word_count ?? '—'}</b> words</span>
+    <span><b>${data.tokens_in ?? '—'}</b> tok in</span>
+    <span><b>${data.tokens_out ?? '—'}</b> tok out</span>`;
+
+  summaryRows[id].className = '';
+  summaryRows[id].innerHTML = `
+    <td>${esc(combo.modelLabel)}</td>
+    <td><span class="rc-badge ${BADGE_CLASS[combo.search] || ''}">${SEARCH_LABELS[combo.search] || combo.search}</span></td>
+    <td>${timeSec}s</td>
+    <td>${costStr}</td>
+    <td>${data.word_count ?? '—'}</td>
+    <td>${data.tokens_in ?? '—'}</td>
+    <td>${data.tokens_out ?? '—'}</td>`;
+
+  results.push({
+    id, combo,
+    modelKey: combo.modelKey, modelLabel: combo.modelLabel, search: combo.search,
+    answer: data.answer, time_ms: data.time_ms, tokens_in: data.tokens_in,
+    tokens_out: data.tokens_out, cost_usd: data.cost_usd, word_count: data.word_count,
+    data,
+  });
+}
+
+function highlightWinner(results) {
+  if (results.length < 2) return;
+  const fastest = results.filter(r => r.data?.time_ms).sort((a,b) => a.data.time_ms - b.data.time_ms)[0];
+  if (fastest) {
+    const tr = summaryRows[fastest.id];
+    if (tr) {
+      tr.classList.add('winner');
+      const td = tr.querySelector('td');
+      if (td) td.innerHTML = '<span class="trophy">⚡</span>' + td.innerHTML;
+    }
+  }
+}
+
+function saveRun(question, docFilename, results) {
+  const status = document.getElementById('save-status');
+  status.textContent = 'Saving…';
+  const logQuestion = docFilename ? `[${docFilename}] ${question}` : question;
+  const payload = results.map(r => ({
+    modelKey: r.modelKey, modelLabel: r.modelLabel, search: r.search,
+    answer: r.answer || null, error: r.error || null,
+    time_ms: r.time_ms || null, tokens_in: r.tokens_in || null,
+    tokens_out: r.tokens_out || null, cost_usd: r.cost_usd || null,
+    word_count: r.word_count || null,
+  }));
+  fetch('/admin/test/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: logQuestion, results: payload }),
+  })
+  .then(r => r.json())
+  .then(d => {
+    status.textContent = d.ok ? 'Saved to log.' : 'Log save failed.';
+    // Refresh log section after a short pause
+    setTimeout(() => location.reload(), 1200);
+  })
+  .catch(() => { status.textContent = 'Log save failed.'; });
+}
+
+function clearResults(keepQuestion) {
+  document.getElementById('result-cards').innerHTML = '';
+  document.getElementById('summary-tbody').innerHTML = '';
+  document.getElementById('results-area').style.display = 'none';
+  document.getElementById('clear-btn').style.display = 'none';
+  document.getElementById('cancel-btn').style.display = 'none';
+  document.getElementById('run-btn').disabled = false;
+  summaryRows = {};
+  if (!keepQuestion) document.getElementById('question').value = '';
+}
+
+function toggleLog(head) {
+  head.classList.toggle('open');
+  head.nextElementSibling.classList.toggle('open');
+}
+
+function getLogEntry(btn) {
+  return btn.closest('.log-entry');
+}
+
+function copyLogPrompt(btn) {
+  const entry = getLogEntry(btn);
+  const q = JSON.parse(entry.dataset.question);
+
+  const done = () => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  };
+  const fail = () => {
+    btn.textContent = 'Failed';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  };
+
+  // Modern clipboard API
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(q).then(done).catch(() => execCopy(q, done, fail));
+  } else {
+    execCopy(q, done, fail);
+  }
+}
+
+function execCopy(text, done, fail) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy') ? done() : fail();
+  } catch (_) { fail(); }
+  document.body.removeChild(ta);
+}
+
+function rerunFromLog(btn) {
+  const entry = getLogEntry(btn);
+  const q        = JSON.parse(entry.dataset.question);
+  const models   = JSON.parse(entry.dataset.models);
+  const searches = JSON.parse(entry.dataset.searches);
+
+  // Fill question
+  document.getElementById('question').value = q;
+
+  // Reset and set search modes
+  document.querySelectorAll('input[name="search"]').forEach(cb => {
+    cb.checked = searches.includes(cb.value);
+  });
+
+  // Reset and set models
+  document.querySelectorAll('.model-cb').forEach(cb => {
+    cb.checked = models.includes(cb.value);
+  });
+  // Sync select-all state
+  const allCbs = document.querySelectorAll('.model-cb');
+  document.getElementById('select-all').checked =
+    [...allCbs].every(cb => cb.checked);
+
+  // Clear any attached doc and improved prompt
+  removeAttachment();
+  dismissImproved();
+
+  // Scroll to top and focus
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.getElementById('question').focus();
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Prompt improver
+let improvedPromptText = null;
+
+async function improvePrompt() {
+  const question = document.getElementById('question').value.trim();
+  if (!question) { alert('Write a prompt first.'); return; }
+
+  const btn = document.getElementById('improve-btn');
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/admin/test/improve-prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Failed');
+    improvedPromptText = d.improved;
+    document.getElementById('improve-text').textContent = d.improved;
+    document.getElementById('improve-panel').style.display = '';
+  } catch (e) {
+    alert('Improve failed: ' + e.message);
+  } finally {
+    btn.textContent = '✦ Improve prompt';
+    btn.disabled = false;
+  }
+}
+
+function useImprovedPrompt() {
+  if (!improvedPromptText) return;
+  document.getElementById('question').value = improvedPromptText;
+  dismissImproved();
+}
+
+function dismissImproved() {
+  document.getElementById('improve-panel').style.display = 'none';
+  improvedPromptText = null;
+}
+
+// Document attachment
+let attachedDoc = null;
+
+async function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+
+  const status = document.getElementById('attach-status');
+  status.innerHTML = '<span class="attach-uploading">Uploading…</span>';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const r = await fetch('/admin/test/upload', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!d.ok) {
+      status.innerHTML = `<span style="color:#dc2626;font-size:12px;">${esc(d.error)}</span>`;
+      return;
+    }
+    attachedDoc = { text: d.text, filename: d.filename, chars: d.chars };
+    const truncWarning = d.truncated
+      ? ` <span style="color:#b45309;font-size:11px;">⚠ truncated to ${(d.truncatedAt/1000).toFixed(0)}k chars</span>`
+      : '';
+    status.innerHTML = `
+      <span class="attach-pill">
+        📄 ${esc(d.filename)} <span style="opacity:.7;">(${(d.truncated ? d.truncatedAt : d.chars).toLocaleString()} / ${d.chars.toLocaleString()} chars)</span>${truncWarning}
+        <button type="button" class="attach-pill-remove" onclick="removeAttachment()" title="Remove">×</button>
+      </span>`;
+  } catch (e) {
+    status.innerHTML = `<span style="color:#dc2626;font-size:12px;">Upload failed: ${esc(e.message)}</span>`;
+  }
+}
+
+function removeAttachment() {
+  attachedDoc = null;
+  document.getElementById('attach-status').innerHTML = '';
+}
+</script>
+
+</body>
+</html>

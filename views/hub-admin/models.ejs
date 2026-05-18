@@ -2,61 +2,149 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Models — Chat Admin — <%= user %></title>
 <link rel="stylesheet" href="/portfolio.css">
 <style>
-  .model-row.shared { opacity: 0.65; }
-  .tier-tag {
-    display: inline-block; padding: 2px 8px; border-radius: 10px;
-    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
-    background: rgba(70,72,212,0.1); color: var(--primary, #4648d4);
-  }
-  .endpoint-tag {
-    font-family: var(--mono, monospace); font-size: 11px;
-    background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px;
-  }
-  .key-set {
-    display: inline-block; padding: 2px 8px; border-radius: 10px;
-    font-size: 11px; font-weight: 600;
-    background: rgba(76,175,138,0.12); color: #2e7d60;
+  :root {
+    --card-radius: 12px;
+    --card-border: var(--border, #dddaf0);
+    --card-bg: var(--bg, #faf9fb);
+    --accent: var(--primary, #7c6af5);
   }
 
-  /* ── Add / Edit model form ── */
-  .model-form {
-    display: flex; flex-direction: column; gap: 16px;
-    max-width: 560px; margin-top: 16px;
+  /* ── Model cards grid ── */
+  .model-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+    margin-top: 4px;
   }
-  .form-row { display: flex; gap: 12px; }
-  .form-row .field { flex: 1; }
-  .field { display: flex; flex-direction: column; gap: 5px; }
+  .model-card {
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    background: var(--card-bg);
+    padding: 16px 18px;
+    transition: box-shadow 0.15s;
+  }
+  .model-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .model-card.disabled { opacity: 0.5; }
+  .model-card-head {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+    margin-bottom: 8px;
+  }
+  .model-card-name {
+    font-size: 14px; font-weight: 600; color: var(--text, #15131e);
+    line-height: 1.3;
+  }
+  .model-card-id {
+    font-family: var(--mono, monospace); font-size: 10px;
+    color: var(--text-dim, #767586); margin-top: 2px; word-break: break-all;
+  }
+  .model-card-badges {
+    display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    line-height: 1.5;
+  }
+  .badge-tier   { background: rgba(124,106,245,0.12); color: #5b4ac4; }
+  .badge-cat    { background: rgba(22,160,133,0.12);  color: #0e7a65; }
+  .badge-search-native  { background: rgba(0,122,255,0.12); color: #0052cc; }
+  .badge-search-plugin  { background: rgba(255,149,0,0.12);  color: #b35e00; }
+  .badge-search-none    { background: rgba(0,0,0,0.06);       color: #666; }
+  .badge-off    { background: rgba(186,26,26,0.1);   color: #ba1a1a; }
+
+  .model-card-cost {
+    font-size: 11px; color: var(--text-dim, #767586);
+    display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .model-card-cost span { white-space: nowrap; }
+
+  .model-card-actions {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .btn-sm {
+    padding: 5px 12px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--outline, #c7c4d7); background: transparent;
+    color: var(--text, #15131e); font-family: inherit; transition: background 0.12s;
+  }
+  .btn-sm:hover { background: rgba(0,0,0,0.05); }
+  .btn-sm.danger { color: #ba1a1a; border-color: #ffdad6; }
+  .btn-sm.danger:hover { background: rgba(186,26,26,0.06); }
+
+  /* ── Inline edit panel (hidden by default, JS-toggled) ── */
+  .edit-panel {
+    display: none; margin-top: 14px; padding-top: 14px;
+    border-top: 1px solid var(--card-border);
+  }
+  .edit-panel.open { display: block; }
+
+  /* ── Forms ── */
+  .model-form { display: flex; flex-direction: column; gap: 12px; }
+  .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .form-row .field { flex: 1; min-width: 120px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
   .field label {
-    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.06em; color: var(--text-dim, #464554);
   }
   .field input, .field select {
-    padding: 9px 12px; font-size: 13px; font-family: var(--font, sans-serif);
-    border: 1px solid var(--outline, #767586); border-radius: 8px;
+    padding: 7px 10px; font-size: 13px; font-family: var(--font, sans-serif);
+    border: 1px solid var(--outline, #c7c4d7); border-radius: 7px;
     background: var(--bg, #fcf8ff); color: var(--text, #1b1b23);
-    outline: none; transition: border-color 0.15s;
+    outline: none; transition: border-color 0.15s; width: 100%; box-sizing: border-box;
   }
   .field input:focus, .field select:focus {
-    border-color: var(--primary, #4648d4);
-    box-shadow: 0 0 0 3px rgba(70,72,212,0.12);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124,106,245,0.12);
   }
-  .field .hint {
-    font-size: 12px; color: var(--text-dim, #767586); margin-top: 2px;
-  }
-  .form-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-  .section-divider {
-    border: none; border-top: 1px solid var(--border, #c7c4d7);
-    margin: 4px 0 8px;
-  }
+  .field .hint { font-size: 11px; color: var(--text-dim, #767586); }
+  .form-actions { display: flex; gap: 8px; margin-top: 4px; }
+  .section-divider { border: none; border-top: 1px solid var(--card-border); margin: 4px 0; }
   .form-section-label {
-    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.08em; color: var(--text-dim, #767586);
-    margin-bottom: 4px;
   }
+
+  /* ── Add model section ── */
+  .add-section {
+    background: var(--card-bg); border: 1px solid var(--card-border);
+    border-radius: var(--card-radius); padding: 20px 22px;
+  }
+
+  /* ── OR search picker ── */
+  .or-picker { margin-bottom: 16px; }
+  .or-picker input[type=search] {
+    width: 100%; max-width: 480px; padding: 8px 12px; font-size: 13px;
+    border: 1px solid var(--outline, #c7c4d7); border-radius: 7px;
+    background: var(--card-bg); color: var(--text, #1b1b23);
+    outline: none; box-sizing: border-box;
+  }
+  .or-picker input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,245,0.12); }
+  #or-results {
+    display: none; margin-top: 5px; border: 1px solid var(--outline, #c7c4d7);
+    border-radius: 8px; overflow: hidden; max-width: 480px;
+    max-height: 260px; overflow-y: auto; background: var(--card-bg);
+  }
+  .or-result {
+    padding: 9px 12px; cursor: pointer;
+    border-bottom: 1px solid var(--card-border);
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; font-size: 13px;
+  }
+  .or-result:last-child { border-bottom: none; }
+  .or-result:hover { background: rgba(124,106,245,0.06); }
+  .or-result-name { font-weight: 600; }
+  .or-result-id { font-family: monospace; font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+  .or-result-meta { text-align: right; white-space: nowrap; font-size: 11px; color: var(--text-dim); }
+
+  #or-status { font-size: 12px; color: var(--text-dim); margin-top: 5px; }
+
+  /* ── Category datalist styling (hint only — browsers style differently) ── */
+  .cat-suggestions { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
 </style>
 </head>
 <body class="admin-page">
@@ -65,195 +153,357 @@
   <h1>Models — <%= user %></h1>
   <nav style="display:flex;gap:12px;align-items:center;">
     <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM</a>
     <a href="/admin/models" style="font-weight:600">Models</a>
+    <a href="/admin/shortcuts">Cards</a>
+    <a href="/admin/test">Test</a>
+    <a href="/admin/chatlogs">Chat logs</a>
     <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
   </nav>
 </header>
 
 <section class="admin-section">
   <h2>How this works</h2>
-  <p>The chat dropdown is built from this list. Shared defaults (greyed) are available to both dchat and nchat. Models you add are visible only in <strong><%= user %></strong>'s chat.</p>
-  <p>For non-OpenRouter providers (Perplexity, Groq, OpenAI direct, Mistral, DeepSeek direct), pick <code>custom-openai</code>, set the base URL, and paste the API key directly below — no SSH needed.</p>
+  <p>The chat model picker is built from this list. Shared defaults (faded) are available to both users. Models you add here are visible only in <strong><%= user %></strong>'s chat. Category and cost data show on the cards in the chat interface.</p>
+  <p style="margin-top:8px;font-size:13px;color:var(--text-dim)">
+    <strong>Search modes:</strong>
+    <strong>Native</strong> — Perplexity Sonar etc., model always searches, no plugin needed. When selected, hub auto-switches to Exa for semantic augmentation. &nbsp;|&nbsp;
+    <strong>Web plugin (Firecrawl)</strong> — OpenRouter injects search as a tool call; only works on models with tool support (auto-detected from catalogue). &nbsp;|&nbsp;
+    <strong>None</strong> — no built-in search; Exa/Brave context injection still works for any model.
+  </p>
 </section>
 
 <section class="admin-section">
   <h2>Current models</h2>
-  <table class="admin-table">
-    <thead>
-      <tr>
-        <th>Label / Model ID</th><th>Key</th><th>Endpoint</th>
-        <th>Tier</th><th>Search</th><th>API key</th><th>On/off</th><th>Edit</th>
-      </tr>
-    </thead>
-    <tbody>
-    <% for (const m of models) { %>
-      <tr class="model-row <%= m.user ? 'owned' : 'shared' %>">
-        <td>
-          <strong><%= m.label %></strong>
-          <div style="font-family:var(--mono,monospace);font-size:11px;color:var(--text-dim,#767586);margin-top:2px;word-break:break-all;"><%= m.model_id %></div>
-        </td>
-        <td style="font-family:var(--mono,monospace);font-size:12px;"><%= m.key %></td>
-        <td><span class="endpoint-tag"><%= m.endpoint %></span></td>
-        <td><span class="tier-tag"><%= m.tier %></span></td>
-        <td><%= m.search %></td>
-        <td><% if (m.api_key) { %><span class="key-set">stored</span><% } else if (m.api_key_env) { %><span class="endpoint-tag"><%= m.api_key_env %></span><% } else { %>–<% } %></td>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <form method="POST" action="/admin/models/<%= m.key %>/toggle" style="display:inline">
-              <button type="submit"><%= m.enabled ? '✓ on' : '× off' %></button>
-            </form>
-            <% if (!m.enabled) { %>
-            <form method="POST" action="/admin/models/<%= m.key %>/delete" style="display:inline" onsubmit="return confirm('Delete model <%= m.key %>?')">
-              <button type="submit" style="background:transparent;color:#ba1a1a;border:1px solid #ffdad6;padding:5px 10px;font-size:12px;">Delete</button>
-            </form>
-            <% } %>
+  <div class="model-cards">
+  <% for (const m of models) { %>
+    <div class="model-card <%= m.enabled ? '' : 'disabled' %>" id="card-<%= m.key %>">
+      <div class="model-card-head">
+        <div>
+          <div class="model-card-name"><%= m.label %></div>
+          <div class="model-card-id"><%= m.model_id %></div>
+        </div>
+        <% if (!m.enabled) { %><span class="badge badge-off">off</span><% } %>
+      </div>
+
+      <div class="model-card-badges">
+        <% if (m.category) { %><span class="badge badge-cat"><%= m.category %></span><% } %>
+        <span class="badge badge-tier"><%= m.tier %></span>
+        <% if (m.search === 'native') { %>
+          <span class="badge badge-search-native">native search</span>
+        <% } else if (m.search === 'web-plugin') { %>
+          <span class="badge badge-search-plugin">web plugin</span>
+        <% } else { %>
+          <span class="badge badge-search-none">no search</span>
+        <% } %>
+      </div>
+
+      <% if (m.cost_input || m.cost_output || m.context_length) { %>
+      <div class="model-card-cost">
+        <% if (m.cost_input != null) { %><span>in $<%= m.cost_input.toFixed(m.cost_input < 0.01 ? 4 : 2) %>/M</span><% } %>
+        <% if (m.cost_output != null) { %><span>out $<%= m.cost_output.toFixed(m.cost_output < 0.01 ? 4 : 2) %>/M</span><% } %>
+        <% if (m.context_length) { %><span><%= Math.round(m.context_length/1000) %>k ctx</span><% } %>
+      </div>
+      <% } %>
+
+      <div class="model-card-actions">
+        <button class="btn-sm" onclick="toggleEdit('<%= m.key.replace(/\//g,'__') %>')">Edit</button>
+        <form method="POST" action="/admin/models/_toggle" style="display:inline">
+          <input type="hidden" name="key" value="<%= m.key %>">
+          <button class="btn-sm" type="submit"><%= m.enabled ? 'Disable' : 'Enable' %></button>
+        </form>
+        <% if (!m.enabled) { %>
+        <form method="POST" action="/admin/models/_delete" style="display:inline"
+          onsubmit="return confirm('Delete model <%= m.key %>?')">
+          <input type="hidden" name="key" value="<%= m.key %>">
+          <button class="btn-sm danger" type="submit">Delete</button>
+        </form>
+        <% } %>
+      </div>
+
+      <div class="edit-panel" id="edit-<%= m.key.replace(/\//g,'__') %>">
+        <form method="POST" action="/admin/models/_update" class="model-form">
+          <input type="hidden" name="key" value="<%= m.key %>">
+          <div class="form-row">
+            <div class="field">
+              <label>Label</label>
+              <input name="label" value="<%= m.label %>" required>
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <input name="category" value="<%= m.category || '' %>" list="cat-list" placeholder="General">
+            </div>
           </div>
-        </td>
-        <td>
-          <details>
-            <summary>Edit</summary>
-            <form method="POST" action="/admin/models/<%= m.key %>" class="model-form">
-              <div class="form-row">
-                <div class="field">
-                  <label>Label</label>
-                  <input name="label" value="<%= m.label %>" required>
-                </div>
-                <div class="field">
-                  <label>Model ID</label>
-                  <input name="model_id" value="<%= m.model_id %>" required>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="field">
-                  <label>Tier</label>
-                  <select name="tier">
-                    <% for (const t of ['everyday','superior','coding','project','research','image']) { %>
-                      <option value="<%= t %>" <%= m.tier === t ? 'selected' : '' %>><%= t %></option>
-                    <% } %>
-                  </select>
-                </div>
-                <div class="field">
-                  <label>Search</label>
-                  <select name="search">
-                    <% for (const s of ['web-plugin','native','none']) { %>
-                      <option value="<%= s %>" <%= m.search === s ? 'selected' : '' %>><%= s %></option>
-                    <% } %>
-                  </select>
-                </div>
-              </div>
-              <hr class="section-divider">
-              <p class="form-section-label">Custom provider (leave blank for OpenRouter)</p>
-              <div class="field">
-                <label>Base URL</label>
-                <input name="base_url" value="<%= m.base_url || '' %>" placeholder="https://api.perplexity.ai">
-              </div>
-              <div class="field">
-                <label>API key</label>
-                <input type="password" name="api_key" placeholder="<%= m.api_key ? 'leave blank to keep existing' : 'paste key here' %>">
-                <span class="hint">Stored securely in the database. Leave blank to keep the existing key.</span>
-              </div>
-              <div class="form-row">
-                <div class="field">
-                  <label>Enabled</label>
-                  <select name="enabled">
-                    <option value="1" <%= m.enabled ? 'selected' : '' %>>Yes</option>
-                    <option value="" <%= !m.enabled ? 'selected' : '' %>>No</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-actions">
-                <button type="submit">Save</button>
-              </div>
-            </form>
-          </details>
-        </td>
-      </tr>
-    <% } %>
-    </tbody>
-  </table>
+          <div class="field">
+            <label>Model ID</label>
+            <input name="model_id" value="<%= m.model_id %>" required>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Tier</label>
+              <select name="tier">
+                <% for (const t of tiers) { %>
+                  <option value="<%= t.key %>" <%= m.tier === t.key ? 'selected' : '' %>><%= t.label %> (<%= t.key %>)</option>
+                <% } %>
+                <% if (!tiers.find(t => t.key === m.tier)) { %>
+                  <option value="<%= m.tier %>" selected><%= m.tier %> (unknown)</option>
+                <% } %>
+              </select>
+            </div>
+            <div class="field">
+              <label>Search</label>
+              <select name="search">
+                <option value="web-plugin" <%= m.search === 'web-plugin' ? 'selected' : '' %>>Web plugin (add-on via OR)</option>
+                <option value="native" <%= m.search === 'native' ? 'selected' : '' %>>Native (built-in search)</option>
+                <option value="none" <%= m.search === 'none' ? 'selected' : '' %>>None</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Cost in ($/M tokens)</label>
+              <input name="cost_input" type="number" step="any" value="<%= m.cost_input != null ? m.cost_input : '' %>" placeholder="0.10">
+            </div>
+            <div class="field">
+              <label>Cost out ($/M tokens)</label>
+              <input name="cost_output" type="number" step="any" value="<%= m.cost_output != null ? m.cost_output : '' %>" placeholder="0.40">
+            </div>
+            <div class="field">
+              <label>Context (tokens)</label>
+              <input name="context_length" type="number" value="<%= m.context_length || '' %>" placeholder="128000">
+            </div>
+          </div>
+          <hr class="section-divider">
+          <p class="form-section-label">Custom provider (leave blank for OpenRouter)</p>
+          <div class="field">
+            <label>Base URL</label>
+            <input name="base_url" value="<%= m.base_url || '' %>" placeholder="https://api.perplexity.ai">
+          </div>
+          <div class="field">
+            <label>API key</label>
+            <input type="password" name="api_key" placeholder="<%= m.api_key ? 'leave blank to keep existing' : 'paste key here' %>">
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Enabled</label>
+              <select name="enabled">
+                <option value="1" <%= m.enabled ? 'selected' : '' %>>Yes</option>
+                <option value="" <%= !m.enabled ? 'selected' : '' %>>No</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <button type="button" class="btn-sm" onclick="toggleEdit('<%= m.key %>')">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  <% } %>
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Tiers</h2>
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:14px">Tiers group models in the chat picker. The key is used internally and in model records — don't change it after models reference it. Search default sets the auto-selected search mode when a model is added to this tier.</p>
+
+  <div class="model-cards" style="margin-bottom:20px">
+  <% for (const t of tiers) { %>
+    <div class="model-card" id="tier-card-<%= t.key %>">
+      <div class="model-card-head">
+        <div>
+          <div class="model-card-name"><%= t.label %></div>
+          <div class="model-card-id"><%= t.key %></div>
+        </div>
+        <span class="badge badge-tier"><%= t.search_default %></span>
+      </div>
+      <div class="model-card-actions">
+        <button class="btn-sm" onclick="toggleTierEdit('<%= t.key %>')">Edit</button>
+        <form method="POST" action="/admin/tiers/_delete" style="display:inline"
+          onsubmit="return confirm('Delete tier <%= t.key %>? Models in this tier will still exist but won\'t be grouped.')">
+          <input type="hidden" name="key" value="<%= t.key %>">
+          <button class="btn-sm danger" type="submit">Delete</button>
+        </form>
+      </div>
+      <div class="edit-panel" id="tier-edit-<%= t.key %>">
+        <form method="POST" action="/admin/tiers/_update" class="model-form">
+          <input type="hidden" name="key" value="<%= t.key %>">
+          <div class="form-row">
+            <div class="field">
+              <label>Display name</label>
+              <input name="label" value="<%= t.label %>" required>
+            </div>
+            <div class="field">
+              <label>Search default</label>
+              <select name="search_default">
+                <option value="web-plugin" <%= t.search_default === 'web-plugin' ? 'selected' : '' %>>Web plugin (Firecrawl)</option>
+                <option value="native"     <%= t.search_default === 'native'     ? 'selected' : '' %>>Native</option>
+                <option value="none"       <%= t.search_default === 'none'       ? 'selected' : '' %>>None</option>
+              </select>
+            </div>
+            <div class="field" style="flex:0 0 70px">
+              <label>Order</label>
+              <input name="display_order" type="number" value="<%= t.display_order %>">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <button type="button" class="btn-sm" onclick="toggleTierEdit('<%= t.key %>')">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  <% } %>
+  </div>
+
+  <details style="margin-top:4px">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Add a tier</summary>
+    <form method="POST" action="/admin/tiers" class="model-form" style="margin-top:12px;max-width:480px">
+      <div class="form-row">
+        <div class="field">
+          <label>Key <span style="font-weight:400;text-transform:none">(slug, e.g. fast-chat)</span></label>
+          <input name="key" placeholder="fast-chat" required>
+        </div>
+        <div class="field">
+          <label>Display name</label>
+          <input name="label" placeholder="Fast Chat" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Search default</label>
+          <select name="search_default">
+            <option value="web-plugin">Web plugin (Firecrawl)</option>
+            <option value="native">Native</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div class="field" style="flex:0 0 80px">
+          <label>Order</label>
+          <input name="display_order" type="number" value="<%= tiers.length %>">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">Add tier</button>
+      </div>
+    </form>
+  </details>
 </section>
 
 <section class="admin-section">
   <h2>Add a model</h2>
+  <div class="add-section">
 
-  <!-- ── OpenRouter model search picker ───────────────────────────────────── -->
-  <div style="margin-bottom:20px">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:8px">
-      Browse OpenRouter catalogue
+    <div class="or-picker">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px">
+        Search OpenRouter catalogue — click to auto-fill form
+      </div>
+      <input id="or-search" type="search" placeholder="Type model name or provider…">
+      <div id="or-results"></div>
+      <div id="or-status"></div>
     </div>
-    <input id="or-search" type="search" placeholder="Type to search OpenRouter models…"
-      style="width:100%;max-width:520px;padding:9px 12px;font-size:13px;border:1px solid var(--outline,#767586);border-radius:8px;background:var(--bg,#fcf8ff);color:var(--text,#1b1b23);outline:none;box-sizing:border-box">
-    <div id="or-results" style="display:none;margin-top:6px;border:1px solid var(--outline,#767586);border-radius:8px;overflow:hidden;max-width:520px;max-height:280px;overflow-y:auto;background:var(--bg,#fcf8ff)"></div>
-    <div id="or-status" style="font-size:12px;color:var(--text-dim);margin-top:6px"></div>
+
+    <form method="POST" action="/admin/models" class="model-form" id="add-model-form">
+      <div class="form-row">
+        <div class="field">
+          <label>Key <span style="font-weight:400;text-transform:none">(unique, internal)</span></label>
+          <input id="f-key" name="key" pattern="[a-z0-9-]+" placeholder="gemini-flash" required>
+        </div>
+        <div class="field">
+          <label>Label <span style="font-weight:400;text-transform:none">(shown on card)</span></label>
+          <input id="f-label" name="label" placeholder="Gemini Flash" required>
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <input id="f-category" name="category" list="cat-list" placeholder="General">
+          <div class="cat-suggestions">e.g. General, Coding, Research, Writing, Document Synthesis</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Endpoint</label>
+          <select id="f-endpoint" name="endpoint" required>
+            <option value="openrouter">openrouter</option>
+            <option value="custom-openai">custom-openai (OpenAI-compatible)</option>
+            <option value="google-ai">google-ai (image)</option>
+          </select>
+        </div>
+        <div class="field" style="flex:2">
+          <label>Model ID</label>
+          <input id="f-model-id" name="model_id" placeholder="google/gemini-flash-1.5" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Tier</label>
+          <select id="f-tier" name="tier" required>
+            <% for (const t of tiers) { %>
+              <option value="<%= t.key %>"><%= t.label %> (<%= t.key %>)</option>
+            <% } %>
+          </select>
+        </div>
+        <div class="field">
+          <label>Search</label>
+          <select id="f-search" name="search">
+            <option value="web-plugin">Web plugin (add-on via OR)</option>
+            <option value="native">Native (built-in search)</option>
+            <option value="none">None</option>
+          </select>
+          <div class="hint">Auto-detected from model ID when browsing catalogue.</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Cost in ($/M tokens)</label>
+          <input id="f-cost-in" name="cost_input" type="number" step="any" placeholder="0.10">
+        </div>
+        <div class="field">
+          <label>Cost out ($/M tokens)</label>
+          <input id="f-cost-out" name="cost_output" type="number" step="any" placeholder="0.40">
+        </div>
+        <div class="field">
+          <label>Context (tokens)</label>
+          <input id="f-context" name="context_length" type="number" placeholder="128000">
+        </div>
+      </div>
+      <hr class="section-divider">
+      <p class="form-section-label">Custom provider — only needed for non-OpenRouter models</p>
+      <div class="field">
+        <label>Base URL</label>
+        <input name="base_url" placeholder="https://api.perplexity.ai">
+      </div>
+      <div class="field">
+        <label>API key</label>
+        <input type="password" name="api_key" placeholder="sk-… stored in database">
+      </div>
+      <div class="form-actions">
+        <button type="submit" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">Add model</button>
+      </div>
+    </form>
   </div>
-
-  <form method="POST" action="/admin/models" class="model-form" id="add-model-form">
-    <div class="form-row">
-      <div class="field">
-        <label>Key <span style="font-weight:400;text-transform:none">(unique, internal)</span></label>
-        <input id="f-key" name="key" pattern="[a-z0-9-]+" placeholder="perplexity-sonar-pro" required>
-      </div>
-      <div class="field">
-        <label>Label <span style="font-weight:400;text-transform:none">(shown in dropdown)</span></label>
-        <input id="f-label" name="label" placeholder="Perplexity Sonar Pro" required>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="field">
-        <label>Endpoint</label>
-        <select id="f-endpoint" name="endpoint" required>
-          <option value="openrouter">openrouter</option>
-          <option value="custom-openai">custom-openai (OpenAI-compatible)</option>
-          <option value="google-ai">google-ai (image)</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Model ID <span style="font-weight:400;text-transform:none">(provider's identifier)</span></label>
-        <input id="f-model-id" name="model_id" placeholder="sonar-pro" required>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="field">
-        <label>Tier</label>
-        <select name="tier" required>
-          <option value="everyday">everyday</option>
-          <option value="superior">superior</option>
-          <option value="coding">coding</option>
-          <option value="web-search">web-search (built-in search)</option>
-          <option value="project">project (confirms before use)</option>
-          <option value="research">research</option>
-          <option value="image">image</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Search mode</label>
-        <select name="search">
-          <option value="web-plugin">Tool — OpenRouter web search tool (recommended default)</option>
-          <option value="native">Native — model has built-in search always on</option>
-          <option value="none">None — no search</option>
-        </select>
-        <span class="hint">OpenRouter can add web search to models that do not support it natively. Use `none` for coding or image models.</span>
-      </div>
-    </div>
-    <hr class="section-divider">
-    <p class="form-section-label">Custom provider — only needed for non-OpenRouter models</p>
-    <div class="field">
-      <label>Base URL</label>
-      <input name="base_url" placeholder="https://api.perplexity.ai">
-    </div>
-    <div class="field">
-      <label>API key</label>
-      <input type="password" name="api_key" placeholder="sk-…  paste key here, stored in database">
-      <span class="hint">Stored in the database — no need to SSH to the server.</span>
-    </div>
-    <div class="form-actions">
-      <button type="submit">Add model</button>
-    </div>
-  </form>
 </section>
+
+<datalist id="cat-list">
+  <option value="General">
+  <option value="Coding">
+  <option value="Research">
+  <option value="Writing">
+  <option value="Document Synthesis">
+  <option value="Image">
+  <option value="Fast">
+</datalist>
 
 <script>
 (function () {
+  // ── Edit toggle ──────────────────────────────────────────────────────────
+  window.toggleEdit = function(key) {
+    // key may contain '/' — use sanitised ID (slashes replaced with __)
+    const safeId = key.replace(/\//g, '__');
+    const panel = document.getElementById('edit-' + safeId);
+    if (panel) panel.classList.toggle('open');
+  };
+
+  // ── OR catalogue picker ──────────────────────────────────────────────────
   const searchEl  = document.getElementById('or-search');
   const resultsEl = document.getElementById('or-results');
   const statusEl  = document.getElementById('or-status');
@@ -261,6 +511,11 @@
   const fLabel    = document.getElementById('f-label');
   const fModelId  = document.getElementById('f-model-id');
   const fEndpoint = document.getElementById('f-endpoint');
+  const fSearch   = document.getElementById('f-search');
+  const fTier     = document.getElementById('f-tier');
+  const fCostIn   = document.getElementById('f-cost-in');
+  const fCostOut  = document.getElementById('f-cost-out');
+  const fContext  = document.getElementById('f-context');
 
   let allModels = null;
   let loadPromise = null;
@@ -272,7 +527,31 @@
   function formatPrice(v) {
     if (v === null || v === undefined) return '–';
     const n = parseFloat(v);
-    return n === 0 ? 'free' : '$' + n.toFixed(n < 0.01 ? 4 : 2);
+    return n === 0 ? 'free' : '$' + n.toFixed(n < 0.1 ? 4 : 2);
+  }
+
+  // Detect search mode using OR's supportsTools field + model ID patterns
+  function detectSearch(modelId, modelName, supportsTools) {
+    const id = (modelId || '').toLowerCase();
+    // Native: Perplexity Sonar always searches internally
+    if (id.includes('perplexity') || id.includes('sonar')) return 'native';
+    // No search: image/video generation, code-only models
+    if (id.includes('flux') || id.includes('dall-e') || id.includes('midjourney')) return 'none';
+    if (id.includes('image') && !id.includes('gemini')) return 'none';
+    // Web plugin (Firecrawl): OR can inject search as a tool call
+    if (supportsTools) return 'web-plugin';
+    // No tool support: can still benefit from Exa/Brave pre-injection, but not OR plugin
+    return 'none';
+  }
+
+  // Detect tier from model ID
+  function detectTier(modelId) {
+    const id = (modelId || '').toLowerCase();
+    if (id.includes('sonar-deep') || id.includes('deep-research')) return 'deep-research';
+    if (id.includes('sonar')) return 'news-research';
+    if (id.includes('image') || id.includes('flux') || id.includes('dall-e')) return 'image';
+    if (id.includes('code') || id.includes('codestral')) return 'coding';
+    return 'everyday';
   }
 
   function loadModels() {
@@ -283,11 +562,11 @@
       .then(data => {
         if (data.error) throw new Error(data.error);
         allModels = data;
-        statusEl.textContent = allModels.length + ' models available — type to filter';
+        statusEl.textContent = allModels.length + ' models — type to search';
         return allModels;
       })
       .catch(err => {
-        statusEl.textContent = '⚠ Could not load catalogue: ' + err.message;
+        statusEl.textContent = '⚠ Could not load: ' + err.message;
         loadPromise = null;
       });
     return loadPromise;
@@ -300,40 +579,47 @@
       ? allModels.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)).slice(0, 40)
       : [];
 
-    if (!hits.length) {
-      resultsEl.style.display = 'none';
-      return;
-    }
+    if (!hits.length) { resultsEl.style.display = 'none'; return; }
 
     resultsEl.style.display = 'block';
     resultsEl.innerHTML = hits.map(m => `
       <div class="or-result" data-id="${m.id}" data-name="${m.name.replace(/"/g,'&quot;')}"
-        style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--outline,#e0ddf0);display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px">
+        data-in="${m.inputPer1M || ''}" data-out="${m.outputPer1M || ''}" data-ctx="${m.context || ''}"
+        data-tools="${m.supportsTools ? 'true' : 'false'}">
         <div>
-          <div style="font-weight:600">${m.name}</div>
-          <div style="font-family:monospace;font-size:11px;color:var(--text-dim)">${m.id}</div>
+          <div class="or-result-name">${m.name}</div>
+          <div class="or-result-id">${m.id}</div>
         </div>
-        <div style="text-align:right;white-space:nowrap;font-size:11px;color:var(--text-dim)">
+        <div class="or-result-meta">
           <div>in ${formatPrice(m.inputPer1M)}/M</div>
           <div>out ${formatPrice(m.outputPer1M)}/M</div>
-          ${m.context ? '<div>' + (m.context/1000).toFixed(0) + 'k ctx</div>' : ''}
+          ${m.context ? '<div>' + Math.round(m.context/1000) + 'k ctx</div>' : ''}
         </div>
       </div>`).join('');
 
     resultsEl.querySelectorAll('.or-result').forEach(el => {
-      el.addEventListener('mouseenter', () => el.style.background = 'rgba(70,72,212,0.07)');
-      el.addEventListener('mouseleave', () => el.style.background = '');
       el.addEventListener('click', () => {
-        const id   = el.dataset.id;
-        const name = el.dataset.name;
+        const id     = el.dataset.id;
+        const name   = el.dataset.name;
+        const costIn  = el.dataset.in;
+        const costOut = el.dataset.out;
+        const ctx     = el.dataset.ctx;
+
+        const supportsTools = el.dataset.tools === 'true';
         fModelId.value  = id;
         fLabel.value    = name;
         fKey.value      = slugify(id);
         fEndpoint.value = 'openrouter';
+        fSearch.value   = detectSearch(id, name, supportsTools);
+        fTier.value     = detectTier(id);
+        if (costIn)  fCostIn.value  = parseFloat(costIn).toFixed(6);
+        if (costOut) fCostOut.value = parseFloat(costOut).toFixed(6);
+        if (ctx)     fContext.value = ctx;
+
         resultsEl.style.display = 'none';
         searchEl.value = '';
-        statusEl.textContent = '✓ Filled in — review fields below and click Add model';
-        fKey.focus();
+        statusEl.textContent = '✓ Filled in — set Category and click Add model';
+        document.getElementById('f-category').focus();
       });
     });
   }
@@ -344,10 +630,7 @@
     clearTimeout(debounce);
     const q = searchEl.value.trim();
     if (!q) { resultsEl.style.display = 'none'; return; }
-    if (!allModels) {
-      loadModels().then(() => renderResults(q));
-      return;
-    }
+    if (!allModels) { loadModels().then(() => renderResults(q)); return; }
     debounce = setTimeout(() => renderResults(q), 120);
   });
 

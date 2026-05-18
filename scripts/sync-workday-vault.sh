@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -n "${MCLELLAN_ROOT:-}" ]; then
+  ROOT="$MCLELLAN_ROOT"
+else
+  ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
+export PATH="/opt/homebrew/opt/node@24/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 VPS_HOST="${WORKDAY_SYNC_HOST:-178.104.235.142}"
 VPS_USER="${WORKDAY_SYNC_USER:-root}"
@@ -16,6 +21,12 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   exit 0
 fi
 trap 'rmdir "$LOCK_DIR"' EXIT
+
+remove_remote_queue_file() {
+  local rel_path="$1"
+  local remote_path="${REMOTE_VAULT}/${rel_path}"
+  ssh -o StrictHostKeyChecking=accept-new "${VPS_USER}@${VPS_HOST}" "rm -f -- \"$remote_path\"" || true
+}
 
 # ── Synthadoc env ─────────────────────────────────────────────────────────────
 SYNTHADOC_PYTHON="${SYNTHADOC_PYTHON:-$ROOT/.tools/synthadoc-venv/bin/python}"
@@ -47,18 +58,37 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
     --filter='+ *.path' \
     --filter='+ *.url' \
     --filter='+ *.json' \
+    --filter='+ *.pdf' \
+    --filter='+ *.docx' \
+    --filter='+ *.txt' \
+    --filter='+ *.csv' \
+    --filter='+ *.png' \
+    --filter='+ *.jpg' \
+    --filter='+ *.jpeg' \
+    --filter='+ *.webp' \
     --filter='- *' \
     "${VPS_USER}@${VPS_HOST}:${REMOTE_VAULT}/" \
     "$VAULT_ROOT/"
 
   printf '[%s] rsync ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-  # ── 2. Process ingest queue ───────────────────────────────────────────────
+  # ── 2. Daily Boox / Onyx Drive notebook ingest ───────────────────────────
+  BOOX_STAMP="$LOG_DIR/.boox-drive-last-run"
+  TODAY="$(date -u '+%Y-%m-%d')"
+  if [ "${BOOX_DRIVE_ENABLED:-0}" = "1" ] && [ "$(cat "$BOOX_STAMP" 2>/dev/null)" != "$TODAY" ]; then
+    printf '[%s] running Boox Drive ingest\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    /usr/bin/env node "$ROOT/scripts/ingest-boox-drive-notes.js" \
+      && echo "$TODAY" > "$BOOX_STAMP" \
+      || printf '[%s] Boox Drive ingest failed\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  fi
+
+  # ── 3. Process ingest queue ───────────────────────────────────────────────
   QUEUE_DIR="$VAULT_ROOT/raw_sources/ingest-queue"
 
   if [ -d "$QUEUE_DIR" ] && [ -x "$SYNTHADOC_PYTHON" ]; then
     # .path files → vault-relative (or absolute) paths to ingest
     find "$QUEUE_DIR" -maxdepth 1 -name '*.path' | sort | while read -r qfile; do
+      rel_qfile="${qfile#$VAULT_ROOT/}"
       raw="$(cat "$qfile" | tr -d '[:space:]')"
       # Resolve relative paths against the local vault root
       if [[ "$raw" = /* ]]; then
@@ -68,8 +98,12 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
       fi
       if [ -f "$target" ]; then
         printf '[%s] ingest path: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$target"
-        (cd "$VAULT_ROOT" && "$SYNTHADOC_PYTHON" -m synthadoc ingest "$target") && rm -f "$qfile" \
-          || printf '[%s] ingest failed: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$target"
+        if (cd "$VAULT_ROOT" && "$SYNTHADOC_PYTHON" -m synthadoc ingest "$target"); then
+          rm -f "$qfile"
+          remove_remote_queue_file "$rel_qfile"
+        else
+          printf '[%s] ingest failed: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$target"
+        fi
       else
         printf '[%s] path not found (skipping): %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$target"
         rm -f "$qfile"
@@ -78,11 +112,16 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
 
     # .url files → JSON {"url":"..."} to ingest
     find "$QUEUE_DIR" -maxdepth 1 -name '*.url' | sort | while read -r qfile; do
+      rel_qfile="${qfile#$VAULT_ROOT/}"
       url="$("$SYNTHADOC_PYTHON" -c "import sys,json; print(json.load(open(sys.argv[1]))['url'])" "$qfile" 2>/dev/null || true)"
       if [ -n "$url" ]; then
         printf '[%s] ingest url: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$url"
-        (cd "$VAULT_ROOT" && "$SYNTHADOC_PYTHON" -m synthadoc ingest "$url") && rm -f "$qfile" \
-          || printf '[%s] ingest url failed: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$url"
+        if (cd "$VAULT_ROOT" && "$SYNTHADOC_PYTHON" -m synthadoc ingest "$url"); then
+          rm -f "$qfile"
+          remove_remote_queue_file "$rel_qfile"
+        else
+          printf '[%s] ingest url failed: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$url"
+        fi
       else
         printf '[%s] malformed url file (skipping): %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$qfile"
         rm -f "$qfile"
@@ -92,17 +131,17 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
     printf '[%s] synthadoc python not found at %s — skipping queue\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$SYNTHADOC_PYTHON"
   fi
 
-  # ── 3. Push compiled wiki pages back to VPS ──────────────────────────────
+  # ── 4. Push compiled wiki pages back to VPS ──────────────────────────────
   rsync -az \
     -e "ssh -o StrictHostKeyChecking=accept-new" \
     "$VAULT_ROOT/wiki/" \
     "${VPS_USER}@${VPS_HOST}:${REMOTE_VAULT}/wiki/"
   printf '[%s] wiki push ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-  # ── 4. Rebuild workday daily index ───────────────────────────────────────
+  # ── 5. Rebuild workday daily index ───────────────────────────────────────
   /usr/bin/env node "$ROOT/scripts/build-workday-daily-index.js"
 
-  # ── 5. Daily topic digest (once per day) ─────────────────────────────────
+  # ── 6. Daily topic digest (once per day) ─────────────────────────────────
   DIGEST_STAMP="$LOG_DIR/.digest-last-run"
   TODAY="$(date -u '+%Y-%m-%d')"
   if [ "$(cat "$DIGEST_STAMP" 2>/dev/null)" != "$TODAY" ]; then

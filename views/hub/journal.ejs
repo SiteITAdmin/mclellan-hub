@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Journal — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
+.journal-wrap { max-width: 680px; margin: 0 auto; padding: 24px 16px 80px; }
+.back-link { font-size: 13px; color: var(--text-dim); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; }
+.back-link:hover { color: var(--primary, #4648d4); }
+.page-title { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
+.page-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 32px; }
+
+/* Prompt cards */
+.prompts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 36px; }
+@media (max-width: 480px) { .prompts { grid-template-columns: 1fr; } }
+.prompt-card {
+  background: var(--surface, #f4f3fb);
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.45;
+}
+.prompt-card:first-child { grid-column: span 2; font-size: 15px; font-weight: 600; }
+@media (max-width: 480px) { .prompt-card:first-child { grid-column: span 1; } }
+.prompt-num { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 4px; }
+
+/* Record section */
+.record-section { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px 24px; border-radius: 16px; border: 2px solid var(--border); background: var(--bg); margin-bottom: 24px; }
+.record-btn {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: var(--primary, #4648d4); border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .15s, background .15s;
+  box-shadow: 0 4px 16px rgba(70,72,212,.25);
+}
+.record-btn:hover { transform: scale(1.06); box-shadow: 0 6px 20px rgba(70,72,212,.35); }
+.record-btn.recording { background: #d32f2f; animation: pulse-rec 1.2s ease-in-out infinite; }
+@keyframes pulse-rec { 0%,100% { box-shadow: 0 0 0 0 rgba(211,47,47,.4); } 50% { box-shadow: 0 0 0 14px rgba(211,47,47,0); } }
+.record-btn.done { background: #2e7d60; }
+.record-btn svg { width: 34px; height: 34px; fill: white; }
+.record-label { font-size: 15px; font-weight: 600; color: var(--text); }
+.record-sub { font-size: 12px; color: var(--text-dim); text-align: center; max-width: 280px; }
+.record-timer { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; display: none; }
+.record-timer.active { display: block; }
+
+/* Result */
+.result-box { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+.result-box.visible { display: block; }
+.result-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); margin-bottom: 8px; }
+.result-text { font-size: 13px; color: var(--text); line-height: 1.6; white-space: pre-wrap; }
+.result-ok { color: #2e7d60; font-size: 14px; font-weight: 600; }
+.result-err { color: #ba1a1a; font-size: 13px; }
+
+/* Type instead */
+.type-divider { text-align: center; font-size: 12px; color: var(--text-dim); margin: 4px 0 16px; position: relative; }
+.type-divider::before { content: ''; position: absolute; left: 0; top: 50%; width: 42%; height: 1px; background: var(--border); }
+.type-divider::after { content: ''; position: absolute; right: 0; top: 50%; width: 42%; height: 1px; background: var(--border); }
+.type-area { display: none; }
+.type-area.visible { display: block; }
+.type-toggle { background: none; border: 1px solid var(--border); padding: 8px 16px; border-radius: 20px; font-size: 13px; color: var(--text-dim); cursor: pointer; display: block; margin: 0 auto; }
+.type-toggle:hover { border-color: var(--primary, #4648d4); color: var(--primary, #4648d4); }
+textarea.type-input {
+  width: 100%; box-sizing: border-box; padding: 12px; font-size: 14px;
+  border: 1px solid var(--border); border-radius: 8px; resize: vertical; min-height: 120px;
+  background: var(--bg); color: var(--text); font-family: var(--font, sans-serif);
+  margin-bottom: 10px; outline: none;
+}
+textarea.type-input:focus { border-color: var(--primary, #4648d4); box-shadow: 0 0 0 3px rgba(70,72,212,.1); }
+.save-text-btn {
+  padding: 10px 24px; background: var(--primary, #4648d4); color: #fff; border: none;
+  border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.save-text-btn:disabled { opacity: .5; }
+</style>
+</head>
+<body class="hub-page" style="background: var(--bg-page, #f4f3fb); min-height: 100vh;">
+<main>
+<div class="journal-wrap">
+
+  <a href="/" class="back-link">← Back to hub</a>
+
+  <h1 class="page-title">Daily Journal</h1>
+  <p class="page-sub">Just talk — these prompts are here to get you going, not to box you in.</p>
+
+  <!-- Prompt cards -->
+  <div class="prompts">
+    <div class="prompt-card">
+      <span class="prompt-num">Start here</span>
+      What happened today? Walk through the day — meetings, conversations, what you worked on.
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">Reflect</span>
+      What went well? What felt hard or uncertain?
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">People</span>
+      Who did you talk to? Anything worth remembering from those conversations?
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">Tomorrow</span>
+      What do you need to do? Anything you're worried about or looking forward to?
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">Mindset</span>
+      How are you feeling? Anything on your mind that isn't work?
+    </div>
+  </div>
+
+  <!-- Record section -->
+  <div class="record-section" id="record-section">
+    <button class="record-btn" id="record-btn" title="Tap to record">
+      <svg id="mic-icon" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2z"/></svg>
+      <svg id="stop-icon" viewBox="0 0 24 24" style="display:none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      <svg id="done-icon" viewBox="0 0 24 24" style="display:none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    </button>
+    <span class="record-label" id="record-label">Tap to record</span>
+    <span class="record-timer" id="record-timer">0:00</span>
+    <span class="record-sub" id="record-sub">Your voice note will be transcribed and saved to Obsidian automatically.</span>
+  </div>
+
+  <!-- Result message -->
+  <div class="result-box" id="result-box">
+    <div class="result-label" id="result-label"></div>
+    <div class="result-text" id="result-text"></div>
+  </div>
+
+  <!-- Type instead -->
+  <p class="type-divider">or</p>
+  <button class="type-toggle" id="type-toggle">Type instead</button>
+  <div class="type-area" id="type-area">
+    <textarea class="type-input" id="typed-entry" placeholder="Write your journal entry here…"></textarea>
+    <button class="save-text-btn" id="save-text-btn">Save entry</button>
+  </div>
+
+</div>
+</main>
+
+<script>
+// ── Timer ─────────────────────────────────────────────────────────────────────
+let timerInterval, timerSecs = 0;
+const timerEl = document.getElementById('record-timer');
+function startTimer() {
+  timerSecs = 0; timerEl.classList.add('active');
+  timerInterval = setInterval(() => {
+    timerSecs++;
+    const m = Math.floor(timerSecs / 60), s = timerSecs % 60;
+    timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  }, 1000);
+}
+function stopTimer() { clearInterval(timerInterval); timerEl.classList.remove('active'); }
+
+// ── Wake lock (prevent screen sleep during recording) ────────────────────────
+let wakeLock = null;
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+}
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+
+// ── Recording ─────────────────────────────────────────────────────────────────
+let mediaRecorder, chunks = [], recording = false;
+const recordBtn = document.getElementById('record-btn');
+const recordLabel = document.getElementById('record-label');
+const recordSub = document.getElementById('record-sub');
+const micIcon = document.getElementById('mic-icon');
+const stopIcon = document.getElementById('stop-icon');
+const doneIcon = document.getElementById('done-icon');
+
+function setRecordState(state) {
+  if (state === 'idle') {
+    recordBtn.className = 'record-btn';
+    micIcon.style.display = ''; stopIcon.style.display = 'none'; doneIcon.style.display = 'none';
+    recordLabel.textContent = 'Tap to record';
+    recordSub.textContent = 'Your voice note will be transcribed and saved to Obsidian automatically.';
+  } else if (state === 'recording') {
+    recordBtn.className = 'record-btn recording';
+    micIcon.style.display = 'none'; stopIcon.style.display = ''; doneIcon.style.display = 'none';
+    recordLabel.textContent = 'Recording… tap to stop';
+    recordSub.textContent = 'Answer the prompts above in any order. Take your time.';
+  } else if (state === 'uploading') {
+    recordBtn.className = 'record-btn';
+    micIcon.style.display = ''; stopIcon.style.display = 'none'; doneIcon.style.display = 'none';
+    recordLabel.textContent = 'Sending…';
+    recordSub.textContent = 'Uploading your recording.';
+    recordBtn.disabled = true;
+  } else if (state === 'done') {
+    recordBtn.className = 'record-btn done';
+    micIcon.style.display = 'none'; stopIcon.style.display = 'none'; doneIcon.style.display = '';
+    recordLabel.textContent = 'Saved';
+    recordBtn.disabled = false;
+  }
+}
+
+recordBtn.addEventListener('click', async () => {
+  if (recording) {
+    mediaRecorder.stop();
+    return;
+  }
+  if (recordBtn.classList.contains('done')) {
+    setRecordState('idle'); return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      recording = false;
+      stopTimer();
+      releaseWakeLock();
+      stream.getTracks().forEach(t => t.stop());
+      setRecordState('uploading');
+
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const fd = new FormData();
+      fd.append('audio', blob, 'journal.webm');
+
+      const box = document.getElementById('result-box');
+      const lbl = document.getElementById('result-label');
+      const txt = document.getElementById('result-text');
+
+      try {
+        const r = await fetch('/api/journal/audio/session', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (r.ok) {
+          setRecordState('done');
+          box.className = 'result-box visible';
+          lbl.textContent = 'Entry saved';
+          txt.innerHTML = '<span class="result-ok">Your journal entry has been sent for processing — it will appear in Obsidian within a minute or two.</span>';
+        } else {
+          setRecordState('idle');
+          box.className = 'result-box visible';
+          lbl.textContent = 'Error';
+          txt.innerHTML = `<span class="result-err">${d.error || 'Something went wrong'}</span>`;
+        }
+      } catch (err) {
+        setRecordState('idle');
+        box.className = 'result-box visible';
+        lbl.textContent = 'Error';
+        txt.innerHTML = `<span class="result-err">${err.message}</span>`;
+      }
+    };
+    mediaRecorder.start(1000);
+    recording = true;
+    await acquireWakeLock();
+    startTimer();
+    setRecordState('recording');
+  } catch (err) {
+    const box = document.getElementById('result-box');
+    box.className = 'result-box visible';
+    document.getElementById('result-label').textContent = 'Microphone unavailable';
+    document.getElementById('result-text').innerHTML = '<span class="result-err">Could not access microphone. Try typing instead.</span>';
+    document.getElementById('type-toggle').click();
+  }
+});
+
+// ── Type instead ──────────────────────────────────────────────────────────────
+document.getElementById('type-toggle').addEventListener('click', function() {
+  const area = document.getElementById('type-area');
+  const visible = area.classList.toggle('visible');
+  this.textContent = visible ? 'Hide' : 'Type instead';
+  if (visible) document.getElementById('typed-entry').focus();
+});
+
+document.getElementById('save-text-btn').addEventListener('click', async () => {
+  const text = document.getElementById('typed-entry').value.trim();
+  if (!text) return;
+  const btn = document.getElementById('save-text-btn');
+  const box = document.getElementById('result-box');
+  const lbl = document.getElementById('result-label');
+  const txt = document.getElementById('result-text');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/journal/text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      box.className = 'result-box visible';
+      lbl.textContent = 'Entry saved';
+      txt.innerHTML = `<span class="result-ok">Saved to Obsidian — ${d.notePath}</span>`;
+      btn.textContent = 'Saved';
+    } else {
+      box.className = 'result-box visible';
+      lbl.textContent = 'Error';
+      txt.innerHTML = `<span class="result-err">${d.error || 'Failed'}</span>`;
+      btn.disabled = false; btn.textContent = 'Save entry';
+    }
+  } catch (err) {
+    box.className = 'result-box visible';
+    lbl.textContent = 'Error';
+    txt.innerHTML = `<span class="result-err">${err.message}</span>`;
+    btn.disabled = false; btn.textContent = 'Save entry';
+  }
+});
+</script>
+
+</body>
+</html>

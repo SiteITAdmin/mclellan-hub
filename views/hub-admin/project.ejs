@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><%= project.name %> memory — <%= user %></title>
 <link rel="stylesheet" href="/portfolio.css">
@@ -10,7 +11,15 @@
 
 <header class="admin-header">
   <h1><%= project.name %> <span style="font-family:var(--mono);font-weight:400;opacity:.6;">/<%= project.slug %></span></h1>
-  <a href="/admin"><button type="button">← Back</button></a>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">← Projects</a>
+    <a href="/admin/crm">CRM</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/shortcuts">Cards</a>
+    <a href="/admin/test">Test</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
 </header>
 
 <section class="admin-section">

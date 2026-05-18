@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Link Report — McLellan Wiki</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/wiki.css">
+<style>
+  .orphan-section { margin: 2rem 0; }
+  .orphan-list { list-style: none; padding: 0; }
+  .orphan-item { padding: 1rem; border: 1px solid var(--border, #e0e0e0); border-radius: 8px; margin-bottom: 0.75rem; }
+  .orphan-item h4 { margin: 0 0 0.4rem; }
+  .orphan-item h4 a { color: inherit; text-decoration: none; }
+  .orphan-item h4 a:hover { text-decoration: underline; }
+  .orphan-suggestions { margin-top: 0.5rem; font-size: 0.85em; color: #666; }
+  .orphan-suggestions strong { color: #333; }
+  .link-chip { display: inline-block; background: #f0f0f0; border-radius: 4px; padding: 1px 6px; margin: 2px; font-size: 0.82em; }
+  .section-count { font-size: 0.85em; color: #888; margin-left: 0.4rem; }
+  .stat-bar { display: flex; gap: 2rem; margin-bottom: 2rem; padding: 1rem 1.25rem; background: #f8f8f8; border-radius: 8px; font-size: 0.9em; }
+  .stat-item { display: flex; flex-direction: column; }
+  .stat-num { font-size: 1.4em; font-weight: 700; }
+  .stat-label { color: #666; }
+  .no-issues { color: #4caf8a; font-style: italic; }
+</style>
+</head>
+<body>
+<%- include('_nav', { page: 'orphans', q: '' }) %>
+<main class="wiki-main">
+  <h1 class="wiki-page-title">Link Report</h1>
+  <p style="color:#666;margin-bottom:1.5rem">Shows wiki pages with missing connections. All other content (meetings, journal, workday) feeds the graph but isn't shown here.</p>
+
+  <div class="stat-bar">
+    <div class="stat-item"><span class="stat-num"><%= wikiCount %></span><span class="stat-label">wiki pages</span></div>
+    <div class="stat-item"><span class="stat-num"><%= orphans.length %></span><span class="stat-label">isolated</span></div>
+    <div class="stat-item"><span class="stat-num"><%= sinks.length %></span><span class="stat-label">no inbound links</span></div>
+    <div class="stat-item"><span class="stat-num"><%= sources.length %></span><span class="stat-label">no outbound links</span></div>
+  </div>
+
+  <%# ── Isolated (no links at all) ────────────────────────────────────────── %>
+  <section class="orphan-section">
+    <h2>Isolated pages <span class="section-count"><%= orphans.length %></span></h2>
+    <p style="color:#666;font-size:0.9em">These wiki pages have no [[wikilinks]] in or out. They exist in isolation.</p>
+    <% if (!orphans.length) { %>
+      <p class="no-issues">None — every wiki page connects to at least one other.</p>
+    <% } else { %>
+      <ul class="orphan-list">
+        <% for (const s of suggestions) { %>
+          <li class="orphan-item">
+            <h4><a href="/page/<%= encodeURIComponent(s.page.slug) %>"><%= s.page.title %></a></h4>
+            <div>
+              <% for (const t of (s.page.tags || []).slice(0, 5)) { %>
+                <span class="tag tag-sm"><%= t %></span>
+              <% } %>
+            </div>
+            <% if (s.related.length) { %>
+              <div class="orphan-suggestions">
+                <strong>Possible connections:</strong>
+                <% for (const r of s.related) { %>
+                  <span class="link-chip"><a href="/page/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a></span>
+                <% } %>
+              </div>
+            <% } %>
+          </li>
+        <% } %>
+        <% if (orphans.length > suggestions.length) { %>
+          <li style="color:#888;font-size:0.9em;padding:0.5rem 0">… and <%= orphans.length - suggestions.length %> more</li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+
+  <%# ── Sink pages (no inbound) ────────────────────────────────────────────── %>
+  <section class="orphan-section">
+    <h2>No inbound links <span class="section-count"><%= sinks.length %></span></h2>
+    <p style="color:#666;font-size:0.9em">These pages link out but nothing links back to them. Good candidates for a Related section on connected pages.</p>
+    <% if (!sinks.length) { %>
+      <p class="no-issues">None.</p>
+    <% } else { %>
+      <ul class="orphan-list">
+        <% for (const { page, out } of sinks) { %>
+          <li class="orphan-item">
+            <h4><a href="/page/<%= encodeURIComponent(page.slug) %>"><%= page.title %></a></h4>
+            <div class="orphan-suggestions">Links to:
+              <% for (const s of out) { %><span class="link-chip"><%= s %></span><% } %>
+            </div>
+          </li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+
+  <%# ── Source pages (no outbound) ─────────────────────────────────────────── %>
+  <section class="orphan-section">
+    <h2>No outbound links <span class="section-count"><%= sources.length %></span></h2>
+    <p style="color:#666;font-size:0.9em">These pages are referenced by others but don't link anywhere themselves.</p>
+    <% if (!sources.length) { %>
+      <p class="no-issues">None.</p>
+    <% } else { %>
+      <ul class="orphan-list">
+        <% for (const { page, inn } of sources) { %>
+          <li class="orphan-item">
+            <h4><a href="/page/<%= encodeURIComponent(page.slug) %>"><%= page.title %></a></h4>
+            <div class="orphan-suggestions">Linked from:
+              <% for (const s of inn) { %><span class="link-chip"><%= s %></span><% } %>
+            </div>
+          </li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+</main>
+</body>
+</html>

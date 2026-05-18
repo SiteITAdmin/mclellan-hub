@@ -1,11 +1,20 @@
 const express = require('express');
 const router = express.Router();
+const fetch = require('node-fetch');
 const users = require('../config/users');
 const db = require('../lib/db');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { createRateLimiter, requireSameOrigin } = require('../lib/security');
+const { exaSearch, braveSearch, WEB_SEARCH_TOOL } = require('../lib/router');
+const multer = require('multer');
+const { fileToMarkdown: extractFileToMarkdown } = require('../lib/extract');
+const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 function defaultSearchModeForTier(tier) {
+  try {
+    const row = db.hub().prepare('SELECT search_default FROM model_tiers WHERE key = ?').get(tier);
+    if (row) return row.search_default || 'web-plugin';
+  } catch (_) {}
   if (tier === 'image' || tier === 'coding') return 'none';
   return 'web-plugin';
 }
@@ -283,32 +292,40 @@ router.get('/admin/chatlogs', requireHubAdmin, (req, res) => {
 // ── Model management ──────────────────────────────────────────────────────────
 const { DEFAULT_MODELS } = require('../lib/router');
 
+function getAdminTiers(hub) {
+  return hub.prepare('SELECT key, label, search_default, display_order FROM model_tiers ORDER BY display_order, key').all();
+}
+
 router.get('/admin/models', requireHubAdmin, (req, res) => {
   const hub = db.hub();
-  // Ensure shared defaults exist, while preserving admin edits to existing rows.
-  const insert = hub.prepare(
-    'INSERT OR IGNORE INTO model_config (key, label, endpoint, model_id, tier, search, enabled, user) VALUES (?, ?, ?, ?, ?, ?, 1, NULL)'
-  );
-  for (const [key, def] of Object.entries(DEFAULT_MODELS)) {
-    insert.run(key, def.label || key, def.endpoint, def.id, def.tier, def.search);
+  // Seed defaults only if the table is completely empty (first run only)
+  const hasAny = hub.prepare('SELECT 1 FROM model_config LIMIT 1').get();
+  if (!hasAny) {
+    const insert = hub.prepare(
+      'INSERT OR IGNORE INTO model_config (key, label, endpoint, model_id, tier, search, enabled, user) VALUES (?, ?, ?, ?, ?, ?, 1, NULL)'
+    );
+    for (const [key, def] of Object.entries(DEFAULT_MODELS)) {
+      insert.run(key, def.label || key, def.endpoint, def.id, def.tier, def.search);
+    }
   }
   const models = hub.prepare(
-    `SELECT * FROM model_config
+    `SELECT *, category, cost_input, cost_output, context_length FROM model_config
       WHERE user IS NULL OR user = ?
       ORDER BY (user IS NULL) DESC, tier, display_order, key`
   ).all(req.hubUser);
-  res.render('hub-admin/models', { user: req.hubUser, models });
+  const tiers = getAdminTiers(hub);
+  res.render('hub-admin/models', { user: req.hubUser, models, tiers });
 });
 
 router.post('/admin/models', requireHubAdmin, (req, res) => {
-  const { key, label, endpoint, model_id, tier, search, base_url, api_key_env, api_key } = req.body;
+  const { key, label, endpoint, model_id, tier, search, base_url, api_key_env, api_key, category, cost_input, cost_output, context_length } = req.body;
   if (!key || !label || !endpoint || !model_id || !tier) return res.redirect('/admin/models');
   const finalTier = tier.trim();
   const finalSearch = (search || defaultSearchModeForTier(finalTier)).trim();
   try {
     db.hub().prepare(`
-      INSERT INTO model_config (key, label, endpoint, model_id, tier, search, enabled, user, base_url, api_key_env, api_key)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      INSERT INTO model_config (key, label, endpoint, model_id, tier, search, enabled, user, base_url, api_key_env, api_key, category, cost_input, cost_output, context_length)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       key.trim().toLowerCase(),
       label.trim(),
@@ -320,6 +337,10 @@ router.post('/admin/models', requireHubAdmin, (req, res) => {
       base_url?.trim() || null,
       api_key_env?.trim() || null,
       api_key?.trim() || null,
+      category?.trim() || null,
+      cost_input ? parseFloat(cost_input) : null,
+      cost_output ? parseFloat(cost_output) : null,
+      context_length ? parseInt(context_length, 10) : null,
     );
   } catch (err) {
     console.error('[hub-admin] add model:', err.message);
@@ -327,10 +348,12 @@ router.post('/admin/models', requireHubAdmin, (req, res) => {
   res.redirect('/admin/models');
 });
 
-router.post('/admin/models/:key', requireHubAdmin, (req, res) => {
-  const { label, model_id, tier, search, base_url, api_key_env, api_key, enabled } = req.body;
+// Model key-in-body actions — avoids slash-in-key URL routing issues
+router.post('/admin/models/_update', requireHubAdmin, (req, res) => {
+  const { key, label, model_id, tier, search, base_url, api_key_env, api_key, enabled, category, cost_input, cost_output, context_length } = req.body;
+  if (!key) return res.redirect('/admin/models');
   const hub = db.hub();
-  const existing = hub.prepare('SELECT api_key FROM model_config WHERE key = ?').get(req.params.key);
+  const existing = hub.prepare('SELECT api_key FROM model_config WHERE key = ?').get(key);
   if (!existing) return res.redirect('/admin/models');
   const resolvedKey = api_key?.trim() || (existing?.api_key ?? null);
   const finalTier = tier?.trim() || 'everyday';
@@ -338,10 +361,11 @@ router.post('/admin/models/:key', requireHubAdmin, (req, res) => {
   hub.prepare(`
     UPDATE model_config
        SET label = ?, model_id = ?, tier = ?, search = ?,
-           base_url = ?, api_key_env = ?, api_key = ?, enabled = ?
+           base_url = ?, api_key_env = ?, api_key = ?, enabled = ?,
+           category = ?, cost_input = ?, cost_output = ?, context_length = ?
      WHERE key = ?
   `).run(
-    label?.trim() || req.params.key,
+    label?.trim() || key,
     model_id?.trim() || '',
     finalTier,
     finalSearch,
@@ -349,23 +373,421 @@ router.post('/admin/models/:key', requireHubAdmin, (req, res) => {
     api_key_env?.trim() || null,
     resolvedKey,
     enabled ? 1 : 0,
-    req.params.key,
+    category?.trim() || null,
+    cost_input ? parseFloat(cost_input) : null,
+    cost_output ? parseFloat(cost_output) : null,
+    context_length ? parseInt(context_length, 10) : null,
+    key,
   );
   res.redirect('/admin/models');
 });
 
-router.post('/admin/models/:key/toggle', requireHubAdmin, (req, res) => {
+router.post('/admin/models/_toggle', requireHubAdmin, (req, res) => {
+  const { key } = req.body;
+  if (!key) return res.redirect('/admin/models');
   const hub = db.hub();
-  const row = hub.prepare('SELECT * FROM model_config WHERE key = ?').get(req.params.key);
+  const row = hub.prepare('SELECT * FROM model_config WHERE key = ?').get(key);
   if (!row) return res.redirect('/admin/models');
-  hub.prepare('UPDATE model_config SET enabled = ? WHERE key = ?')
-     .run(row.enabled ? 0 : 1, req.params.key);
+  hub.prepare('UPDATE model_config SET enabled = ? WHERE key = ?').run(row.enabled ? 0 : 1, key);
   res.redirect('/admin/models');
 });
 
-router.post('/admin/models/:key/delete', requireHubAdmin, (req, res) => {
-  db.hub().prepare('DELETE FROM model_config WHERE key = ?').run(req.params.key);
+router.post('/admin/models/_delete', requireHubAdmin, (req, res) => {
+  const { key } = req.body;
+  if (!key) return res.redirect('/admin/models');
+  db.hub().prepare('DELETE FROM model_config WHERE key = ?').run(key);
   res.redirect('/admin/models');
+});
+
+// ── Tier management ───────────────────────────────────────────────────────────
+router.post('/admin/tiers', requireHubAdmin, (req, res) => {
+  const { key, label, search_default, display_order } = req.body;
+  if (!key || !label) return res.redirect('/admin/models');
+  try {
+    db.hub().prepare(
+      'INSERT INTO model_tiers (key, label, search_default, display_order) VALUES (?, ?, ?, ?)'
+    ).run(
+      key.trim().toLowerCase().replace(/\s+/g, '-'),
+      label.trim(),
+      search_default?.trim() || 'web-plugin',
+      parseInt(display_order, 10) || 0,
+    );
+  } catch (err) {
+    console.error('[hub-admin] add tier:', err.message);
+  }
+  res.redirect('/admin/models');
+});
+
+router.post('/admin/tiers/_update', requireHubAdmin, (req, res) => {
+  const { key, label, search_default, display_order } = req.body;
+  if (!key) return res.redirect('/admin/models');
+  db.hub().prepare(
+    'UPDATE model_tiers SET label = ?, search_default = ?, display_order = ? WHERE key = ?'
+  ).run(label?.trim() || key, search_default?.trim() || 'web-plugin', parseInt(display_order, 10) || 0, key);
+  res.redirect('/admin/models');
+});
+
+router.post('/admin/tiers/_delete', requireHubAdmin, (req, res) => {
+  const { key } = req.body;
+  if (!key) return res.redirect('/admin/models');
+  db.hub().prepare('DELETE FROM model_tiers WHERE key = ?').run(key);
+  res.redirect('/admin/models');
+});
+
+// ── Chat shortcuts (welcome screen cards) ─────────────────────────────────────
+router.get('/admin/shortcuts', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const shortcuts = hub.prepare(
+    `SELECT * FROM chat_shortcuts WHERE user IS NULL OR user = ? ORDER BY display_order, rowid`
+  ).all(req.hubUser);
+  const models = hub.prepare(
+    `SELECT key, label FROM model_config WHERE enabled = 1 AND (user IS NULL OR user = ?) ORDER BY tier, display_order, key`
+  ).all(req.hubUser);
+  res.render('hub-admin/shortcuts', { user: req.hubUser, shortcuts, models });
+});
+
+router.post('/admin/shortcuts', requireHubAdmin, (req, res) => {
+  const { kicker, icon, label, desc, model_key, search, display_order } = req.body;
+  if (!kicker || !label || !model_key) return res.redirect('/admin/shortcuts');
+  const { uuid } = require('../lib/id');
+  db.hub().prepare(`
+    INSERT INTO chat_shortcuts (id, user, kicker, icon, label, desc, model_key, search, display_order, enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(
+    uuid(), req.hubUser,
+    kicker.trim().toUpperCase(),
+    icon?.trim() || '◎',
+    label.trim(),
+    desc?.trim() || null,
+    model_key.trim(),
+    search?.trim() || null,
+    parseInt(display_order, 10) || 0,
+  );
+  res.redirect('/admin/shortcuts');
+});
+
+router.post('/admin/shortcuts/:id', requireHubAdmin, (req, res) => {
+  const { kicker, icon, label, desc, model_key, search, display_order, enabled } = req.body;
+  db.hub().prepare(`
+    UPDATE chat_shortcuts
+       SET kicker = ?, icon = ?, label = ?, desc = ?, model_key = ?,
+           search = ?, display_order = ?, enabled = ?
+     WHERE id = ? AND (user IS NULL OR user = ?)
+  `).run(
+    kicker.trim().toUpperCase(),
+    icon?.trim() || '◎',
+    label.trim(),
+    desc?.trim() || null,
+    model_key.trim(),
+    search?.trim() || null,
+    parseInt(display_order, 10) || 0,
+    enabled ? 1 : 0,
+    req.params.id, req.hubUser,
+  );
+  res.redirect('/admin/shortcuts');
+});
+
+router.post('/admin/shortcuts/:id/delete', requireHubAdmin, (req, res) => {
+  db.hub().prepare('DELETE FROM chat_shortcuts WHERE id = ? AND user = ?')
+    .run(req.params.id, req.hubUser);
+  res.redirect('/admin/shortcuts');
+});
+
+// ── Model test arena ──────────────────────────────────────────────────────────
+router.get('/admin/test', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const models = hub.prepare(
+    `SELECT key, label, model_id, tier, search, enabled FROM model_config
+     WHERE enabled = 1 AND (user IS NULL OR user = ?)
+     ORDER BY tier, display_order, key`
+  ).all(req.hubUser);
+  const tiers = hub.prepare('SELECT key, label FROM model_tiers ORDER BY display_order, key').all();
+  const logs = hub.prepare(
+    'SELECT id, question, run_at, results FROM test_runs WHERE user = ? ORDER BY run_at DESC LIMIT 5'
+  ).all(req.hubUser).map(r => ({ ...r, results: JSON.parse(r.results) }));
+  res.render('hub-admin/test', { user: req.hubUser, models, tiers, logs });
+});
+
+router.post('/admin/test/save', requireHubAdmin, (req, res) => {
+  const { question, results } = req.body;
+  if (!question || !Array.isArray(results)) return res.json({ ok: false });
+  const hub = db.hub();
+  const id = require('crypto').randomBytes(8).toString('hex');
+  hub.prepare(
+    'INSERT INTO test_runs (id, user, question, results) VALUES (?, ?, ?, ?)'
+  ).run(id, req.hubUser, question, JSON.stringify(results));
+  // Prune to 5 most recent
+  hub.prepare(
+    `DELETE FROM test_runs WHERE user = ? AND id NOT IN (
+       SELECT id FROM test_runs WHERE user = ? ORDER BY run_at DESC LIMIT 5
+     )`
+  ).run(req.hubUser, req.hubUser);
+  res.json({ ok: true, id });
+});
+
+const UPLOAD_CHAR_LIMIT = 150_000;
+
+router.post('/admin/test/upload', requireHubAdmin, testUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.json({ ok: false, error: 'No file received' });
+  const { originalname, buffer } = req.file;
+  const ext = originalname.split('.').pop().toLowerCase();
+  if (!['pdf', 'docx'].includes(ext)) return res.json({ ok: false, error: 'Only PDF and Word (.docx) files are supported' });
+  try {
+    const { markdown } = await extractFileToMarkdown(originalname, buffer);
+    const truncated = markdown.length > UPLOAD_CHAR_LIMIT;
+    const text = truncated ? markdown.slice(0, UPLOAD_CHAR_LIMIT) : markdown;
+    res.json({ ok: true, text, filename: originalname, chars: markdown.length, truncated, truncatedAt: UPLOAD_CHAR_LIMIT });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
+const IMPROVE_PROMPT_MODEL = 'google/gemini-2.5-flash-lite';
+const IMPROVE_META_PROMPT = `You are an expert prompt engineer. A user has written a prompt they want to send to an AI model. Rewrite it to significantly improve the quality of the response they'll get.
+
+Apply these improvements as relevant:
+- Specify the desired output format (structured briefing, memo, bullet points, table, etc.)
+- Define the target audience and what they'll do with the answer
+- Add role framing ("You are an expert in...")
+- Anchor context (who is asking, from what perspective, for what purpose)
+- Make vague requests specific and concrete
+- Add output length or depth guidance where useful
+- Include constraints or scope limits to prevent rambling
+
+Return ONLY the improved prompt. No explanation, no preamble, no commentary. Just the rewritten prompt text, ready to use directly.`;
+
+router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
+  const { question } = req.body;
+  if (!question?.trim()) return res.json({ ok: false, error: 'No prompt provided' });
+  const orHeaders = {
+    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': 'https://mclellan.scot',
+    'X-Title': 'McLellan Hub Test',
+  };
+  try {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: orHeaders,
+      body: JSON.stringify({
+        model: IMPROVE_PROMPT_MODEL,
+        messages: [
+          { role: 'system', content: IMPROVE_META_PROMPT },
+          { role: 'user', content: question },
+        ],
+        stream: false,
+      }),
+    });
+    const data = await r.json();
+    const improved = data.choices?.[0]?.message?.content?.trim();
+    if (!improved) return res.json({ ok: false, error: data.error?.message || 'Model returned no content' });
+    res.json({ ok: true, improved });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
+// Shared combo execution — used by both /run (single) and /run-all (SSE)
+async function runComboInternal(question, model, search) {
+  const orHeaders = {
+    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': 'https://mclellan.scot',
+    'X-Title': 'McLellan Hub Test',
+  };
+
+  const TIMEOUT_MS = 60_000;
+  const timeoutSignal = () => AbortSignal.timeout(TIMEOUT_MS);
+
+  const start = Date.now();
+  let userContent = question;
+  let sources = [];
+  let answer = '';
+  let tokensIn = 0, tokensOut = 0, costUsd = null;
+
+  // ── Multi-search orchestration (exa + brave → synthesis) ───────────────────
+  if (model.endpoint === 'multi-search') {
+    const [exaSettled, braveSettled] = await Promise.allSettled([
+      exaSearch(question),
+      braveSearch(question),
+    ]);
+    const exaR   = exaSettled.status   === 'fulfilled' ? exaSettled.value   : { content: '', sources: [] };
+    const braveR = braveSettled.status === 'fulfilled' ? braveSettled.value : { content: '', sources: [] };
+    const seenUrls = new Set();
+    sources = [...exaR.sources, ...braveR.sources].filter(s => !seenUrls.has(s.url) && seenUrls.add(s.url));
+    const combinedContext = [
+      exaR.content   ? `## Semantic search results\n${exaR.content}`   : '',
+      braveR.content ? `## Web search results\n${braveR.content}` : '',
+    ].filter(Boolean).join('\n\n');
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST', headers: orHeaders, signal: timeoutSignal(),
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        messages: [
+          { role: 'system', content: 'Synthesise the search results below to answer the question. Be accurate and concise.' },
+          { role: 'user', content: `${combinedContext}\n\n---\n\n${question}` },
+        ],
+        stream: false,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) return { error: data.error?.message || `API error ${r.status}` };
+    answer = data.choices?.[0]?.message?.content || '';
+    const usage = data.usage || {};
+    tokensIn  = usage.prompt_tokens     || 0;
+    tokensOut = usage.completion_tokens || 0;
+    if (usage.cost != null) costUsd = usage.cost;
+    return {
+      ok: true, answer,
+      time_ms: Date.now() - start,
+      tokens_in: tokensIn, tokens_out: tokensOut, cost_usd: costUsd,
+      word_count: answer.trim().split(/\s+/).filter(Boolean).length,
+      search_used: 'exa+brave', sources,
+      model_id: 'google/gemini-2.5-flash-lite', model_label: model.label || model.key,
+    };
+  }
+
+  if (search === 'exa') {
+    const result = await exaSearch(question);
+    userContent = result.content; sources = result.sources;
+  } else if (search === 'brave') {
+    const result = await braveSearch(question);
+    userContent = result.content; sources = result.sources;
+  }
+
+  const messages = [{ role: 'user', content: userContent }];
+
+  // web-plugin path only applies to OpenRouter models — custom-openai endpoints
+  // don't support the plugin tool and should use the standard call path below.
+  if (search === 'web-plugin' && model.endpoint !== 'custom-openai') {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST', headers: orHeaders, signal: timeoutSignal(),
+      body: JSON.stringify({ model: model.model_id, messages, stream: true, tools: [WEB_SEARCH_TOOL], tool_choice: 'auto' }),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      let msg = `API error ${r.status}`;
+      try { msg = JSON.parse(t).error?.message || msg; } catch (_) {}
+      return { error: msg };
+    }
+    for await (const chunk of r.body) {
+      for (const line of chunk.toString().split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const d = line.slice(6);
+        if (d === '[DONE]') continue;
+        try {
+          const p = JSON.parse(d);
+          const delta = p.choices?.[0]?.delta?.content;
+          if (delta) answer += delta;
+          if (p.usage) {
+            tokensIn  = p.usage.prompt_tokens  || 0;
+            tokensOut = p.usage.completion_tokens || 0;
+            if (p.usage.cost != null) costUsd = p.usage.cost;
+          }
+        } catch (_) {}
+      }
+    }
+  } else {
+    let apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
+    let headers = orHeaders;
+    if (model.endpoint === 'custom-openai' && model.base_url) {
+      const apiKey = model.api_key || (model.api_key_env ? process.env[model.api_key_env] : null);
+      apiUrl = `${model.base_url.replace(/\/+$/, '')}/chat/completions`;
+      headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+    }
+    const r = await fetch(apiUrl, {
+      method: 'POST', headers, signal: timeoutSignal(), body: JSON.stringify({ model: model.model_id, messages, stream: false }),
+    });
+    const data = await r.json();
+    if (!r.ok) return { error: data.error?.message || `API error ${r.status}` };
+
+    answer = data.choices?.[0]?.message?.content || '';
+    if (data.citations?.length) {
+      sources = data.citations.map(u => ({ url: u, title: u }));
+      answer += '\n\n---\n**Sources**\n' + data.citations.map((u, i) => `[${i + 1}] ${u}`).join('\n');
+    }
+    const usage = data.usage || {};
+    tokensIn  = usage.prompt_tokens  || 0;
+    tokensOut = usage.completion_tokens || 0;
+    if (usage.cost != null) costUsd = usage.cost;
+  }
+
+  if (costUsd == null && model.cost_input != null && model.cost_output != null) {
+    costUsd = (tokensIn / 1_000_000) * model.cost_input + (tokensOut / 1_000_000) * model.cost_output;
+  }
+
+  return {
+    ok: true, answer,
+    time_ms: Date.now() - start,
+    tokens_in: tokensIn, tokens_out: tokensOut, cost_usd: costUsd,
+    word_count: answer.trim().split(/\s+/).filter(Boolean).length,
+    search_used: search, sources,
+    model_id: model.model_id, model_label: model.label || model.key,
+  };
+}
+
+// Single-combo endpoint (kept for backwards compat / direct use)
+router.post('/admin/test/run', requireHubAdmin, async (req, res) => {
+  const { question, modelKey, search } = req.body;
+  if (!question || !modelKey) return res.json({ error: 'Missing question or model' });
+  const hub = db.hub();
+  const model = hub.prepare('SELECT * FROM model_config WHERE key = ?').get(modelKey);
+  if (!model) return res.json({ error: `Unknown model: ${modelKey}` });
+  try {
+    res.json(await runComboInternal(question, model, search));
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+// All-combos SSE endpoint — single persistent connection, immune to iOS killing sequential fetches
+router.post('/admin/test/run-all', requireHubAdmin, async (req, res) => {
+  const { question, combos } = req.body;
+  if (!question || !Array.isArray(combos) || !combos.length) {
+    return res.status(400).json({ error: 'Missing question or combos' });
+  }
+  const hub = db.hub();
+
+  console.log(`[test-arena] run-all: ${combos.length} combos — ${combos.map(c => `${c.modelKey}+${c.search}`).join(', ')}`);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx proxy buffering
+  res.flushHeaders();
+
+  let cancelled = false;
+  req.on('close', () => { cancelled = true; });
+
+  const send = (obj) => { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch (_) {} };
+  const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch (_) {} }, 15000);
+
+  try {
+    for (let i = 0; i < combos.length; i++) {
+      if (cancelled) break;
+      const { modelKey, search } = combos[i];
+      send({ type: 'progress', index: i, total: combos.length });
+
+      const model = hub.prepare('SELECT * FROM model_config WHERE key = ?').get(modelKey);
+      if (!model) { send({ type: 'result', index: i, modelKey, search, error: `Unknown model: ${modelKey}` }); continue; }
+
+      if (model.search === 'native' && search === 'web-plugin') {
+        send({ type: 'result', index: i, modelKey, search, _skipped: true });
+        continue;
+      }
+
+      try {
+        const result = await runComboInternal(question, model, search);
+        send({ type: 'result', index: i, modelKey, search, ...result });
+      } catch (e) {
+        send({ type: 'result', index: i, modelKey, search, error: e.message });
+      }
+    }
+  } finally {
+    clearInterval(ping);
+    send({ type: 'done' });
+    res.end();
+  }
 });
 
 // ── OpenRouter model catalogue proxy ─────────────────────────────────────────
@@ -389,6 +811,7 @@ router.get('/admin/openrouter-models', requireHubAdmin, async (req, res) => {
         context: m.context_length || null,
         inputPer1M:  m.pricing?.prompt      ? (parseFloat(m.pricing.prompt)      * 1_000_000).toFixed(4) : null,
         outputPer1M: m.pricing?.completion  ? (parseFloat(m.pricing.completion)  * 1_000_000).toFixed(4) : null,
+        supportsTools: Array.isArray(m.supported_parameters) && m.supported_parameters.includes('tools'),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     res.json(models);

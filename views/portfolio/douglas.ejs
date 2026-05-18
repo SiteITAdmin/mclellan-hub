@@ -4,47 +4,38 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><%= user === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan' %></title>
+<title>Douglas McLellan</title>
 <link rel="stylesheet" href="/portfolio.css">
 </head>
 <body>
 
-<% const fullName = user === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan';
-   const firstName = user === 'douglas' ? 'Douglas' : 'Nakai';
-   const emailAddress = profile.email || (user === 'douglas' ? 'douglas@mclellan.scot' : '');
-   const phonePublic = profile.phone_public || (user === 'douglas' ? '+353 (0) 896003148' : '');
-   const phoneEncoded = phonePublic ? Buffer.from(phonePublic.split('').reverse().join('')).toString('base64') : '';
-   const roleLabel = cv.role_label || (user === 'douglas' ? 'Product & Technology Leader' : 'Senior Internal Audit Leader');
-   const heroTitle = cv.hero_title || (user === 'douglas' ? 'Product & Technology Leader.' : 'Head of Internal Audit & Regional Lead.');
-   const credentials = (cv.credentials || (user === 'nakai' ? 'FCCA CIA CAMS MSc' : '')).trim();
-   const tagline = cv.tagline || (user === 'nakai'
-     ? 'Senior executive specialising in audit, risk management, and regulatory compliance within high-growth financial technology and investment services.'
-     : 'Building products at the intersection of AI, developer tooling, and enterprise software.');
-   const visionTitle = cv.vision_title || (user === 'nakai' ? 'The Vision of Audit' : 'Product as Practice');
-   const visionBody1 = cv.vision_body1 || (user === 'nakai'
-     ? 'With over a decade of leadership in regulated financial services, I operate as a pragmatic business partner and change agent. My approach transcends traditional compliance; it is about building resilient frameworks that enable innovation.'
-     : 'I build durable products by pairing first-principles engineering with clear user intent — and I lead teams that do the same.');
-   const visionBody2 = cv.vision_body2 || (user === 'nakai'
-     ? 'Having spearheaded audit functions at global leaders like Block and Maples Group, I specialize in navigating the intricate intersections of traditional finance and the digital asset frontier.'
-     : 'Across founder, operator, and executive roles, I have shipped AI-native tools, developer platforms, and enterprise software at scale.');
-   const essayTitle = cv.essay_title || 'Governance in the Age of Agility';
-   const essayBody = cv.essay_body || 'I believe that effective audit isn\'t about finding what\'s wrong, but about verifying what\'s right — providing the confidence for businesses to take calculated risks and scale with velocity.';
-   const stat1Num = cv.stat1_num || '10+';
-   const stat1Label = cv.stat1_label || 'Years experience';
-   const stat2Num = cv.stat2_num || '3';
-   const stat2Label = cv.stat2_label || 'Global markets';
-   const strongSkills = skills.filter(s => s.level === 'strong').slice(0, 3);
-   const availabilityStatus = (profile.availability_status || '').trim();
-   const noticePeriod = (profile.available_from || '').trim();
-   const remotePreference = (profile.remote_preference || '').trim();
-   const isNakai = user === 'nakai';
-   const nakaiLinkedInMessageUrl = 'https://www.linkedin.com/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3AACoAAA39lEcBJ03ZBpjopopuTRqOb7MPhcYh1i0&recipient=ACoAAA39lEcBJ03ZBpjopopuTRqOb7MPhcYh1i0&screenContext=NON_SELF_PROFILE_VIEW&interop=msgOverlay&lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base%3B9jQrKoazSu6GcMh2jmrkWg%3D%3D';
+<%
+  const emailAddress = profile.email || 'douglas@mclellan.scot';
+  const phonePublic = profile.phone_public || '+353 (0) 896003148';
+  const phoneEncoded = phonePublic ? Buffer.from(phonePublic.split('').reverse().join('')).toString('base64') : '';
+  const linkedInUrl = cv.linkedin_url || 'https://www.linkedin.com/in/douglasmclellan';
+  const roleLabel = cv.role_label || 'IT Operations & Microsoft 365 Leader';
+  const heroTitle = cv.hero_title || 'IT Operations & Microsoft 365 Leader.';
+  const credentials = (cv.credentials || '').trim();
+  const tagline = cv.tagline || 'Sole IT administrator for Cricket Ireland across four years — full M365 scope, no team, live international fixtures. Now at Beacon Hospital, and shipping AI-assisted tools alongside.';
+  const visionTitle = cv.vision_title || 'IT Runs Better When Nobody Has to Think About It';
+  const visionBody1 = cv.vision_body1 || 'The organisations I have worked with did not have large IT teams. At Cricket Ireland, I was the only IT person: sole M365 administrator, security lead, support desk, project manager, and vendor liaison across four years. The job was to make everything work reliably and invisibly so that sports administrators, coaches, referees, and volunteers could focus on the actual mission.';
+  const visionBody2 = cv.vision_body2 || 'That constraint is also where I have developed most. Operating alone in a complex environment forces clarity about what to maintain, what to document, and what to actually build. The AI-assisted tools came from the same place: a real need, a specific problem, and practical delivery.';
+  const essayTitle = cv.essay_title || 'The Right Technology for the Organisation You Actually Have';
+  const essayBody = cv.essay_body || 'Not every organisation needs best-of-breed. Most need what is already licensed, configured properly, secured reasonably, and documented well enough that it survives the next person. At Cricket Ireland, that meant inheriting a live M365 tenant with no MFA, no DMARC, no Conditional Access, and no Intune — and working methodically through each layer before adding anything new. Four years later, the handover covered ten formal operational areas: identity, devices, security, systems ownership, match-day technology, hardware, Power Platform, support operations, vendor management, and documentation. Each one written to be re-run without the author present. That is the work I find satisfying.';
+  const stat1Num = cv.stat1_num || '4';
+  const stat1Label = cv.stat1_label || 'Years as sole IT administrator at Cricket Ireland';
+  const stat2Num = cv.stat2_num || '10';
+  const stat2Label = cv.stat2_label || 'Operational areas documented in structured handover';
+  const availabilityStatus = (profile.availability_status || '').trim();
+  const noticePeriod = (profile.available_from || '').trim();
+  const remotePreference = (profile.remote_preference || '').trim();
 %>
 
 <!-- Nav -->
 <header class="pf-nav">
   <div class="pf-nav-inner">
-    <a href="/" class="pf-nav-brand"><%= fullName %></a>
+    <a href="/" class="pf-nav-brand">Douglas McLellan</a>
     <nav class="pf-nav-links">
       <a href="#portfolio" class="active" data-nav-section="portfolio">Portfolio</a>
       <a href="#experience" data-nav-section="experience">Experience</a>
@@ -69,19 +60,15 @@
     <% } %>
     <h1><%= heroTitle %></h1>
     <p class="tagline"><%= tagline %></p>
-   <div class="hero-actions">
+    <div class="hero-actions">
       <a href="/executive-summary" class="btn-primary">Download Executive Summary PDF</a>
-      <% if (isNakai) { %>
-      <a href="<%= nakaiLinkedInMessageUrl %>" class="btn-ghost" target="_blank" rel="noopener noreferrer">Contact Nakai via LinkedIn</a>
-      <% } else { %>
       <a href="#contact" class="btn-ghost">Contact Douglas</a>
-      <% } %>
     </div>
   </div>
   <div class="hero-media">
     <div class="hero-portrait">
       <% if (cv.portrait_url) { %>
-        <img src="<%= cv.portrait_url %>" alt="<%= fullName %>">
+        <img src="<%= cv.portrait_url %>" alt="Douglas McLellan">
       <% } else { %>
         <div class="placeholder">Portrait</div>
       <% } %>
@@ -108,7 +95,7 @@
     <div class="candidate-analysis-copy">
       <span class="eyebrow">Recruiter tool</span>
       <h2>Candidate Analysis</h2>
-      <p>Paste a role description to compare it against Douglas&apos;s skills, experience, and operating range. The assessment is written for recruiters and hiring managers deciding whether to make contact.</p>
+      <p>Paste a role description to compare it against Douglas's skills, experience, and operating range. The assessment is written for recruiters and hiring managers deciding whether to make contact.</p>
       <ul class="analysis-points">
         <li>Highlights the strongest matching strengths and relevant evidence.</li>
         <li>Calls out gaps or weak spots without overselling.</li>
@@ -156,7 +143,7 @@
       <% aiBuildProjects.forEach((project) => { %>
         <article class="ai-build-card">
           <div class="ai-build-card-head">
-            <h3><%= project.name %></h3>
+            <h3><%= project.name %><% if (project.type === 'personal') { %> <span style="font-size:0.65em;font-weight:500;opacity:0.55;letter-spacing:0.03em;vertical-align:middle;">Personal</span><% } %></h3>
             <a href="<%= project.url %>" target="_blank" rel="noopener noreferrer" aria-label="Open <%= project.name %> on GitHub">
               <span class="material-symbols-outlined">arrow_outward</span>
             </a>
@@ -208,22 +195,23 @@
       <div class="card">
         <div class="card-eyebrow"><span class="material-symbols-outlined">check_circle</span> Strong Proficiency</div>
         <ul class="card-skills">
-          <% if (strongSkills.length === 0) { %>
-            <li>Executive Management</li>
-            <li>Auditing</li>
-            <li>Risk Management</li>
-          <% } else { strongSkills.forEach(s => { %>
-            <li><%= s.name %></li>
-          <% }) } %>
+          <li>Microsoft 365 Administration</li>
+          <li>Entra ID &amp; Identity</li>
+          <li>Intune &amp; Device Management</li>
+          <li>SharePoint &amp; Teams</li>
+          <li>Power Platform</li>
+          <li>Email Security &amp; DMARC</li>
+          <li>Vendor &amp; MSP Management</li>
         </ul>
       </div>
       <div class="card card-filled">
-        <div class="card-eyebrow"><span class="material-symbols-outlined">insights</span> AI &amp; Analytics</div>
-        <h3 class="card-title">Data-driven Assurance</h3>
-        <p class="card-body">Implementing predictive risk models and automated control testing.</p>
+        <div class="card-eyebrow"><span class="material-symbols-outlined">code</span> AI-Assisted Development</div>
+        <h3 class="card-title">Three Shipped Tools</h3>
+        <p class="card-body">Bowling workload monitoring, venue reporting, and a private AI workspace — designed for real operational needs, deployed, and in use.</p>
         <div class="card-chips">
-          <span class="chip">Data Analytics</span>
-          <span class="chip">AI Governance</span>
+          <span class="chip">Node.js</span>
+          <span class="chip">Azure</span>
+          <span class="chip">SPFx</span>
         </div>
       </div>
       <div class="card">
@@ -235,18 +223,18 @@
     </div>
     <div class="focus-bar">
       <div class="focus-text">
-        <span class="eyebrow">Strategic Focus 2024+</span>
-        <h3>Regulatory Change Management in Digital Assets</h3>
+        <span class="eyebrow">Current Focus</span>
+        <h3>Secure Microsoft 365 Administration in Healthcare</h3>
       </div>
       <div class="focus-progress">
-        Active Research Area
+        Beacon Hospital Private Clinic
         <div class="bar"><span></span></div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Governance essay -->
+<!-- Perspective -->
 <section class="section">
   <div class="essay">
     <div>
@@ -267,12 +255,12 @@
       <div class="img-tile">
         <span class="img-tile-label">Operating style</span>
         <strong>Security-first delivery</strong>
-        <p>Calm systems, dependable operations, and practical AI adoption without unnecessary theatre.</p>
+        <p>Methodical administration, practical security controls, and reliable systems that hold up when they need to — including live international fixtures.</p>
       </div>
       <div class="img-tile">
-        <span class="img-tile-label">Why this matters</span>
-        <strong>Useful leadership signal</strong>
-        <p>This space now surfaces actual positioning instead of empty placeholder tiles.</p>
+        <span class="img-tile-label">Proof of work</span>
+        <strong>Built, deployed, in use</strong>
+        <p>Each AI project on this site is shipped and in operational use — with real users, documented processes, and successive iterations built from actual feedback.</p>
       </div>
     </div>
   </div>
@@ -281,36 +269,28 @@
 <!-- Footer -->
 <footer class="pf-footer" id="contact">
   <div class="pf-contact">
-    <span class="copy">© 2026 <%= fullName.toUpperCase() %> · <%= roleLabel.toUpperCase() %></span>
+    <span class="copy">© 2026 DOUGLAS MCLELLAN · <%= roleLabel.toUpperCase() %></span>
     <div class="pf-contact-actions">
-      <% if (emailAddress) { %>
       <a href="mailto:<%= emailAddress %>" class="contact-chip">Email <%= emailAddress %></a>
-      <% } %>
       <% if (phoneEncoded) { %>
       <button type="button" class="contact-chip contact-phone-btn" id="contact-phone-btn" data-phone="<%= phoneEncoded %>">Reveal phone</button>
       <a href="#" class="contact-chip contact-phone-link" id="contact-phone-link" hidden></a>
-      <% } else if (isNakai) { %>
-      <a href="<%= nakaiLinkedInMessageUrl %>" class="contact-chip" target="_blank" rel="noopener noreferrer">Contact Nakai via LinkedIn</a>
       <% } else { %>
       <span class="contact-chip contact-chip-muted">Phone available on request</span>
       <% } %>
     </div>
   </div>
   <div class="pf-footer-links">
-    <% if (cv.linkedin_url) { %>
-    <a href="<%= cv.linkedin_url %>" target="_blank" rel="noopener noreferrer">LinkedIn</a>
-    <% } %>
+    <a href="<%= linkedInUrl %>" target="_blank" rel="noopener noreferrer">LinkedIn</a>
     <a href="/executive-summary">Executive Summary PDF</a>
-    <% if (emailAddress) { %>
     <a href="mailto:<%= emailAddress %>">Email</a>
-    <% } %>
   </div>
 </footer>
 
 <!-- Chat drawer -->
 <div class="chat-drawer" id="chat-drawer" aria-hidden="true">
   <div class="drawer-header">
-    <span>Chat with <%= firstName %></span>
+    <span>Chat with Douglas</span>
     <select id="drawer-model" title="AI model" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.15);color:#fff;cursor:pointer;max-width:140px;">
       <% for (const m of availableModels) { %>
       <option value="<%= m.key %>"><%= m.label %></option>
@@ -390,7 +370,6 @@
     });
 
     sections.forEach(section => observer.observe(section));
-
   })();
 
   (function() {
@@ -406,7 +385,6 @@
       btn.hidden = true;
     });
   })();
-
 </script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script src="/portfolio-chat.js"></script>

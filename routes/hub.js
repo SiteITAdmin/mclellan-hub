@@ -13,6 +13,7 @@ const { processCrmCommand, listContacts, buildBriefingText, fetchTodayCalendarEv
 const { compactProject } = require('../lib/memory-compactor');
 const { ingestWorkdayInterview } = require('../lib/workday-ingest');
 const { writeJournalEntry } = require('../lib/journal');
+const { writeMeetingNote } = require('../lib/meeting');
 const { listNotes, readNote, searchNotes, writeNote, vaultRoot } = require('../lib/obsidian-vault');
 const { getWikiPagesByTags } = require('../lib/wiki-tags');
 const {
@@ -128,6 +129,25 @@ async function verifyGoogleChatRequest(req) {
   }
 }
 
+async function postToGoogleChatSpace(spaceName, text) {
+  if (!spaceName) return;
+  try {
+    const fs = require('fs');
+    const saPath = require('path').join(__dirname, '..', 'config', 'google-service-account.json');
+    if (!fs.existsSync(saPath)) { console.warn('[google-chat] no service account for async post'); return; }
+    const { google } = require('googleapis');
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(fs.readFileSync(saPath, 'utf8')),
+      scopes: ['https://www.googleapis.com/auth/chat.bot'],
+    });
+    const chat = google.chat({ version: 'v1', auth });
+    await chat.spaces.messages.create({ parent: spaceName, requestBody: { text } });
+    console.log('[google-chat] async post sent to', spaceName);
+  } catch (err) {
+    console.error('[google-chat] async post failed:', err.message);
+  }
+}
+
 function helpText() {
   return [
     '"Had a call with Karol - she is pushing for June" saves a CRM note',
@@ -137,10 +157,11 @@ function helpText() {
     '"read Daily/2026-05-13.md" reads a vault note',
     '"remember ..." appends to today\'s daily note',
     '"follow up ..." appends a follow-up to today\'s daily note',
+    '"linkedin <topic>" generates a scored LinkedIn post + image + adds to content calendar',
   ].join('\n- ');
 }
 
-async function handleGoogleChatCommand(user, text) {
+async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
   if (!text) return helpText();
   const lower = text.toLowerCase();
 
@@ -187,6 +208,41 @@ async function handleGoogleChatCommand(user, text) {
       console.warn('[google-chat] CRM side-write skipped:', err.message);
     }
     return `Added to Daily/${todayIso()}.md`;
+  }
+
+  if (lower.startsWith('linkedin ') || lower.startsWith('content ')) {
+    const topic = text.replace(/^(linkedin|content)\s+/i, '').trim();
+    if (!topic) return 'What topic? e.g. "linkedin Microsoft Teams new AI feature"';
+    const { runPipeline } = require('../lib/linkedin-pipeline');
+
+    setImmediate(async () => {
+      try {
+        const result = await runPipeline(user, topic, s => console.log('[linkedin]', s));
+        const sc = result.score || {};
+        const overall = sc.overall_score || '?';
+        const verdict = sc.recruiter_value || '';
+        const emoji = overall >= 4 ? '🟢' : overall >= 3 ? '🟡' : '🔴';
+        const postText = result.refinedDraft || result.draft;
+        const lines = [
+          `✅ *LinkedIn post ready — ${topic}*`,
+          '',
+          postText,
+          '',
+          `${emoji} *${overall}/5* ${verdict}`,
+        ];
+        const topFix1 = sc.top_fixes?.[0];
+        if (topFix1) lines.push(`_Top fix: ${topFix1.problem} → ${topFix1.fix}_`);
+        if (sc.recruiter_perspective) lines.push(`_${sc.recruiter_perspective}_`);
+        if (result.carouselUrl) lines.push(`📄 Carousel: ${result.carouselUrl}`);
+        if (result.sheetUrl) lines.push(`📋 ${result.sheetUrl}`);
+        await postToGoogleChatSpace(spaceName, lines.join('\n'));
+      } catch (err) {
+        console.error('[linkedin] pipeline error:', err);
+        await postToGoogleChatSpace(spaceName, `❌ LinkedIn pipeline failed: ${err.message}`);
+      }
+    });
+
+    return `Working on a LinkedIn post about *${topic}*. I'll post the result here when ready (~30 seconds).`;
   }
 
   const result = await processCrmCommand(user, text, 'google-chat');
@@ -252,34 +308,56 @@ function formatRecallResults(entries, query) {
 
 // ── Model list for chat dropdown ──────────────────────────────────────────────
 // Grouped by tier, includes shared defaults + user-added rows, enabled only.
-const TIER_ORDER = ['everyday', 'superior', 'coding', 'web-search', 'news-research', 'project', 'deep-research', 'research', 'image'];
-const TIER_LABELS = {
-  everyday: 'Everyday',
-  superior: 'Superior',
-  coding: 'Coding',
-  'web-search': 'Web Search',
-  'news-research': 'News & Light Research',
-  project: 'Project (confirm)',
-  'deep-research': 'Deep Research',
-  research: 'Research',
-  image: 'Image',
-};
-function listModelsForUser(user) {
+function listTiers() {
   const rows = db.hub().prepare(
-    `SELECT key, label, tier, search FROM model_config
+    'SELECT key, label, search_default, display_order FROM model_tiers ORDER BY display_order, key'
+  ).all();
+  // Always have at least a fallback so the app works even if DB tiers are empty
+  if (!rows.length) return [{ key: 'everyday', label: 'Everyday', search_default: 'web-plugin', display_order: 0 }];
+  return rows;
+}
+
+function listModelsForUser(user) {
+  const tiers = listTiers();
+  const tierOrder = tiers.map(t => t.key);
+  const tierLabels = Object.fromEntries(tiers.map(t => [t.key, t.label]));
+
+  const rows = db.hub().prepare(
+    `SELECT key, label, tier, search, category, cost_input, cost_output, context_length FROM model_config
       WHERE enabled = 1 AND (user IS NULL OR user = ?)
-      ORDER BY tier, display_order, key`
+      ORDER BY display_order, key`
   ).all(user);
   const groups = {};
   for (const r of rows) {
     const t = r.tier || 'everyday';
-    (groups[t] ||= []).push({ key: r.key, label: r.label || r.key, tier: t, search: r.search || 'none' });
+    (groups[t] ||= []).push({
+      key: r.key,
+      label: r.label || r.key,
+      tier: t,
+      search: r.search || 'none',
+      category: r.category || null,
+      costInput: r.cost_input || null,
+      costOutput: r.cost_output || null,
+      contextLength: r.context_length || null,
+    });
   }
-  return TIER_ORDER.filter(t => groups[t]).map(t => ({
+  // Include tiers that have models, in DB order; append any unknown tiers at end
+  const knownOrder = tierOrder.filter(t => groups[t]);
+  const unknown = Object.keys(groups).filter(t => !tierOrder.includes(t));
+  return [...knownOrder, ...unknown].map(t => ({
     tier: t,
-    label: TIER_LABELS[t] || t,
+    label: tierLabels[t] || t,
     models: groups[t],
   }));
+}
+
+function listShortcutsForUser(user) {
+  return db.hub().prepare(
+    `SELECT id, kicker, icon, label, desc, model_key, search
+       FROM chat_shortcuts
+      WHERE enabled = 1 AND (user IS NULL OR user = ?)
+      ORDER BY display_order, rowid`
+  ).all(user);
 }
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
@@ -289,7 +367,7 @@ function requireAuth(req, res, next) {
 }
 
 function validWorkdayWebhookAuth(req) {
-  const secret = process.env.WORKDAY_WEBHOOK_SECRET || process.env.HERMES_WEBHOOK_SECRET;
+  const secret = process.env.WORKDAY_WEBHOOK_SECRET;
   const mobileSecret = process.env.WORKDAY_MOBILE_TOKEN;
   if (!secret && !mobileSecret) return { ok: false, configured: false };
   const auth = req.headers.authorization || '';
@@ -303,8 +381,15 @@ function validWorkdayWebhookAuth(req) {
   };
 }
 
+function requireWorkdayWebhookAuth(req, res, next) {
+  const auth = validWorkdayWebhookAuth(req);
+  if (!auth.configured) return res.status(503).json({ error: 'Workday webhook not configured' });
+  if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
+  return next();
+}
+
 function requireHermesAuth(req, res, next) {
-  const secret = process.env.HERMES_WEBHOOK_SECRET || process.env.WORKDAY_WEBHOOK_SECRET;
+  const secret = process.env.HERMES_WEBHOOK_SECRET;
   if (!secret) return res.status(503).json({ error: 'Hermes auth not configured' });
   const auth = req.headers.authorization || '';
   if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
@@ -325,6 +410,8 @@ router.get('/auth/google', (req, res, next) =>
       'https://www.googleapis.com/auth/calendar.readonly',
       'https://www.googleapis.com/auth/gmail.modify',
       'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/spreadsheets',
     ],
   })(req, res, next)
 );
@@ -337,8 +424,48 @@ router.post('/logout', requireSameOrigin, (req, res) => {
   req.session.destroy(() => res.redirect('/login'));
 });
 
+router.get(['/wiki', '/wiki/*'], (req, res) => {
+  const rest = req.params[0] ? `/${req.params[0]}` : '';
+  res.redirect(302, `https://wiki.mclellan.scot${rest}`);
+});
+
 // ── Hub index ─────────────────────────────────────────────────────────────────
-router.get('/', requireAuth, (req, res) => res.redirect('/c'));
+router.get('/', requireAuth, async (req, res) => {
+  const hub = db.hub();
+  const user = req.hubUser;
+
+  const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(user);
+  const recentConvs = hub.prepare('SELECT * FROM conversations WHERE user = ? ORDER BY created_at DESC LIMIT 10').all(user);
+
+  // Today strip data
+  const today = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London',
+  });
+
+  // Check if journal was written today
+  const fs = require('fs');
+  const path = require('path');
+  const vault = vaultRoot();
+  const todayIso = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/London' });
+  const journalFilename = `Journal - ${todayIso}.md`;
+  const journalToday = fs.existsSync(path.join(vault, 'Journal', journalFilename));
+
+  // Most recent meeting note
+  let recentMeeting = null;
+  try {
+    const meetDir = path.join(vault, 'Meetings');
+    if (fs.existsSync(meetDir)) {
+      const files = fs.readdirSync(meetDir).filter(f => f.endsWith('.md')).sort().reverse();
+      if (files.length) recentMeeting = files[0].replace(/\.md$/, '').replace(/^\d{4}-\d{2}-\d{2}-/, '').replace(/-/g, ' ');
+    }
+  } catch (_) {}
+
+  // Calendar events
+  let calendarEvents = [];
+  try { calendarEvents = await fetchTodayCalendarEvents(user); } catch (_) {}
+
+  res.render('hub/home', { user, projects, recentConvs, today, journalToday, calendarEvents, recentMeeting });
+});
 
 router.get('/_home', requireAuth, (req, res) => {
   const hub = db.hub();
@@ -415,6 +542,7 @@ router.get('/c/:convId?', requireAuth, (req, res) => {
     user: req.hubUser, projects, recentConvs, conv, messages, convId,
     activeProject: null,
     availableModels: listModelsForUser(req.hubUser),
+    shortcuts: listShortcutsForUser(req.hubUser),
   });
 });
 
@@ -465,6 +593,7 @@ router.get('/p/:slug', requireAuth, (req, res) => {
     projectHistoryCount: historyCount,
     projectHistoryLoaded: loadHistory,
     availableModels: listModelsForUser(req.hubUser),
+    shortcuts: listShortcutsForUser(req.hubUser),
   });
 });
 
@@ -1000,15 +1129,14 @@ router.post('/api/workday/interview', requireAuth, requireSameOrigin, uploadLimi
 });
 
 // External capture endpoint for Siri Shortcuts or trusted agents.
-// Secured by Authorization: Bearer <WORKDAY_WEBHOOK_SECRET>, falling back to
-// HERMES_WEBHOOK_SECRET if a dedicated secret is not set.
-router.post('/api/workday/webhook', uploadLimiter, audioUpload.single('file'), async (req, res) => {
+// Secured by Authorization: Bearer <WORKDAY_WEBHOOK_SECRET> or WORKDAY_MOBILE_TOKEN.
+router.post('/api/workday/webhook', requireWorkdayWebhookAuth, uploadLimiter, audioUpload.single('file'), async (req, res) => {
   const auth = validWorkdayWebhookAuth(req);
   if (!auth.configured) return res.status(503).json({ error: 'Workday webhook not configured' });
   if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
 
   const hasAudio = !!(req.file || (Buffer.isBuffer(req.body) && req.body.length));
-  const user = req.body.user || 'douglas';
+  const user = req.hubUser || req.body.user || 'douglas';
   const opts = {
     user,
     transcript: req.body.transcript || req.body.text,
@@ -1047,7 +1175,7 @@ router.post('/api/workday/webhook', uploadLimiter, audioUpload.single('file'), a
   }
 });
 
-router.post('/api/workday/audio', uploadLimiter, express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {
+router.post('/api/workday/audio', requireWorkdayWebhookAuth, uploadLimiter, express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {
   const auth = validWorkdayWebhookAuth(req);
   if (!auth.configured) return res.status(503).json({ error: 'Workday audio endpoint not configured' });
   if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
@@ -1059,7 +1187,7 @@ router.post('/api/workday/audio', uploadLimiter, express.raw({ type: '*/*', limi
   // transcription + narrative generation (which can take 60–180 s).
   res.status(202).json({ ok: true, message: 'Audio received — processing in background' });
 
-  const user = req.headers['x-workday-user'] || 'douglas';
+  const user = req.hubUser || req.headers['x-workday-user'] || 'douglas';
   const audioBuffer = req.body;
   const opts = {
     user,
@@ -1086,7 +1214,7 @@ router.post('/api/workday/audio', uploadLimiter, express.raw({ type: '*/*', limi
 });
 
 // ── Journal audio — personal diary entry from voice note ─────────────────────
-router.post('/api/journal/audio', uploadLimiter, express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {
+router.post('/api/journal/audio', requireWorkdayWebhookAuth, uploadLimiter, express.raw({ type: '*/*', limit: '30mb' }), async (req, res) => {
   const auth = validWorkdayWebhookAuth(req);
   if (!auth.configured) return res.status(503).json({ error: 'Not configured' });
   if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
@@ -1096,7 +1224,7 @@ router.post('/api/journal/audio', uploadLimiter, express.raw({ type: '*/*', limi
 
   res.status(202).json({ ok: true, message: 'Journal audio received — processing' });
 
-  const user = req.headers['x-workday-user'] || 'douglas';
+  const user = req.hubUser || req.headers['x-workday-user'] || 'douglas';
   const audioBuffer = req.body;
   const filename = req.headers['x-workday-filename'] || 'journal-audio.m4a';
   const mimetype = req.headers['content-type'] || 'audio/mp4';
@@ -1132,15 +1260,97 @@ router.post('/api/journal/audio/session', requireAuth, requireSameOrigin, upload
     .catch(err => console.error('[journal] processing failed:', err.message));
 });
 
+// ── Journal page ──────────────────────────────────────────────────────────────
+router.get('/journal', requireAuth, (req, res) => {
+  res.render('hub/journal', { user: req.hubUser });
+});
+
+// Journal text entry from browser (typed instead of voice)
+router.post('/api/journal/text', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const { text } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'No text provided' });
+  try {
+    const { notePath } = await writeJournalEntry(req.hubUser, text.trim());
+    res.json({ ok: true, notePath });
+  } catch (err) {
+    console.error('[journal text]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Meeting debrief page ──────────────────────────────────────────────────────
+router.get('/meeting', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  const contacts = hub.prepare('SELECT name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  res.render('hub/meeting', { user: req.hubUser, projects, contacts });
+});
+
+// Transcribe audio for meeting debrief (returns transcript only, no vault write)
+router.post('/api/meeting/transcribe', requireAuth, requireSameOrigin, uploadLimiter, audioUpload.single('audio'), async (req, res) => {
+  if (!req.file?.buffer?.length) return res.status(400).json({ error: 'Audio required' });
+  try {
+    const { transcribeAudioBuffer } = require('../lib/workday-ingest');
+    const transcript = await transcribeAudioBuffer({
+      buffer: req.file.buffer,
+      filename: req.file.originalname || 'meeting.webm',
+      mimetype: req.file.mimetype || 'audio/webm',
+    });
+    res.json({ transcript });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Submit meeting debrief form (text + optional transcript file)
+const meetingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
+router.post('/api/meeting/submit', requireAuth, requireSameOrigin, uploadLimiter, meetingUpload.single('transcript'), async (req, res) => {
+  const { title, attendees, project, topics, takeaways, myThoughts } = req.body;
+  if (!title?.trim()) return res.status(400).json({ error: 'Meeting title required' });
+
+  let uploadedTranscript = '';
+  if (req.file) {
+    try {
+      const { fileToMarkdown } = require('../lib/extract');
+      const md = await fileToMarkdown(req.file.buffer, req.file.originalname || 'transcript.txt');
+      uploadedTranscript = md;
+    } catch (err) {
+      uploadedTranscript = req.file.buffer.toString('utf8');
+    }
+  }
+
+  let parsedAttendees = [];
+  try { parsedAttendees = JSON.parse(attendees || '[]'); } catch (_) {}
+
+  try {
+    const { notePath } = await writeMeetingNote(req.hubUser, {
+      title: title.trim(),
+      attendees: parsedAttendees,
+      projectSlug: project || null,
+      topics: topics || '',
+      takeaways: takeaways || '',
+      myThoughts: myThoughts || '',
+      uploadedTranscript,
+    });
+    const { pushGoogleChatBriefing } = require('../lib/crm');
+    pushGoogleChatBriefing(req.hubUser, `📋 *Meeting note saved* — ${title}`).catch(() => {});
+    res.json({ ok: true, notePath });
+  } catch (err) {
+    console.error('[meeting] save failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── YouTube / URL ingest queue ────────────────────────────────────────────────
 // Writes URL to vault ingest-queue so Mac Mini synthadoc picks it up on sync
 router.post('/api/synthadoc/ingest-url', async (req, res) => {
-  const secret = process.env.HERMES_WEBHOOK_SECRET || process.env.WORKDAY_WEBHOOK_SECRET;
+  const secret = process.env.HERMES_WEBHOOK_SECRET;
   if (!secret) return res.status(503).json({ error: 'Not configured' });
   const auth = req.headers.authorization || '';
   if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { url, projectSlug, user = 'douglas' } = req.body;
+  const { url, projectSlug } = req.body;
+  const user = req.hubUser || req.body.user || 'douglas';
   if (!url) return res.status(400).json({ error: 'url required' });
 
   try {
@@ -1310,6 +1520,37 @@ router.post('/api/messages/:msgId/save-to-project', requireAuth, requireSameOrig
   res.json({ ok: true, projectSlug, filename });
 });
 
+// ── Save message to wiki ──────────────────────────────────────────────────────
+router.post('/api/wiki/save', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const hub    = db.hub();
+  const msgId  = req.body.msgId;
+  if (!msgId) return res.status(400).json({ error: 'msgId required' });
+
+  const asstMsg = hub.prepare('SELECT * FROM messages WHERE id = ? AND user = ? AND role = ?')
+                     .get(msgId, req.hubUser, 'assistant');
+  if (!asstMsg) return res.status(404).json({ error: 'Message not found' });
+
+  const userMsg = hub.prepare(`
+    SELECT content FROM messages
+     WHERE user = ? AND role = 'user'
+       AND (conversation_id = ? OR project_id = ?)
+       AND ts < ?
+     ORDER BY ts DESC LIMIT 1
+  `).get(req.hubUser, asstMsg.conversation_id, asstMsg.project_id, asstMsg.ts);
+
+  try {
+    const { saveToWiki } = require('../lib/wiki-engine');
+    const result = await saveToWiki({
+      question: userMsg?.content || '',
+      answer:   asstMsg.content || '',
+    });
+    res.json({ ok: true, slug: result.slug, title: result.title });
+  } catch (err) {
+    console.error('[wiki-save]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Move conversation into a project ─────────────────────────────────────────
 router.post('/api/conversations/:convId/move', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
@@ -1439,8 +1680,9 @@ router.post('/api/google-chat/hermes', async (req, res) => {
       return res.json({});
     }
 
+    const spaceName = event.space?.name || '';
     const text = cleanGoogleChatText(message.argumentText || message.text || '');
-    const reply = await handleGoogleChatCommand(user, text);
+    const reply = await handleGoogleChatCommand(user, text, { spaceName });
     console.log(`[google-chat] handled ${type || 'event'} addon=${isGoogleWorkspaceAddOnRequest(req)} text_chars=${text.length} reply_chars=${String(reply || '').length}`);
     return res.json(googleChatReply(req, reply));
   } catch (err) {
@@ -1452,12 +1694,13 @@ router.post('/api/google-chat/hermes', async (req, res) => {
 // Hermes (or any external agent) posts a /crm note here
 // Secured by a shared secret: Authorization: Bearer <HERMES_WEBHOOK_SECRET>
 router.post('/api/crm/webhook', async (req, res) => {
-  const secret = process.env.HERMES_WEBHOOK_SECRET || process.env.WORKDAY_WEBHOOK_SECRET;
+  const secret = process.env.HERMES_WEBHOOK_SECRET;
   if (!secret) return res.status(503).json({ error: 'Webhook not configured' });
   const auth = req.headers.authorization || '';
   if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { text, user, source = 'hermes', dedup_key } = req.body;
+  const { text, source = 'hermes', dedup_key } = req.body;
+  const user = req.hubUser || req.body.user;
   if (!text || !user) return res.status(400).json({ error: 'text and user required' });
 
   // Dedup: reject retries from the same message ID within 5 minutes
@@ -1484,12 +1727,12 @@ router.post('/api/crm/webhook', async (req, res) => {
 
 // On-demand briefing push (callable from Google Chat bot or Hermes)
 router.post('/api/crm/briefing-push', async (req, res) => {
-  const secret = process.env.HERMES_WEBHOOK_SECRET || process.env.WORKDAY_WEBHOOK_SECRET;
+  const secret = process.env.HERMES_WEBHOOK_SECRET;
   if (!secret) return res.status(503).json({ error: 'Not configured' });
   const auth = req.headers.authorization || '';
   if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { user } = req.body;
+  const user = req.hubUser || req.body.user;
   if (!user) return res.status(400).json({ error: 'user required' });
 
   try {
@@ -1549,6 +1792,13 @@ router.post('/api/crm/note', requireAuth, requireSameOrigin, writeLimiter, async
 });
 
 // ── Message rating ────────────────────────────────────────────────────────────
+// Manual trigger — GET /api/reg-monitor/run (authenticated, admin only)
+router.get('/api/reg-monitor/run', requireAuth, async (req, res) => {
+  const { runRegulatoryMonitor } = require('../lib/regulatory-monitor');
+  res.json({ ok: true, message: 'Regulatory monitor started — check logs for output' });
+  runRegulatoryMonitor().catch(err => console.error('[reg-monitor] manual run error:', err));
+});
+
 router.post('/api/messages/:msgId/rate', requireAuth, requireSameOrigin, (req, res) => {
   const rating = parseInt(req.body.rating);
   if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'Invalid rating (1–5)' });

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quick-start cards — Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+  :root { --accent: var(--primary, #7c6af5); }
+
+  .sc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .sc-card {
+    border: 1px solid var(--border, #dddaf0);
+    border-radius: 12px;
+    background: var(--bg, #faf9fb);
+    padding: 16px 18px;
+    transition: box-shadow 0.15s;
+  }
+  .sc-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+  .sc-card.disabled { opacity: 0.5; }
+
+  .sc-preview {
+    display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px;
+  }
+  .sc-preview-kicker {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--accent);
+  }
+  .sc-preview-label { font-size: 15px; font-weight: 600; }
+  .sc-preview-desc  { font-size: 12px; color: var(--text-dim, #767586); }
+  .sc-preview-meta  {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;
+  }
+  .sc-tag {
+    font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+    background: rgba(124,106,245,0.1); color: #5b4ac4;
+  }
+  .sc-tag.search { background: rgba(10,132,255,0.1); color: #0052cc; }
+
+  .sc-actions { display: flex; gap: 8px; }
+  .btn-sm {
+    padding: 5px 12px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--outline, #c7c4d7); background: transparent;
+    color: var(--text, #15131e); font-family: inherit;
+  }
+  .btn-sm:hover { background: rgba(0,0,0,.05); }
+  .btn-sm.danger { color: #ba1a1a; border-color: #ffdad6; }
+  .btn-sm.danger:hover { background: rgba(186,26,26,.06); }
+
+  .edit-panel { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border, #dddaf0); }
+  .edit-panel.open { display: block; }
+
+  /* Forms */
+  .sc-form { display: flex; flex-direction: column; gap: 10px; }
+  .form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .form-row .field { flex: 1; min-width: 100px; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-dim, #464554);
+  }
+  .field input, .field select, .field textarea {
+    padding: 7px 10px; font-size: 13px; font-family: inherit;
+    border: 1px solid var(--outline, #c7c4d7); border-radius: 7px;
+    background: var(--bg, #fcf8ff); color: var(--text, #1b1b23);
+    outline: none; width: 100%; box-sizing: border-box;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,245,.12); }
+  .field .hint { font-size: 11px; color: var(--text-dim, #767586); }
+  .form-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+  .add-wrap {
+    background: var(--bg, #faf9fb);
+    border: 1px solid var(--border, #dddaf0);
+    border-radius: 12px;
+    padding: 20px 22px;
+  }
+  .icon-picker {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;
+  }
+  .icon-opt {
+    padding: 4px 8px; border: 1px solid var(--outline, #c7c4d7);
+    border-radius: 6px; font-size: 16px; cursor: pointer; background: none;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .icon-opt:hover, .icon-opt.selected { background: rgba(124,106,245,.12); border-color: var(--accent); }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Quick-start cards — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/shortcuts" style="font-weight:600">Cards</a>
+    <a href="/admin/test">Test</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+  <h2>How this works</h2>
+  <p>These cards appear on the welcome screen when you open a new chat. Each card sets a model and optionally a search mode. Drag to reorder (use the Order field). Shared cards (no user set) show for all users.</p>
+</section>
+
+<section class="admin-section">
+  <h2>Current cards</h2>
+  <% if (shortcuts.length === 0) { %>
+    <p style="color:var(--text-dim);font-size:13px;">No cards yet — the welcome screen will use the built-in defaults until you add some.</p>
+  <% } %>
+  <div class="sc-grid">
+  <% for (const s of shortcuts) { %>
+    <div class="sc-card <%= s.enabled ? '' : 'disabled' %>" id="sc-<%= s.id %>">
+      <div class="sc-preview">
+        <div class="sc-preview-kicker"><%= s.icon %> <%= s.kicker %></div>
+        <div class="sc-preview-label"><%= s.label %></div>
+        <% if (s.desc) { %><div class="sc-preview-desc"><%= s.desc %></div><% } %>
+        <div class="sc-preview-meta">
+          <span class="sc-tag"><%= s.model_key %></span>
+          <% if (s.search) { %><span class="sc-tag search"><%= s.search %></span><% } %>
+          <% if (!s.enabled) { %><span class="sc-tag" style="background:rgba(186,26,26,.1);color:#ba1a1a">off</span><% } %>
+          <% if (!s.user) { %><span class="sc-tag" style="opacity:.6">shared</span><% } %>
+        </div>
+      </div>
+
+      <div class="sc-actions">
+        <button class="btn-sm" onclick="toggleEdit('<%= s.id %>')">Edit</button>
+        <% if (s.user) { %>
+        <form method="POST" action="/admin/shortcuts/<%= s.id %>/delete" style="display:inline"
+          onsubmit="return confirm('Delete this card?')">
+          <button class="btn-sm danger" type="submit">Delete</button>
+        </form>
+        <% } %>
+      </div>
+
+      <div class="edit-panel" id="edit-<%= s.id %>">
+        <form class="sc-form" method="POST" action="/admin/shortcuts/<%= s.id %>">
+          <div class="form-row">
+            <div class="field" style="flex:0 0 60px">
+              <label>Icon</label>
+              <input id="icon-<%= s.id %>" name="icon" value="<%= s.icon || '◎' %>" maxlength="4" style="text-align:center;font-size:16px">
+            </div>
+            <div class="field">
+              <label>Kicker <span style="font-weight:400;text-transform:none">(shown small, auto-uppercased)</span></label>
+              <input name="kicker" value="<%= s.kicker %>" required>
+            </div>
+          </div>
+          <div class="field">
+            <label>Title</label>
+            <input name="label" value="<%= s.label %>" required>
+          </div>
+          <div class="field">
+            <label>Subtitle / description</label>
+            <input name="desc" value="<%= s.desc || '' %>" placeholder="Optional — shown below title">
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Model</label>
+              <select name="model_key" required>
+                <% for (const m of models) { %>
+                  <option value="<%= m.key %>" <%= s.model_key === m.key ? 'selected' : '' %>><%= m.label %> (<%= m.key %>)</option>
+                <% } %>
+              </select>
+            </div>
+            <div class="field">
+              <label>Search override</label>
+              <select name="search">
+                <option value="" <%= !s.search ? 'selected' : '' %>>Auto (from model)</option>
+                <option value="openrouter" <%= s.search === 'openrouter' ? 'selected' : '' %>>OpenRouter web plugin</option>
+                <option value="exa" <%= s.search === 'exa' ? 'selected' : '' %>>Exa (neural)</option>
+                <option value="off" <%= s.search === 'off' ? 'selected' : '' %>>Off</option>
+              </select>
+              <span class="hint">Override the default search for this card.</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field" style="flex:0 0 80px">
+              <label>Order</label>
+              <input name="display_order" type="number" value="<%= s.display_order || 0 %>">
+            </div>
+            <div class="field">
+              <label>Enabled</label>
+              <select name="enabled">
+                <option value="1" <%= s.enabled ? 'selected' : '' %>>Yes</option>
+                <option value="" <%= !s.enabled ? 'selected' : '' %>>No</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <button type="button" class="btn-sm" onclick="toggleEdit('<%= s.id %>')">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  <% } %>
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Add a card</h2>
+  <div class="add-wrap">
+    <form class="sc-form" method="POST" action="/admin/shortcuts">
+      <div class="form-row">
+        <div class="field" style="flex:0 0 60px">
+          <label>Icon</label>
+          <input id="new-icon" name="icon" value="◎" maxlength="4" style="text-align:center;font-size:16px">
+        </div>
+        <div class="field">
+          <label>Kicker <span style="font-weight:400;text-transform:none">(auto-uppercased)</span></label>
+          <input name="kicker" placeholder="CODING" required>
+        </div>
+      </div>
+      <div style="margin:-4px 0 4px">
+        <div class="field"><label>Quick icons</label></div>
+        <div class="icon-picker">
+          <% for (const ic of ['◎','◉','⌖','⊕','⋆','◈','⬡','◇','✦','⌘','⚡','🔬','📝','💻','🔍','📊']) { %>
+            <button type="button" class="icon-opt" onclick="pickIcon(this,'new-icon')"><%= ic %></button>
+          <% } %>
+        </div>
+      </div>
+      <div class="field">
+        <label>Title</label>
+        <input name="label" placeholder="Coding assistant" required>
+      </div>
+      <div class="field">
+        <label>Subtitle / description</label>
+        <input name="desc" placeholder="Claude Sonnet · no search">
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Model</label>
+          <select name="model_key" required>
+            <% for (const m of models) { %>
+              <option value="<%= m.key %>"><%= m.label %> (<%= m.key %>)</option>
+            <% } %>
+          </select>
+        </div>
+        <div class="field">
+          <label>Search override</label>
+          <select name="search">
+            <option value="">Auto (from model)</option>
+            <option value="openrouter">OpenRouter web plugin</option>
+            <option value="exa">Exa (neural)</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:0 0 80px">
+          <label>Order</label>
+          <input name="display_order" type="number" value="<%= shortcuts.length %>">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">
+          Add card
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+window.toggleEdit = function(id) {
+  document.getElementById('edit-' + id)?.classList.toggle('open');
+};
+window.pickIcon = function(btn, inputId) {
+  document.getElementById(inputId).value = btn.textContent.trim();
+  btn.closest('.icon-picker').querySelectorAll('.icon-opt').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+};
+</script>
+</body>
+</html>
