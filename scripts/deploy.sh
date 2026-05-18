@@ -55,6 +55,16 @@ if [[ "$USE_PASSWORD" -eq 1 ]]; then
   RSYNC_RSH="sshpass -e ssh ${SSH_OPTS[*]}"
 fi
 
+echo "==> Pushing to GitHub..."
+cd "$APP_DIR"
+if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+  echo "    Uncommitted changes detected — commit before deploying."
+  git status --short
+  exit 1
+fi
+git push origin main
+echo "    GitHub up to date: $(git rev-parse --short HEAD)"
+
 echo "==> Syncing code to VPS..."
 rsync -avz --progress -e "$RSYNC_RSH" \
   --exclude .git \
