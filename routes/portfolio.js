@@ -790,6 +790,9 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
     'Skills:\n' + skillRows.map(s => `- ${s.name} (${s.level})`).join('\n'),
   ].filter(Boolean).join('\n\n');
 
+  const jdFullName = profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
+  const jdFirstName = jdFullName.split(' ')[0];
+
   const messages = [{
     role: 'system',
     content: JD_ANALYSER_GUARD,
@@ -808,7 +811,7 @@ Provide:
 2. The strongest matching capabilities or experiences
 3. Any gaps, risks, or missing evidence a recruiter should note
 4. The most promising angle for outreach if they do contact the candidate
-5. A short recruiter verdict on whether Douglas is worth approaching for this role now`,
+5. A short recruiter verdict on whether ${jdFirstName} is worth approaching for this role now`,
   }];
 
   res.setHeader('Content-Type', 'text/event-stream');
