@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meeting Debrief — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
+.meeting-wrap { max-width: 680px; margin: 0 auto; padding: 24px 16px 80px; }
+.back-link { font-size: 13px; color: var(--text-dim); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; }
+.back-link:hover { color: var(--primary, #4648d4); }
+.page-title { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
+.page-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 28px; }
+
+/* Metadata strip */
+.meta-strip { display: flex; flex-direction: column; gap: 14px; margin-bottom: 28px; }
+.field-row { display: flex; gap: 12px; }
+@media (max-width: 520px) { .field-row { flex-direction: column; } }
+.field-group { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.field-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); }
+.field-hint { font-size: 12px; color: var(--text-muted, #999); }
+input[type=text], select {
+  padding: 10px 12px; font-size: 14px; font-family: var(--font, sans-serif);
+  border: 1px solid var(--border, #c7c4d7); border-radius: 8px;
+  background: var(--bg); color: var(--text); width: 100%; box-sizing: border-box; outline: none;
+  transition: border-color .15s;
+}
+input[type=text]:focus, select:focus { border-color: var(--primary, #4648d4); box-shadow: 0 0 0 3px rgba(70,72,212,.1); }
+
+/* Attendee tags */
+.attendee-wrap-outer { position: relative; }
+.attendee-wrap {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); min-height: 42px; cursor: text;
+}
+.attendee-wrap:focus-within { border-color: var(--primary, #4648d4); box-shadow: 0 0 0 3px rgba(70,72,212,.1); }
+.attendee-tag { display: inline-flex; align-items: center; gap: 5px; background: rgba(70,72,212,.1);
+  color: var(--primary, #4648d4); border-radius: 20px; padding: 3px 10px; font-size: 13px; }
+.attendee-tag button { background: none; border: none; cursor: pointer; font-size: 12px; opacity: .6; padding: 0; line-height: 1; color: var(--primary, #4648d4); }
+.attendee-tag button:hover { opacity: 1; }
+.attendee-input { border: none; outline: none; background: none; font-size: 14px; color: var(--text); flex: 1; min-width: 100px; padding: 2px 0; font-family: var(--font); }
+.attendee-suggestions { position: absolute; z-index: 20; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.1); max-height: 180px; overflow-y: auto; min-width: 200px; }
+.attendee-suggestions div { padding: 8px 12px; font-size: 13px; cursor: pointer; }
+.attendee-suggestions div:hover, .attendee-suggestions div.active { background: rgba(70,72,212,.08); }
+
+/* Prompt cards */
+.section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); margin-bottom: 10px; }
+.prompts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 28px; }
+@media (max-width: 480px) { .prompts { grid-template-columns: 1fr; } }
+.prompt-card {
+  background: var(--surface, #f4f3fb);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.45;
+}
+.prompt-num { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 3px; }
+
+/* Record section */
+.record-section {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 28px 24px; border-radius: 14px; border: 2px solid var(--border);
+  background: var(--bg); margin-bottom: 20px;
+}
+.record-btn {
+  width: 76px; height: 76px; border-radius: 50%;
+  background: var(--primary, #4648d4); border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .15s, background .15s;
+  box-shadow: 0 4px 16px rgba(70,72,212,.25);
+}
+.record-btn:hover { transform: scale(1.06); box-shadow: 0 6px 20px rgba(70,72,212,.35); }
+.record-btn.recording { background: #d32f2f; animation: pulse-rec 1.2s ease-in-out infinite; }
+@keyframes pulse-rec { 0%,100% { box-shadow: 0 0 0 0 rgba(211,47,47,.4); } 50% { box-shadow: 0 0 0 14px rgba(211,47,47,0); } }
+.record-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.record-btn svg { width: 32px; height: 32px; fill: white; }
+.record-label { font-size: 15px; font-weight: 600; color: var(--text); }
+.record-sub { font-size: 12px; color: var(--text-dim); text-align: center; max-width: 300px; }
+.record-timer { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; display: none; }
+.record-timer.active { display: block; }
+
+/* Transcript preview */
+.transcript-box { display: none; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+.transcript-box.visible { display: block; }
+.transcript-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); }
+textarea.transcript-text {
+  width: 100%; box-sizing: border-box; padding: 12px 14px; font-size: 13px; line-height: 1.6;
+  border: none; resize: vertical; min-height: 100px; background: var(--bg);
+  color: var(--text); font-family: var(--font, sans-serif); outline: none;
+}
+
+/* Upload */
+.upload-strip {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface, #f8f7ff); margin-bottom: 24px;
+  cursor: pointer;
+}
+.upload-strip:hover { border-color: var(--primary, #4648d4); }
+.upload-strip-label { flex: 1; font-size: 13px; color: var(--text-dim); cursor: pointer; display: block; }
+.upload-strip input[type=file] { display: none; }
+.upload-browse-btn {
+  padding: 6px 14px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--primary, #4648d4);
+  border-radius: 6px; background: transparent; color: var(--primary, #4648d4);
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.upload-browse-btn:hover { background: rgba(70,72,212,.08); }
+
+/* Submit */
+.submit-row { display: flex; gap: 10px; align-items: center; }
+.submit-btn {
+  padding: 12px 32px; background: var(--primary, #4648d4); color: #fff; border: none;
+  border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .15s;
+}
+.submit-btn:disabled { opacity: .5; cursor: not-allowed; }
+.submit-msg { font-size: 13px; }
+.submit-msg.ok { color: #2e7d60; }
+.submit-msg.err { color: #ba1a1a; }
+
+/* Divider */
+.or-divider { text-align: center; font-size: 12px; color: var(--text-dim); margin: 4px 0 16px; position: relative; }
+.or-divider::before { content: ''; position: absolute; left: 0; top: 50%; width: 44%; height: 1px; background: var(--border); }
+.or-divider::after { content: ''; position: absolute; right: 0; top: 50%; width: 44%; height: 1px; background: var(--border); }
+</style>
+</head>
+<body class="hub-page" style="background: var(--bg-page, #f4f3fb); min-height: 100vh;">
+<main>
+<div class="meeting-wrap">
+
+  <a href="/" class="back-link">← Back to hub</a>
+
+  <h1 class="page-title">Meeting debrief</h1>
+  <p class="page-sub">Record your thoughts — the prompts below guide what to cover. Metadata, then record.</p>
+
+  <!-- ── Metadata ──────────────────────────────────────────────────────────── -->
+  <div class="meta-strip">
+    <div class="field-group">
+      <label class="field-label" for="title">Meeting title</label>
+      <input type="text" id="title" placeholder="e.g. HealthLink discussion with Nicola" autocomplete="off">
+    </div>
+
+    <div class="field-row">
+      <div class="field-group">
+        <label class="field-label" for="project">Project</label>
+        <select id="project">
+          <option value="">— No project —</option>
+          <% for (const p of projects) { %>
+          <option value="<%= p.slug %>"><%= p.name %></option>
+          <% } %>
+        </select>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Attendees</label>
+      <div class="attendee-wrap-outer">
+        <div class="attendee-wrap" id="attendee-wrap">
+          <input class="attendee-input" id="attendee-input" placeholder="Type a name and press Enter…" autocomplete="off">
+        </div>
+        <div class="attendee-suggestions" id="attendee-suggestions" style="display:none"></div>
+      </div>
+      <span class="field-hint">Matches CRM contacts and logs a meeting entry against them.</span>
+    </div>
+  </div>
+
+  <!-- ── Prompt questions ──────────────────────────────────────────────────── -->
+  <p class="section-label">Speak to these prompts</p>
+  <div class="prompts">
+    <div class="prompt-card">
+      <span class="prompt-num">Context</span>
+      What was this meeting about? What was the background going in?
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">What happened</span>
+      What was discussed? What were the key points raised?
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">Decisions</span>
+      What was agreed or decided? Any commitments made?
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">Next steps</span>
+      What needs to happen now? Who's doing what?
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">Your read</span>
+      How did it go? Any concerns, dynamics, or things you noticed?
+    </div>
+    <div class="prompt-card">
+      <span class="prompt-num">Loose ends</span>
+      Anything unresolved, unclear, or worth flagging for later?
+    </div>
+  </div>
+
+  <!-- ── Record ────────────────────────────────────────────────────────────── -->
+  <div class="record-section" id="record-section">
+    <button class="record-btn" id="record-btn" title="Tap to record">
+      <svg id="mic-icon" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2z"/></svg>
+      <svg id="stop-icon" viewBox="0 0 24 24" style="display:none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+    </button>
+    <span class="record-label" id="record-label">Tap to record your debrief</span>
+    <span class="record-timer" id="record-timer">0:00</span>
+    <span class="record-sub" id="record-sub">Work through the prompts above. You can record multiple times — each recording appends.</span>
+  </div>
+
+  <!-- Transcript preview (shown after transcription) -->
+  <div class="transcript-box" id="transcript-box">
+    <div class="transcript-head">
+      <span>Transcript — edit if needed</span>
+      <button type="button" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--text-dim)" onclick="document.getElementById('transcript-box').className='transcript-box'">Clear</button>
+    </div>
+    <textarea class="transcript-text" id="voice-transcript" rows="6"></textarea>
+  </div>
+
+  <!-- Upload transcript -->
+  <p class="or-divider">or upload a transcript</p>
+  <label class="upload-strip" for="transcript-file">
+    <span class="upload-strip-label"><span id="upload-label">Choose .txt, .docx, or .pdf…</span></span>
+    <input type="file" id="transcript-file" accept=".txt,.docx,.pdf,.md">
+    <span class="upload-browse-btn">Browse</span>
+  </label>
+
+  <!-- Submit -->
+  <div class="submit-row">
+    <button class="submit-btn" id="submit-btn">Save meeting note</button>
+    <span class="submit-msg" id="submit-msg"></span>
+  </div>
+
+</div>
+</main>
+
+<script>
+// ── Attendee tags ─────────────────────────────────────────────────────────────
+const crmContacts = <%- JSON.stringify(contacts.map(c => c.name)) %>;
+const attendees = [];
+const wrap = document.getElementById('attendee-wrap');
+const input = document.getElementById('attendee-input');
+const suggestions = document.getElementById('attendee-suggestions');
+
+function renderTags() {
+  wrap.querySelectorAll('.attendee-tag').forEach(el => el.remove());
+  attendees.forEach((name, i) => {
+    const tag = document.createElement('span');
+    tag.className = 'attendee-tag';
+    tag.innerHTML = `${name} <button type="button" data-i="${i}">✕</button>`;
+    tag.querySelector('button').addEventListener('click', () => { attendees.splice(i, 1); renderTags(); });
+    wrap.insertBefore(tag, input);
+  });
+}
+function addAttendee(name) {
+  const clean = name.trim();
+  if (!clean || attendees.includes(clean)) return;
+  attendees.push(clean); renderTags();
+  input.value = ''; suggestions.style.display = 'none';
+}
+function showSuggestions(query) {
+  const q = query.toLowerCase();
+  const hits = crmContacts.filter(n => n.toLowerCase().includes(q) && !attendees.includes(n));
+  if (!hits.length || !q) { suggestions.style.display = 'none'; return; }
+  suggestions.innerHTML = hits.slice(0, 6).map((n, i) =>
+    `<div class="${i===0?'active':''}" data-name="${n}">${n}</div>`).join('');
+  suggestions.style.display = 'block';
+}
+wrap.addEventListener('click', () => input.focus());
+input.addEventListener('input', () => showSuggestions(input.value));
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const active = suggestions.querySelector('.active');
+    addAttendee(active ? active.dataset.name : input.value);
+  }
+  if (e.key === 'Backspace' && !input.value && attendees.length) { attendees.pop(); renderTags(); }
+  const items = suggestions.querySelectorAll('div');
+  const idx = [...items].findIndex(el => el.classList.contains('active'));
+  if (e.key === 'ArrowDown' && idx < items.length - 1) { items[idx]?.classList.remove('active'); items[idx+1]?.classList.add('active'); }
+  if (e.key === 'ArrowUp' && idx > 0) { items[idx]?.classList.remove('active'); items[idx-1]?.classList.add('active'); }
+  if (e.key === 'Escape') suggestions.style.display = 'none';
+});
+suggestions.addEventListener('click', e => { const d = e.target.closest('[data-name]'); if (d) addAttendee(d.dataset.name); });
+document.addEventListener('click', e => { if (!wrap.contains(e.target)) suggestions.style.display = 'none'; });
+
+// ── Upload filename ───────────────────────────────────────────────────────────
+document.getElementById('transcript-file').addEventListener('change', function() {
+  document.getElementById('upload-label').textContent = this.files[0]?.name || 'Choose file…';
+});
+
+// ── Timer ─────────────────────────────────────────────────────────────────────
+let timerInterval, timerSecs = 0;
+const timerEl = document.getElementById('record-timer');
+function startTimer() {
+  timerSecs = 0; timerEl.classList.add('active');
+  timerInterval = setInterval(() => {
+    timerSecs++;
+    const m = Math.floor(timerSecs / 60), s = timerSecs % 60;
+    timerEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  }, 1000);
+}
+function stopTimer() { clearInterval(timerInterval); timerEl.classList.remove('active'); }
+
+// ── Wake lock (prevent screen sleep during recording) ────────────────────────
+let wakeLock = null;
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+}
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+
+// ── Voice recording ───────────────────────────────────────────────────────────
+let mediaRecorder, chunks = [], recording = false;
+const recordBtn = document.getElementById('record-btn');
+const recordLabel = document.getElementById('record-label');
+const recordSub = document.getElementById('record-sub');
+const micIcon = document.getElementById('mic-icon');
+const stopIcon = document.getElementById('stop-icon');
+
+recordBtn.addEventListener('click', async () => {
+  if (recording) { mediaRecorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      recording = false;
+      stopTimer();
+      releaseWakeLock();
+      stream.getTracks().forEach(t => t.stop());
+      recordBtn.classList.remove('recording');
+      micIcon.style.display = ''; stopIcon.style.display = 'none';
+      recordLabel.textContent = 'Transcribing…';
+      recordSub.textContent = 'Please wait.';
+      recordBtn.disabled = true;
+
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const fd = new FormData();
+      fd.append('audio', blob, 'debrief.webm');
+      try {
+        const r = await fetch('/api/meeting/transcribe', { method: 'POST', body: fd });
+        const d = await r.json();
+        const box = document.getElementById('transcript-box');
+        const ta = document.getElementById('voice-transcript');
+        if (d.transcript) {
+          const existing = ta.value.trim();
+          ta.value = existing ? existing + '\n\n' + d.transcript : d.transcript;
+          box.className = 'transcript-box visible';
+          recordLabel.textContent = 'Transcribed — tap to add more';
+          recordSub.textContent = 'Review the transcript below. Tap record again to add more.';
+        } else {
+          recordLabel.textContent = 'Transcription failed';
+          recordSub.textContent = 'Type your notes in the transcript box or try again.';
+          box.className = 'transcript-box visible';
+        }
+      } catch (err) {
+        recordLabel.textContent = 'Error: ' + err.message;
+        recordSub.textContent = 'Type your notes in the transcript box.';
+        document.getElementById('transcript-box').className = 'transcript-box visible';
+      }
+      recordBtn.disabled = false;
+    };
+    mediaRecorder.start(1000);
+    recording = true;
+    await acquireWakeLock();
+    recordBtn.classList.add('recording');
+    micIcon.style.display = 'none'; stopIcon.style.display = '';
+    startTimer();
+    recordLabel.textContent = 'Recording… tap to stop';
+    recordSub.textContent = 'Work through the prompts. Take your time.';
+  } catch (err) {
+    recordLabel.textContent = 'Microphone unavailable';
+    recordSub.textContent = 'Type your notes in the transcript box below.';
+    document.getElementById('transcript-box').className = 'transcript-box visible';
+  }
+});
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+document.getElementById('submit-btn').addEventListener('click', async () => {
+  const title = document.getElementById('title').value.trim();
+  if (!title) {
+    document.getElementById('submit-msg').className = 'submit-msg err';
+    document.getElementById('submit-msg').textContent = 'Please enter a meeting title.';
+    document.getElementById('title').focus();
+    return;
+  }
+  const btn = document.getElementById('submit-btn');
+  const msg = document.getElementById('submit-msg');
+  btn.disabled = true; btn.textContent = 'Saving…'; msg.textContent = '';
+
+  const fd = new FormData();
+  fd.append('title', title);
+  fd.append('attendees', JSON.stringify(attendees));
+  fd.append('project', document.getElementById('project').value);
+  fd.append('myThoughts', document.getElementById('voice-transcript').value);
+  const fileInput = document.getElementById('transcript-file');
+  if (fileInput.files[0]) fd.append('transcript', fileInput.files[0]);
+
+  try {
+    const r = await fetch('/api/meeting/submit', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (r.ok) {
+      msg.className = 'submit-msg ok';
+      msg.textContent = '✓ Saved — ' + d.notePath;
+      btn.textContent = 'Saved';
+    } else {
+      msg.className = 'submit-msg err';
+      msg.textContent = '✖ ' + (d.error || 'Failed');
+      btn.disabled = false; btn.textContent = 'Save meeting note';
+    }
+  } catch (err) {
+    msg.className = 'submit-msg err';
+    msg.textContent = '✖ ' + err.message;
+    btn.disabled = false; btn.textContent = 'Save meeting note';
+  }
+});
+</script>
+
+</body>
+</html>

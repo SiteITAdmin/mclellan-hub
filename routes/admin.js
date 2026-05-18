@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../lib/db');
 const { uuid } = require('../lib/id');
 const { scanCvContextCandidates } = require('../lib/cvCandidates');
+const { routeMessage } = require('../lib/router');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { createRateLimiter, requireSameOrigin } = require('../lib/security');
 
@@ -19,6 +20,89 @@ function getAdminReturnTo(req, fallback = '/admin') {
 function getPortfolioDisplayName(user) {
   const names = { douglas: 'Douglas', nakai: 'Nakai' };
   return names[user] || user;
+}
+
+function rowsToCvObject(rows) {
+  return rows.reduce((acc, row) => {
+    acc[row.section] = row.content;
+    return acc;
+  }, {});
+}
+
+function clip(text, max = 900) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  return clean.length > max ? clean.slice(0, max - 1).trim() + '...' : clean;
+}
+
+function buildSummaryDraftPrompt({ user, profile, cv, experiences, skills, candidates }) {
+  const fullName = profile.full_name || (user === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
+  const role = cv.role_label || profile.current_title || '';
+  const currentSummary = cv.summary || profile.elevator_pitch || '';
+  const expLines = experiences
+    .filter(e => e.is_cv_context)
+    .slice(0, 6)
+    .map(e => `- ${e.role}, ${e.company} (${e.start_date || '?'} - ${e.end_date || 'Present'}): ${clip(e.description, 280)}`)
+    .join('\n');
+  const skillLines = skills
+    .filter(s => s.level !== 'gap')
+    .slice(0, 14)
+    .map(s => `- ${s.name}${s.level ? ` (${s.level})` : ''}${s.evidence ? `: ${clip(s.evidence, 220)}` : ''}`)
+    .join('\n');
+  const topicLines = candidates
+    .slice(0, 12)
+    .map(c => `- ${c.term} (${c.occurrences} mentions, ${c.status}): ${clip(c.evidence, 360)}`)
+    .join('\n');
+
+  return `Draft a replacement executive summary for a public portfolio CV.
+
+Return only the summary text. Use 2-3 polished sentences, around 80-130 words.
+Be specific, recruiter-facing, and evidence-backed. Do not invent claims. Do not use first person.
+Correct spelling and grammar. Avoid keyword stuffing and avoid listing every tool.
+
+Candidate:
+- Name: ${fullName}
+- Current role/title: ${role}
+- Location: ${profile.location || ''}
+- Target titles: ${profile.target_titles || ''}
+- Looking for: ${profile.looking_for || ''}
+
+Current summary:
+${currentSummary || '(none)'}
+
+Selected experience:
+${expLines || '(none)'}
+
+Reviewed skills:
+${skillLines || '(none)'}
+
+Reviewed detected topics from CV context:
+${topicLines || '(none)'}`;
+}
+
+async function draftExecutiveSummary({ user, profile, cv, experiences, skills, candidates }) {
+  const messages = [
+    {
+      role: 'system',
+      content: 'You write concise, accurate executive summaries for senior professional CVs. You use only supplied evidence.',
+    },
+    {
+      role: 'user',
+      content: buildSummaryDraftPrompt({ user, profile, cv, experiences, skills, candidates }),
+    },
+  ];
+  let content = '';
+  const result = await routeMessage({
+    model: 'deepseek-v3',
+    messages,
+    user,
+    noSearch: true,
+    searchProvider: 'off',
+    onChunk: chunk => { content += String(chunk || '').replace(/^\x00/, ''); },
+  });
+  return (result?.content || content)
+    .replace(/^\x00/, '')
+    .replace(/^["']|["']$/g, '')
+    .trim();
 }
 
 router.get('/admin/login', (req, res) => {
@@ -68,6 +152,7 @@ router.get('/admin', requireAdmin, (req, res) => {
   const experiences = pdb.prepare('SELECT * FROM experiences ORDER BY display_order').all();
   const skills = pdb.prepare('SELECT * FROM skills ORDER BY level, display_order').all();
   const cvRows = pdb.prepare('SELECT * FROM cv_context ORDER BY section').all();
+  const cv = rowsToCvObject(cvRows);
   const profile = pdb.prepare('SELECT * FROM profile WHERE id = 1').get() || {};
   const gaps = pdb.prepare('SELECT * FROM gaps ORDER BY display_order, rowid').all();
   const faqs = pdb.prepare('SELECT * FROM faqs ORDER BY display_order, rowid').all();
@@ -86,8 +171,11 @@ router.get('/admin', requireAdmin, (req, res) => {
   res.render('admin/index', {
     user: req.portfolioUser,
     displayUser: getPortfolioDisplayName(req.portfolioUser),
-    experiences, skills, cvRows, profile, gaps, faqs, aiInstructions, jdSubmissions, skillCandidates, projects,
+    experiences, skills, cvRows, cv, profile, gaps, faqs, aiInstructions, jdSubmissions, skillCandidates, projects,
+    summaryDraft: req.session.summaryDraft || null,
+    summaryDraftError: req.session.summaryDraftError || null,
   });
+  req.session.summaryDraftError = null;
 });
 
 // ── Profile (one row per portfolio user) ──────────────────────────────────────
@@ -258,6 +346,61 @@ router.post('/admin/cv', requireAdmin, (req, res) => {
     ON CONFLICT(section) DO UPDATE SET content = excluded.content, updated_at = unixepoch()
   `).run(uuid(), section.trim(), content || '');
   res.redirect('/admin');
+});
+
+router.post('/admin/cv/summary-draft', requireAdmin, async (req, res) => {
+  const pdb = db.portfolio(req.portfolioUser);
+  try {
+    scanCvContextCandidates({ hub: db.hub(), portfolio: pdb, user: req.portfolioUser });
+    const profile = pdb.prepare('SELECT * FROM profile WHERE id = 1').get() || {};
+    const cvRows = pdb.prepare('SELECT * FROM cv_context ORDER BY section').all();
+    const cv = rowsToCvObject(cvRows);
+    const experiences = pdb.prepare('SELECT * FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC').all();
+    const skills = pdb.prepare("SELECT * FROM skills WHERE level != 'gap' ORDER BY CASE level WHEN 'strong' THEN 0 ELSE 1 END, display_order").all();
+    const candidates = pdb.prepare(`
+      SELECT * FROM skill_candidates
+       WHERE user = ? AND status IN ('promoted_jd', 'chat_only')
+       ORDER BY CASE status WHEN 'promoted_jd' THEN 0 ELSE 1 END, occurrences DESC, last_seen_at DESC
+    `).all(req.portfolioUser);
+
+    const draft = await draftExecutiveSummary({
+      user: req.portfolioUser,
+      profile,
+      cv,
+      experiences,
+      skills,
+      candidates,
+    });
+    req.session.summaryDraft = {
+      content: draft,
+      generated_at: Date.now(),
+      topic_count: candidates.length,
+      skill_count: skills.length,
+    };
+  } catch (err) {
+    console.error('[summary-draft]', err);
+    req.session.summaryDraftError = err.message || 'Could not draft executive summary';
+  }
+  res.redirect('/admin#cv');
+});
+
+router.post('/admin/cv/summary-draft/save', requireAdmin, (req, res) => {
+  const content = String(req.body.content || '').trim();
+  if (content) {
+    const pdb = db.portfolio(req.portfolioUser);
+    pdb.exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_cv_section ON cv_context(section)');
+    pdb.prepare(`
+      INSERT INTO cv_context (id, section, content) VALUES (?, 'summary', ?)
+      ON CONFLICT(section) DO UPDATE SET content = excluded.content, updated_at = unixepoch()
+    `).run(uuid(), content);
+  }
+  req.session.summaryDraft = null;
+  res.redirect('/admin#cv');
+});
+
+router.post('/admin/cv/summary-draft/discard', requireAdmin, (req, res) => {
+  req.session.summaryDraft = null;
+  res.redirect('/admin#cv');
 });
 
 router.post('/admin/cv/:section/delete', requireAdmin, (req, res) => {

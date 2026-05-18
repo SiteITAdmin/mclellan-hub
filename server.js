@@ -5,12 +5,14 @@ const path = require('path');
 const BetterSqliteSessionStore = require('./lib/session-store');
 
 const hubRouter = require('./routes/hub');
+const debriefRouter = require('./routes/debrief');
 const hubAdminRouter = require('./routes/hub-admin');
 const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
 const { sendDailyBriefing, sendEmailBriefing } = require('./lib/crm');
 const { processNewEmails } = require('./lib/email-processor');
+const { runRegulatoryMonitor } = require('./lib/regulatory-monitor');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,16 +28,33 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.disable('x-powered-by');
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data: https:",
+      "font-src 'self' https://fonts.gstatic.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
+      "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+      "connect-src 'self'",
+    ].join('; ')
+  );
+  if (isProduction) {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
   next();
 });
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
   store: new BetterSqliteSessionStore(),
@@ -61,6 +80,10 @@ app.use((req, res, next) => {
 
   if (host === 'dchat.mclellan.scot' || host === 'nchat.mclellan.scot') {
     req.hubUser = host.startsWith('d') ? 'douglas' : 'nakai';
+    if (req.path.startsWith('/debrief') || req.path.startsWith('/api/debrief')) {
+      req.session.user = req.hubUser;
+      return debriefRouter(req, res, next);
+    }
     if (req.path.startsWith('/admin') || req.path.startsWith('/mcp')) {
       return hubAdminRouter(req, res, next);
     }
@@ -88,7 +111,6 @@ app.use((req, res, next) => {
     if (req.path.startsWith('/admin')) return adminRouter(req, res, next);
     return portfolioRouter(req, res, next);
   }
-
   res.status(404).send('Not found');
 });
 
@@ -139,3 +161,13 @@ setInterval(() => {
     processNewEmails(user).catch(err => console.error(`[email] process error for ${user}:`, err));
   }
 }, 15 * 60 * 1000);
+
+// ── Regulatory monitor (08:00 Europe/Dublin, daily) ───────────────────────────
+const REG_MONITOR_HOUR   = parseInt(process.env.REG_MONITOR_HOUR   || '8');
+const REG_MONITOR_MINUTE = parseInt(process.env.REG_MONITOR_MINUTE || '0');
+
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getHours() !== REG_MONITOR_HOUR || now.getMinutes() !== REG_MONITOR_MINUTE) return;
+  runRegulatoryMonitor().catch(err => console.error('[reg-monitor] error:', err));
+}, 60 * 1000);

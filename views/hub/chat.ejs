@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><%= activeProject ? '/' + activeProject.slug : (conv?.title || 'Chat') %> — McLellan Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,6 +22,7 @@
     projects: <%- JSON.stringify(locals.projects || []) %>,
     recentConvs: <%- JSON.stringify(locals.recentConvs || []) %>,
     availableModels: <%- JSON.stringify(locals.availableModels || []) %>,
+    shortcuts: <%- JSON.stringify(locals.shortcuts || []) %>,
     projectDocs: <%- JSON.stringify(locals.projectDocs || []) %>,
     projectHistoryCount: <%- locals.projectHistoryCount || 0 %>,
     projectHistoryLoaded: <%- locals.projectHistoryLoaded || false %>,
@@ -44,8 +46,8 @@
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
-<script type="text/babel" src="/tweaks-panel.jsx?v=20260505"></script>
-<script type="text/babel" src="/hub-modern.jsx?v=20260505"></script>
+<script type="text/babel" src="/tweaks-panel.jsx?v=20260515d"></script>
+<script type="text/babel" src="/hub-modern.jsx?v=20260515d"></script>
 
 </body>
 </html>

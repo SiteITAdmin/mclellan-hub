@@ -107,96 +107,298 @@ function getPortfolioBaseUrl(user) {
     : 'https://nakai.mclellan.scot';
 }
 
-async function buildExecutiveSummaryPdf({ user, profile, cv, experiences }) {
+function cleanCvText(text) {
+  return String(text || '')
+    .replace(/\bcyberscreuity\b/gi, 'cybersecurity')
+    .replace(/\banalitics\b/gi, 'analytics')
+    .replace(/\bmanagment\b/gi, 'management')
+    .replace(/\baccross\b/gi, 'across')
+    .replace(/\bsecuirty\b/gi, 'security')
+    .replace(/\bdeprivide\b/gi, 'deprived')
+    .replace(/\begistration\b/gi, 'registration')
+    .replace(/—/g, ' - ')
+    .replace(/–/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getDouglasProfileSummary(profile, cv) {
+  return [
+    'Sole IT administrator for Cricket Ireland across four years - full Microsoft 365 responsibility without a team across approximately 50 staff, 40-50 players, and 25 match officials.',
+    'Inherited a tenant with no MFA, no DMARC, no Conditional Access, and no Intune; handed it over secure, documented, and formally structured across ten operational areas.',
+    'Now administering Microsoft 365 at Beacon Hospital and building AI-assisted tools alongside: a secure Azure-hosted bowling workload platform, a SharePoint SPFx venue reporting tool, and a personal AI workspace.',
+    'All capability is self-taught and demonstrated through operational delivery, GitHub repositories, and named employer references.',
+  ].join(' ');
+}
+
+function getDouglasExperiences() {
+  return [
+    {
+      role: 'Microsoft 365 Systems Administrator',
+      company: 'Beacon Hospital Private Clinic',
+      start_date: 'Mar 2025',
+      end_date: null,
+      description: "Administering Microsoft 365 for Beacon Hospital during the hospital's M365 migration: SharePoint, Teams, OneDrive, and Entra ID in a healthcare environment where data handling and reliability are non-negotiable. Enhancing helpdesk staff capabilities through Entra role-based administration, enabling the support team to self-serve identity tasks that previously required escalation.",
+    },
+    {
+      role: 'IT Manager',
+      company: 'Cricket Ireland',
+      start_date: 'Jan 2021',
+      end_date: 'Feb 2025',
+      description: "Sole IT administrator for a national sporting organisation for four years - approximately 50 staff, 40-50 players, and 25 match officials across the Entra ID tenant. Inherited a live M365 environment with no MFA, no DMARC, no Conditional Access, and no Intune, and brought it to a secure, documented, handover-ready state. Responsible for the full M365 tenant, business systems, match-day technology at 6-8 international fixtures per season (including temporary venues such as the 7,500-capacity stadium at Malahide Castle), and all vendor relationships - without a team.",
+    },
+    {
+      role: 'IT Systems Administrator',
+      company: 'Cricket Ireland',
+      start_date: 'Sep 2019',
+      end_date: 'Dec 2020',
+      description: "Co-managed IT operations across a transition period: devices, identity, file services, collaboration tools, and user support. Planned and delivered migration of priority workloads from AWS-hosted operational storage into Microsoft 365.",
+    },
+    {
+      role: 'ICT Manager',
+      company: 'Liffey College of Further Education',
+      start_date: '2015',
+      end_date: '2019',
+      description: "Led ICT across five Dublin community sites: infrastructure, user support, vendor management, and business system delivery. Migrated from Windows Server 2012 file services to SharePoint and OneDrive, implemented VoIP during COVID-19, and supported system change across HR, finance, telephony, and collaboration tools.",
+    },
+  ];
+}
+
+function getCoreStrengths(user, skills, candidates) {
+  const approvedTopics = new Set((candidates || [])
+    .filter(c => ['promoted_jd', 'chat_only'].includes(c.status))
+    .map(c => String(c.term || '').toLowerCase()));
+  const preferred = user === 'douglas'
+    ? [
+      'Microsoft 365 Administration',
+      'Identity & Access (Entra ID)',
+      'SharePoint & Teams',
+      'Power Platform (Apps / Automate)',
+      'MS Purview',
+      'Intune',
+      'Email Security & DMARC',
+      'Vendor & MSP Management',
+      'Business Systems Implementation',
+      'Change Management',
+      'Team Leadership',
+      'Power BI / DOMO',
+      'VoIP & Unified Comms',
+      'AI Tool Development',
+    ]
+    : [];
+  const byName = new Map((skills || []).map(s => [String(s.name || '').toLowerCase(), s.name]));
+  const picked = preferred.filter(name => byName.has(name.toLowerCase()) || approvedTopics.has(name.toLowerCase()));
+  const fallback = (skills || [])
+    .filter(s => s.level !== 'gap')
+    .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+    .map(s => s.name)
+    .slice(0, 10);
+  const strategic = user === 'douglas'
+    ? ['Business Systems Implementation', 'Change Management']
+    : [];
+  return [...new Set([...(picked.length ? picked : fallback), ...strategic])].filter(Boolean);
+}
+
+function getDouglasImpactHighlights() {
+  return [
+    'Administered the Cricket Ireland M365 tenant as sole administrator for four years across approximately 50 staff, 40-50 players, and 25 match officials: Entra ID with RBAC, MFA, and Conditional Access; Intune across a mixed corporate Android and personal iPhone estate; Exchange Online, SharePoint, Teams, OneDrive, and enterprise application permission governance.',
+    'Inherited a live tenant with no MFA, no DMARC, no Conditional Access, and no Intune. Implemented all four, tightened application consent policies, applied Purview information protection controls, and consolidated wasted license and AWS expenditure.',
+    'Administered Sport80, NV Play, BrightHR, WordPress, Vodafone ROI/NI, and Nostra MSP. Built Power Platform automation for player registration and the Match Referee Venue Report (MRVR) SharePoint SPFx application.',
+    'Managed match-day technology at 6-8 international fixtures per season, including the 7,500-capacity temporary stadium at Malahide Castle: Starlink, DLS 6 scoring, broadcasting, and live streaming in venues with no permanent IT infrastructure.',
+    'Delivered a ten-area structured handover covering identity, devices, security, systems, match-day, hardware, Power Platform, support, vendors, and documentation - designed to be re-executed without the author present.',
+  ];
+}
+
+function getExperienceBullets(user, exp) {
+  if (user !== 'douglas') return [cleanCvText(exp.description)].filter(Boolean);
+  const role = String(exp.role || '').toLowerCase();
+  const company = String(exp.company || '').toLowerCase();
+  if (company.includes('beacon')) {
+    return [
+      'Support the hospital\'s Microsoft 365 transition, focusing on secure administration, SharePoint, Teams, OneDrive and Entra ID.',
+      'Provide practical user support and rollout assistance in a healthcare environment where reliability, data handling and adoption matter.',
+    ];
+  }
+  if (company.includes('cricket') && role.includes('manager')) {
+    return [
+      'Sole M365 administrator for approximately 50 staff, 40-50 players, and 25 match officials: Entra ID with RBAC, MFA, and Conditional Access; Intune device management across a mixed corporate Android and personal iPhone estate; Exchange Online, SharePoint, Teams, OneDrive, and enterprise application permission governance.',
+      'Inherited a live tenant with no MFA, no DMARC, no Conditional Access, and no Intune. Implemented all four, tightened application consent policies, applied Purview information protection controls, and consolidated wasted license and AWS expenditure.',
+      'Administered Sport80, NV Play, BrightHR, WordPress, Vodafone ROI/NI, and Nostra MSP. Built Power Platform automation for player registration and the Match Referee Venue Report (MRVR) SharePoint SPFx application.',
+      'Managed match-day technology at 6-8 international fixtures per season including the 7,500-capacity Malahide Castle stadium: Starlink, DLS 6 scoring, broadcasting, and live streaming.',
+    ];
+  }
+  if (company.includes('cricket') && role.includes('systems')) {
+    return [
+      'Supported co-managed IT operations across devices, identity, file services, collaboration tools and user support.',
+      'Planned and delivered migration of priority workloads from AWS-hosted operational storage into Microsoft 365.',
+    ];
+  }
+  if (company.includes('liffey') && role.includes('ict')) {
+    return [
+      'Led ICT operations across five Dublin sites, combining infrastructure, user support, vendor management and organisational delivery.',
+      'Moved the organisation from Windows Server 2012 file services to SharePoint and OneDrive, improving remote access and resilience.',
+      'Supported business-system change across HR, finance/accounts, telephony and collaboration tools, including implementation, training and handover.',
+      'Implemented VoIP/softphone services and secure remote-working support during COVID-19.',
+    ];
+  }
+  return [cleanCvText(exp.description)].filter(Boolean);
+}
+
+function shouldShowCvRole(user, exp) {
+  if (user !== 'douglas') return true;
+  return !String(exp.company || '').toLowerCase().includes('bank of scotland');
+}
+
+function getDetailedExperiences(user, experiences) {
+  const visible = (experiences || []).filter(exp => shouldShowCvRole(user, exp));
+  return user === 'douglas' ? visible.slice(0, 5) : visible;
+}
+
+function getEarlierExperiences(user, experiences) {
+  if (user !== 'douglas') return [];
+  return (experiences || []).filter(exp => shouldShowCvRole(user, exp)).slice(5);
+}
+
+function addPageIfNeeded(doc, needed = 80) {
+  if (doc.y + needed > 770) {
+    doc.addPage();
+    doc.y = 48;
+  }
+}
+
+function drawSection(doc, title) {
+  addPageIfNeeded(doc, 48);
+  doc.moveDown(0.65);
+  doc.fillColor('#4648d4').font('Helvetica-Bold').fontSize(10).text(title.toUpperCase(), { characterSpacing: 0.4 });
+  doc.moveDown(0.25);
+  const y = doc.y;
+  doc.save().moveTo(48, y).lineTo(547, y).lineWidth(0.8).strokeColor('#d8d4e8').stroke().restore();
+  doc.moveDown(0.55);
+}
+
+function drawBullet(doc, text, options = {}) {
+  if (!text) return;
+  addPageIfNeeded(doc, options.space || 34);
+  const x = options.x || 48;
+  const y = doc.y;
+  doc.fillColor(options.color || '#1b1b23').font('Helvetica').fontSize(options.size || 9.2);
+  doc.text('•', x, y, { width: 10 });
+  doc.text(cleanCvText(text), x + 13, y, { width: options.width || 486, lineGap: 1.5 });
+  doc.x = 48;
+  doc.moveDown(0.18);
+}
+
+function drawSkillChips(doc, skills) {
+  const line = skills.join(', ');
+  doc.x = 48;
+  doc.fillColor('#1b1b23').font('Helvetica').fontSize(9.2).text(line, { width: 499, lineGap: 2 });
+  doc.x = 48;
+}
+
+async function buildExecutiveSummaryPdf({ user, profile, cv, experiences, skills = [], candidates = [] }) {
   const fullName = profile.full_name || (user === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
   const title = cv.role_label || profile.current_title || '';
-  const summary = cv.summary || profile.elevator_pitch || '';
+  const summary = user === 'douglas'
+    ? cleanCvText(getDouglasProfileSummary(profile, cv))
+    : cleanCvText(cv.summary || profile.elevator_pitch || '');
   const website = getPortfolioBaseUrl(user);
   const email = profile.email || (user === 'douglas' ? 'douglas@mclellan.scot' : '');
   const phone = getPublicPhone(user, profile);
   const location = profile.location || '';
   const linkedin = cv.linkedin_url || '';
-  const highlights = experiences.slice(0, 5);
+  const coreStrengths = getCoreStrengths(user, skills, candidates);
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 52, size: 'A4' });
+    const doc = new PDFDocument({ margin: 48, size: 'A4', info: { Title: `${fullName} CV` } });
     const chunks = [];
     doc.on('data', c => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const drawRule = () => {
-      const y = doc.y;
-      doc.save();
-      doc.moveTo(52, y).lineTo(543, y).lineWidth(1).strokeColor('#d8d4e8').stroke();
-      doc.restore();
-      doc.moveDown(1);
-    };
-
-    doc.fillColor('#1b1b23').font('Helvetica-Bold').fontSize(24).text(fullName);
+    doc.fillColor('#1b1b23').font('Helvetica-Bold').fontSize(23).text(fullName);
     if (title) {
       doc.moveDown(0.15);
-      doc.fillColor('#4a4760').font('Helvetica').fontSize(12).text(title);
+      doc.fillColor('#4a4760').font('Helvetica').fontSize(11.5).text(cleanCvText(title));
     }
 
-    doc.moveDown(0.35);
-    doc.font('Helvetica').fontSize(10).fillColor('#5f5b74');
-    const contactBits = [email, phone, website].filter(Boolean).join('   •   ');
+    doc.moveDown(0.3);
+    doc.font('Helvetica').fontSize(9.2).fillColor('#5f5b74');
+    const contactBits = [email, phone, website].filter(Boolean).join('  |  ');
     if (contactBits) doc.text(contactBits);
     if (location || linkedin) {
       doc.moveDown(0.15);
-      doc.text([location, linkedin].filter(Boolean).join('   •   '));
+      doc.text([location, linkedin].filter(Boolean).join('  |  '));
+    }
+    if (profile.availability_status || profile.remote_preference) {
+      doc.moveDown(0.15);
+      doc.text([profile.availability_status, profile.remote_preference].filter(Boolean).join('  |  '));
     }
 
-    doc.moveDown(0.8);
-    drawRule();
-
+    drawSection(doc, 'Professional Profile');
     if (summary) {
-      doc.fillColor('#4648d4').font('Helvetica-Bold').fontSize(11).text('EXECUTIVE SUMMARY');
-      doc.moveDown(0.35);
-      doc.fillColor('#1b1b23').font('Helvetica').fontSize(11).text(summary, { lineGap: 3 });
-      doc.moveDown(0.8);
+      doc.fillColor('#1b1b23').font('Helvetica').fontSize(9.7).text(summary, { width: 499, lineGap: 2.2 });
     }
 
-    drawRule();
-    doc.fillColor('#4648d4').font('Helvetica-Bold').fontSize(11).text('KEY EXPERIENCE');
-    doc.moveDown(0.45);
+    if (coreStrengths.length) {
+      drawSection(doc, 'Core Strengths');
+      drawSkillChips(doc, coreStrengths);
+    }
 
-    highlights.forEach((exp, idx) => {
+    if (user === 'douglas') {
+      drawSection(doc, 'Selected Impact');
+      getDouglasImpactHighlights().forEach(item => drawBullet(doc, item));
+    }
+
+    drawSection(doc, 'Professional Experience');
+    const detailedExperiences = getDetailedExperiences(user, experiences);
+    const earlierExperiences = getEarlierExperiences(user, experiences);
+    detailedExperiences.forEach((exp, idx) => {
+      addPageIfNeeded(doc, 76);
+      doc.x = 48;
       const dates = `${exp.start_date || '?'} - ${exp.end_date || 'Present'}`;
-      doc.fillColor('#1b1b23').font('Helvetica-Bold').fontSize(11)
+      doc.fillColor('#1b1b23').font('Helvetica-Bold').fontSize(10.2)
         .text(`${exp.role} | ${exp.company}`);
-      doc.fillColor('#5f5b74').font('Helvetica').fontSize(10)
+      doc.fillColor('#5f5b74').font('Helvetica').fontSize(8.8)
         .text(dates);
-      if (exp.description) {
-        doc.moveDown(0.15);
-        doc.fillColor('#1b1b23').font('Helvetica').fontSize(10.5)
-          .text(exp.description, { lineGap: 2 });
-      }
-      if (idx < highlights.length - 1) doc.moveDown(0.8);
+      doc.moveDown(0.15);
+      getExperienceBullets(user, exp).slice(0, idx < 4 ? 4 : 2).forEach(item => drawBullet(doc, item, { size: 8.9, width: 474, space: 28 }));
+      if (idx < detailedExperiences.length - 1) doc.moveDown(0.35);
     });
 
-    if (shouldShowAiBuilds(user)) {
-      doc.moveDown(1);
-      drawRule();
-      doc.fillColor('#4648d4').font('Helvetica-Bold').fontSize(11).text('AI-ASSISTED APP BUILDS');
-      doc.moveDown(0.45);
-      AI_ASSISTED_APP_BUILDS_PROJECTS.forEach((project, idx) => {
-        doc.fillColor('#1b1b23').font('Helvetica-Bold').fontSize(10.5).text(project.name);
-        doc.moveDown(0.12);
-        doc.fillColor('#1b1b23').font('Helvetica').fontSize(9.5)
-          .text(project.summary, { lineGap: 2 });
-        doc.moveDown(0.12);
-        doc.fillColor('#5f5b74').font('Helvetica').fontSize(8.5)
-          .text(project.stack, { lineGap: 1 });
-        if (idx < AI_ASSISTED_APP_BUILDS_PROJECTS.length - 1) doc.moveDown(0.55);
+    if (earlierExperiences.length) {
+      drawSection(doc, 'Earlier Career');
+      earlierExperiences.forEach(exp => {
+        addPageIfNeeded(doc, 24);
+        doc.x = 48;
+        doc.fillColor('#1b1b23').font('Helvetica-Bold').fontSize(9.2)
+          .text(`${exp.role} | ${exp.company}`, { continued: false });
+        doc.fillColor('#5f5b74').font('Helvetica').fontSize(8.4)
+          .text(`${exp.start_date || '?'} - ${exp.end_date || 'Present'}`);
+        doc.moveDown(0.2);
       });
     }
 
-    doc.moveDown(0.9);
-    drawRule();
-    doc.fillColor('#5f5b74').font('Helvetica').fontSize(9)
-      .text(`Portfolio: ${website}`);
+    if (shouldShowAiBuilds(user)) {
+      drawSection(doc, 'AI-Assisted Application Builds');
+      AI_ASSISTED_APP_BUILDS_PROJECTS.forEach(project => {
+        addPageIfNeeded(doc, 60);
+        doc.fillColor('#1b1b23').font('Helvetica-Bold').fontSize(9.5).text(project.name);
+        doc.moveDown(0.12);
+        doc.fillColor('#1b1b23').font('Helvetica').fontSize(8.8).text(cleanCvText(project.summary), { width: 499, lineGap: 1.4 });
+        doc.fillColor('#5f5b74').font('Helvetica').fontSize(8).text(project.stack, { width: 499 });
+        doc.moveDown(0.45);
+      });
+    }
+
+    if (cv.education) {
+      drawSection(doc, 'Education');
+      doc.fillColor('#1b1b23').font('Helvetica').fontSize(9).text(cleanCvText(cv.education), { width: 499 });
+    }
+
+    addPageIfNeeded(doc, 34);
+    doc.moveDown(0.7);
+    doc.fillColor('#5f5b74').font('Helvetica').fontSize(8.2)
+      .text(`Portfolio: ${website}`, 48, doc.y, { width: 499, align: 'right' });
 
     doc.end();
   });
@@ -261,9 +463,9 @@ router.get('/', (req, res) => {
   if (req.portfolioUser === 'douglas' && !profile.phone_public) {
     profile.phone_public = '+353 (0) 896003148';
   }
-  const experiences = pdb.prepare(
-    'SELECT * FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC'
-  ).all();
+  const experiences = req.portfolioUser === 'douglas'
+    ? getDouglasExperiences()
+    : pdb.prepare('SELECT * FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC').all();
   const skills = pdb.prepare(
     'SELECT * FROM skills ORDER BY level, display_order'
   ).all();
@@ -271,7 +473,8 @@ router.get('/', (req, res) => {
     'SELECT * FROM cv_context'
   ).all().reduce((acc, row) => { acc[row.section] = row.content; return acc; }, {}), req.portfolioUser);
 
-  res.render('portfolio/index', {
+  const template = req.portfolioUser === 'douglas' ? 'portfolio/douglas' : 'portfolio/index';
+  res.render(template, {
     user: req.portfolioUser,
     profile,
     experiences,
@@ -356,16 +559,23 @@ router.get('/executive-summary', (req, res) => {
   if (req.portfolioUser === 'douglas' && !profile.phone_public) {
     profile.phone_public = '+353 (0) 896003148';
   }
-  const experiences = pdb.prepare(
-    'SELECT role, company, start_date, end_date, description FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC'
-  ).all();
+  const experiences = req.portfolioUser === 'douglas'
+    ? getDouglasExperiences()
+    : pdb.prepare('SELECT role, company, start_date, end_date, description FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC').all();
+  const skills = pdb.prepare('SELECT * FROM skills ORDER BY level, display_order').all();
+  const candidates = pdb.prepare(`
+    SELECT * FROM skill_candidates
+     WHERE user = ? AND status IN ('promoted_jd', 'chat_only')
+     ORDER BY CASE status WHEN 'promoted_jd' THEN 0 ELSE 1 END, occurrences DESC, last_seen_at DESC
+  `).all(req.portfolioUser);
   const cv = ensureAiBuildsCv(pdb.prepare('SELECT * FROM cv_context').all()
     .reduce((acc, row) => { acc[row.section] = row.content; return acc; }, {}), req.portfolioUser);
 
   const fullName = profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
-  const filename = `${fullName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-executive-summary.pdf`;
+  const monthLabel = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const filename = `${fullName} CV - ${monthLabel}.pdf`.replace(/[\\/:*?"<>|]+/g, '-');
 
-  buildExecutiveSummaryPdf({ user: req.portfolioUser, profile, cv, experiences })
+  buildExecutiveSummaryPdf({ user: req.portfolioUser, profile, cv, experiences, skills, candidates })
     .then(buf => {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -389,8 +599,11 @@ router.get('/chat', (req, res) => {
 });
 
 // ── Portfolio AI chat ─────────────────────────────────────────────────────────
+const PUBLIC_PORTFOLIO_CHAT_MODEL = 'deepseek-v3';
+const PUBLIC_PORTFOLIO_ANALYSER_MODEL = 'deepseek-v3';
+
 router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) => {
-  const { message, sessionId, model } = req.body;
+  const { message, sessionId } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
   if (String(message).length > 6000) return res.status(400).json({ error: 'Message too long' });
 
@@ -447,11 +660,14 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
 - Handling ambiguity: ${profile.ambiguity_handling || ''}
 - Handling failure: ${profile.failure_handling || ''}` : '';
 
+  const expFallback = (req.portfolioUser === 'douglas' && !expRows.length)
+    ? getDouglasExperiences()
+    : expRows;
   const cvContext = [
     profileBlock,
     cvRows.length ? '## CV copy\n' + cvRows.map(r => `**${r.section}:** ${r.content}`).join('\n') : '',
     getAiBuildsCvBlock(cvRows, req.portfolioUser),
-    expRows.length ? '## Experience\n' + expRows.map(e => `- **${e.role}**, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n') : '',
+    expFallback.length ? '## Experience\n' + expFallback.map(e => `- **${e.role}**, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n') : '',
     skillRows.length ? '## Skills\n' + skillRows.map(s => {
       const bits = [`${s.name} (${s.level}`];
       if (s.self_rating) bits.push(`rated ${s.self_rating}/5`);
@@ -470,6 +686,12 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
     ).join('\n') : '',
     hubCvMessages.length ? '## Additional notes\n' + hubCvMessages.map(m => m.content).join('\n\n') : '',
   ].filter(Boolean).join('\n\n');
+
+  const douglasHonestNotes = req.portfolioUser === 'douglas' ? `\n## Honest notes (always use these when relevant)
+- No formal Microsoft certifications (MS-102, SC-300, etc). All capability is self-taught and demonstrated through operational delivery.
+- Proof available: four-year sole-admin tenure at Cricket Ireland (checkable), GitHub repositories for three shipped tools, Beacon Hospital current role.
+- If a recruiter asks about certifications, acknowledge the gap honestly and redirect to the evidence above.
+- The candidate is direct about this and does not want it obscured.` : '';
 
   const honestyLevel = profile.honesty_level || 7;
   const customInstructions = aiInstructions.length
@@ -497,7 +719,7 @@ Tone: ${honestyDescriptor} (honesty level ${honestyLevel}/10).
 - Don't oversell. Don't hedge. Be specific.${customInstructions}
 
 Your context:
-${wrapUntrustedBlock('candidate_context', cvContext || 'No CV context loaded yet.')}`;
+${wrapUntrustedBlock('candidate_context', (cvContext || 'No CV context loaded yet.') + douglasHonestNotes)}`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -517,7 +739,7 @@ ${wrapUntrustedBlock('candidate_context', cvContext || 'No CV context loaded yet
   try {
     let full = '';
     const result = await routeMessage({
-      model: model || 'deepseek-v3',
+      model: PUBLIC_PORTFOLIO_CHAT_MODEL,
       messages,
       user: req.portfolioUser,
       noSearch: true,
@@ -558,10 +780,13 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
   const skillRows = pdb.prepare(
     'SELECT name, level, category FROM skills ORDER BY level, display_order'
   ).all();
+  const jdExpRows = (req.portfolioUser === 'douglas' && !expRows.length)
+    ? getDouglasExperiences()
+    : expRows;
   const cvContext = [
     cvRows.map(r => `**${r.section}:** ${r.content}`).join('\n'),
     getAiBuildsCvBlock(cvRows, req.portfolioUser),
-    'Experience:\n' + expRows.map(e => `- ${e.role}, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n'),
+    'Experience:\n' + jdExpRows.map(e => `- ${e.role}, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n'),
     'Skills:\n' + skillRows.map(s => `- ${s.name} (${s.level})`).join('\n'),
   ].filter(Boolean).join('\n\n');
 
@@ -592,7 +817,7 @@ Provide:
 
   try {
     const result = await routeMessage({
-      model: 'claude-sonnet',
+      model: PUBLIC_PORTFOLIO_ANALYSER_MODEL,
       messages,
       user: req.portfolioUser,
       noSearch: true,

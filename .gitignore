@@ -6,9 +6,11 @@ exports/
 .env.*
 !.env.example
 config/google-service-account.json
+mclellan-hub-*.json
+config/mclellan-hub-*.json
 *.db
 *.sqlite
 .DS_Store
 .claude/
 *.zip
-Untitled.rtf
+*.rtf

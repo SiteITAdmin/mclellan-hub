@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><%= q ? q + ' — ' : '' %>McLellan Wiki</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
@@ -23,7 +24,7 @@
       />
       <button type="submit">Ask</button>
     </form>
-    <p class="wiki-stats"><%= total %> knowledge pages</p>
+    <p class="wiki-stats"><%= total %> indexed items — <%= counts['Wiki'] || 0 %> wiki · <%= counts['Meetings'] || 0 %> meetings · <%= counts['Workday'] || 0 %> workday · <%= counts['Journal'] || 0 %> journal</p>
   </div>
 
   <div id="results">
@@ -57,6 +58,14 @@
 </main>
 
 <script>
+function escapeHtml(raw) {
+  return String(raw || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 document.getElementById('search-form').addEventListener('submit', async function(e) {
   e.preventDefault();
   const q = document.getElementById('search-input').value.trim();
@@ -71,20 +80,19 @@ document.getElementById('search-form').addEventListener('submit', async function
 
   const cards = document.getElementById('page-cards');
   if (!data.results.length && !(data.emailMatches || []).length) {
-    cards.innerHTML = '<p class="wiki-empty">No matches for "' + q + '"</p>';
+    cards.innerHTML = '<p class="wiki-empty">No matches for "' + escapeHtml(q) + '"</p>';
     return;
   }
 
-  cards.innerHTML = data.results.map(p => `
-    <a href="/page/${encodeURIComponent(p.slug)}" class="wiki-card">
-      <h3>${p.title}</h3>
-      <p>${p.excerpt.replace(/\[\[([^\]]+)\]\]/g, '$1')}…</p>
-      <div class="wiki-card-tags">${(p.tags||[]).slice(0,4).map(t => '<span class="tag">' + t + '</span>').join('')}</div>
-    </a>
-  `).join('') + (data.emailMatches||[]).map(e => `
+  cards.innerHTML = data.results.map(p => {
+    const inner = `<h3>${escapeHtml(p.title)}</h3><p style="font-size:0.78em;color:#888;margin:0 0 4px">${escapeHtml(p.typeLabel)}</p><p>${escapeHtml(String(p.excerpt || '').replace(/\[\[([^\]]+)\]\]/g, '$1'))}…</p><div class="wiki-card-tags">${(p.tags||[]).slice(0,4).map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('')}</div>`;
+    return p.url
+      ? `<a href="${escapeHtml(p.url)}" class="wiki-card">${inner}</a>`
+      : `<div class="wiki-card">${inner}</div>`;
+  }).join('') + (data.emailMatches||[]).map(e => `
     <div class="wiki-card wiki-card-email">
-      <h3>📧 ${e.subject}</h3>
-      <p>${e.summary}</p>
+      <h3>📧 ${escapeHtml(e.subject)}</h3>
+      <p>${escapeHtml(e.summary)}</p>
     </div>
   `).join('');
 

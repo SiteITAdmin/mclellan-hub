@@ -57,10 +57,18 @@ fi
 
 echo "==> Syncing code to VPS..."
 rsync -avz --progress -e "$RSYNC_RSH" \
+  --exclude .git \
+  --exclude .claude \
+  --exclude .tools \
   --exclude node_modules \
   --exclude data \
   --exclude .env \
+  --exclude '.env*' \
   --exclude exports \
+  --exclude '*.rtf' \
+  --exclude '*.zip' \
+  --exclude 'mclellan-hub-*.json' \
+  --exclude 'mclellan hub' \
   "$APP_DIR/" \
   "${VPS_USER}@${VPS_IP}:/app/"
 

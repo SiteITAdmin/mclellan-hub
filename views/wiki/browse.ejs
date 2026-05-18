@@ -2,18 +2,58 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Browse — McLellan Wiki</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/wiki.css">
+<style>
+  .type-badge { display: inline-block; font-size: 0.72em; padding: 1px 5px; border-radius: 3px; margin-right: 4px; vertical-align: middle; background: #eee; color: #555; }
+  .type-badge.wiki    { background: #e8e4ff; color: #5a40c0; }
+  .type-badge.meeting { background: #e4f0ff; color: #1a6ab0; }
+  .type-badge.workday { background: #fff0e4; color: #c05a10; }
+  .type-badge.journal { background: #e4ffe8; color: #1a7a30; }
+  .type-badge.daily   { background: #f0ffe4; color: #3a7a10; }
+  .type-badge.person  { background: #ffe4f0; color: #b01a6a; }
+  .type-badge.project { background: #f0f0f0; color: #444; }
+</style>
 </head>
 <body>
 <%- include('_nav', { page: 'browse', q: '' }) %>
 <main class="wiki-main">
   <h1 class="wiki-page-title">Browse</h1>
-  <% for (const [cat, pages] of Object.entries(byCategory).sort()) { %>
+
+  <%# ── All content by type ────────────────────────────────────────────────── %>
+  <% const typeOrder = ['Wiki', 'Meetings', 'Workday', 'Journal', 'Daily Notes', 'People', 'Projects']; %>
+  <% for (const typeName of typeOrder) { %>
+    <% const pages = byType[typeName]; if (!pages || !pages.length) continue; %>
     <section class="browse-section">
-      <h2 class="browse-cat"><%= cat %> <span class="browse-count"><%= pages.length %></span></h2>
+      <h2 class="browse-cat"><%= typeName %> <span class="browse-count"><%= pages.length %></span></h2>
+      <ul class="browse-list">
+        <% for (const p of pages.slice(0, 30)) { %>
+          <li>
+            <% if (p.type === 'wiki') { %>
+              <a href="/page/<%= encodeURIComponent(p.slug) %>"><%= p.title %></a>
+            <% } else { %>
+              <span><%= p.title %></span>
+              <% if (p.created) { %><span class="meta-date" style="font-size:0.8em;color:#888;margin-left:4px"><%= new Date(p.created).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) %></span><% } %>
+            <% } %>
+            <% for (const t of (p.tags || []).slice(0, 3)) { %>
+              <span class="tag tag-sm"><%= t %></span>
+            <% } %>
+          </li>
+        <% } %>
+        <% if (pages.length > 30) { %><li style="color:#888;font-size:0.85em">… and <%= pages.length - 30 %> more</li><% } %>
+      </ul>
+    </section>
+  <% } %>
+
+  <%# ── Wiki pages by category ─────────────────────────────────────────────── %>
+  <% if (Object.keys(wikiByCategory).length) { %>
+  <h2 style="margin-top:2.5rem">Wiki by category</h2>
+  <% for (const [cat, pages] of Object.entries(wikiByCategory).sort()) { %>
+    <section class="browse-section">
+      <h3 class="browse-cat"><%= cat %> <span class="browse-count"><%= pages.length %></span></h3>
       <ul class="browse-list">
         <% for (const p of pages) { %>
           <li>
@@ -25,6 +65,7 @@
         <% } %>
       </ul>
     </section>
+  <% } %>
   <% } %>
 </main>
 </body>

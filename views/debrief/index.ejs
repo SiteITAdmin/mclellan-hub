@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Voice Notes</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0c14;
+    --surface: #13131f;
+    --border: #252535;
+    --text: #e4e4f0;
+    --muted: #6a6a88;
+    --accent: #7c6af5;
+    --danger: #e05050;
+    --green: #3db87a;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overflow: hidden;
+  }
+
+  .screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 32px 24px;
+  }
+  .screen[hidden] { display: none; }
+
+  /* ── Mode select ── */
+  .page-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .mode-btn {
+    width: 100%;
+    max-width: 340px;
+    padding: 22px 22px;
+    border-radius: 16px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .mode-btn:active { background: #1e1e2e; border-color: var(--accent); }
+  .mode-btn small {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* ── Active screen ── */
+  .question-text {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text);
+    text-align: center;
+    line-height: 1.5;
+    max-width: 320px;
+    min-height: 60px;
+  }
+
+  .status-text {
+    font-size: 14px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 20px;
+    letter-spacing: 0.01em;
+  }
+
+  .record-btn {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s, background 0.2s, transform 0.1s;
+    -webkit-user-select: none;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .record-btn:active { transform: scale(0.94); }
+  .record-btn .mic-icon {
+    width: 44px;
+    height: 44px;
+    color: var(--muted);
+    transition: color 0.2s;
+  }
+  .record-btn.is-recording {
+    border-color: var(--danger);
+    background: rgba(224, 80, 80, 0.1);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  .record-btn.is-recording .mic-icon { color: var(--danger); }
+  .record-btn.is-playing {
+    border-color: var(--accent);
+    background: rgba(124, 106, 245, 0.1);
+  }
+  .record-btn.is-playing .mic-icon { color: var(--accent); }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(224, 80, 80, 0.4); }
+    50%       { box-shadow: 0 0 0 18px rgba(224, 80, 80, 0); }
+  }
+
+  .silence-wrap {
+    width: 100%;
+    max-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+  }
+  .silence-track {
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .silence-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--danger);
+    border-radius: 2px;
+    transition: width 0.1s linear;
+  }
+  .silence-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .end-btn {
+    padding: 13px 30px;
+    border-radius: 100px;
+    border: 1.5px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .end-btn:active { border-color: var(--danger); color: var(--danger); }
+
+  /* ── Done screen ── */
+  .done-icon {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: rgba(61, 184, 122, 0.15);
+    border: 2px solid var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--green);
+  }
+  .done-title { font-size: 26px; font-weight: 700; }
+  .done-sub {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.6;
+    max-width: 280px;
+  }
+  .new-btn {
+    margin-top: 8px;
+    padding: 15px 36px;
+    border-radius: 100px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .new-btn:active { background: #1e1e2e; }
+</style>
+</head>
+<body>
+
+<!-- Mode select -->
+<div id="mode-screen" class="screen">
+  <p class="page-title">Voice Notes</p>
+  <button class="mode-btn" id="btn-meeting">
+    Quick Meeting Debrief
+    <small>Tap to record your meeting recap. Saves decisions and action items.</small>
+  </button>
+  <button class="mode-btn" id="btn-interview">
+    Daily Interview
+    <small>Guided questions to reflect on your day. Saves to journal.</small>
+  </button>
+  <button class="mode-btn" id="btn-thoughts">
+    Verbal Thoughts
+    <small>Speak freely. Transcribed, analysed, and saved.</small>
+  </button>
+</div>
+
+<!-- Active session -->
+<div id="active-screen" class="screen" hidden>
+
+  <p class="question-text" id="question-text"></p>
+  <p class="status-text" id="status">Ready</p>
+
+  <button class="record-btn" id="record-btn" aria-label="Record">
+    <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="11" rx="3"/>
+      <path d="M5 10a7 7 0 0 0 14 0"/>
+      <line x1="12" y1="19" x2="12" y2="22"/>
+      <line x1="8" y1="22" x2="16" y2="22"/>
+    </svg>
+  </button>
+
+  <div id="silence-wrap" class="silence-wrap" style="visibility:hidden">
+    <div class="silence-track"><div class="silence-fill" id="silence-fill"></div></div>
+    <p class="silence-label" id="silence-label">Silence…</p>
+  </div>
+
+  <button class="end-btn" id="end-btn" style="display:none">End session</button>
+</div>
+
+<!-- Done -->
+<div id="done-screen" class="screen" hidden>
+  <div class="done-icon">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  </div>
+  <p class="done-title">Saved</p>
+  <p class="done-sub" id="done-sub">Added to your journal.</p>
+  <button class="new-btn" id="new-btn">New session</button>
+</div>
+
+<script>
+(function () {
+  const GRACE_MS = 3000;
+
+  let mode              = null;
+  let stream            = null;
+  let recorder          = null;
+  let chunks            = [];
+  let wakeLock          = null;
+  let animFrame         = null;
+  let recStart          = 0;
+  let silenceStart      = null;
+  let activeSilenceMs   = 5000;
+  let chatHistory       = [];
+  let exchanges         = [];
+  let currentQ          = null;
+  let analyserCtx       = null;
+  let speakResolve      = null;
+  let meetingRecording  = false;
+  let thoughtsRecording = false;
+
+  const CALENDAR_EVENTS = <%- JSON.stringify(calendarEvents || []) %>;
+
+  const modeScreen   = document.getElementById('mode-screen');
+  const activeScreen = document.getElementById('active-screen');
+  const doneScreen   = document.getElementById('done-screen');
+  const questionEl   = document.getElementById('question-text');
+  const statusEl     = document.getElementById('status');
+  const recordBtn    = document.getElementById('record-btn');
+  const silenceWrap  = document.getElementById('silence-wrap');
+  const silenceFill  = document.getElementById('silence-fill');
+  const silenceLabel = document.getElementById('silence-label');
+  const endBtn       = document.getElementById('end-btn');
+  const doneSub      = document.getElementById('done-sub');
+
+  // ── Wake lock ──────────────────────────────────────────────────────────────
+  async function acquireWakeLock() {
+    try { wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+  }
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && mode && !wakeLock) acquireWakeLock();
+  });
+
+  // ── Mic ───────────────────────────────────────────────────────────────────
+  async function getMic() {
+    if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return stream;
+  }
+
+  // ── Recording ─────────────────────────────────────────────────────────────
+  function startRecording(onStop) {
+    chunks = [];
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus' : 'audio/webm';
+    recorder = new MediaRecorder(stream, { mimeType: mime });
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => onStop(new Blob(chunks, { type: mime }), mime.split(';')[0]);
+    recorder.start(100);
+    recStart = Date.now();
+  }
+
+  function stopRecording() {
+    if (recorder && recorder.state === 'recording') recorder.stop();
+  }
+
+  // ── Silence detection ──────────────────────────────────────────────────────
+  function startSilenceDetection(silenceMs) {
+    activeSilenceMs = silenceMs || 5000;
+    if (!analyserCtx || analyserCtx.state === 'closed') analyserCtx = new AudioContext();
+    const ctx      = analyserCtx;
+    const src      = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    silenceStart = null;
+    silenceWrap.style.visibility = 'visible';
+    silenceFill.style.width = '0%';
+
+    function tick() {
+      analyser.getByteTimeDomainData(data);
+      const rms = Math.sqrt(data.reduce((s, v) => s + (v - 128) ** 2, 0) / data.length);
+      const elapsed = Date.now() - recStart;
+
+      if (elapsed > GRACE_MS) {
+        if (rms < 12) {
+          if (!silenceStart) silenceStart = Date.now();
+          const pct = Math.min(100, ((Date.now() - silenceStart) / activeSilenceMs) * 100);
+          silenceFill.style.width = pct + '%';
+          const remaining = Math.ceil((activeSilenceMs - (Date.now() - silenceStart)) / 1000);
+          silenceLabel.textContent = `Saving in ${remaining}s…`;
+          if (Date.now() - silenceStart >= activeSilenceMs) {
+            stopSilenceDetection();
+            stopRecording();
+            return;
+          }
+        } else {
+          silenceStart = null;
+          silenceFill.style.width = '0%';
+          silenceLabel.textContent = 'Silence…';
+        }
+      }
+      animFrame = requestAnimationFrame(tick);
+    }
+    animFrame = requestAnimationFrame(tick);
+  }
+
+  function stopSilenceDetection() {
+    if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+    silenceWrap.style.visibility = 'hidden';
+    silenceFill.style.width = '0%';
+    silenceStart = null;
+  }
+
+  // ── Speech synthesis ──────────────────────────────────────────────────────
+  function speakText(text) {
+    return new Promise(resolve => {
+      speakResolve = resolve;
+      const done = () => { speakResolve = null; clearTimeout(watchdog); resolve(); };
+      const watchdog = setTimeout(done, 20000);
+      speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.lang = 'en-GB';
+      utt.rate = 0.92;
+      const voices = speechSynthesis.getVoices();
+      if (voices.length) {
+        const v = voices.find(v => v.lang === 'en-GB' && !v.name.toLowerCase().includes('siri'))
+               || voices.find(v => v.lang === 'en-GB')
+               || voices.find(v => v.lang.startsWith('en'));
+        if (v) utt.voice = v;
+      }
+      utt.onend  = done;
+      utt.onerror = done;
+      speechSynthesis.speak(utt);
+    });
+  }
+
+  // ── API ───────────────────────────────────────────────────────────────────
+  async function apiTranscribe(blob) {
+    const form = new FormData();
+    form.append('audio', blob, 'audio.webm');
+    const r = await fetch('/api/debrief/transcribe', { method: 'POST', body: form });
+    if (!r.ok) throw new Error('Transcription failed');
+    return r.json();
+  }
+
+  async function apiQuestion(history) {
+    const body = { history };
+    if (history.length === 0) body.calendarEvents = CALENDAR_EVENTS;
+    const r = await fetch('/api/debrief/question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d.error || `Question failed (${r.status})`);
+    }
+    return r.json();
+  }
+
+  async function apiSave(saveMode, transcript, exch) {
+    const r = await fetch('/api/debrief/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: saveMode, transcript, exchanges: exch }),
+    });
+    if (!r.ok) throw new Error('Save failed');
+    return r.json();
+  }
+
+  // ── UI helpers ─────────────────────────────────────────────────────────────
+  function setQuestion(q) { questionEl.textContent = q || ''; }
+  function setStatus(s)   { statusEl.textContent = s; }
+
+  function showActive() {
+    modeScreen.hidden = true;
+    doneScreen.hidden = true;
+    activeScreen.hidden = false;
+  }
+
+  function showDone(msg) {
+    stopSilenceDetection();
+    activeScreen.hidden = true;
+    doneScreen.hidden = false;
+    doneSub.textContent = msg || 'Saved.';
+    releaseWakeLock();
+    recordBtn.className = 'record-btn';
+    recordBtn.onclick = null;
+    endBtn.style.display = 'none';
+    questionEl.textContent = '';
+  }
+
+  // ── QUICK MEETING DEBRIEF ─────────────────────────────────────────────────
+  async function startMeeting() {
+    mode = 'meeting';
+    meetingRecording = false;
+    try { await getMic(); } catch { alert('Microphone access is required.'); return; }
+    acquireWakeLock();
+    showActive();
+    setQuestion('');
+    setStatus('Tap the mic to start recording your meeting recap.');
+    recordBtn.className = 'record-btn';
+    recordBtn.onclick = meetingToggle;
+    endBtn.style.display = 'none';
+  }
+
+  function meetingToggle() {
+    if (!meetingRecording) {
+      meetingRecording = true;
+      recordBtn.className = 'record-btn is-recording';
+      setStatus('Recording… tap to stop.');
+      startRecording(async (blob) => {
+        meetingRecording = false;
+        stopSilenceDetection();
+        recordBtn.className = 'record-btn';
+        recordBtn.onclick = null;
+        setStatus('Transcribing…');
+        try {
+          const { text } = await apiTranscribe(blob);
+          setStatus('Analysing…');
+          const result = await apiSave('meeting', text, []);
+          showDone(result.summary || 'Saved to Meetings.');
+        } catch (err) {
+          setStatus('Error: ' + err.message);
+          meetingRecording = false;
+          recordBtn.onclick = meetingToggle;
+        }
+      });
+      // 60-second silence auto-stop — long enough for meeting pauses
+      startSilenceDetection(60000);
+    } else {
+      stopSilenceDetection();
+      stopRecording();
+    }
+  }
+
+  // ── DAILY INTERVIEW ───────────────────────────────────────────────────────
+  async function startInterview() {
+    mode = 'interview';
+    chatHistory = [];
+    exchanges   = [];
+    currentQ    = null;
+    try { await getMic(); } catch { alert('Microphone access is required.'); return; }
+    acquireWakeLock();
+    showActive();
+    endBtn.style.display = 'block';
+    endBtn.onclick = () => endInterview();
+    recordBtn.onclick = null;
+    setQuestion('');
+    setStatus('Getting your first question…');
+    recordBtn.className = 'record-btn is-playing';
+    await interviewTurn(null);
+  }
+
+  async function interviewTurn(userAnswer) {
+    if (userAnswer !== null && currentQ) {
+      exchanges.push({ question: currentQ, answer: userAnswer });
+      chatHistory.push({ role: 'user', content: userAnswer });
+      if (/that(?:'s|'ll| will| would) do(?: for now)?|that'?s enough|done for now/i.test(userAnswer)) {
+        await endInterview();
+        return;
+      }
+    }
+
+    setQuestion('');
+    setStatus('Thinking…');
+    recordBtn.className = 'record-btn is-playing';
+    recordBtn.onclick = null;
+
+    let questionText;
+    try {
+      const result = await apiQuestion(chatHistory);
+      questionText = result.text;
+    } catch (err) {
+      setStatus('Error: ' + err.message);
+      return;
+    }
+
+    currentQ = questionText;
+    if (chatHistory.length === 0) chatHistory.push({ role: 'user', content: '[start]' });
+    chatHistory.push({ role: 'assistant', content: questionText });
+
+    // Speak the question; tap record to skip
+    setQuestion(questionText);
+    setStatus('');
+    recordBtn.onclick = () => {
+      speechSynthesis.cancel();
+      if (speakResolve) { const r = speakResolve; speakResolve = null; r(); }
+    };
+    await speakText(questionText);
+    recordBtn.onclick = null;
+
+    setStatus('Listening…');
+    recordBtn.className = 'record-btn is-recording';
+    // Tap to finish this answer early
+    recordBtn.onclick = () => { stopSilenceDetection(); stopRecording(); };
+
+    startRecording(async (blob) => {
+      recordBtn.onclick = null;
+      stopSilenceDetection();
+      recordBtn.className = 'record-btn is-playing';
+      setStatus('Transcribing…');
+      try {
+        const { text } = await apiTranscribe(blob);
+        await interviewTurn(text);
+      } catch (err) {
+        setStatus('Error: ' + err.message);
+      }
+    });
+    startSilenceDetection(5000);
+  }
+
+  async function endInterview() {
+    stopSilenceDetection();
+    stopRecording();
+    recordBtn.onclick = null;
+    endBtn.onclick = null;
+    setQuestion('');
+    setStatus('Saving…');
+    try {
+      const result = await apiSave('reflect', '', exchanges);
+      showDone(result.summary || 'Interview saved to journal.');
+    } catch (err) {
+      setStatus('Error saving: ' + err.message);
+    }
+  }
+
+  // ── VERBAL THOUGHTS ───────────────────────────────────────────────────────
+  async function startThoughts() {
+    mode = 'thoughts';
+    thoughtsRecording = false;
+    try { await getMic(); } catch { alert('Microphone access is required.'); return; }
+    acquireWakeLock();
+    showActive();
+    setQuestion('');
+    setStatus('Tap the mic to start. Silence stops automatically.');
+    recordBtn.className = 'record-btn';
+    recordBtn.onclick = thoughtsToggle;
+    endBtn.style.display = 'none';
+  }
+
+  function thoughtsToggle() {
+    if (!thoughtsRecording) {
+      thoughtsRecording = true;
+      recordBtn.className = 'record-btn is-recording';
+      setStatus('Recording… silence will stop it.');
+      startRecording(async (blob) => {
+        thoughtsRecording = false;
+        stopSilenceDetection();
+        recordBtn.className = 'record-btn';
+        recordBtn.onclick = null;
+        setStatus('Transcribing…');
+        try {
+          const { text } = await apiTranscribe(blob);
+          setStatus('Analysing…');
+          const result = await apiSave('dump', text, []);
+          showDone(result.summary || 'Saved to journal.');
+        } catch (err) {
+          setStatus('Error: ' + err.message);
+          thoughtsRecording = false;
+          recordBtn.onclick = thoughtsToggle;
+        }
+      });
+      startSilenceDetection(5000);
+    } else {
+      stopSilenceDetection();
+      stopRecording();
+    }
+  }
+
+  // ── Nav ────────────────────────────────────────────────────────────────────
+  document.getElementById('new-btn').onclick = () => {
+    mode = null;
+    doneScreen.hidden = true;
+    modeScreen.hidden = false;
+  };
+
+  document.getElementById('btn-meeting').onclick  = startMeeting;
+  document.getElementById('btn-thoughts').onclick = startThoughts;
+  document.getElementById('btn-interview').onclick = () => {
+    // Prime speechSynthesis synchronously during the gesture so iOS will allow it
+    const primer = new SpeechSynthesisUtterance(' ');
+    primer.volume = 0;
+    speechSynthesis.speak(primer);
+    startInterview();
+  };
+})();
+</script>
+</body>
+</html>

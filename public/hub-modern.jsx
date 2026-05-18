@@ -15,10 +15,19 @@ const MODELS = (HUB.availableModels || [])
         key: m.key,
         label: m.label,
         tier: m.tier,
-        search: m.search || false,
+        search: m.search || 'none',
+        category: m.category || null,
+        costInput: m.costInput || null,
+        costOutput: m.costOutput || null,
+        contextLength: m.contextLength || null,
       })),
   }))
   .filter(g => g.options.length > 0);
+
+// Flat list of all models for the card grid (deduplicated by key)
+const ALL_MODELS_FLAT = [];
+const _seen = new Set();
+MODELS.forEach(g => g.options.forEach(m => { if (!_seen.has(m.key)) { _seen.add(m.key); ALL_MODELS_FLAT.push(m); } }));
 
 // Flat model key → label lookup (built once from MODELS)
 const MODEL_LABELS = {};
@@ -263,6 +272,8 @@ function ProjectDocs({ slug }) {
 function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
   const [hovered, setHovered] = React.useState(false);
   const [showNewProj, setShowNewProj] = React.useState(false);
+  const [projectsOpen, setProjectsOpen] = React.useState(true);
+  const [recentsOpen, setRecentsOpen] = React.useState(true);
   const expanded = !collapsed || hovered || mobileOpen;
   const W = expanded ? 264 : 64;
 
@@ -311,26 +322,38 @@ function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
 
         {expanded && projects.length > 0 && (
           <>
-            <div className="sb-section-head">
+            <div className="sb-section-head sb-section-toggle" onClick={() => setProjectsOpen(o => !o)} style={{ cursor: 'pointer' }}>
               <span>Projects</span>
-              <button title="New project" onClick={() => setShowNewProj(true)}><Icon name="plus" size={14} /></button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button title="New project" onClick={e => { e.stopPropagation(); setShowNewProj(true); }}><Icon name="plus" size={14} /></button>
+                <span style={{ display: 'inline-flex', transition: 'transform 0.15s', transform: projectsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}><Icon name="chevron" size={14} /></span>
+              </div>
             </div>
-            <div className="sb-list">
-              {projects.map(p => (
-                <button
-                  key={p.slug}
-                  className={'sb-row sb-project ' + (activeSlug === p.slug ? 'is-active' : '')}
-                  onClick={() => window.location.href = '/p/' + p.slug}
-                >
-                  <span className="sb-row-label">/{p.slug}</span>
-                </button>
-              ))}
-            </div>
+            {projectsOpen && (
+              <div className="sb-list">
+                {projects.map(p => (
+                  <button
+                    key={p.slug}
+                    className={'sb-row sb-project ' + (activeSlug === p.slug ? 'is-active' : '')}
+                    onClick={() => window.location.href = '/p/' + p.slug}
+                  >
+                    <span className="sb-row-label">/{p.slug}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         )}
 
-        {expanded && activeSlug && <ProjectDocs slug={activeSlug} />}
-        {expanded && <RecentConvs convs={convs} activeConvId={activeConvId} />}
+        {expanded && activeSlug && projectsOpen && <ProjectDocs slug={activeSlug} />}
+
+        {expanded && convs.length > 0 && (
+          <div className="sb-section-head sb-section-toggle" onClick={() => setRecentsOpen(o => !o)} style={{ cursor: 'pointer' }}>
+            <span>Recent chats</span>
+            <span style={{ display: 'inline-flex', transition: 'transform 0.15s', transform: recentsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}><Icon name="chevron" size={14} /></span>
+          </div>
+        )}
+        {expanded && recentsOpen && <RecentConvs convs={convs} activeConvId={activeConvId} />}
 
         <div className="sb-foot">
           <div className="sb-foot-row" style={{ cursor: 'default' }}>
@@ -371,8 +394,114 @@ const SbItem = ({ icon, label, expanded, active, onClick }) => (
   </button>
 );
 
+// ── Model card picker ──────────────────────────────────────────────────────
+const SEARCH_BADGE = {
+  native:     { label: 'native search', cls: 'hb-mc-native' },
+  'web-plugin': { label: 'Brave Search',  cls: 'hb-mc-plugin' },
+  none:       { label: null,            cls: null },
+};
+
+function fmtCost(v) {
+  if (v == null) return null;
+  const n = parseFloat(v);
+  if (n === 0) return 'free';
+  return '$' + n.toFixed(n < 0.1 ? 4 : 2) + '/M';
+}
+
+function ModelCard({ m, active, onClick }) {
+  const srch = SEARCH_BADGE[m.search] || SEARCH_BADGE.none;
+  const costIn  = fmtCost(m.costInput);
+  const costOut = fmtCost(m.costOutput);
+  const ctx     = m.contextLength ? Math.round(m.contextLength / 1000) + 'k' : null;
+  return (
+    <button
+      className={'hb-mc' + (active ? ' is-active' : '')}
+      onClick={onClick}
+    >
+      <div className="hb-mc-top">
+        <span className="hb-mc-name">{m.label}</span>
+        <div className="hb-mc-badges">
+          {m.category && <span className="hb-mc-badge hb-mc-cat">{m.category}</span>}
+          {srch.label && <span className={'hb-mc-badge ' + srch.cls}>{srch.label}</span>}
+        </div>
+      </div>
+      {(costIn || costOut || ctx) && (
+        <div className="hb-mc-meta">
+          {costIn  && <span>in {costIn}</span>}
+          {costOut && <span>out {costOut}</span>}
+          {ctx     && <span>{ctx} ctx</span>}
+        </div>
+      )}
+    </button>
+  );
+}
+
+function ModelPicker({ model, onSelect, onClose }) {
+  const [filter, setFilter] = React.useState('');
+  const ref = React.useRef(null);
+
+  // Group by category, fallback to tier label
+  const groups = React.useMemo(() => {
+    const q = filter.toLowerCase().trim();
+    const filtered = q
+      ? ALL_MODELS_FLAT.filter(m => m.label.toLowerCase().includes(q) || (m.category || '').toLowerCase().includes(q))
+      : ALL_MODELS_FLAT;
+    const map = {};
+    filtered.forEach(m => {
+      const grp = m.category || MODELS.find(g => g.options.some(o => o.key === m.key))?.group || 'Other';
+      (map[grp] ||= []).push(m);
+    });
+    return map;
+  }, [filter]);
+
+  // Close on outside click
+  React.useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div className="hb-model-pop hb-model-cards-pop" ref={ref}>
+      <div className="hb-mc-search-row">
+        <input
+          className="hb-mc-search"
+          type="search"
+          placeholder="Filter models…"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          autoFocus
+        />
+      </div>
+      <div className="hb-mc-scroll">
+        {Object.entries(groups).map(([grp, models]) => (
+          <div key={grp} className="hb-mc-group">
+            <div className="hb-mc-group-label">{grp}</div>
+            <div className="hb-mc-grid">
+              {models.map(m => (
+                <ModelCard
+                  key={m.key}
+                  m={m}
+                  active={model?.key === m.key}
+                  onClick={() => { onSelect(m); onClose(); }}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+        {Object.keys(groups).length === 0 && (
+          <div style={{ padding: '20px', color: 'var(--text-3)', fontSize: 13, textAlign: 'center' }}>No models match</div>
+        )}
+      </div>
+      <a className="hb-model-foot" href="/admin/models">
+        <Icon name="settings" size={13} /> Manage models
+      </a>
+    </div>
+  );
+}
+
 // ── Header ─────────────────────────────────────────────────────────────────
-function ChatHeader({ model, setModel, onMenu, streaming, onStop }) {
+function ChatHeader({ model, setModel, onMenu }) {
   const [open, setOpen] = React.useState(false);
   const conv = HUB.conv;
   const project = HUB.activeProject;
@@ -389,16 +518,6 @@ function ChatHeader({ model, setModel, onMenu, streaming, onStop }) {
         {subtitle && <span className="hb-sub">{subtitle}</span>}
       </div>
 
-      {streaming && (
-        <button
-          onClick={onStop}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'none', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13, marginRight: 8 }}
-          title="Stop generating"
-        >
-          <Icon name="stop" size={14} /> Stop
-        </button>
-      )}
-
       <div className="hb-model">
         <button className="hb-model-btn" onClick={() => setOpen(o => !o)}>
           <span className="hb-model-dot" />
@@ -406,26 +525,11 @@ function ChatHeader({ model, setModel, onMenu, streaming, onStop }) {
           <Icon name="chevron" size={14} />
         </button>
         {open && (
-          <div className="hb-model-pop" onMouseLeave={() => setOpen(false)}>
-            {MODELS.map(g => (
-              <div key={g.group} className="hb-model-group">
-                <div className="hb-model-group-head">{g.group}</div>
-                {g.options.map(m => (
-                  <button
-                    key={m.key}
-                    className={'hb-model-opt ' + (model?.key === m.key ? 'is-active' : '')}
-                    onClick={() => { setModel(m); setOpen(false); }}
-                  >
-                    <span>{m.label}</span>
-                    {m.search && <span className="hb-model-tag">search</span>}
-                  </button>
-                ))}
-              </div>
-            ))}
-            <a className="hb-model-foot" href="/settings">
-              <Icon name="settings" size={13} /> Model settings
-            </a>
-          </div>
+          <ModelPicker
+            model={model}
+            onSelect={setModel}
+            onClose={() => setOpen(false)}
+          />
         )}
       </div>
     </header>
@@ -438,6 +542,40 @@ function MessageUser({ content }) {
     <div className="msg msg-user">
       <div className="msg-bubble">{content}</div>
     </div>
+  );
+}
+
+// ── Save to wiki ─────────────────────────────────────────────────────────────
+function SaveToWiki({ msgId }) {
+  if (!msgId) return null;
+  const [state, setState] = React.useState('idle'); // idle | saving | done | error
+  const [slug,  setSlug]  = React.useState(null);
+
+  if (state === 'done') return (
+    <a className="save-proj-done" href={`https://wiki.mclellan.scot/page/${encodeURIComponent(slug)}`} target="_blank" rel="noopener noreferrer">
+      ✓ wiki/{slug} ↗
+    </a>
+  );
+  if (state === 'error') return <span className="save-proj-done" style={{ color: 'var(--error)' }}>wiki save failed</span>;
+
+  async function save() {
+    setState('saving');
+    try {
+      const r = await fetch('/api/wiki/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ msgId }),
+      });
+      const d = await r.json();
+      if (d.ok) { setSlug(d.slug); setState('done'); }
+      else setState('error');
+    } catch { setState('error'); }
+  }
+
+  return (
+    <button onClick={save} disabled={state === 'saving'} title="Save to wiki">
+      <Icon name="sparkle" size={14} />{state === 'saving' ? '…' : '→ Wiki'}
+    </button>
   );
 }
 
@@ -560,16 +698,19 @@ function MessageAssistant({ content, model, cost, searchUsed, id: msgId, isStrea
               </button>
               {msgId && (
                 <>
-                  <button title="Download Word" onClick={() => exportMsg('docx')}>
-                    <Icon name="download" size={14} />Word
+                  <div className="msg-actions-sep" />
+                  <button className="msg-act-secondary" title="Download Word" onClick={() => exportMsg('docx')}>
+                    <Icon name="download" size={13} />Word
                   </button>
-                  <button title="Export PDF" onClick={() => exportMsg('pdf')}>
-                    <Icon name="download" size={14} />PDF
+                  <button className="msg-act-secondary" title="Export PDF" onClick={() => exportMsg('pdf')}>
+                    <Icon name="download" size={13} />PDF
                   </button>
-                  <button title="Open in Google Doc" onClick={() => exportMsg('gdoc')}>
-                    <Icon name="sparkle" size={14} />GDoc
+                  <button className="msg-act-secondary" title="Open in Google Doc" onClick={() => exportMsg('gdoc')}>
+                    <Icon name="sparkle" size={13} />GDoc
                   </button>
+                  <div className="msg-actions-sep" />
                   <SaveToProject msgId={msgId} />
+                  <SaveToWiki msgId={msgId} />
                 </>
               )}
             </div>
@@ -602,8 +743,25 @@ function findModel(predicate) {
 }
 
 function buildShortcuts() {
-  // Free model: prefer a specific free model that supports web search (not the opaque
-  // openrouter/free catch-all which outputs raw tool-call JSON when given search tools)
+  // Use admin-configured shortcuts if available
+  const configured = (HUB.shortcuts || [])
+    .map(s => {
+      const model = ALL_MODELS_FLAT.find(m => m.key === s.model_key);
+      if (!model) return null;
+      return {
+        kicker: s.kicker,
+        icon: s.icon || '◎',
+        label: s.label,
+        desc: s.desc || model.label,
+        model,
+        searchOverride: s.search || null,
+      };
+    })
+    .filter(Boolean);
+
+  if (configured.length > 0) return configured;
+
+  // Fallback: auto-derive from available models
   const freeModel =
     findModel(m => m.key === 'grok-fast') ||
     findModel(m => m.key === 'mistral-small') ||
@@ -611,45 +769,25 @@ function buildShortcuts() {
     findModel((m, g) => g.group.toLowerCase().includes('everyday')) ||
     MODELS[0]?.options[0];
 
-  // Research: best search-capable non-Sonar model
   const researchModel =
     findModel(m => m.key === 'gemini-25-pro') ||
     findModel(m => m.key === 'claude-sonnet') ||
     findModel(m => m.key === 'deepseek-v3') ||
     findModel(m => m.search && !m.key.toLowerCase().includes('sonar'));
 
-  // Sonar: Perplexity native search
   const sonarModel =
     findModel(m => m.key === 'sonar') ||
     findModel(m => m.key.toLowerCase().includes('sonar'));
 
   return [
-    {
-      kicker: 'Free',
-      label: 'Free model',
-      desc: freeModel ? freeModel.label : 'Fast, no cost',
-      icon: '◎',
-      model: freeModel,
-    },
-    {
-      kicker: 'Research',
-      label: 'Live research',
-      desc: researchModel ? researchModel.label + ' + web' : 'Web search enabled',
-      icon: '⌖',
-      model: researchModel,
-    },
-    {
-      kicker: 'Sonar',
-      label: 'Sonar search',
-      desc: sonarModel ? sonarModel.label : 'Perplexity deep search',
-      icon: '◉',
-      model: sonarModel,
-    },
+    { kicker: 'Free',     label: 'Free model',    desc: freeModel     ? freeModel.label : 'Fast, no cost',          icon: '◎', model: freeModel,     searchOverride: null },
+    { kicker: 'Research', label: 'Live research', desc: researchModel ? researchModel.label + ' + web' : 'Web search enabled', icon: '⌖', model: researchModel, searchOverride: null },
+    { kicker: 'Sonar',    label: 'Sonar search',  desc: sonarModel    ? sonarModel.label : 'Perplexity deep search', icon: '◉', model: sonarModel,    searchOverride: null },
   ].filter(s => s.model);
 }
 
 // ── Empty state ───────────────────────────────────────────────────────────
-function EmptyState({ onSelectModel }) {
+function EmptyState({ onSelectModel, onSelectShortcut }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const rawName = HUB.user || 'Douglas';
@@ -666,7 +804,7 @@ function EmptyState({ onSelectModel }) {
       <p>Choose a mode to start, or just type below.</p>
       <div className="empty-grid">
         {shortcuts.map((s, i) => (
-          <button key={i} className="empty-card" onClick={() => onSelectModel(s.model)}>
+          <button key={i} className="empty-card" onClick={() => onSelectShortcut(s.model, s.searchOverride)}>
             <span className="empty-kicker">{s.icon} {s.kicker}</span>
             <span className="empty-text" style={{ fontWeight: 600, fontSize: 14 }}>{s.label}</span>
             <span className="empty-text" style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{s.desc}</span>
@@ -678,16 +816,39 @@ function EmptyState({ onSelectModel }) {
 }
 
 // ── Composer ──────────────────────────────────────────────────────────────
-function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
+const PHASE_LABELS = { thinking: 'Thinking…', searching: 'Searching…', drafting: 'Drafting…', writing: 'Writing…' };
+
+function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: externalRef, searchOverride, clearSearchOverride }) {
   const [val, setVal] = React.useState('');
   const [more, setMore] = React.useState(false);
   const [uploadStatus, setUploadStatus] = React.useState('');
   const [opts, setOpts] = React.useState({
     sensitive: false,
     research: false,
-    search: 'on',
+    search: 'openrouter',
     depth: 'medium',
   });
+
+  // Apply shortcut search override when set from welcome screen
+  React.useEffect(() => {
+    if (!searchOverride) return;
+    setOpts(o => ({ ...o, search: searchOverride }));
+    clearSearchOverride?.();
+  }, [searchOverride]);
+
+  // Auto-adjust search provider when model changes
+  const prevModelKey = React.useRef(model?.key);
+  React.useEffect(() => {
+    if (model?.key === prevModelKey.current) return;
+    prevModelKey.current = model?.key;
+    setOpts(o => {
+      if (o.sensitive) return o;
+      if (model?.search === 'native') return { ...o, search: 'exa' };
+      if (o.search === 'exa') return { ...o, search: 'openrouter' };
+      return o;
+    });
+  }, [model?.key]);
+
   const internalRef = React.useRef(null);
   const textRef = externalRef || internalRef;
   const fileRef = React.useRef(null);
@@ -907,10 +1068,18 @@ function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
 
           <button
             className={'comp-btn comp-toggle ' + (opts.search !== 'off' ? 'is-on' : '')}
-            onClick={() => setOpts(o => ({ ...o, search: o.search === 'off' ? 'on' : 'off' }))}
-            title="Toggle web search"
+            onClick={() => setOpts(o => {
+              const isNative = model?.search === 'native';
+              // Native models handle their own search — skip web-plugin entirely
+              const next = isNative
+                ? (o.search === 'off' ? 'exa' : 'off')
+                : (o.search === 'off' ? 'openrouter' : o.search === 'openrouter' ? 'exa' : 'off');
+              return { ...o, search: next };
+            })}
+            title={opts.search === 'exa' ? 'Search: Semantic Search' : opts.search === 'openrouter' ? 'Search: Brave Search' : 'Search: Off'}
           >
-            <Icon name="search" size={15} /> <span>Search</span>
+            <Icon name="search" size={15} />
+            <span>{opts.search === 'exa' ? 'Semantic' : opts.search === 'openrouter' ? 'Brave' : 'Search'}</span>
           </button>
 
           <button
@@ -933,14 +1102,22 @@ function Composer({ onSend, model, streaming, textareaRef: externalRef }) {
             </span>
           )}
 
-          <span className="comp-model-hint">
-            <span className="hb-model-dot" /> {model?.label || '—'}
-          </span>
-
-          <button className="comp-send" onClick={send} disabled={!val.trim() || streaming}>
-            <Icon name="send" size={15} />
-            <span>Send</span>
-          </button>
+          {streaming ? (
+            <>
+              <span className="comp-phase-label">
+                <span className="comp-phase-dot" />
+                {PHASE_LABELS[streamPhase] || 'Working…'}
+              </span>
+              <button className="comp-stop-inline" onClick={onStop} title="Stop generating">
+                <Icon name="stop" size={14} /> Stop
+              </button>
+            </>
+          ) : (
+            <button className="comp-send" onClick={send} disabled={!val.trim()}>
+              <Icon name="send" size={15} />
+              <span>Send</span>
+            </button>
+          )}
         </div>
 
         {more && (
@@ -1013,6 +1190,58 @@ function ChatApp() {
   const activeReaderRef = React.useRef(null);
   const composerRef = React.useRef(null);
 
+  // ── Wake lock: keep screen on while streaming, release 30s after done ──────
+  const wakeLockRef = React.useRef(null);
+  const wakeLockTimerRef = React.useRef(null);
+
+  const acquireWakeLock = async () => {
+    if (!('wakeLock' in navigator)) return;
+    try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (_) {}
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) { wakeLockRef.current.release().catch(() => {}); wakeLockRef.current = null; }
+  };
+
+  React.useEffect(() => {
+    if (streaming) {
+      clearTimeout(wakeLockTimerRef.current);
+      acquireWakeLock();
+    } else if (wakeLockRef.current) {
+      // Release 30s after completion unless user touches the screen
+      wakeLockTimerRef.current = setTimeout(releaseWakeLock, 30000);
+    }
+  }, [streaming]);
+
+  React.useEffect(() => {
+    const onTouch = () => {
+      if (!streaming && wakeLockTimerRef.current) {
+        clearTimeout(wakeLockTimerRef.current);
+        wakeLockTimerRef.current = null;
+        releaseWakeLock();
+      }
+    };
+    document.addEventListener('touchstart', onTouch, { passive: true });
+    return () => document.removeEventListener('touchstart', onTouch);
+  }, [streaming]);
+
+  // Re-acquire if OS released it (e.g. tab became visible again mid-stream)
+  React.useEffect(() => {
+    const onVisible = () => { if (streaming && document.visibilityState === 'visible' && !wakeLockRef.current) acquireWakeLock(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [streaming]);
+
+  // ── Stream phase: derive from streaming state + content length ─────────────
+  const streamPhase = React.useMemo(() => {
+    if (!streaming) return null;
+    if (streamingMsg?.thinking !== false) return 'thinking';
+    const len = (streamingMsg?.content || '').length;
+    if (len < 40)  return 'searching';
+    if (len < 300) return 'drafting';
+    return 'writing';
+  }, [streaming, streamingMsg]);
+
   // Auto-scroll to bottom
   React.useEffect(() => {
     const el = scrollRef.current;
@@ -1026,8 +1255,16 @@ function ChatApp() {
     }
   };
 
+  const [pendingSearchOverride, setPendingSearchOverride] = React.useState(null);
+
   const selectModel = (m) => {
     if (m) setModel(m);
+    setTimeout(() => composerRef.current?.focus(), 50);
+  };
+
+  const selectShortcut = (m, searchOverride) => {
+    if (m) setModel(m);
+    if (searchOverride) setPendingSearchOverride(searchOverride);
     setTimeout(() => composerRef.current?.focus(), 50);
   };
 
@@ -1104,7 +1341,7 @@ function ChatApp() {
           convId: window.CONV_ID || undefined,
           projectSlug: window.PROJECT_SLUG || undefined,
           noSearch: opts.sensitive || false,
-          searchProvider: opts.search === 'off' ? 'off' : 'openrouter',
+          searchProvider: opts.sensitive ? 'off' : (opts.search === 'off' ? 'off' : opts.search === 'exa' ? 'exa' : 'openrouter'),
           searchDepth: opts.depth || 'medium',
           researchMode: opts.research || false,
         }),
@@ -1210,8 +1447,6 @@ function ChatApp() {
         <ChatHeader
           model={model} setModel={setModel}
           onMenu={() => setMobileOpen(true)}
-          streaming={streaming}
-          onStop={stop}
         />
 
         {HUB.activeProject && !HUB.projectHistoryLoaded && HUB.projectHistoryCount > 0 && (
@@ -1232,7 +1467,7 @@ function ChatApp() {
         <div className="msg-scroll" ref={scrollRef}>
           <div className="msg-stack">
             {messages.length === 0 && !streamingMsg ? (
-              <EmptyState onSelectModel={selectModel} />
+              <EmptyState onSelectModel={selectModel} onSelectShortcut={selectShortcut} />
             ) : (
               <>
                 {messages.map((m, i) =>
@@ -1255,7 +1490,7 @@ function ChatApp() {
         </div>
 
         <div className="hub-composer-mount">
-          <Composer onSend={send} model={model} streaming={streaming} textareaRef={composerRef} />
+          <Composer onSend={send} onStop={stop} model={model} streaming={streaming} streamPhase={streamPhase} textareaRef={composerRef} searchOverride={pendingSearchOverride} clearSearchOverride={() => setPendingSearchOverride(null)} />
         </div>
       </main>
 
