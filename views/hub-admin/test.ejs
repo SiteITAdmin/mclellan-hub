@@ -357,6 +357,8 @@ function comboId(modelKey, search) {
   return `${modelKey}__${search}`.replace(/[^a-z0-9_-]/gi, '_');
 }
 
+let _pollTimer = null;
+
 function runTest() {
   const baseQuestion = document.getElementById('question').value.trim();
   if (!baseQuestion) { alert('Enter a question first.'); return; }
@@ -378,8 +380,9 @@ function runTest() {
 
   clearResults(true);
   document.getElementById('results-area').style.display = '';
-  document.getElementById('results-count').textContent = `${combos.length} combo${combos.length !== 1 ? 's' : ''}`;
+  document.getElementById('results-count').textContent = `${combos.length} combo${combos.length !== 1 ? 's' : ''} — queued`;
   document.getElementById('run-btn').disabled = true;
+  document.getElementById('cancel-btn').style.display = '';
   document.getElementById('clear-btn').style.display = '';
 
   const cards = document.getElementById('result-cards');
@@ -387,7 +390,6 @@ function runTest() {
 
   for (const combo of combos) {
     const id = comboId(combo.modelKey, combo.search);
-
     const card = document.createElement('div');
     card.className = 'result-card running';
     card.id = `card-${id}`;
@@ -404,7 +406,7 @@ function runTest() {
       <div class="rc-body">
         <div class="rc-spinner">
           <div class="spinner-dot"></div><div class="spinner-dot"></div><div class="spinner-dot"></div>
-          <span>Running…</span>
+          <span>Running on server…</span>
         </div>
       </div>
       <div class="rc-foot" id="foot-${id}" style="display:none"></div>`;
@@ -421,75 +423,70 @@ function runTest() {
     summaryRows[id] = tr;
   }
 
-  const results = [];
-  let _abortController = new AbortController();
-
-  document.getElementById('cancel-btn').style.display = '';
-
-  // Single SSE connection — server runs all combos and streams results back.
-  // iOS won't kill one persistent connection the way it kills sequential fetches.
-  (async () => {
-    try {
-      const resp = await fetch('/admin/test/run-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question,
-          combos: combos.map(c => ({ modelKey: c.modelKey, search: c.search })),
-        }),
-        signal: _abortController.signal,
-      });
-      if (!resp.ok) throw new Error(`Server error ${resp.status}`);
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
-          try {
-            const ev = JSON.parse(raw);
-            if (ev.type === 'progress') {
-              document.getElementById('results-count').textContent =
-                `${ev.index + 1} / ${ev.total}`;
-            } else if (ev.type === 'result') {
-              const combo = combos.find(c => c.modelKey === ev.modelKey && c.search === ev.search);
-              if (combo) fillResult(comboId(ev.modelKey, ev.search), combo, ev, results);
-            }
-          } catch (_) {}
-        }
-      }
-    } catch (e) {
-      const wasCancelled = e.name === 'AbortError';
-      for (const combo of combos) {
-        const card = document.getElementById(`card-${comboId(combo.modelKey, combo.search)}`);
-        if (card?.classList.contains('running'))
-          fillResult(comboId(combo.modelKey, combo.search), combo,
-            { error: wasCancelled ? 'Cancelled' : 'Connection lost: ' + e.message }, results);
-      }
-    }
-
-    document.getElementById('cancel-btn').style.display = 'none';
+  // Submit job — server runs all combos in parallel, no persistent connection needed
+  fetch('/admin/test/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, combos: combos.map(c => ({ modelKey: c.modelKey, search: c.search })) }),
+  })
+  .then(r => r.json())
+  .then(({ jobId, error }) => {
+    if (!jobId) throw new Error(error || 'No job ID returned');
     document.getElementById('results-count').textContent =
-      `${combos.length} combo${combos.length !== 1 ? 's' : ''} — done`;
+      `0 / ${combos.length} — running on server`;
+
+    const allResults = [];
+    const seen = new Set();
+
+    const poll = async () => {
+      try {
+        const job = await fetch(`/admin/test/jobs/${jobId}`).then(r => r.json());
+
+        for (const r of (job.results || [])) {
+          const key = `${r.modelKey}__${r.search}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const id = comboId(r.modelKey, r.search);
+          const combo = combos.find(c => c.modelKey === r.modelKey && c.search === r.search);
+          if (combo) fillResult(id, combo, r, allResults);
+        }
+
+        const n = seen.size;
+        const total = combos.length;
+        const done = job.status === 'done';
+        document.getElementById('results-count').textContent =
+          `${n} / ${total}${done ? ' — done' : ' — running on server'}`;
+
+        if (done) {
+          document.getElementById('run-btn').disabled = false;
+          document.getElementById('cancel-btn').style.display = 'none';
+          if (allResults.some(r => !r.error)) {
+            highlightWinner(allResults);
+            saveRun(baseQuestion, attachedDoc?.filename, allResults);
+          }
+        } else {
+          _pollTimer = setTimeout(poll, 3000);
+        }
+      } catch (_) {
+        // Network hiccup — retry in 5s
+        _pollTimer = setTimeout(poll, 5000);
+      }
+    };
+
+    _pollTimer = setTimeout(poll, 2000);
+  })
+  .catch(e => {
+    document.getElementById('results-count').textContent = 'Submission failed: ' + e.message;
     document.getElementById('run-btn').disabled = false;
-    if (results.some(r => !r.error)) {
-      highlightWinner(results);
-      saveRun(baseQuestion, attachedDoc?.filename, results);
-    }
-  })();
+    document.getElementById('cancel-btn').style.display = 'none';
+  });
 }
 
 function cancelTest() {
-  if (typeof _abortController !== 'undefined') _abortController.abort();
+  if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('cancel-btn').style.display = 'none';
+  document.getElementById('results-count').textContent += ' — stopped watching (job still running on server)';
 }
 
 function fillResult(id, combo, data, results) {
