@@ -4,25 +4,99 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CRM Contacts — <%= user %></title>
+<title>CRM — <%= user %></title>
 <link rel="stylesheet" href="/portfolio.css">
 <style>
-.tag-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-.tag-label { display: flex; align-items: center; gap: 4px; background: var(--surface,#f9f9fb); border: 1px solid var(--border,#e5e3f0); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
-.tag-label input { margin: 0; }
-.contact-card { border: 1px solid var(--border,#e5e3f0); border-radius: 12px; padding: 16px 18px; margin: 10px 0; background: var(--surface,#fff); }
-.contact-card h3 { font-size: 15px; margin: 0 0 4px; }
-.contact-aliases { font-size: 12px; color: var(--text-muted,#888); margin-bottom: 10px; }
-.matched-pages { margin-top: 10px; font-size: 13px; }
-.matched-pages a { color: var(--accent,#5b4fcf); }
-.matched-pages span { color: var(--text-muted,#888); margin-left: 6px; }
-details summary { cursor: pointer; font-weight: 500; font-size: 13px; }
+  :root {
+    --card-radius: 12px;
+    --card-border: var(--border, #dddaf0);
+    --card-bg: var(--bg, #faf9fb);
+    --accent: var(--primary, #7c6af5);
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .contact-card {
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    background: var(--card-bg);
+    padding: 16px 18px;
+    transition: box-shadow 0.15s;
+  }
+  .contact-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+
+  .card-head {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+    margin-bottom: 6px;
+  }
+  .card-name { font-size: 14px; font-weight: 600; color: var(--text, #15131e); line-height: 1.3; }
+  .card-aliases { font-size: 11px; color: var(--text-dim, #767586); margin-top: 2px; }
+
+  .card-badges {
+    display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; margin-top: 8px;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; line-height: 1.5;
+  }
+  .badge-tag  { background: rgba(22,160,133,0.12);  color: #0e7a65; }
+  .badge-none { background: rgba(0,0,0,0.06); color: #999; font-weight: 400; font-style: italic; }
+
+  .card-actions {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .btn-sm {
+    padding: 5px 12px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--outline, #c7c4d7); background: transparent;
+    color: var(--text, #15131e); font-family: inherit; transition: background 0.12s;
+  }
+  .btn-sm:hover { background: rgba(0,0,0,0.05); }
+  .btn-sm.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-sm.primary:hover { opacity: 0.9; }
+
+  .edit-panel {
+    display: none; margin-top: 14px; padding-top: 14px;
+    border-top: 1px solid var(--card-border);
+  }
+  .edit-panel.open { display: block; }
+
+  /* Tag checkboxes */
+  .tag-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .tag-label {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--surface, #f9f9fb); border: 1px solid var(--card-border);
+    border-radius: 20px; padding: 3px 10px; cursor: pointer; font-size: 12px;
+    transition: background 0.12s;
+  }
+  .tag-label:hover { background: rgba(124,106,245,0.06); }
+  .tag-label input { margin: 0; accent-color: var(--accent); }
+
+  /* Matched pages */
+  .matched-pages { margin-top: 12px; }
+  .matched-pages-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-dim, #767586); margin-bottom: 6px;
+  }
+  .matched-page-item {
+    font-size: 12px; display: flex; align-items: baseline; gap: 6px;
+    padding: 3px 0; border-bottom: 1px solid var(--card-border);
+  }
+  .matched-page-item:last-child { border-bottom: none; }
+  .matched-page-item a { color: var(--accent); text-decoration: none; }
+  .matched-page-item a:hover { text-decoration: underline; }
+  .matched-page-tags { color: var(--text-dim, #888); font-size: 11px; }
+
+  .form-actions { display: flex; gap: 8px; margin-top: 8px; }
 </style>
 </head>
 <body class="admin-page">
 
 <header class="admin-header">
-  <h1>CRM Contacts — <%= user %></h1>
+  <h1>CRM — <%= user %></h1>
   <nav style="display:flex;gap:12px;align-items:center;">
     <a href="/admin">Projects</a>
     <a href="/admin/crm" style="font-weight:600">CRM</a>
@@ -42,48 +116,80 @@ details summary { cursor: pointer; font-weight: 500; font-size: 13px; }
     <p style="font-size:13px;color:var(--text-muted);">No wiki tags yet — add some content via wiki.mclellan.scot first.</p>
   <% } %>
 
+  <div class="card-grid">
   <% for (const c of contacts) { %>
   <%
     const contactTags = JSON.parse(c.wiki_tags || '[]');
     const aliases = JSON.parse(c.aliases || '[]');
   %>
-  <div class="contact-card">
-    <h3><%= c.name %></h3>
-    <% if (aliases.length) { %><p class="contact-aliases">Also known as: <%= aliases.join(', ') %></p><% } %>
+  <div class="contact-card" id="crm-card-<%= c.id %>">
+    <div class="card-head">
+      <div>
+        <div class="card-name"><%= c.name %></div>
+        <% if (aliases.length) { %>
+          <div class="card-aliases">Also: <%= aliases.join(', ') %></div>
+        <% } %>
+      </div>
+      <span style="font-size:11px;color:var(--text-dim);white-space:nowrap;"><%= contactTags.length %> tag<%= contactTags.length !== 1 ? 's' : '' %></span>
+    </div>
 
-    <details>
-      <summary>Knowledge tags (<%= contactTags.length %>)</summary>
-      <form method="POST" action="/admin/contacts/<%= c.id %>/wiki-tags" style="margin-top:10px;">
-        <div class="tag-grid">
-          <% for (const tag of wikiTags) { %>
-            <label class="tag-label">
-              <input type="checkbox" name="tags" value="<%= tag %>" <%= contactTags.includes(tag) ? 'checked' : '' %>>
-              <%= tag %>
-            </label>
-          <% } %>
-        </div>
-        <button type="submit" style="margin-top:4px;">Save tags</button>
-      </form>
+    <% if (contactTags.length) { %>
+    <div class="card-badges">
+      <% for (const t of contactTags) { %><span class="badge badge-tag"><%= t %></span><% } %>
+    </div>
+    <% } else { %>
+    <div class="card-badges">
+      <span class="badge badge-none">no tags</span>
+    </div>
+    <% } %>
 
-      <% if (contactTags.length) { %>
-      <div class="matched-pages">
-        <strong style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);">Matching wiki pages</strong>
-        <ul style="list-style:none;margin-top:6px;display:flex;flex-direction:column;gap:4px;">
-          <% /* We can't call server functions from EJS directly, so pass matchedPages per contact */ %>
-          <% if (c.matchedPages && c.matchedPages.length) { %>
-            <% for (const p of c.matchedPages) { %>
-            <li><a href="https://wiki.mclellan.scot/page/<%= p.slug %>" target="_blank"><%= p.title %></a><span><%= p.matchedTags.join(', ') %></span></li>
-            <% } %>
-          <% } else { %>
-            <li style="color:var(--text-muted,#888);font-size:13px;">No matching pages yet.</li>
-          <% } %>
-        </ul>
+    <% if (contactTags.length && c.matchedPages && c.matchedPages.length) { %>
+    <div class="matched-pages">
+      <div class="matched-pages-label">Matching wiki pages</div>
+      <% for (const p of c.matchedPages) { %>
+      <div class="matched-page-item">
+        <a href="https://wiki.mclellan.scot/page/<%= p.slug %>" target="_blank"><%= p.title %></a>
+        <span class="matched-page-tags"><%= p.matchedTags.join(', ') %></span>
       </div>
       <% } %>
-    </details>
+    </div>
+    <% } %>
+
+    <div class="card-actions" style="margin-top:12px;">
+      <button class="btn-sm" onclick="toggleCrmEdit('<%= c.id %>')">Edit tags</button>
+    </div>
+
+    <div class="edit-panel" id="crm-edit-<%= c.id %>">
+      <form method="POST" action="/admin/contacts/<%= c.id %>/wiki-tags">
+        <% if (wikiTags.length) { %>
+        <div class="tag-grid">
+          <% for (const tag of wikiTags) { %>
+          <label class="tag-label">
+            <input type="checkbox" name="tags" value="<%= tag %>" <%= contactTags.includes(tag) ? 'checked' : '' %>>
+            <%= tag %>
+          </label>
+          <% } %>
+        </div>
+        <% } else { %>
+        <p style="font-size:12px;color:var(--text-dim);">No wiki tags available yet.</p>
+        <% } %>
+        <div class="form-actions">
+          <button type="submit" class="btn-sm primary">Save tags</button>
+          <button type="button" class="btn-sm" onclick="toggleCrmEdit('<%= c.id %>')">Cancel</button>
+        </div>
+      </form>
+    </div>
   </div>
   <% } %>
+  </div>
 </section>
+
+<script>
+window.toggleCrmEdit = function(id) {
+  const panel = document.getElementById('crm-edit-' + id);
+  if (panel) panel.classList.toggle('open');
+};
+</script>
 
 </body>
 </html>
