@@ -557,7 +557,9 @@ router.post('/admin/test/upload', requireHubAdmin, testUpload.single('file'), as
 });
 
 const IMPROVE_PROMPT_MODEL = 'google/gemini-2.5-flash-lite';
-const IMPROVE_META_PROMPT = `You are an expert prompt engineer. A user has written a prompt they want to send to an AI model. Rewrite it to significantly improve the quality of the response they'll get.
+const IMPROVE_META_PROMPT = `You are an expert prompt engineer acting as a STRUCTURAL editor only. A user has written a prompt they want to send to an AI model. Rewrite it to significantly improve the quality of the response they'll get.
+
+Your role is to improve structure, clarity, and framing — NOT to fact-check or validate content. Preserve all proper nouns, product names, brand names, technical terms, and capitalised terms exactly as written, even if you don't recognise them. Unknown terms are intentional — treat them as correct and keep them verbatim.
 
 Apply these improvements as relevant:
 - Specify the desired output format (structured briefing, memo, bullet points, table, etc.)
