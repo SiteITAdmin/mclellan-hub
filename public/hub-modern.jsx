@@ -836,6 +836,8 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
     clearSearchOverride?.();
   }, [searchOverride]);
 
+  const isPerplexityModel = key => /sonar|perplexity/i.test(key || '');
+
   // Auto-adjust search provider when model changes
   const prevModelKey = React.useRef(model?.key);
   React.useEffect(() => {
@@ -843,6 +845,7 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
     prevModelKey.current = model?.key;
     setOpts(o => {
       if (o.sensitive) return o;
+      if (isPerplexityModel(model?.key)) return { ...o, search: 'off' };
       if (model?.search === 'native') return { ...o, search: 'exa' };
       if (o.search === 'exa') return { ...o, search: 'openrouter' };
       return o;
@@ -1068,6 +1071,7 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
 
           <button
             className={'comp-btn comp-toggle ' + (opts.search !== 'off' ? 'is-on' : '')}
+            disabled={isPerplexityModel(model?.key)}
             onClick={() => setOpts(o => {
               const isNative = model?.search === 'native';
               // Native models handle their own search — skip web-plugin entirely
@@ -1076,7 +1080,7 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
                 : (o.search === 'off' ? 'openrouter' : o.search === 'openrouter' ? 'exa' : 'off');
               return { ...o, search: next };
             })}
-            title={opts.search === 'exa' ? 'Search: Semantic Search' : opts.search === 'openrouter' ? 'Search: Brave Search' : 'Search: Off'}
+            title={isPerplexityModel(model?.key) ? 'Sonar/Perplexity searches internally — no external search needed' : opts.search === 'exa' ? 'Search: Semantic Search' : opts.search === 'openrouter' ? 'Search: Brave Search' : 'Search: Off'}
           >
             <Icon name="search" size={15} />
             <span>{opts.search === 'exa' ? 'Semantic' : opts.search === 'openrouter' ? 'Brave' : 'Search'}</span>
