@@ -371,9 +371,11 @@ function runTest() {
   if (!models.length)   { alert('Select at least one model.'); return; }
   if (!searches.length) { alert('Select at least one search mode.'); return; }
 
+  const isPerplexityModel = key => /sonar|perplexity/i.test(key);
   const combos = [];
   for (const m of models) {
-    for (const s of searches) {
+    const effectiveSearches = isPerplexityModel(m.key) ? ['none'] : searches;
+    for (const s of effectiveSearches) {
       combos.push({ modelKey: m.key, modelLabel: m.label, search: s });
     }
   }
