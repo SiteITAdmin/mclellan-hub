@@ -610,8 +610,9 @@ async function runComboInternal(question, model, search) {
     'X-Title': 'McLellan Hub Test',
   };
 
-  const TIMEOUT_MS = 120_000;
-  const timeoutSignal = () => AbortSignal.timeout(TIMEOUT_MS);
+  // No explicit timeout — infrastructure (nginx 300s) is the backstop,
+  // same as the main chat. Individual combos run in parallel so a slow
+  // one doesn't block the others.
 
   const start = Date.now();
   let userContent = question;
@@ -634,7 +635,7 @@ async function runComboInternal(question, model, search) {
       braveR.content ? `## Web search results\n${braveR.content}` : '',
     ].filter(Boolean).join('\n\n');
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST', headers: orHeaders, signal: timeoutSignal(),
+      method: 'POST', headers: orHeaders,
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash-lite',
         messages: [
@@ -675,7 +676,7 @@ async function runComboInternal(question, model, search) {
   // don't support the plugin tool and should use the standard call path below.
   if (search === 'web-plugin' && model.endpoint !== 'custom-openai') {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST', headers: orHeaders, signal: timeoutSignal(),
+      method: 'POST', headers: orHeaders,
       body: JSON.stringify({ model: model.model_id, messages, stream: true, tools: [WEB_SEARCH_TOOL], tool_choice: 'auto' }),
     });
     if (!r.ok) {
@@ -710,7 +711,7 @@ async function runComboInternal(question, model, search) {
       headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
     }
     const r = await fetch(apiUrl, {
-      method: 'POST', headers, signal: timeoutSignal(), body: JSON.stringify({ model: model.model_id, messages, stream: false }),
+      method: 'POST', headers, body: JSON.stringify({ model: model.model_id, messages, stream: false }),
     });
     const data = await r.json();
     if (!r.ok) return { error: data.error?.message || `API error ${r.status}` };
