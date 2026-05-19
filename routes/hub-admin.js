@@ -610,7 +610,7 @@ async function runComboInternal(question, model, search) {
     'X-Title': 'McLellan Hub Test',
   };
 
-  const TIMEOUT_MS = 60_000;
+  const TIMEOUT_MS = 120_000;
   const timeoutSignal = () => AbortSignal.timeout(TIMEOUT_MS);
 
   const start = Date.now();
@@ -760,7 +760,9 @@ async function runJob(jobId, user, question, combos) {
       try {
         entry = { modelKey, search, ...(await runComboInternal(question, model, search)) };
       } catch (e) {
-        entry = { modelKey, search, error: e.message };
+        const msg = (e.name === 'AbortError' || e.name === 'TimeoutError')
+          ? 'Timed out (120s)' : e.message;
+        entry = { modelKey, search, error: msg };
       }
     }
     results.push(entry);
