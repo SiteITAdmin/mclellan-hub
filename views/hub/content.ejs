@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
+.content-wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
+
+.back-link { font-size: 13px; color: var(--text-dim); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; }
+.back-link:hover { color: var(--accent, #4648d4); }
+.page-title { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
+.page-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 28px; }
+
+/* Generate box */
+.gen-box {
+  background: var(--surface, #f4f3fb);
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 16px; padding: 20px; margin-bottom: 24px;
+}
+.gen-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); margin-bottom: 10px; }
+.gen-row { display: flex; gap: 10px; }
+.gen-input {
+  flex: 1; padding: 10px 14px; font-size: 14px;
+  border: 1px solid var(--border, #e0ddf0); border-radius: 10px;
+  background: var(--bg, #fff); color: var(--text, #15131e); font-family: inherit; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.gen-input:focus { border-color: var(--accent, #4648d4); box-shadow: 0 0 0 3px rgba(70,72,212,.1); }
+.gen-btn {
+  padding: 10px 22px; background: var(--accent, #4648d4); color: #fff;
+  border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; font-family: inherit; transition: opacity .15s;
+}
+.gen-btn:disabled { opacity: .5; cursor: default; }
+.gen-btn:not(:disabled):hover { opacity: .9; }
+
+/* Progress */
+.gen-progress { margin-top: 14px; display: none; }
+.gen-progress.visible { display: block; }
+.progress-track { height: 3px; background: var(--border, #e0ddf0); border-radius: 2px; margin-bottom: 8px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent, #4648d4); border-radius: 2px; transition: width .5s ease; }
+.progress-msg { font-size: 12px; color: var(--text-dim); }
+
+/* Filters */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; align-items: center; }
+.filter-label { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+.filter-chip {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border, #e0ddf0); background: transparent; cursor: pointer;
+  color: var(--text-dim); font-family: inherit; transition: background .12s, color .12s, border-color .12s;
+}
+.filter-chip:hover { border-color: var(--accent, #4648d4); color: var(--accent, #4648d4); }
+.filter-chip.active { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
+
+/* Stats */
+.stats-row { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat-pill { background: var(--surface, #f4f3fb); border: 1px solid var(--border, #e0ddf0); border-radius: 8px; padding: 8px 14px; font-size: 13px; }
+.stat-pill strong { font-size: 18px; font-weight: 700; color: var(--accent, #4648d4); display: block; line-height: 1.2; }
+.stat-pill span { font-size: 11px; color: var(--text-dim); }
+
+/* Card grid */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.post-card {
+  background: var(--surface, #f4f3fb);
+  border: 1px solid var(--border, #e0ddf0);
+  border-left: 3px solid var(--card-accent, var(--border, #e0ddf0));
+  border-radius: 12px; padding: 14px 16px;
+  transition: box-shadow .15s;
+}
+.post-card:hover { box-shadow: 0 2px 14px rgba(0,0,0,.07); }
+.post-card[data-status="processing"] { --card-accent: #f59e0b; }
+.post-card[data-status="error"]      { --card-accent: #ef4444; }
+.post-card[data-status="draft"]      { --card-accent: var(--accent, #4648d4); }
+.post-card[data-status="scheduled"]  { --card-accent: #7c3aed; }
+.post-card[data-status="published"]  { --card-accent: #10b981; }
+
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.card-date { font-size: 11px; color: var(--text-dim); }
+.card-topic { font-size: 14px; font-weight: 600; line-height: 1.35; margin-bottom: 8px; color: var(--text, #15131e); }
+.card-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.badge {
+  padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; line-height: 1.6;
+  display: inline-flex; align-items: center;
+}
+.badge-processing { background: rgba(245,158,11,.12); color: #d97706; }
+.badge-error      { background: rgba(239,68,68,.12);  color: #dc2626; }
+.badge-draft      { background: rgba(70,72,212,.12);  color: #4648d4; }
+.badge-scheduled  { background: rgba(124,58,237,.12); color: #7c3aed; }
+.badge-published  { background: rgba(16,185,129,.12); color: #059669; }
+.badge-type       { background: rgba(0,0,0,.06); color: var(--text-dim); font-weight: 400; }
+.badge-score      { background: rgba(70,72,212,.12); color: var(--accent, #4648d4); }
+.badge-date       { background: rgba(124,58,237,.08); color: #7c3aed; font-weight: 400; }
+
+.card-preview { font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 10px; }
+.card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Buttons */
+.btn-sm {
+  padding: 5px 12px; font-size: 12px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--border, #e0ddf0); background: transparent;
+  color: var(--text, #15131e); font-family: inherit; transition: background .12s;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+}
+.btn-sm:hover { background: rgba(0,0,0,.05); }
+.btn-sm.primary { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
+.btn-sm.primary:hover { opacity: .9; background: var(--accent, #4648d4); }
+.btn-sm.danger { color: #dc2626; border-color: rgba(220,38,38,.3); }
+.btn-sm.danger:hover { background: rgba(220,38,38,.07); }
+
+/* Expand panel */
+.expand-panel { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border, #e0ddf0); }
+.expand-panel.open { display: block; }
+
+.panel-section { margin-bottom: 14px; }
+.panel-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-dim); margin-bottom: 6px;
+}
+.panel-draft {
+  font-size: 12px; line-height: 1.65; color: var(--text, #15131e);
+  white-space: pre-wrap; word-break: break-word;
+  background: var(--bg, #fff); border: 1px solid var(--border, #e0ddf0);
+  border-radius: 8px; padding: 10px 12px; max-height: 300px; overflow-y: auto;
+}
+
+.score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+.score-item { background: var(--bg, #fff); border: 1px solid var(--border, #e0ddf0); border-radius: 8px; padding: 8px 10px; }
+.score-item-key { font-size: 10px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+.score-item-val { font-size: 18px; font-weight: 700; color: var(--accent, #4648d4); line-height: 1; }
+
+.fix-item { font-size: 12px; margin-bottom: 4px; line-height: 1.45; }
+.fix-item strong { color: var(--text, #15131e); }
+
+.links-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.schedule-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.schedule-input, .type-select {
+  padding: 6px 10px; border: 1px solid var(--border, #e0ddf0); border-radius: 8px;
+  font-size: 13px; background: var(--bg, #fff); color: var(--text, #15131e); font-family: inherit; outline: none;
+}
+.schedule-input:focus, .type-select:focus { border-color: var(--accent, #4648d4); }
+
+.status-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+.empty-state { grid-column: 1 / -1; text-align: center; padding: 48px 24px; color: var(--text-dim); }
+.empty-state p { font-size: 14px; }
+</style>
+</head>
+<body class="hub-page" style="background: var(--bg, #fcf8ff); min-height: 100vh;">
+<main>
+<div class="content-wrap">
+
+  <a href="/" class="back-link">← Back to hub</a>
+  <h1 class="page-title">Content</h1>
+  <p class="page-sub">Generate and manage LinkedIn posts — research, draft, score, refine, carousel.</p>
+
+  <!-- Generate -->
+  <div class="gen-box">
+    <div class="gen-label">New post</div>
+    <div class="gen-row">
+      <input class="gen-input" id="gen-topic" type="text"
+        placeholder="Topic or idea — e.g. Microsoft Copilot Pages for Teams" />
+      <button class="gen-btn" id="gen-btn">Generate</button>
+    </div>
+    <div class="gen-progress" id="gen-progress">
+      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:5%"></div></div>
+      <div class="progress-msg" id="progress-msg">Starting…</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <%
+    const totalPosts = posts.length;
+    const published = posts.filter(p => p.status === 'published').length;
+    const scheduled = posts.filter(p => p.status === 'scheduled').length;
+    const typeCounts = {};
+    posts.forEach(p => { if (p.content_type) typeCounts[p.content_type] = (typeCounts[p.content_type] || 0) + 1; });
+    const topType = Object.entries(typeCounts).sort((a,b) => b[1]-a[1])[0];
+  %>
+  <% if (totalPosts > 0) { %>
+  <div class="stats-row">
+    <div class="stat-pill"><strong><%= totalPosts %></strong><span>Total posts</span></div>
+    <div class="stat-pill"><strong><%= published %></strong><span>Published</span></div>
+    <div class="stat-pill"><strong><%= scheduled %></strong><span>Scheduled</span></div>
+    <% if (topType) { %><div class="stat-pill"><strong><%= topType[1] %></strong><span><%= topType[0] %></span></div><% } %>
+  </div>
+  <% } %>
+
+  <!-- Filter chips -->
+  <div class="filters">
+    <span class="filter-label">Filter:</span>
+    <button class="filter-chip active" data-filter="all">All</button>
+    <button class="filter-chip" data-filter="status:processing">Processing</button>
+    <button class="filter-chip" data-filter="status:draft">Draft</button>
+    <button class="filter-chip" data-filter="status:scheduled">Scheduled</button>
+    <button class="filter-chip" data-filter="status:published">Published</button>
+    <% for (const t of contentTypes) { %>
+    <button class="filter-chip" data-filter="type:<%= t %>"><%= t %></button>
+    <% } %>
+  </div>
+
+  <!-- Card grid -->
+  <div class="card-grid" id="card-grid">
+  <% if (!posts.length) { %>
+    <div class="empty-state"><p>No posts yet. Generate your first LinkedIn post above.</p></div>
+  <% } %>
+  <% for (const p of posts) { %>
+  <%
+    const scoreVal = p.score?.overall_score;
+    const dateStr = new Date(p.created_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const statusLabel = { processing: 'Processing…', error: 'Error', draft: 'Draft', scheduled: 'Scheduled', published: 'Published' }[p.status] || p.status;
+    const calTopic = encodeURIComponent('Post: ' + p.topic);
+    const calDetail = encodeURIComponent(p.preview || p.topic);
+    const calDate = (p.scheduled_date || '').replace(/-/g, '');
+    const calUrl = p.scheduled_date ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTopic}&dates=${calDate}/${calDate}&details=${calDetail}` : '';
+  %>
+  <div class="post-card" id="card-<%= p.id %>" data-status="<%= p.status %>" data-type="<%= p.content_type || '' %>">
+    <div class="card-top">
+      <span class="card-date"><%= dateStr %></span>
+      <% if (scoreVal) { %><span class="badge badge-score"><%= scoreVal %>/5</span><% } %>
+    </div>
+    <div class="card-topic"><%= p.topic %></div>
+    <div class="card-badges">
+      <span class="badge badge-<%= p.status %>"><%= statusLabel %></span>
+      <% if (p.content_type) { %><span class="badge badge-type"><%= p.content_type %></span><% } %>
+      <% if (p.scheduled_date) { %><span class="badge badge-date">📅 <%= p.scheduled_date %></span><% } %>
+    </div>
+    <% if (p.preview && p.status !== 'processing') { %>
+    <div class="card-preview"><%= p.preview.replace(/[\r\n]+/g, ' ').slice(0, 150) %><% if (p.preview.length > 150) { %>…<% } %></div>
+    <% } else if (p.status === 'processing') { %>
+    <div class="card-preview" style="color:var(--text-dim);font-style:italic;">Pipeline running — this card will update when complete.</div>
+    <% } %>
+    <div class="card-actions">
+      <% if (p.status !== 'processing') { %>
+      <button class="btn-sm" onclick="toggleExpand('<%= p.id %>')">View</button>
+      <% } %>
+      <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">PDF</a><% } %>
+      <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">📅 Cal</a><% } %>
+      <% if (p.status !== 'processing') { %>
+      <button class="btn-sm danger" onclick="deletePost('<%= p.id %>')">Delete</button>
+      <% } %>
+    </div>
+
+    <% if (p.status !== 'processing') { %>
+    <div class="expand-panel" id="expand-<%= p.id %>">
+
+      <!-- Content type -->
+      <div class="panel-section">
+        <div class="panel-label">Content type</div>
+        <select class="type-select" onchange="setType('<%= p.id %>', this.value)">
+          <option value="">— Select type —</option>
+          <% for (const t of contentTypes) { %>
+          <option value="<%= t %>" <%= p.content_type === t ? 'selected' : '' %>><%= t %></option>
+          <% } %>
+        </select>
+      </div>
+
+      <!-- Score -->
+      <% if (scoreVal) { %>
+      <div class="panel-section">
+        <div class="panel-label">Score — <%= scoreVal %>/5</div>
+        <% if (p.score?.recruiter_value) { %><div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;"><%= p.score.recruiter_value %></div><% } %>
+        <% if (p.score?.axis_scores && Object.keys(p.score.axis_scores).length) { %>
+        <div class="score-grid">
+          <% for (const [k, v] of Object.entries(p.score.axis_scores)) { %>
+          <div class="score-item">
+            <div class="score-item-key"><%= k.replace(/_/g, ' ') %></div>
+            <div class="score-item-val"><%= v %>/5</div>
+          </div>
+          <% } %>
+        </div>
+        <% } %>
+        <% if (p.score?.top_fixes?.length) { %>
+        <div class="panel-label" style="margin-top:10px;">Top fixes</div>
+        <% for (const f of (p.score.top_fixes || [])) { %>
+        <div class="fix-item"><strong><%= f.problem %></strong> → <%= f.fix %></div>
+        <% } %>
+        <% } %>
+        <% if (p.score?.recruiter_perspective) { %>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:8px;font-style:italic;"><%= p.score.recruiter_perspective %></div>
+        <% } %>
+      </div>
+      <% } %>
+
+      <!-- Draft -->
+      <div class="panel-section">
+        <div class="panel-label">Refined draft</div>
+        <div class="panel-draft" id="draft-<%= p.id %>">
+          <button class="btn-sm" onclick="loadDraft('<%= p.id %>')">Load draft</button>
+        </div>
+      </div>
+
+      <!-- Links -->
+      <% if (p.carousel_url || p.sheet_url) { %>
+      <div class="panel-section">
+        <div class="panel-label">Links</div>
+        <div class="links-row">
+          <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">Carousel PDF</a><% } %>
+          <% if (p.sheet_url) { %><a href="<%= p.sheet_url %>" target="_blank" class="btn-sm">Google Sheet</a><% } %>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Schedule -->
+      <div class="panel-section">
+        <div class="panel-label">Schedule</div>
+        <div class="schedule-row">
+          <input type="date" class="schedule-input" id="date-<%= p.id %>" value="<%= p.scheduled_date || '' %>" />
+          <button class="btn-sm primary" onclick="schedulePost('<%= p.id %>')">Save date</button>
+          <span id="cal-link-<%= p.id %>">
+            <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">Add to Calendar</a><% } %>
+          </span>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="panel-section">
+        <div class="panel-label">Status</div>
+        <div class="status-row">
+          <button class="btn-sm<%= p.status === 'draft' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'draft')">Draft</button>
+          <button class="btn-sm<%= p.status === 'scheduled' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'scheduled')">Scheduled</button>
+          <button class="btn-sm<%= p.status === 'published' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'published')">Published</button>
+        </div>
+      </div>
+
+    </div>
+    <% } %>
+  </div>
+  <% } %>
+  </div>
+
+</div>
+</main>
+
+<script>
+// ── Generate ──────────────────────────────────────────────────────────────────
+const genBtn = document.getElementById('gen-btn');
+const genInput = document.getElementById('gen-topic');
+const genProgress = document.getElementById('gen-progress');
+const progressFill = document.getElementById('progress-fill');
+const progressMsg = document.getElementById('progress-msg');
+
+let pollTimer = null;
+
+function setProgress(pct, msg) {
+  progressFill.style.width = pct + '%';
+  progressMsg.textContent = msg;
+}
+
+genInput.addEventListener('keydown', e => { if (e.key === 'Enter') startGenerate(); });
+genBtn.addEventListener('click', startGenerate);
+
+async function startGenerate() {
+  const topic = genInput.value.trim();
+  if (!topic) { genInput.focus(); return; }
+
+  genBtn.disabled = true;
+  genBtn.textContent = 'Generating…';
+  genProgress.classList.add('visible');
+  setProgress(5, 'Starting pipeline…');
+
+  try {
+    const r = await fetch('/api/content/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic }),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.postId) throw new Error(d.error || 'Failed to start pipeline');
+    beginPolling(d.postId);
+  } catch (err) {
+    setProgress(0, 'Error: ' + err.message);
+    genBtn.disabled = false;
+    genBtn.textContent = 'Generate';
+  }
+}
+
+function beginPolling(postId) {
+  let tick = 0;
+  const MSGS = [
+    'Researching topic…', 'Reading sources…', 'Synthesising research…',
+    'Drafting post…', 'Scoring draft…', 'Refining post…',
+    'Creating carousel…', 'Uploading to Drive…', 'Saving to calendar…',
+  ];
+
+  pollTimer = setInterval(async () => {
+    tick++;
+    const pct = Math.min(90, 5 + tick * 3);
+    setProgress(pct, MSGS[Math.floor(tick / 3) % MSGS.length]);
+
+    try {
+      const r = await fetch('/api/content/posts/' + postId);
+      if (!r.ok) return;
+      const d = await r.json();
+      const status = d.post?.status;
+      if (status && status !== 'processing') {
+        clearInterval(pollTimer);
+        if (status === 'error') {
+          setProgress(100, 'Pipeline encountered an error — see the card below.');
+        } else {
+          setProgress(100, 'Done — refreshing page…');
+        }
+        setTimeout(() => window.location.reload(), 1500);
+      }
+    } catch (_) {}
+  }, 3000);
+}
+
+// ── Expand panel ──────────────────────────────────────────────────────────────
+window.toggleExpand = function(id) {
+  document.getElementById('expand-' + id)?.classList.toggle('open');
+};
+
+// ── Load draft ────────────────────────────────────────────────────────────────
+window.loadDraft = async function(id) {
+  const el = document.getElementById('draft-' + id);
+  el.textContent = 'Loading…';
+  try {
+    const r = await fetch('/api/content/posts/' + id);
+    const d = await r.json();
+    const text = d.post?.refined_draft || d.post?.draft || '(no draft yet)';
+    el.textContent = text;
+  } catch (err) {
+    el.textContent = 'Error loading draft: ' + err.message;
+  }
+};
+
+// ── Content type ──────────────────────────────────────────────────────────────
+window.setType = async function(id, type) {
+  await fetch('/api/content/posts/' + id + '/type', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type }),
+  }).catch(() => {});
+};
+
+// ── Status ────────────────────────────────────────────────────────────────────
+window.setStatus = async function(id, status) {
+  const r = await fetch('/api/content/posts/' + id + '/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  if (r.ok) window.location.reload();
+};
+
+// ── Schedule ──────────────────────────────────────────────────────────────────
+window.schedulePost = async function(id) {
+  const date = document.getElementById('date-' + id)?.value;
+  if (!date) return;
+  const r = await fetch('/api/content/posts/' + id + '/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date }),
+  });
+  if (r.ok) window.location.reload();
+};
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+window.deletePost = async function(id) {
+  if (!confirm('Delete this post? This cannot be undone.')) return;
+  const r = await fetch('/api/content/posts/' + id + '/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (r.ok) {
+    const card = document.getElementById('card-' + id);
+    if (card) card.remove();
+  }
+};
+
+// ── Filter chips ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', function () {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    const filter = this.dataset.filter;
+    document.querySelectorAll('.post-card').forEach(card => {
+      if (filter === 'all') { card.style.display = ''; return; }
+      const [kind, val] = filter.split(':');
+      const match = kind === 'status'
+        ? card.dataset.status === val
+        : card.dataset.type === val;
+      card.style.display = match ? '' : 'none';
+    });
+  });
+});
+</script>
+
+</body>
+</html>
