@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkedIn Content — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+  :root {
+    --card-radius: 12px;
+    --card-border: var(--border, #dddaf0);
+    --card-bg: var(--bg, #faf9fb);
+    --accent: var(--primary, #7c6af5);
+  }
+
+  /* ── Filter bar ── */
+  .filter-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin-bottom: 20px;
+  }
+  .filter-chip {
+    padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--card-border);
+    background: var(--card-bg); color: var(--text-dim, #767586);
+    transition: all 0.12s;
+  }
+  .filter-chip.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+
+  /* ── Card grid ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+  }
+  .post-card {
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    background: var(--card-bg);
+    padding: 18px 20px;
+    transition: box-shadow 0.15s;
+    display: flex; flex-direction: column; gap: 0;
+  }
+  .post-card:hover { box-shadow: 0 2px 14px rgba(0,0,0,0.07); }
+  .post-card.status-published { border-left: 3px solid #16a085; }
+  .post-card.status-scheduled { border-left: 3px solid #7c6af5; }
+  .post-card.status-archived  { opacity: 0.55; }
+  .post-card.status-processing { border-left: 3px solid #f0a500; }
+
+  .card-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 10px; margin-bottom: 10px;
+  }
+  .card-topic { font-size: 14px; font-weight: 600; color: var(--text, #15131e); line-height: 1.35; flex: 1; }
+  .card-date  { font-size: 11px; color: var(--text-dim, #767586); white-space: nowrap; flex-shrink: 0; }
+
+  .card-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; line-height: 1.5;
+  }
+  .badge-type       { background: rgba(124,106,245,0.12); color: #5b4ac4; }
+  .badge-status-draft     { background: rgba(0,0,0,0.06);       color: #555; }
+  .badge-status-scheduled { background: rgba(124,106,245,0.15); color: #5b4ac4; }
+  .badge-status-published { background: rgba(22,160,133,0.14);  color: #0e7a65; }
+  .badge-status-archived  { background: rgba(0,0,0,0.06);       color: #999; }
+  .badge-status-processing{ background: rgba(240,165,0,0.15);   color: #8a5a00; }
+  .badge-score      { background: rgba(22,160,133,0.12); color: #0e7a65; }
+  .badge-score-mid  { background: rgba(240,165,0,0.12);  color: #8a5a00; }
+  .badge-score-low  { background: rgba(186,26,26,0.1);   color: #ba1a1a; }
+
+  .card-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 12px; }
+
+  .card-preview {
+    font-size: 12px; line-height: 1.65; color: var(--text-dim, #555);
+    border-left: 2px solid var(--card-border); padding-left: 10px;
+    margin-bottom: 12px; display: -webkit-box; -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  .card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
+  .btn-sm {
+    padding: 5px 11px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--outline, #c7c4d7); background: transparent;
+    color: var(--text, #15131e); font-family: inherit; transition: background 0.12s;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .btn-sm:hover { background: rgba(0,0,0,0.05); }
+  .btn-sm.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-sm.primary:hover { opacity: 0.9; }
+  .btn-sm.danger { color: #ba1a1a; border-color: #ffdad6; }
+  .btn-sm.danger:hover { background: rgba(186,26,26,0.06); }
+
+  /* ── Detail drawer ── */
+  .detail-panel {
+    display: none; margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--card-border);
+  }
+  .detail-panel.open { display: block; }
+
+  .detail-section { margin-bottom: 18px; }
+  .detail-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--text-dim, #767586); margin-bottom: 6px;
+  }
+  .detail-body {
+    font-size: 13px; line-height: 1.7; color: var(--text, #15131e);
+    white-space: pre-wrap; background: var(--surface, #f9f8fd);
+    border: 1px solid var(--card-border); border-radius: 8px;
+    padding: 12px 14px; max-height: 300px; overflow-y: auto;
+  }
+  .detail-body.draft { border-left: 3px solid #aaa; }
+  .detail-body.refined { border-left: 3px solid var(--accent); }
+
+  .score-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px; margin-top: 8px;
+  }
+  .score-item {
+    background: var(--surface, #f9f8fd); border: 1px solid var(--card-border);
+    border-radius: 8px; padding: 8px 12px;
+  }
+  .score-item-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
+  .score-item-val   { font-size: 20px; font-weight: 700; color: var(--text); }
+
+  .form-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .form-inline input[type=date], .form-inline select {
+    padding: 5px 10px; font-size: 12px; border: 1px solid var(--outline, #c7c4d7);
+    border-radius: 6px; background: var(--card-bg); color: var(--text);
+    font-family: inherit;
+  }
+
+  /* ── Cal link ── */
+  .cal-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--accent); font-size: 12px; font-weight: 600;
+    text-decoration: none;
+  }
+  .cal-link:hover { text-decoration: underline; }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center; padding: 60px 20px; color: var(--text-dim);
+    font-size: 14px; grid-column: 1 / -1;
+  }
+  .empty strong { display: block; font-size: 16px; margin-bottom: 6px; color: var(--text); }
+
+  /* ── Summary bar ── */
+  .summary-bar {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    background: var(--card-bg); border: 1px solid var(--card-border);
+    border-radius: var(--card-radius); padding: 14px 20px; margin-bottom: 20px;
+  }
+  .summary-stat { display: flex; flex-direction: column; gap: 2px; }
+  .summary-stat-val { font-size: 22px; font-weight: 700; color: var(--text); }
+  .summary-stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>LinkedIn Content — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/shortcuts">Cards</a>
+    <a href="/admin/test">Test</a>
+    <a href="/admin/linkedin" style="font-weight:600">Content</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+    <div>
+      <h2 style="margin-bottom:4px;">Content pipeline</h2>
+      <p style="font-size:13px;color:var(--text-dim);margin:0;">
+        Trigger from dchat: type <code>linkedin <em>topic</em></code> or <code>content <em>topic</em></code>.
+        Posts are saved here automatically.
+      </p>
+    </div>
+  </div>
+
+  <%
+    const total = posts.length;
+    const published = posts.filter(p => p.status === 'published').length;
+    const scheduled = posts.filter(p => p.status === 'scheduled').length;
+    const typeCounts = {};
+    posts.forEach(p => { if (p.content_type) typeCounts[p.content_type] = (typeCounts[p.content_type] || 0) + 1; });
+    const topType = Object.entries(typeCounts).sort((a,b) => b[1]-a[1])[0];
+  %>
+
+  <% if (total > 0) { %>
+  <div class="summary-bar">
+    <div class="summary-stat">
+      <span class="summary-stat-val"><%= total %></span>
+      <span class="summary-stat-label">Total posts</span>
+    </div>
+    <div class="summary-stat">
+      <span class="summary-stat-val"><%= published %></span>
+      <span class="summary-stat-label">Published</span>
+    </div>
+    <div class="summary-stat">
+      <span class="summary-stat-val"><%= scheduled %></span>
+      <span class="summary-stat-label">Scheduled</span>
+    </div>
+    <% if (topType) { %>
+    <div class="summary-stat">
+      <span class="summary-stat-val" style="font-size:15px;padding-top:4px;"><%= topType[0] %></span>
+      <span class="summary-stat-label">Most used type (<%= topType[1] %>)</span>
+    </div>
+    <% } %>
+  </div>
+  <% } %>
+
+  <!-- Filter chips -->
+  <div class="filter-bar" id="filter-bar">
+    <span class="filter-chip active" data-filter="all">All</span>
+    <span class="filter-chip" data-filter="draft">Draft</span>
+    <span class="filter-chip" data-filter="scheduled">Scheduled</span>
+    <span class="filter-chip" data-filter="published">Published</span>
+    <span style="width:1px;height:20px;background:var(--card-border);margin:0 4px;"></span>
+    <% for (const ct of contentTypes) { %>
+    <span class="filter-chip" data-type="<%= ct %>"><%= ct %></span>
+    <% } %>
+  </div>
+
+  <div class="card-grid" id="posts-grid">
+  <% if (posts.length === 0) { %>
+    <div class="empty">
+      <strong>No posts yet</strong>
+      Type <code>linkedin Microsoft Copilot and the agentic shift</code> in dchat to generate your first one.
+    </div>
+  <% } %>
+
+  <% for (const p of posts) { %>
+  <%
+    const score = p.score || {};
+    const overall = score.overall_score;
+    const scoreCls = overall >= 4 ? 'badge-score' : overall >= 3 ? 'badge-score-mid' : 'badge-score-low';
+    const statusCls = `badge-status-${p.status || 'draft'}`;
+    const dateLabel = new Date(p.created_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    const displayPost = p.refined_preview || p.draft_preview || '';
+    const axes = score.axis_scores || {};
+
+    // Google Calendar quick-add URL (only shown when scheduled_date is set)
+    const calText = encodeURIComponent(`LinkedIn: ${p.topic}`);
+    const calDetail = encodeURIComponent((p.refined_preview || p.draft_preview || '').slice(0, 200) + (p.carousel_url ? `\n\nCarousel: ${p.carousel_url}` : ''));
+    const calDateFmt = p.scheduled_date ? p.scheduled_date.replace(/-/g, '') : '';
+    const calUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calText}&dates=${calDateFmt}/${calDateFmt}&details=${calDetail}`;
+  %>
+  <div class="post-card status-<%= p.status || 'draft' %>"
+       data-status="<%= p.status || 'draft' %>"
+       data-type="<%= p.content_type || '' %>"
+       id="post-<%= p.id %>">
+
+    <div class="card-head">
+      <div class="card-topic"><%= p.topic %></div>
+      <div class="card-date"><%= dateLabel %></div>
+    </div>
+
+    <div class="card-badges">
+      <span class="badge <%= statusCls %>"><%= p.status || 'draft' %></span>
+      <% if (p.content_type) { %><span class="badge badge-type"><%= p.content_type %></span><% } %>
+      <% if (overall) { %><span class="badge <%= scoreCls %>"><%= overall.toFixed(1) %>/5</span><% } %>
+      <% if (score.recruiter_value) { %><span class="badge badge-score-mid"><%= score.recruiter_value %></span><% } %>
+    </div>
+
+    <% if (p.scheduled_date) { %>
+    <div class="card-meta">
+      Scheduled: <strong><%= p.scheduled_date %></strong>
+      <a class="cal-link" href="<%= calUrl %>" target="_blank" style="margin-left:8px;">+ Google Calendar</a>
+    </div>
+    <% } %>
+
+    <% if (displayPost) { %>
+    <div class="card-preview"><%= displayPost %></div>
+    <% } %>
+
+    <div class="card-actions">
+      <button class="btn-sm primary" onclick="toggleDetail('<%= p.id %>')">View</button>
+      <% if (p.carousel_url) { %>
+      <a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">Carousel PDF</a>
+      <% } %>
+      <button class="btn-sm" onclick="toggleSchedule('<%= p.id %>')">Schedule</button>
+      <form method="POST" action="/admin/linkedin/<%= p.id %>/status" style="display:inline">
+        <input type="hidden" name="status" value="<%= p.status === 'published' ? 'draft' : 'published' %>">
+        <button type="submit" class="btn-sm"><%= p.status === 'published' ? 'Unpublish' : 'Mark published' %></button>
+      </form>
+      <form method="POST" action="/admin/linkedin/<%= p.id %>/delete" style="display:inline" onsubmit="return confirm('Delete this post?')">
+        <button type="submit" class="btn-sm danger">Delete</button>
+      </form>
+    </div>
+
+    <!-- Schedule panel -->
+    <div class="detail-panel" id="sched-<%= p.id %>">
+      <form method="POST" action="/admin/linkedin/<%= p.id %>/schedule" class="form-inline">
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);">Schedule date</label>
+        <input type="date" name="scheduled_date" value="<%= p.scheduled_date || '' %>">
+        <button type="submit" class="btn-sm primary">Save date</button>
+        <% if (p.scheduled_date) { %>
+        <a href="<%= calUrl %>" target="_blank" class="cal-link">+ Add to Google Calendar</a>
+        <% } %>
+      </form>
+      <form method="POST" action="/admin/linkedin/<%= p.id %>/type" class="form-inline" style="margin-top:10px;">
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);">Content type</label>
+        <select name="content_type">
+          <option value="">— none —</option>
+          <% for (const ct of contentTypes) { %>
+          <option value="<%= ct %>" <%= p.content_type === ct ? 'selected' : '' %>><%= ct %></option>
+          <% } %>
+        </select>
+        <button type="submit" class="btn-sm">Save type</button>
+      </form>
+    </div>
+
+    <!-- Full detail panel -->
+    <div class="detail-panel" id="detail-<%= p.id %>">
+
+      <% if (p.content_type || !p.content_type) { %>
+      <div class="detail-section">
+        <form method="POST" action="/admin/linkedin/<%= p.id %>/type" class="form-inline">
+          <div class="detail-label" style="margin-bottom:0;">Content type</div>
+          <select name="content_type">
+            <option value="">— none —</option>
+            <% for (const ct of contentTypes) { %>
+            <option value="<%= ct %>" <%= p.content_type === ct ? 'selected' : '' %>><%= ct %></option>
+            <% } %>
+          </select>
+          <button type="submit" class="btn-sm">Save</button>
+        </form>
+      </div>
+      <% } %>
+
+      <div class="detail-section">
+        <div class="detail-label">Topic / Hermes prompt</div>
+        <div class="detail-body"><%= p.topic %></div>
+      </div>
+
+      <% if (p.score && p.score.overall_score) { %>
+      <div class="detail-section">
+        <div class="detail-label">Score — <%= p.score.overall_score.toFixed(1) %>/5 &nbsp;·&nbsp; Recruiter: <%= p.score.recruiter_value || '—' %></div>
+        <div class="score-grid">
+          <% for (const [k, v] of Object.entries(axes)) { %>
+          <div class="score-item">
+            <div class="score-item-label"><%= k.replace(/_/g,' ') %></div>
+            <div class="score-item-val"><%= v %><span style="font-size:13px;color:var(--text-dim);font-weight:400;">/5</span></div>
+          </div>
+          <% } %>
+        </div>
+        <% if (p.score.recruiter_perspective) { %>
+        <div style="margin-top:10px;font-size:12px;color:var(--text-dim);font-style:italic;line-height:1.6;">
+          <%= p.score.recruiter_perspective %>
+        </div>
+        <% } %>
+      </div>
+      <% } %>
+
+      <div class="detail-section" id="draft-section-<%= p.id %>">
+        <div class="detail-label" style="display:flex;justify-content:space-between;">
+          <span>First draft (DeepSeek)</span>
+          <button class="btn-sm" style="padding:2px 8px;font-size:11px;" onclick="loadDraft('<%= p.id %>', 'draft')">Load full</button>
+        </div>
+        <div class="detail-body draft" id="draft-body-<%= p.id %>"><%= p.draft_preview || '' %><% if ((p.draft_preview || '').length >= 200) { %><span style="color:var(--text-dim)"> … (click Load full)</span><% } %></div>
+      </div>
+
+      <div class="detail-section" id="refined-section-<%= p.id %>">
+        <div class="detail-label" style="display:flex;justify-content:space-between;">
+          <span>Refined draft (Mistral)</span>
+          <button class="btn-sm" style="padding:2px 8px;font-size:11px;" onclick="loadDraft('<%= p.id %>', 'refined')">Load full</button>
+        </div>
+        <div class="detail-body refined" id="refined-body-<%= p.id %>"><%= p.refined_preview || '—' %><% if ((p.refined_preview || '').length >= 200) { %><span style="color:var(--text-dim)"> … (click Load full)</span><% } %></div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px;">
+        <% if (p.carousel_url) { %>
+        <a href="<%= p.carousel_url %>" target="_blank" class="btn-sm primary">Open carousel PDF</a>
+        <% } %>
+        <% if (p.sheet_url) { %>
+        <a href="<%= p.sheet_url %>" target="_blank" class="btn-sm">Google Sheets</a>
+        <% } %>
+        <% if (p.scheduled_date) { %>
+        <a href="<%= calUrl %>" target="_blank" class="cal-link btn-sm">+ Google Calendar</a>
+        <% } %>
+      </div>
+    </div>
+
+  </div>
+  <% } %>
+  </div>
+</section>
+
+<script>
+// ── Toggle panels ────────────────────────────────────────────────────────────
+function toggleDetail(id) {
+  const el = document.getElementById('detail-' + id);
+  const sched = document.getElementById('sched-' + id);
+  if (sched) sched.classList.remove('open');
+  if (el) el.classList.toggle('open');
+}
+function toggleSchedule(id) {
+  const el = document.getElementById('sched-' + id);
+  const det = document.getElementById('detail-' + id);
+  if (det) det.classList.remove('open');
+  if (el) el.classList.toggle('open');
+}
+
+// ── Load full draft/refined text ─────────────────────────────────────────────
+async function loadDraft(postId, field) {
+  const bodyEl = document.getElementById((field === 'draft' ? 'draft' : 'refined') + '-body-' + postId);
+  if (!bodyEl) return;
+  try {
+    const r = await fetch(`/admin/linkedin/${postId}`);
+    const { post } = await r.json();
+    if (!post) return;
+    bodyEl.textContent = field === 'draft' ? (post.draft || '—') : (post.refined_draft || '—');
+  } catch (e) {
+    bodyEl.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+// ── Filter chips ─────────────────────────────────────────────────────────────
+(function () {
+  const chips = document.querySelectorAll('.filter-chip');
+  const cards = document.querySelectorAll('.post-card');
+  let activeStatus = 'all';
+  let activeType   = null;
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (chip.dataset.filter !== undefined) {
+        document.querySelectorAll('[data-filter]').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        activeStatus = chip.dataset.filter;
+      } else if (chip.dataset.type !== undefined) {
+        if (chip.classList.contains('active')) {
+          chip.classList.remove('active');
+          activeType = null;
+        } else {
+          document.querySelectorAll('[data-type]').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+          activeType = chip.dataset.type;
+        }
+      }
+      applyFilter();
+    });
+  });
+
+  function applyFilter() {
+    cards.forEach(card => {
+      const statusMatch = activeStatus === 'all' || card.dataset.status === activeStatus;
+      const typeMatch   = !activeType || card.dataset.type === activeType;
+      card.style.display = (statusMatch && typeMatch) ? '' : 'none';
+    });
+  }
+})();
+</script>
+</body>
+</html>

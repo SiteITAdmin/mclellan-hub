@@ -1036,4 +1036,68 @@ router.post('/admin/trigger-email-digest', requireHubAdmin, async (req, res) => 
   }
 });
 
+// ── LinkedIn content pipeline ─────────────────────────────────────────────────
+
+const CONTENT_TYPES = [
+  'AI & Technology', 'M365 & Microsoft', 'Healthcare IT',
+  'Digital Transformation', 'EU Policy & Regulation',
+  'Leadership & Management', 'Industry Analysis',
+  'Product Review', 'Case Study', 'Career & Development',
+];
+
+router.get('/admin/linkedin', requireHubAdmin, (req, res) => {
+  const posts = db.hub().prepare(
+    `SELECT id, user, topic, content_type, score_json, carousel_url, image_url,
+            sheet_url, scheduled_date, status, created_at,
+            substr(draft, 1, 200) AS draft_preview,
+            substr(refined_draft, 1, 200) AS refined_preview
+     FROM linkedin_posts WHERE user = ? ORDER BY created_at DESC LIMIT 100`
+  ).all(req.hubUser);
+
+  const parsed = posts.map(p => ({
+    ...p,
+    score: (() => { try { return JSON.parse(p.score_json || '{}'); } catch { return {}; } })(),
+  }));
+
+  res.render('hub-admin/linkedin', { user: req.hubUser, posts: parsed, contentTypes: CONTENT_TYPES });
+});
+
+router.get('/admin/linkedin/:id', requireHubAdmin, (req, res) => {
+  const post = db.hub().prepare(
+    `SELECT * FROM linkedin_posts WHERE id = ? AND user = ?`
+  ).get(req.params.id, req.hubUser);
+  if (!post) return res.status(404).json({ error: 'Not found' });
+  post.score = (() => { try { return JSON.parse(post.score_json || '{}'); } catch { return {}; } })();
+  res.json({ ok: true, post });
+});
+
+router.post('/admin/linkedin/:id/type', requireHubAdmin, (req, res) => {
+  const { content_type } = req.body;
+  db.hub().prepare('UPDATE linkedin_posts SET content_type = ? WHERE id = ? AND user = ?')
+    .run(content_type || '', req.params.id, req.hubUser);
+  res.redirect('/admin/linkedin');
+});
+
+router.post('/admin/linkedin/:id/status', requireHubAdmin, (req, res) => {
+  const { status } = req.body;
+  const allowed = ['draft', 'scheduled', 'published', 'archived'];
+  if (!allowed.includes(status)) return res.redirect('/admin/linkedin');
+  db.hub().prepare('UPDATE linkedin_posts SET status = ? WHERE id = ? AND user = ?')
+    .run(status, req.params.id, req.hubUser);
+  res.redirect('/admin/linkedin');
+});
+
+router.post('/admin/linkedin/:id/schedule', requireHubAdmin, (req, res) => {
+  const { scheduled_date } = req.body;
+  db.hub().prepare('UPDATE linkedin_posts SET scheduled_date = ?, status = ? WHERE id = ? AND user = ?')
+    .run(scheduled_date || '', scheduled_date ? 'scheduled' : 'draft', req.params.id, req.hubUser);
+  res.redirect('/admin/linkedin');
+});
+
+router.post('/admin/linkedin/:id/delete', requireHubAdmin, (req, res) => {
+  db.hub().prepare('DELETE FROM linkedin_posts WHERE id = ? AND user = ?')
+    .run(req.params.id, req.hubUser);
+  res.redirect('/admin/linkedin');
+});
+
 module.exports = router;
