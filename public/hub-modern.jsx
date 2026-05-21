@@ -318,7 +318,7 @@ function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
         <nav className="sb-nav">
           <SbItem icon="chat" label="Chats" expanded={expanded} active={!activeSlug} onClick={() => window.location.href = '/c'} />
           <SbItem icon="people" label="People" expanded={expanded} onClick={() => window.location.href = '/crm'} />
-          <SbItem icon="sparkle" label="Content" expanded={expanded} onClick={() => window.location.href = '/content'} />
+          <SbItem icon="sparkle" label="Content" expanded={expanded} onClick={() => window.location.href = '/lin'} />
         </nav>
 
         {expanded && projects.length > 0 && (
