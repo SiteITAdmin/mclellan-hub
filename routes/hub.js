@@ -1817,7 +1817,7 @@ const CONTENT_TYPES_HUB = [
   'Product Review', 'Case Study', 'Career & Development',
 ];
 
-router.get('/content', requireAuth, (req, res) => {
+router.get('/lin', requireAuth, (req, res) => {
   const posts = db.hub().prepare(
     `SELECT id, topic, content_type, score_json, carousel_url, sheet_url,
             scheduled_date, status, created_at,
