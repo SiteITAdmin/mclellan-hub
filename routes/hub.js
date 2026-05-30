@@ -2045,4 +2045,107 @@ router.post('/api/flights/:id/delete', requireAuth, requireSameOrigin, writeLimi
   res.json({ ok: true });
 });
 
+async function aviationstackLookup(flightNumber, flightDate) {
+  const key = process.env.AVIATIONSTACK_KEY;
+  if (!key) throw new Error('AVIATIONSTACK_KEY not set');
+
+  const url = `http://api.aviationstack.com/v1/flights?access_key=${encodeURIComponent(key)}&flight_iata=${encodeURIComponent(flightNumber)}&flight_date=${flightDate}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`API HTTP ${resp.status}`);
+  const json = await resp.json();
+  if (json.error) throw new Error(json.error.message || 'AviationStack error');
+  if (!json.data?.length) return null;
+
+  const DUB_EDI = new Set(['DUB', 'EDI', 'EIDW', 'EGPH']);
+  const f = json.data.find(d =>
+    DUB_EDI.has(d.departure?.iata) || DUB_EDI.has(d.arrival?.iata)
+  ) || json.data[0];
+
+  function t(iso) {
+    if (!iso) return '';
+    const m = iso.match(/T(\d{2}:\d{2})/);
+    return m ? m[1] : '';
+  }
+
+  return {
+    scheduled_dep: t(f.departure?.scheduled),
+    actual_dep:    t(f.departure?.actual),
+    scheduled_arr: t(f.arrival?.scheduled),
+    actual_arr:    t(f.arrival?.actual),
+    status:  f.flight_status === 'cancelled' ? 'cancelled'
+           : f.flight_status === 'diverted'  ? 'diverted'
+           : 'completed',
+    airline: f.airline?.name || '',
+    dep_iata: f.departure?.iata || '',
+    arr_iata: f.arrival?.iata  || '',
+  };
+}
+
+router.post('/api/flights/lookup', requireAuth, requireSameOrigin, async (req, res) => {
+  const { flight_number, flight_date } = req.body;
+  if (!flight_number || !flight_date) {
+    return res.status(400).json({ error: 'flight_number and flight_date are required' });
+  }
+  if (!process.env.AVIATIONSTACK_KEY) {
+    return res.status(503).json({ error: 'AVIATIONSTACK_KEY not configured on this server' });
+  }
+  try {
+    const data = await aviationstackLookup(flight_number.trim().toUpperCase(), flight_date);
+    if (!data) return res.status(404).json({ error: 'No flight data found for that number and date' });
+    res.json(data);
+  } catch (err) {
+    console.error('[flights lookup]', err.message);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, async (req, res) => {
+  const user = req.hubUser;
+  if (!process.env.AVIATIONSTACK_KEY) {
+    return res.status(503).json({ error: 'AVIATIONSTACK_KEY not configured on this server' });
+  }
+
+  const candidates = db.hub().prepare(`
+    SELECT id, flight_number, flight_date FROM flights
+    WHERE user = ? AND flight_number != '' AND (scheduled_dep = '' OR actual_arr = '')
+    ORDER BY flight_date ASC
+  `).all(user);
+
+  if (!candidates.length) return res.json({ updated: 0, failed: 0, results: [] });
+
+  const results = [];
+  let updated = 0, failed = 0;
+
+  for (const row of candidates) {
+    await new Promise(r => setTimeout(r, 350)); // stay well within free-tier rate limits
+    try {
+      const data = await aviationstackLookup(row.flight_number, row.flight_date);
+      if (!data) { failed++; results.push({ id: row.id, ok: false, error: 'No data' }); continue; }
+
+      db.hub().prepare(`
+        UPDATE flights SET
+          scheduled_dep = CASE WHEN scheduled_dep = '' THEN ? ELSE scheduled_dep END,
+          actual_dep    = CASE WHEN actual_dep    = '' THEN ? ELSE actual_dep    END,
+          scheduled_arr = CASE WHEN scheduled_arr = '' THEN ? ELSE scheduled_arr END,
+          actual_arr    = CASE WHEN actual_arr    = '' THEN ? ELSE actual_arr    END,
+          status  = ?,
+          airline = CASE WHEN airline = '' THEN ? ELSE airline END
+        WHERE id = ? AND user = ?
+      `).run(
+        data.scheduled_dep, data.actual_dep, data.scheduled_arr, data.actual_arr,
+        data.status, data.airline,
+        row.id, user,
+      );
+
+      updated++;
+      results.push({ id: row.id, ok: true, flight_number: row.flight_number, flight_date: row.flight_date });
+    } catch (err) {
+      failed++;
+      results.push({ id: row.id, ok: false, error: err.message });
+    }
+  }
+
+  res.json({ updated, failed, results });
+});
+
 module.exports = router;

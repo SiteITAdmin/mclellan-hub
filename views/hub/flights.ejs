@@ -172,12 +172,38 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
 
 .fl-status-msg { font-size: 13px; color: var(--text-dim); margin-top: 8px; min-height: 18px; }
 
-/* ── Tracker note ─────────────────────────────────────────────────────────── */
+/* ── Tracker / API note ───────────────────────────────────────────────────── */
 .fl-tracker-note {
   background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
-  padding: 12px 14px; margin-bottom: 24px; font-size: 13px; color: var(--text-dim); line-height: 1.6;
+  padding: 12px 14px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.6;
 }
 .fl-tracker-note a { color: var(--accent); }
+
+.fl-api-bar {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.fl-fetch-btn {
+  background: var(--surface); color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 8px 16px; font-size: 13px; font-weight: 600;
+  font-family: var(--font); cursor: pointer; transition: background .15s;
+}
+.fl-fetch-btn:hover { background: var(--accent-light); }
+.fl-fetch-btn:disabled { opacity: .5; cursor: default; }
+.fl-api-status { font-size: 13px; color: var(--text-dim); }
+
+/* ── Look up button inside modal ─────────────────────────────────────────── */
+.fl-lookup-row {
+  display: flex; align-items: center; gap: 10px; grid-column: 1 / -1;
+  border-top: 1px solid var(--border); padding-top: 14px; margin-top: 2px; flex-wrap: wrap;
+}
+.fl-lookup-btn {
+  background: var(--surface2); color: var(--accent); border: 1px solid var(--border);
+  border-radius: 9px; padding: 7px 14px; font-size: 13px; font-weight: 600;
+  font-family: var(--font); cursor: pointer; transition: border-color .12s;
+}
+.fl-lookup-btn:hover { border-color: var(--accent); }
+.fl-lookup-btn:disabled { opacity: .5; cursor: default; }
+.fl-lookup-status { font-size: 12px; color: var(--text-dim); }
 
 @media (max-width: 600px) {
   .fl-form { grid-template-columns: 1fr; }
@@ -271,13 +297,19 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
     </div>
   </div>
 
-  <!-- Historical data note -->
+  <!-- API / tracker note -->
   <div class="fl-tracker-note">
-    For historical flight times, look up your flight on
-    <a href="https://www.flightaware.com" target="_blank" rel="noopener">FlightAware</a> or
-    <a href="https://www.flightradar24.com" target="_blank" rel="noopener">FlightRadar24</a>
-    and paste the actual times + a link in the tracker URL field. Both sites keep records going back several years.
-    Ryanair flights are typically FR#### · Aer Lingus: EI### · easyJet: U2####.
+    Add your flights using just the flight number + date from your Ryanair app, then click
+    <strong>Fetch missing times</strong> to auto-fill scheduled/actual times via AviationStack.
+    Needs <code>AVIATIONSTACK_KEY</code> in your server env — free tier at
+    <a href="https://aviationstack.com" target="_blank" rel="noopener">aviationstack.com</a>
+    covers ~100 lookups/month (paid plans unlock full history beyond ~3 months).
+    Ryanair: FR#### · Aer Lingus: EI### · easyJet: U2####.
+  </div>
+
+  <div class="fl-api-bar">
+    <button id="bulk-lookup-btn" class="fl-fetch-btn">Fetch missing times</button>
+    <span id="bulk-status" class="fl-api-status"></span>
   </div>
 
   <!-- Flights table -->
@@ -477,6 +509,11 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
         </div>
       </div>
 
+      <div class="fl-lookup-row">
+        <button type="button" id="lookup-btn" class="fl-lookup-btn">Look up times via AviationStack</button>
+        <span id="lookup-status" class="fl-lookup-status"></span>
+      </div>
+
       <div class="fl-field full">
         <label class="fl-label" for="f-tracker">Tracker URL</label>
         <input type="url" id="f-tracker" class="fl-input" placeholder="Paste FlightAware / FR24 link for this specific flight">
@@ -621,6 +658,73 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
       statusEl.textContent = '✖ ' + err.message;
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save flight';
+    }
+  });
+
+  // ── AviationStack single-flight lookup ────────────────────────────────────
+  const lookupBtn = document.getElementById('lookup-btn');
+  const lookupStatus = document.getElementById('lookup-status');
+
+  lookupBtn.addEventListener('click', async () => {
+    const flnr = fields.flnr.value.trim();
+    const date = fields.date.value;
+    if (!flnr || !date) {
+      lookupStatus.textContent = 'Enter a flight number and date first.';
+      return;
+    }
+    lookupBtn.disabled = true;
+    lookupBtn.textContent = 'Looking up…';
+    lookupStatus.textContent = '';
+    try {
+      const r = await fetch('/api/flights/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ flight_number: flnr, flight_date: date }),
+      });
+      const d = await r.json();
+      if (!r.ok) { lookupStatus.textContent = '✖ ' + (d.error || 'Lookup failed'); return; }
+      if (d.scheduled_dep) fields.sdep.value = d.scheduled_dep;
+      if (d.actual_dep)    fields.adep.value = d.actual_dep;
+      if (d.scheduled_arr) fields.sarr.value = d.scheduled_arr;
+      if (d.actual_arr)    fields.aarr.value = d.actual_arr;
+      if (d.status)        fields.status.value = d.status;
+      if (d.airline && !fields.airline.value) fields.airline.value = d.airline;
+      lookupStatus.textContent = '✓ Times filled in — review and save.';
+    } catch (err) {
+      lookupStatus.textContent = '✖ ' + err.message;
+    } finally {
+      lookupBtn.disabled = false;
+      lookupBtn.textContent = 'Look up times via AviationStack';
+    }
+  });
+
+  // ── AviationStack bulk lookup ─────────────────────────────────────────────
+  const bulkBtn = document.getElementById('bulk-lookup-btn');
+  const bulkStatus = document.getElementById('bulk-status');
+
+  bulkBtn.addEventListener('click', async () => {
+    bulkBtn.disabled = true;
+    bulkBtn.textContent = 'Fetching…';
+    bulkStatus.textContent = 'Looking up missing times — this may take a moment…';
+    try {
+      const r = await fetch('/api/flights/bulk-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: '{}',
+      });
+      const d = await r.json();
+      if (!r.ok) { bulkStatus.textContent = '✖ ' + (d.error || 'Failed'); return; }
+      if (d.updated === 0 && d.failed === 0) {
+        bulkStatus.textContent = 'All flights already have time data.';
+      } else {
+        bulkStatus.textContent = `✓ Updated ${d.updated} flight${d.updated !== 1 ? 's' : ''}${d.failed ? ` · ${d.failed} failed` : ''} — reloading…`;
+        setTimeout(() => window.location.reload(), 1200);
+      }
+    } catch (err) {
+      bulkStatus.textContent = '✖ ' + err.message;
+    } finally {
+      bulkBtn.disabled = false;
+      bulkBtn.textContent = 'Fetch missing times';
     }
   });
 })();
