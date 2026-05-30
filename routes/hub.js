@@ -1898,4 +1898,151 @@ router.post('/api/content/posts/:id/delete', requireAuth, requireSameOrigin, wri
   res.json({ ok: true });
 });
 
+// ── Flights (DUB ↔ EDI personal log) ─────────────────────────────────────────
+
+function parseFlightMinutes(t) {
+  if (!t || typeof t !== 'string') return null;
+  const m = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
+function flightDelay(scheduled, actual) {
+  const s = parseFlightMinutes(scheduled);
+  const a = parseFlightMinutes(actual);
+  if (s === null || a === null) return null;
+  let diff = a - s;
+  if (diff < -720) diff += 1440; // handle midnight crossings
+  if (diff > 720) diff -= 1440;
+  return diff;
+}
+
+function computeFlightStats(flights) {
+  const completed = flights.filter(f => f.status !== 'cancelled');
+  const withArr = completed.filter(f => f.scheduled_arr && f.actual_arr);
+  const arrDelays = withArr
+    .map(f => flightDelay(f.scheduled_arr, f.actual_arr))
+    .filter(d => d !== null);
+
+  const onTime = arrDelays.filter(d => d <= 15).length;
+  const avgArr = arrDelays.length
+    ? Math.round(arrDelays.reduce((a, b) => a + b, 0) / arrDelays.length)
+    : null;
+  const worstArr = arrDelays.length ? Math.max(...arrDelays) : null;
+
+  const airlineCounts = {};
+  for (const f of flights) {
+    const a = (f.airline || '').trim();
+    if (a) airlineCounts[a] = (airlineCounts[a] || 0) + 1;
+  }
+  const topEntry = Object.entries(airlineCounts).sort((a, b) => b[1] - a[1])[0];
+
+  return {
+    total: flights.length,
+    cancelled: flights.filter(f => f.status === 'cancelled').length,
+    onTimePct: arrDelays.length ? Math.round((onTime / arrDelays.length) * 100) : null,
+    onTimeSample: arrDelays.length,
+    avgArrDelay: avgArr,
+    worstArrDelay: worstArr,
+    dubToEdi: flights.filter(f => f.direction === 'DUB-EDI').length,
+    ediToDub: flights.filter(f => f.direction === 'EDI-DUB').length,
+    topAirline: topEntry ? { name: topEntry[0], count: topEntry[1] } : null,
+  };
+}
+
+router.get('/flights', requireAuth, (req, res) => {
+  const user = req.hubUser;
+  const raw = db.hub().prepare(
+    'SELECT * FROM flights WHERE user = ? ORDER BY flight_date DESC, created_at DESC'
+  ).all(user);
+  const flights = raw.map(f => ({
+    ...f,
+    dep_delay: flightDelay(f.scheduled_dep, f.actual_dep),
+    arr_delay: flightDelay(f.scheduled_arr, f.actual_arr),
+  }));
+  const stats = computeFlightStats(raw);
+  res.render('hub/flights', { user, flights, stats });
+});
+
+router.post('/api/flights', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const user = req.hubUser;
+  const { flight_number, airline, direction, flight_date,
+    scheduled_dep, actual_dep, scheduled_arr, actual_arr,
+    status, notes, tracker_url } = req.body;
+
+  if (!direction || !flight_date) {
+    return res.status(400).json({ error: 'direction and flight_date are required' });
+  }
+  if (!['DUB-EDI', 'EDI-DUB'].includes(direction)) {
+    return res.status(400).json({ error: 'Invalid direction' });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(flight_date)) {
+    return res.status(400).json({ error: 'Invalid date format' });
+  }
+
+  const id = uuid();
+  db.hub().prepare(`
+    INSERT INTO flights
+      (id, user, flight_number, airline, direction, flight_date,
+       scheduled_dep, actual_dep, scheduled_arr, actual_arr, status, notes, tracker_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, user,
+    (flight_number || '').trim().toUpperCase(),
+    (airline || '').trim(),
+    direction,
+    flight_date,
+    (scheduled_dep || '').trim(),
+    (actual_dep || '').trim(),
+    (scheduled_arr || '').trim(),
+    (actual_arr || '').trim(),
+    status || 'completed',
+    (notes || '').trim(),
+    (tracker_url || '').trim(),
+  );
+  res.json({ ok: true, id });
+});
+
+router.put('/api/flights/:id', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const user = req.hubUser;
+  const existing = db.hub().prepare('SELECT id FROM flights WHERE id = ? AND user = ?').get(req.params.id, user);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+
+  const { flight_number, airline, direction, flight_date,
+    scheduled_dep, actual_dep, scheduled_arr, actual_arr,
+    status, notes, tracker_url } = req.body;
+
+  if (!['DUB-EDI', 'EDI-DUB'].includes(direction)) {
+    return res.status(400).json({ error: 'Invalid direction' });
+  }
+
+  db.hub().prepare(`
+    UPDATE flights SET
+      flight_number = ?, airline = ?, direction = ?, flight_date = ?,
+      scheduled_dep = ?, actual_dep = ?, scheduled_arr = ?, actual_arr = ?,
+      status = ?, notes = ?, tracker_url = ?
+    WHERE id = ? AND user = ?
+  `).run(
+    (flight_number || '').trim().toUpperCase(),
+    (airline || '').trim(),
+    direction,
+    flight_date,
+    (scheduled_dep || '').trim(),
+    (actual_dep || '').trim(),
+    (scheduled_arr || '').trim(),
+    (actual_arr || '').trim(),
+    status || 'completed',
+    (notes || '').trim(),
+    (tracker_url || '').trim(),
+    req.params.id, user,
+  );
+  res.json({ ok: true });
+});
+
+router.post('/api/flights/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const result = db.hub().prepare('DELETE FROM flights WHERE id = ? AND user = ?').run(req.params.id, req.hubUser);
+  if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
 module.exports = router;
