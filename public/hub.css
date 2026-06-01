@@ -3,45 +3,45 @@
    Matches public portfolio + admin. Mobile-Safari friendly.
    ══════════════════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #fcf8ff;
+  --bg: #f8faff;
   --surface: #ffffff;
-  --surface2: #f4effb;
-  --surface3: #ebe4f5;
-  --border: #e5e0ed;
-  --border-strong: #d4ccdf;
-  --accent: #4648d4;
-  --accent-hover: #3a3cb8;
-  --accent-light: #e1e0ff;
+  --surface2: #f0f2f9;
+  --surface3: #e4e8f2;
+  --border: #e2e6f0;
+  --border-strong: #c8cedf;
+  --accent: #8083ff;
+  --accent-hover: #6365e0;
+  --accent-light: #eeeeff;
   --accent-ink: #ffffff;
-  --text: #1a1a2e;
-  --text-dim: #5d5d72;
-  --text-muted: #8a8a9e;
+  --text: #0f172a;
+  --text-dim: #475569;
+  --text-muted: #64748b;
   --error: #c4342b;
-  --success: #2f8a5a;
-  --font: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --serif: 'Noto Serif', Georgia, serif;
+  --success: #0f6b3a;
+  --font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --display: 'Geist', 'Inter', system-ui, sans-serif;
   --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   --sidebar-w: 260px;
-  --radius: 14px;
-  --shadow-sm: 0 1px 2px rgba(70, 72, 212, 0.04);
-  --shadow: 0 4px 16px rgba(70, 72, 212, 0.06);
+  --radius: 8px;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
 }
 
 html, body { height: 100%; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   font-family: var(--font); background: var(--bg); color: var(--text);
-  font-size: 15px; line-height: 1.55;
+  font-size: 15px; line-height: 1.55; letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-h1, h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.03em; color: var(--text); }
 
 /* ── Login ──────────────────────────────────────────────────────────────────── */
 .login-page {

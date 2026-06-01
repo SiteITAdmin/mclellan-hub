@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/hub.css">
 <style>
 body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
-.content-wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
+.content-wrap { max-width: 1200px; margin: 0 auto; padding: 24px 20px 80px; }
 
 .back-link { font-size: 13px; color: var(--text-dim); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; }
 .back-link:hover { color: var(--accent, #4648d4); }
@@ -38,23 +38,11 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .gen-btn:disabled { opacity: .5; cursor: default; }
 .gen-btn:not(:disabled):hover { opacity: .9; }
 
-/* Progress */
 .gen-progress { margin-top: 14px; display: none; }
 .gen-progress.visible { display: block; }
 .progress-track { height: 3px; background: var(--border, #e0ddf0); border-radius: 2px; margin-bottom: 8px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--accent, #4648d4); border-radius: 2px; transition: width .5s ease; }
 .progress-msg { font-size: 12px; color: var(--text-dim); }
-
-/* Filters */
-.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; align-items: center; }
-.filter-label { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
-.filter-chip {
-  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
-  border: 1px solid var(--border, #e0ddf0); background: transparent; cursor: pointer;
-  color: var(--text-dim); font-family: inherit; transition: background .12s, color .12s, border-color .12s;
-}
-.filter-chip:hover { border-color: var(--accent, #4648d4); color: var(--accent, #4648d4); }
-.filter-chip.active { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
 
 /* Stats */
 .stats-row { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -62,29 +50,22 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .stat-pill strong { font-size: 18px; font-weight: 700; color: var(--accent, #4648d4); display: block; line-height: 1.2; }
 .stat-pill span { font-size: 11px; color: var(--text-dim); }
 
-/* Card grid */
-.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
-.post-card {
-  background: var(--surface, #f4f3fb);
-  border: 1px solid var(--border, #e0ddf0);
-  border-left: 3px solid var(--card-accent, var(--border, #e0ddf0));
-  border-radius: 12px; padding: 14px 16px;
-  transition: box-shadow .15s;
+/* Toolbar: sort + filter */
+.toolbar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.toolbar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.toolbar-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); white-space: nowrap; margin-right: 2px; }
+.sort-btn, .filter-chip {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border, #e0ddf0); background: transparent; cursor: pointer;
+  color: var(--text-dim); font-family: inherit; transition: background .12s, color .12s, border-color .12s;
 }
-.post-card:hover { box-shadow: 0 2px 14px rgba(0,0,0,.07); }
-.post-card[data-status="processing"] { --card-accent: #f59e0b; }
-.post-card[data-status="error"]      { --card-accent: #ef4444; }
-.post-card[data-status="draft"]      { --card-accent: var(--accent, #4648d4); }
-.post-card[data-status="scheduled"]  { --card-accent: #7c3aed; }
-.post-card[data-status="published"]  { --card-accent: #10b981; }
+.sort-btn:hover, .filter-chip:hover { border-color: var(--accent, #4648d4); color: var(--accent, #4648d4); }
+.sort-btn.active, .filter-chip.active { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
 
-.card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
-.card-date { font-size: 11px; color: var(--text-dim); }
-.card-topic { font-size: 14px; font-weight: 600; line-height: 1.35; margin-bottom: 8px; color: var(--text, #15131e); }
-.card-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+/* Badges */
 .badge {
   padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; line-height: 1.6;
-  display: inline-flex; align-items: center;
+  display: inline-flex; align-items: center; white-space: nowrap;
 }
 .badge-processing { background: rgba(245,158,11,.12); color: #d97706; }
 .badge-error      { background: rgba(239,68,68,.12);  color: #dc2626; }
@@ -92,27 +73,70 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .badge-scheduled  { background: rgba(124,58,237,.12); color: #7c3aed; }
 .badge-published  { background: rgba(16,185,129,.12); color: #059669; }
 .badge-type       { background: rgba(0,0,0,.06); color: var(--text-dim); font-weight: 400; }
-.badge-score      { background: rgba(70,72,212,.12); color: var(--accent, #4648d4); }
+.badge-score      { background: rgba(70,72,212,.12); color: var(--accent, #4648d4); font-weight: 700; }
 .badge-date       { background: rgba(124,58,237,.08); color: #7c3aed; font-weight: 400; }
 
-.card-preview { font-size: 12px; color: var(--text-dim); line-height: 1.55; margin-bottom: 10px; }
-.card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Post list */
+.post-list { display: flex; flex-direction: column; gap: 6px; }
+
+.post-row {
+  background: var(--bg, #fff);
+  border: 1px solid var(--border, #e0ddf0);
+  border-left: 4px solid var(--row-accent, var(--border, #e0ddf0));
+  border-radius: 10px;
+  overflow: hidden;
+  transition: box-shadow .15s;
+}
+.post-row:hover { box-shadow: 0 2px 12px rgba(0,0,0,.07); }
+.post-row[data-status="processing"] { --row-accent: #f59e0b; }
+.post-row[data-status="error"]      { --row-accent: #ef4444; }
+.post-row[data-status="draft"]      { --row-accent: var(--accent, #4648d4); }
+.post-row[data-status="scheduled"]  { --row-accent: #7c3aed; }
+.post-row[data-status="published"]  { --row-accent: #10b981; }
+
+.row-main {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; cursor: default;
+}
+.row-date { font-size: 11px; color: var(--text-dim); white-space: nowrap; min-width: 72px; }
+.row-topic { flex: 1; font-size: 14px; font-weight: 600; color: var(--text, #15131e); line-height: 1.3; min-width: 0; }
+.row-badges { display: flex; flex-wrap: wrap; gap: 4px; flex-shrink: 0; }
+.row-actions { display: flex; gap: 5px; flex-shrink: 0; }
+
+@media (max-width: 700px) {
+  /* Switch row to block — topic gets full width, no flex fighting */
+  .row-main { display: block; padding: 12px 14px; }
+  .row-topic { display: block; margin-bottom: 8px; min-width: 0; white-space: normal; word-break: break-word; }
+  .row-date  { display: inline; font-size: 11px; margin-right: 6px; }
+  .row-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; vertical-align: middle; }
+  .row-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .row-actions .btn-sm { flex: 1; justify-content: center; min-height: 40px; }
+  /* Toolbar */
+  .toolbar-row { gap: 6px; }
+  .sort-btn, .filter-chip { padding: 4px 10px; font-size: 11px; }
+  /* Expand panel */
+  .expand-panel { padding: 12px 14px 16px; }
+  .score-grid { grid-template-columns: 1fr 1fr; }
+  .schedule-row { flex-direction: column; align-items: stretch; }
+  .schedule-input { width: 100%; }
+}
 
 /* Buttons */
 .btn-sm {
-  padding: 5px 12px; font-size: 12px; border-radius: 7px; cursor: pointer;
+  padding: 4px 11px; font-size: 12px; border-radius: 7px; cursor: pointer;
   border: 1px solid var(--border, #e0ddf0); background: transparent;
   color: var(--text, #15131e); font-family: inherit; transition: background .12s;
-  text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
 }
 .btn-sm:hover { background: rgba(0,0,0,.05); }
 .btn-sm.primary { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
 .btn-sm.primary:hover { opacity: .9; background: var(--accent, #4648d4); }
 .btn-sm.danger { color: #dc2626; border-color: rgba(220,38,38,.3); }
 .btn-sm.danger:hover { background: rgba(220,38,38,.07); }
+.btn-sm.view-btn.open { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
 
 /* Expand panel */
-.expand-panel { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border, #e0ddf0); }
+.expand-panel { display: none; padding: 16px 20px 18px; border-top: 1px solid var(--border, #e0ddf0); background: var(--surface, #f4f3fb); }
 .expand-panel.open { display: block; }
 
 .panel-section { margin-bottom: 14px; }
@@ -121,13 +145,13 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   color: var(--text-dim); margin-bottom: 6px;
 }
 .panel-draft {
-  font-size: 12px; line-height: 1.65; color: var(--text, #15131e);
+  font-size: 13px; line-height: 1.65; color: var(--text, #15131e);
   white-space: pre-wrap; word-break: break-word;
   background: var(--bg, #fff); border: 1px solid var(--border, #e0ddf0);
-  border-radius: 8px; padding: 10px 12px; max-height: 300px; overflow-y: auto;
+  border-radius: 8px; padding: 12px 14px; max-height: 340px; overflow-y: auto;
 }
 
-.score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+.score-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; margin: 8px 0; }
 .score-item { background: var(--bg, #fff); border: 1px solid var(--border, #e0ddf0); border-radius: 8px; padding: 8px 10px; }
 .score-item-key { font-size: 10px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
 .score-item-val { font-size: 18px; font-weight: 700; color: var(--accent, #4648d4); line-height: 1; }
@@ -143,9 +167,9 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 }
 .schedule-input:focus, .type-select:focus { border-color: var(--accent, #4648d4); }
 
-.status-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.status-row { display: flex; gap: 6px; flex-wrap: wrap; }
 
-.empty-state { grid-column: 1 / -1; text-align: center; padding: 48px 24px; color: var(--text-dim); }
+.empty-state { text-align: center; padding: 48px 24px; color: var(--text-dim); }
 .empty-state p { font-size: 14px; }
 </style>
 </head>
@@ -189,27 +213,37 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   </div>
   <% } %>
 
-  <!-- Filter chips -->
-  <div class="filters">
-    <span class="filter-label">Filter:</span>
-    <button class="filter-chip active" data-filter="all">All</button>
-    <button class="filter-chip" data-filter="status:processing">Processing</button>
-    <button class="filter-chip" data-filter="status:draft">Draft</button>
-    <button class="filter-chip" data-filter="status:scheduled">Scheduled</button>
-    <button class="filter-chip" data-filter="status:published">Published</button>
-    <% for (const t of contentTypes) { %>
-    <button class="filter-chip" data-filter="type:<%= t %>"><%= t %></button>
-    <% } %>
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-row">
+      <span class="toolbar-label">Sort:</span>
+      <button class="sort-btn active" data-sort="date-desc">Newest first</button>
+      <button class="sort-btn" data-sort="date-asc">Oldest first</button>
+      <button class="sort-btn" data-sort="score-desc">Highest score</button>
+      <button class="sort-btn" data-sort="published-desc">Published date</button>
+    </div>
+    <div class="toolbar-row">
+      <span class="toolbar-label">Filter:</span>
+      <button class="filter-chip active" data-filter="all">All</button>
+      <button class="filter-chip" data-filter="status:processing">Processing</button>
+      <button class="filter-chip" data-filter="status:draft">Draft</button>
+      <button class="filter-chip" data-filter="status:scheduled">Scheduled</button>
+      <button class="filter-chip" data-filter="status:published">Published</button>
+      <% for (const t of contentTypes) { %>
+      <button class="filter-chip" data-filter="type:<%= t %>"><%= t %></button>
+      <% } %>
+    </div>
   </div>
 
-  <!-- Card grid -->
-  <div class="card-grid" id="card-grid">
+  <!-- Post list -->
+  <div class="post-list" id="post-list">
   <% if (!posts.length) { %>
     <div class="empty-state"><p>No posts yet. Generate your first LinkedIn post above.</p></div>
   <% } %>
   <% for (const p of posts) { %>
   <%
     const scoreVal = p.score?.overall_score;
+    const scoreNum = scoreVal ? parseFloat(scoreVal) : 0;
     const dateStr = new Date(p.created_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     const statusLabel = { processing: 'Processing…', error: 'Error', draft: 'Draft', scheduled: 'Scheduled', published: 'Published' }[p.status] || p.status;
     const calTopic = encodeURIComponent('Post: ' + p.topic);
@@ -217,31 +251,32 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     const calDate = (p.scheduled_date || '').replace(/-/g, '');
     const calUrl = p.scheduled_date ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTopic}&dates=${calDate}/${calDate}&details=${calDetail}` : '';
   %>
-  <div class="post-card" id="card-<%= p.id %>" data-status="<%= p.status %>" data-type="<%= p.content_type || '' %>">
-    <div class="card-top">
-      <span class="card-date"><%= dateStr %></span>
-      <% if (scoreVal) { %><span class="badge badge-score"><%= scoreVal %>/5</span><% } %>
-    </div>
-    <div class="card-topic"><%= p.topic %></div>
-    <div class="card-badges">
-      <span class="badge badge-<%= p.status %>"><%= statusLabel %></span>
-      <% if (p.content_type) { %><span class="badge badge-type"><%= p.content_type %></span><% } %>
-      <% if (p.scheduled_date) { %><span class="badge badge-date">📅 <%= p.scheduled_date %></span><% } %>
-    </div>
-    <% if (p.preview && p.status !== 'processing') { %>
-    <div class="card-preview"><%= p.preview.replace(/[\r\n]+/g, ' ').slice(0, 150) %><% if (p.preview.length > 150) { %>…<% } %></div>
-    <% } else if (p.status === 'processing') { %>
-    <div class="card-preview" style="color:var(--text-dim);font-style:italic;">Pipeline running — this card will update when complete.</div>
-    <% } %>
-    <div class="card-actions">
-      <% if (p.status !== 'processing') { %>
-      <button class="btn-sm" onclick="toggleExpand('<%= p.id %>')">View</button>
-      <% } %>
-      <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">PDF</a><% } %>
-      <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">📅 Cal</a><% } %>
-      <% if (p.status !== 'processing') { %>
-      <button class="btn-sm danger" onclick="deletePost('<%= p.id %>')">Delete</button>
-      <% } %>
+  <div class="post-row" id="row-<%= p.id %>"
+    data-status="<%= p.status %>"
+    data-type="<%= p.content_type || '' %>"
+    data-created="<%= p.created_at %>"
+    data-score="<%= scoreNum %>"
+    data-scheduled="<%= p.scheduled_date || '' %>">
+
+    <div class="row-main">
+      <span class="row-date"><%= dateStr %></span>
+      <span class="row-topic"><%= p.topic %></span>
+      <div class="row-badges">
+        <span class="badge badge-<%= p.status %>"><%= statusLabel %></span>
+        <% if (scoreVal) { %><span class="badge badge-score"><%= scoreVal %>/5</span><% } %>
+        <% if (p.content_type) { %><span class="badge badge-type"><%= p.content_type %></span><% } %>
+        <% if (p.scheduled_date) { %><span class="badge badge-date">📅 <%= p.scheduled_date %></span><% } %>
+      </div>
+      <div class="row-actions">
+        <% if (p.status !== 'processing') { %>
+        <button class="btn-sm view-btn" onclick="toggleExpand('<%= p.id %>')">View</button>
+        <% } %>
+        <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">PDF</a><% } %>
+        <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">📅 Cal</a><% } %>
+        <% if (p.status !== 'processing') { %>
+        <button class="btn-sm danger" onclick="deletePost('<%= p.id %>')">Delete</button>
+        <% } %>
+      </div>
     </div>
 
     <% if (p.status !== 'processing') { %>
@@ -342,7 +377,6 @@ const genInput = document.getElementById('gen-topic');
 const genProgress = document.getElementById('gen-progress');
 const progressFill = document.getElementById('progress-fill');
 const progressMsg = document.getElementById('progress-msg');
-
 let pollTimer = null;
 
 function setProgress(pct, msg) {
@@ -356,12 +390,10 @@ genBtn.addEventListener('click', startGenerate);
 async function startGenerate() {
   const topic = genInput.value.trim();
   if (!topic) { genInput.focus(); return; }
-
   genBtn.disabled = true;
   genBtn.textContent = 'Generating…';
   genProgress.classList.add('visible');
   setProgress(5, 'Starting pipeline…');
-
   try {
     const r = await fetch('/api/content/generate', {
       method: 'POST',
@@ -385,12 +417,9 @@ function beginPolling(postId) {
     'Drafting post…', 'Scoring draft…', 'Refining post…',
     'Creating carousel…', 'Uploading to Drive…', 'Saving to calendar…',
   ];
-
   pollTimer = setInterval(async () => {
     tick++;
-    const pct = Math.min(90, 5 + tick * 3);
-    setProgress(pct, MSGS[Math.floor(tick / 3) % MSGS.length]);
-
+    setProgress(Math.min(90, 5 + tick * 3), MSGS[Math.floor(tick / 3) % MSGS.length]);
     try {
       const r = await fetch('/api/content/posts/' + postId);
       if (!r.ok) return;
@@ -398,11 +427,7 @@ function beginPolling(postId) {
       const status = d.post?.status;
       if (status && status !== 'processing') {
         clearInterval(pollTimer);
-        if (status === 'error') {
-          setProgress(100, 'Pipeline encountered an error — see the card below.');
-        } else {
-          setProgress(100, 'Done — refreshing page…');
-        }
+        setProgress(100, status === 'error' ? 'Pipeline encountered an error.' : 'Done — refreshing…');
         setTimeout(() => window.location.reload(), 1500);
       }
     } catch (_) {}
@@ -411,7 +436,11 @@ function beginPolling(postId) {
 
 // ── Expand panel ──────────────────────────────────────────────────────────────
 window.toggleExpand = function(id) {
-  document.getElementById('expand-' + id)?.classList.toggle('open');
+  const panel = document.getElementById('expand-' + id);
+  const btn = document.querySelector('#row-' + id + ' .view-btn');
+  if (!panel) return;
+  const open = panel.classList.toggle('open');
+  if (btn) btn.classList.toggle('open', open);
 };
 
 // ── Load draft ────────────────────────────────────────────────────────────────
@@ -421,18 +450,16 @@ window.loadDraft = async function(id) {
   try {
     const r = await fetch('/api/content/posts/' + id);
     const d = await r.json();
-    const text = d.post?.refined_draft || d.post?.draft || '(no draft yet)';
-    el.textContent = text;
+    el.textContent = d.post?.refined_draft || d.post?.draft || '(no draft yet)';
   } catch (err) {
-    el.textContent = 'Error loading draft: ' + err.message;
+    el.textContent = 'Error: ' + err.message;
   }
 };
 
 // ── Content type ──────────────────────────────────────────────────────────────
 window.setType = async function(id, type) {
   await fetch('/api/content/posts/' + id + '/type', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type }),
   }).catch(() => {});
 };
@@ -440,8 +467,7 @@ window.setType = async function(id, type) {
 // ── Status ────────────────────────────────────────────────────────────────────
 window.setStatus = async function(id, status) {
   const r = await fetch('/api/content/posts/' + id + '/status', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   });
   if (r.ok) window.location.reload();
@@ -452,8 +478,7 @@ window.schedulePost = async function(id) {
   const date = document.getElementById('date-' + id)?.value;
   if (!date) return;
   const r = await fetch('/api/content/posts/' + id + '/schedule', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date }),
   });
   if (r.ok) window.location.reload();
@@ -463,31 +488,66 @@ window.schedulePost = async function(id) {
 window.deletePost = async function(id) {
   if (!confirm('Delete this post? This cannot be undone.')) return;
   const r = await fetch('/api/content/posts/' + id + '/delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
   });
   if (r.ok) {
-    const card = document.getElementById('card-' + id);
-    if (card) card.remove();
+    const row = document.getElementById('row-' + id);
+    if (row) row.remove();
   }
 };
 
-// ── Filter chips ──────────────────────────────────────────────────────────────
+// ── Filter ────────────────────────────────────────────────────────────────────
+let activeFilter = 'all';
 document.querySelectorAll('.filter-chip').forEach(chip => {
-  chip.addEventListener('click', function () {
+  chip.addEventListener('click', function() {
     document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
     this.classList.add('active');
-    const filter = this.dataset.filter;
-    document.querySelectorAll('.post-card').forEach(card => {
-      if (filter === 'all') { card.style.display = ''; return; }
-      const [kind, val] = filter.split(':');
-      const match = kind === 'status'
-        ? card.dataset.status === val
-        : card.dataset.type === val;
-      card.style.display = match ? '' : 'none';
-    });
+    activeFilter = this.dataset.filter;
+    applyFilterSort();
   });
 });
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+let activeSort = 'date-desc';
+document.querySelectorAll('.sort-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    activeSort = this.dataset.sort;
+    applyFilterSort();
+  });
+});
+
+function applyFilterSort() {
+  const list = document.getElementById('post-list');
+  const rows = Array.from(list.querySelectorAll('.post-row'));
+
+  // Filter
+  rows.forEach(row => {
+    let show = true;
+    if (activeFilter !== 'all') {
+      const [kind, val] = activeFilter.split(':');
+      show = kind === 'status' ? row.dataset.status === val : row.dataset.type === val;
+    }
+    row.style.display = show ? '' : 'none';
+  });
+
+  // Sort visible rows
+  const visible = rows.filter(r => r.style.display !== 'none');
+  visible.sort((a, b) => {
+    switch (activeSort) {
+      case 'date-asc':  return Number(a.dataset.created) - Number(b.dataset.created);
+      case 'date-desc': return Number(b.dataset.created) - Number(a.dataset.created);
+      case 'score-desc': return Number(b.dataset.score) - Number(a.dataset.score);
+      case 'published-desc': {
+        const da = a.dataset.scheduled || '0', db = b.dataset.scheduled || '0';
+        return db.localeCompare(da);
+      }
+      default: return 0;
+    }
+  });
+  visible.forEach(row => list.appendChild(row));
+}
 </script>
 
 </body>

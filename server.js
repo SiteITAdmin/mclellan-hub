@@ -5,7 +5,6 @@ const path = require('path');
 const BetterSqliteSessionStore = require('./lib/session-store');
 
 const hubRouter = require('./routes/hub');
-const debriefRouter = require('./routes/debrief');
 const hubAdminRouter = require('./routes/hub-admin');
 const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
@@ -80,11 +79,7 @@ app.use((req, res, next) => {
 
   if (host === 'dchat.mclellan.scot' || host === 'nchat.mclellan.scot') {
     req.hubUser = host.startsWith('d') ? 'douglas' : 'nakai';
-    if (req.path.startsWith('/debrief') || req.path.startsWith('/api/debrief')) {
-      req.session.user = req.hubUser;
-      return debriefRouter(req, res, next);
-    }
-    if (req.path.startsWith('/admin') || req.path.startsWith('/mcp')) {
+if (req.path.startsWith('/admin') || req.path.startsWith('/mcp')) {
       return hubAdminRouter(req, res, next);
     }
     return hubRouter(req, res, next);

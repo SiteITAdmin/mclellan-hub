@@ -8,58 +8,62 @@ html, body, #root { height: 100%; }
 html { -webkit-text-size-adjust: 100%; }
 
 :root {
-  --accent: #7c6af5;
-  --font-ui: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-display: var(--font-ui);
+  --accent: #8083ff;
+  --font-ui: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Geist', 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 }
 
 /* ── Theme: light ────────────────────────────────────────────────────────── */
 [data-theme="light"] {
-  --bg: #faf9fb;
+  --bg: #f8faff;
   --bg-elev: #ffffff;
-  --bg-soft: #f3f1f6;
-  --bg-soft2: #ebe8f0;
-  --bg-tint: rgba(124, 106, 245, 0.06);
-  --line: #e9e6ee;
-  --line-strong: #d8d3df;
-  --text: #15131e;
-  --text-2: #4d4a5a;
-  --text-3: #8a8693;
+  --bg-soft: #f0f2f9;
+  --bg-soft2: #e4e8f2;
+  --bg-tint: rgba(128, 131, 255, 0.07);
+  --line: #e2e6f0;
+  --line-strong: #c8cedf;
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #64748b;
   --text-on-accent: #ffffff;
-  --shadow-sm: 0 1px 2px rgba(20, 19, 30, 0.05);
-  --shadow-md: 0 6px 24px -8px rgba(20, 19, 30, 0.12), 0 2px 6px -2px rgba(20, 19, 30, 0.06);
-  --shadow-lg: 0 24px 60px -20px rgba(20, 19, 30, 0.18), 0 4px 12px -4px rgba(20, 19, 30, 0.06);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 16px -4px rgba(15, 23, 42, 0.10), 0 1px 4px -1px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 20px 48px -16px rgba(15, 23, 42, 0.16), 0 4px 12px -4px rgba(15, 23, 42, 0.06);
   --warn-bg: #fff5ec;
   --warn-fg: #9a4a08;
   --warn-line: #f3d3b1;
-  --ok-bg: #e9f7ee;
-  --ok-fg: #157a3d;
-  --ok-line: #b8e0c4;
+  --ok-bg: #e8f7f0;
+  --ok-fg: #0f6b3a;
+  --ok-line: #a8dfc4;
 }
 
 /* ── Theme: dark ─────────────────────────────────────────────────────────── */
 [data-theme="dark"] {
-  --bg: #0e0d12;
-  --bg-elev: #17151c;
-  --bg-soft: #1d1b24;
-  --bg-soft2: #27242f;
-  --bg-tint: rgba(124, 106, 245, 0.14);
-  --line: #2a2832;
-  --line-strong: #3a3744;
-  --text: #ecebf1;
-  --text-2: #a6a3b1;
-  --text-3: #74717f;
+  --bg: #0b1326;
+  --bg-elev: #131b2e;
+  --bg-soft: #171f33;
+  --bg-soft2: #222a3d;
+  --bg-tint: rgba(128, 131, 255, 0.12);
+  --line: #1e2a42;
+  --line-strong: #2d3a52;
+  --text: #dae2fd;
+  --text-2: #c7c4d7;
+  --text-3: #8a94aa;
   --text-on-accent: #ffffff;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 28px -8px rgba(0, 0, 0, 0.6), 0 2px 6px -2px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 28px 70px -24px rgba(0, 0, 0, 0.7), 0 6px 16px -4px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 28px -8px rgba(0, 0, 0, 0.7), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.8), 0 6px 16px -4px rgba(0, 0, 0, 0.5);
   --warn-bg: #2a1b0d;
   --warn-fg: #ffb780;
   --warn-line: #4a3322;
-  --ok-bg: #0f2418;
-  --ok-fg: #6cd49a;
-  --ok-line: #1f4030;
+  --ok-bg: #0a2318;
+  --ok-fg: #4edea3;
+  --ok-line: #1a4030;
 }
 
 body {
@@ -70,6 +74,7 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
 }
 
 /* ── Shell ───────────────────────────────────────────────────────────────── */
@@ -341,7 +346,7 @@ body {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 17px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -1009,49 +1014,84 @@ body {
   .hub-sidebar[data-mobile-open="true"] ~ .sb-scrim,
   .sb-scrim { display: block; }
 
-  .hb-menu { display: inline-flex; }
-
-  .hub-header { padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top)); }
+  /* Header */
+  .hb-menu {
+    display: inline-flex;
+    width: 44px; height: 44px;   /* 44px tap target */
+  }
+  .hub-header {
+    padding: 8px 12px;
+    padding-top: max(env(safe-area-inset-top), 10px);
+    gap: 10px;
+  }
   .hb-title h1 { font-size: 15px; }
   .hb-sub { display: none; }
+  .hb-model-btn {
+    padding: 8px 10px;
+    min-height: 44px;            /* tap target */
+  }
   .hb-model-name {
-    max-width: 110px;
-    overflow: hidden; text-overflow: ellipsis;
+    max-width: 100px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .hb-model-pop {
     right: 0;
-    width: min(280px, calc(100vw - 24px));
+    width: min(300px, calc(100vw - 16px));
+    max-height: 60vh;
   }
 
+  /* Messages */
   .msg-stack {
-    padding: 22px 16px 230px;
-    gap: 22px;
+    padding: 16px 14px 220px;
+    gap: 18px;
   }
-  .msg-user .msg-bubble { font-size: 15px; padding: 10px 14px; }
+  .msg-user .msg-bubble {
+    font-size: 15px; padding: 10px 14px;
+    max-width: 88%;
+  }
   .msg-prose { font-size: 15px; }
+  .msg-avatar { display: none; }   /* save width on small screens */
 
+  /* Composer */
   .hub-composer-mount {
-    padding: 0 12px;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding: 0 10px;
+    padding-bottom: max(env(safe-area-inset-bottom), 12px);
   }
-  .composer { padding: 10px 10px 6px; border-radius: 20px; }
-  .composer textarea { font-size: 16px; }   /* prevent iOS Safari zoom */
-  .comp-bar { gap: 2px; }
-  .comp-btn span { display: none; }         /* keep just icons on mobile */
-  .comp-btn { padding: 8px; min-width: 36px; justify-content: center; }
+  .composer { padding: 8px 10px 6px; border-radius: 18px; }
+  .composer textarea {
+    font-size: 16px;             /* prevent iOS Safari zoom */
+    line-height: 1.4;
+  }
+  .comp-bar { gap: 4px; }
+  .comp-btn span { display: none; }
+  .comp-btn {
+    min-width: 44px; min-height: 44px;
+    padding: 10px;
+    justify-content: center;
+    border-radius: 10px;
+  }
   .comp-model-hint { display: none; }
-  .comp-send { padding: 8px 12px; }
-  .comp-more-panel { width: calc(100vw - 24px); right: -8px; }
+  .comp-send {
+    padding: 10px 16px;
+    min-height: 44px;
+    border-radius: 12px;
+  }
+  .comp-stop-inline { min-height: 44px; padding: 10px 14px; }
+  .comp-more-panel { width: calc(100vw - 20px); right: -6px; }
 
-  .empty { padding: 32px 0 0; }
-  .empty h2 { font-size: 22px; }
-  .empty-grid { grid-template-columns: 1fr; gap: 8px; padding: 0 4px; }
+  /* Empty state */
+  .empty { padding: 28px 0 0; }
+  .empty h2 { font-size: 21px; }
+  .empty-grid { grid-template-columns: 1fr; gap: 8px; padding: 0 2px; }
 }
 
 @media (max-width: 420px) {
-  .msg-stack { padding-bottom: 240px; }
-  .empty-mark { width: 48px; height: 48px; }
-  .empty-glyph { font-size: 22px; }
+  .msg-stack { padding: 12px 12px 220px; gap: 16px; }
+  .msg-user .msg-bubble { max-width: 92%; }
+  .empty-mark { width: 44px; height: 44px; }
+  .empty-glyph { font-size: 20px; }
+  .hub-header { gap: 8px; }
+  .hb-model-name { max-width: 80px; }
 }
 
 /* ── Compact density ─────────────────────────────────────────────────────── */
