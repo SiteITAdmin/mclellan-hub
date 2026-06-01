@@ -243,7 +243,7 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
     <div class="fl-stat <%= stats.onTimePct >= 75 ? 'good' : stats.onTimePct >= 50 ? 'warn' : 'bad' %>">
       <div class="fl-stat-value"><%= stats.onTimePct %>%</div>
       <div class="fl-stat-label">On time</div>
-      <div class="fl-stat-sub">≤15 min late · <%= stats.onTimeSample %> flights with data</div>
+      <div class="fl-stat-sub">≤5 min late · <%= stats.onTimeSample %> flights with data</div>
     </div>
     <% } else { %>
     <div class="fl-stat">
@@ -305,10 +305,7 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
   <!-- API / tracker note -->
   <div class="fl-tracker-note">
     Add your flights using just the flight number + date from your Ryanair app, then click
-    <strong>Fetch missing times</strong> to auto-fill scheduled/actual times via AviationStack.
-    Needs <code>AVIATIONSTACK_KEY</code> in your server env — free tier at
-    <a href="https://aviationstack.com" target="_blank" rel="noopener">aviationstack.com</a>
-    covers ~100 lookups/month (paid plans unlock full history beyond ~3 months).
+    <strong>Fetch missing times</strong> to auto-fill scheduled/actual times via AeroDataBox.
     Ryanair: FR#### · Aer Lingus: EI### · easyJet: U2####.
   </div>
 
@@ -348,14 +345,15 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
           function delayClass(d) {
             if (d === null) return 'unknown';
             if (d <= 0) return 'early';
-            if (d <= 15) return 'on-time';
+            if (d <= 5) return 'on-time';
             if (d <= 30) return 'minor';
             if (d <= 60) return 'major';
             return 'severe';
           }
           function delayLabel(d) {
             if (d === null) return '?';
-            if (d <= 0) return d === 0 ? 'On time' : d + 'm';
+            if (d < 0) return d + 'm';
+            if (d === 0) return 'On time';
             return '+' + d + 'm';
           }
 
@@ -540,7 +538,7 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
       </div>
 
       <div class="fl-lookup-row">
-        <button type="button" id="lookup-btn" class="fl-lookup-btn">Look up times via AviationStack</button>
+        <button type="button" id="lookup-btn" class="fl-lookup-btn">Look up times via AeroDataBox</button>
         <span id="lookup-status" class="fl-lookup-status"></span>
       </div>
 
@@ -763,7 +761,7 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
       lookupStatus.textContent = '✖ ' + err.message;
     } finally {
       lookupBtn.disabled = false;
-      lookupBtn.textContent = 'Look up times via AviationStack';
+      lookupBtn.textContent = 'Look up times via AeroDataBox';
     }
   });
 
