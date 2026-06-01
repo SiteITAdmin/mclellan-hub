@@ -81,6 +81,8 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
 }
 .fl-dir-badge.dub-edi { background: rgba(70,72,212,.1); color: #3537b8; }
 .fl-dir-badge.edi-dub { background: rgba(47,138,90,.12); color: #217a4d; }
+.fl-dir-badge.dub-gla { background: rgba(200,100,0,.1); color: #904000; }
+.fl-dir-badge.gla-dub { background: rgba(140,60,160,.1); color: #6a1a80; }
 
 .fl-time-cell { white-space: nowrap; }
 .fl-time-row { display: flex; align-items: center; gap: 6px; }
@@ -223,7 +225,10 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
       <h1 class="fl-title">Dublin ↔ Edinburgh Flights</h1>
       <p class="fl-subtitle">Personal flight log — scheduled vs actual times, delay tracking</p>
     </div>
-    <button class="fl-add-btn" id="add-flight-btn">+ Add flight</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="fl-add-btn" style="background:var(--surface);color:var(--accent);border:1px solid var(--accent);" id="import-btn">Import Excel</button>
+      <button class="fl-add-btn" id="add-flight-btn">+ Add flight</button>
+    </div>
   </div>
 
   <!-- Stats -->
@@ -287,14 +292,14 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
 
   <!-- Direction split -->
   <div class="fl-dir-row">
-    <div class="fl-dir-chip">
-      <span>DUB → EDI</span>
-      <span class="count"><%= stats.dubToEdi %></span>
-    </div>
-    <div class="fl-dir-chip">
-      <span>EDI → DUB</span>
-      <span class="count"><%= stats.ediToDub %></span>
-    </div>
+    <div class="fl-dir-chip"><span>DUB → EDI</span><span class="count"><%= stats.dubToEdi %></span></div>
+    <div class="fl-dir-chip"><span>EDI → DUB</span><span class="count"><%= stats.ediToDub %></span></div>
+    <% if (stats.dubToGla > 0) { %>
+    <div class="fl-dir-chip"><span>DUB → GLA</span><span class="count"><%= stats.dubToGla %></span></div>
+    <% } %>
+    <% if (stats.glaToDub > 0) { %>
+    <div class="fl-dir-chip"><span>GLA → DUB</span><span class="count"><%= stats.glaToDub %></span></div>
+    <% } %>
   </div>
 
   <!-- API / tracker note -->
@@ -375,9 +380,11 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
             }).replace(/'/g, "&#39;") %>'>
           <td class="fl-date"><%= dateFormatted %></td>
           <td>
-            <span class="fl-dir-badge <%= f.direction === 'DUB-EDI' ? 'dub-edi' : 'edi-dub' %>">
-              <%= f.direction === 'DUB-EDI' ? 'DUB → EDI' : 'EDI → DUB' %>
-            </span>
+            <%
+              const dirClass = { 'DUB-EDI':'dub-edi','EDI-DUB':'edi-dub','DUB-GLA':'dub-gla','GLA-DUB':'gla-dub' }[f.direction] || '';
+              const dirLabel = f.direction.replace('-',' → ');
+            %>
+            <span class="fl-dir-badge <%= dirClass %>"><%= dirLabel %></span>
           </td>
           <td class="fl-flnr">
             <% if (f.flight_number && faBase) { %>
@@ -440,6 +447,27 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
 </div>
 </main>
 
+<!-- Import modal -->
+<div class="fl-backdrop" id="import-backdrop">
+  <div class="fl-modal" role="dialog" aria-label="Import flights">
+    <h3>Import from Ryanair Excel</h3>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.6;">
+      Upload your <strong>ryanair_flights_v4.xlsx</strong> (or any file using the same column layout).
+      Scheduled departure/arrival times are imported automatically. Actual times can be fetched
+      afterwards via <em>Fetch missing times</em>. Already-imported flights are skipped.
+    </p>
+    <div class="fl-field">
+      <label class="fl-label" for="import-file">Excel file (.xlsx)</label>
+      <input type="file" id="import-file" class="fl-input" accept=".xlsx,.xls">
+    </div>
+    <div class="fl-status-msg" id="import-status"></div>
+    <div class="fl-modal-footer">
+      <button class="fl-btn-cancel" id="import-cancel">Cancel</button>
+      <button class="fl-btn-save" id="import-submit">Import</button>
+    </div>
+  </div>
+</div>
+
 <!-- Add / Edit modal -->
 <div class="fl-backdrop" id="flight-backdrop">
   <div class="fl-modal" role="dialog" aria-label="Flight details">
@@ -453,8 +481,10 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
       <div class="fl-field">
         <label class="fl-label" for="f-direction">Direction *</label>
         <select id="f-direction" class="fl-select">
-          <option value="DUB-EDI">DUB → Edinburgh</option>
-          <option value="EDI-DUB">EDI → Dublin</option>
+          <option value="DUB-EDI">DUB → Edinburgh (EDI)</option>
+          <option value="EDI-DUB">EDI → Dublin (DUB)</option>
+          <option value="DUB-GLA">DUB → Glasgow (GLA)</option>
+          <option value="GLA-DUB">GLA → Dublin (DUB)</option>
         </select>
       </div>
       <div class="fl-field">
@@ -658,6 +688,45 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
       statusEl.textContent = '✖ ' + err.message;
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save flight';
+    }
+  });
+
+  // ── Excel import ──────────────────────────────────────────────────────────
+  const importBtn = document.getElementById('import-btn');
+  const importBackdrop = document.getElementById('import-backdrop');
+  const importCancelBtn = document.getElementById('import-cancel');
+  const importSubmitBtn = document.getElementById('import-submit');
+  const importFileInput = document.getElementById('import-file');
+  const importStatusEl  = document.getElementById('import-status');
+
+  importBtn?.addEventListener('click', () => {
+    importFileInput.value = '';
+    importStatusEl.textContent = '';
+    importSubmitBtn.disabled = false;
+    importSubmitBtn.textContent = 'Import';
+    importBackdrop.classList.add('open');
+  });
+  importCancelBtn?.addEventListener('click', () => importBackdrop.classList.remove('open'));
+  importBackdrop?.addEventListener('click', e => { if (e.target === importBackdrop) importBackdrop.classList.remove('open'); });
+
+  importSubmitBtn?.addEventListener('click', async () => {
+    const file = importFileInput.files?.[0];
+    if (!file) { importStatusEl.textContent = 'Pick an .xlsx file first.'; return; }
+    importSubmitBtn.disabled = true;
+    importSubmitBtn.textContent = 'Importing…';
+    importStatusEl.textContent = 'Reading file…';
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch('/api/flights/import', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const d = await r.json();
+      if (!r.ok) { importStatusEl.textContent = '✖ ' + (d.error || 'Import failed'); importSubmitBtn.disabled = false; importSubmitBtn.textContent = 'Import'; return; }
+      importStatusEl.textContent = `✓ ${d.inserted} flights imported, ${d.skipped} skipped (duplicates/unknown routes). Reloading…`;
+      setTimeout(() => window.location.reload(), 1400);
+    } catch (err) {
+      importStatusEl.textContent = '✖ ' + err.message;
+      importSubmitBtn.disabled = false;
+      importSubmitBtn.textContent = 'Import';
     }
   });
 

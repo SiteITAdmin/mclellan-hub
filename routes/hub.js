@@ -1946,6 +1946,8 @@ function computeFlightStats(flights) {
     worstArrDelay: worstArr,
     dubToEdi: flights.filter(f => f.direction === 'DUB-EDI').length,
     ediToDub: flights.filter(f => f.direction === 'EDI-DUB').length,
+    dubToGla: flights.filter(f => f.direction === 'DUB-GLA').length,
+    glaToDub: flights.filter(f => f.direction === 'GLA-DUB').length,
     topAirline: topEntry ? { name: topEntry[0], count: topEntry[1] } : null,
   };
 }
@@ -1973,7 +1975,7 @@ router.post('/api/flights', requireAuth, requireSameOrigin, writeLimiter, (req, 
   if (!direction || !flight_date) {
     return res.status(400).json({ error: 'direction and flight_date are required' });
   }
-  if (!['DUB-EDI', 'EDI-DUB'].includes(direction)) {
+  if (!['DUB-EDI', 'EDI-DUB', 'DUB-GLA', 'GLA-DUB'].includes(direction)) {
     return res.status(400).json({ error: 'Invalid direction' });
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(flight_date)) {
@@ -2012,7 +2014,7 @@ router.put('/api/flights/:id', requireAuth, requireSameOrigin, writeLimiter, (re
     scheduled_dep, actual_dep, scheduled_arr, actual_arr,
     status, notes, tracker_url } = req.body;
 
-  if (!['DUB-EDI', 'EDI-DUB'].includes(direction)) {
+  if (!['DUB-EDI', 'EDI-DUB', 'DUB-GLA', 'GLA-DUB'].includes(direction)) {
     return res.status(400).json({ error: 'Invalid direction' });
   }
 
@@ -2043,6 +2045,95 @@ router.post('/api/flights/:id/delete', requireAuth, requireSameOrigin, writeLimi
   const result = db.hub().prepare('DELETE FROM flights WHERE id = ? AND user = ?').run(req.params.id, req.hubUser);
   if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });
+});
+
+router.post('/api/flights/import', requireAuth, requireSameOrigin, uploadLimiter, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  let XLSX;
+  try { XLSX = require('xlsx'); } catch (_) {
+    return res.status(500).json({ error: 'xlsx package not available on this server' });
+  }
+
+  const VALID = new Set(['DUB-EDI', 'EDI-DUB', 'DUB-GLA', 'GLA-DUB']);
+  const MONTHS = { Jan:1, Feb:2, Mar:3, Apr:4, May:5, Jun:6, Jul:7, Aug:8, Sep:9, Oct:10, Nov:11, Dec:12 };
+
+  function parseExcelDate(s) {
+    const parts = String(s || '').trim().split(' ');
+    if (parts.length !== 3) return '';
+    const [d, m, y] = parts;
+    const mn = MONTHS[m];
+    if (!mn) return '';
+    return `${y}-${String(mn).padStart(2,'0')}-${String(parseInt(d,10)).padStart(2,'0')}`;
+  }
+
+  let wb;
+  try {
+    wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+  } catch (e) {
+    return res.status(400).json({ error: 'Could not parse file — upload a valid .xlsx' });
+  }
+
+  const ws = wb.Sheets['Flight History'] || wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  if (rows.length < 2) return res.json({ inserted: 0, skipped: 0 });
+
+  const user = req.hubUser;
+  const insert = db.hub().prepare(`
+    INSERT INTO flights
+      (id, user, flight_number, airline, direction, flight_date,
+       scheduled_dep, actual_dep, scheduled_arr, actual_arr, status, notes, tracker_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  let inserted = 0, skipped = 0;
+
+  for (const row of rows.slice(1)) {
+    const flnr = String(row[1] || '').trim().toUpperCase();
+    if (!flnr) { skipped++; continue; }
+
+    const fromCode = String(row[3] || '').trim().toUpperCase();
+    const toCode   = String(row[5] || '').trim().toUpperCase();
+    const direction = `${fromCode}-${toCode}`;
+    if (!VALID.has(direction)) { skipped++; continue; }
+
+    const flightDate = parseExcelDate(row[6]);
+    if (!flightDate) { skipped++; continue; }
+
+    // Skip if already imported (same user + flight number + date)
+    const exists = db.hub().prepare(
+      'SELECT 1 FROM flights WHERE user = ? AND flight_number = ? AND flight_date = ?'
+    ).get(user, flnr, flightDate);
+    if (exists) { skipped++; continue; }
+
+    const boardingStatus = String(row[10] || '').trim().toUpperCase();
+    const bookingStatus  = String(row[9]  || '').trim().toUpperCase();
+    const status = boardingStatus === 'BOARDED' ? 'completed'
+                 : bookingStatus  === 'CANCELLED' ? 'cancelled'
+                 : 'completed';
+
+    const notes = String(row[22] || '').trim(); // Calendar Notes column
+
+    try {
+      insert.run(
+        uuid(), user,
+        flnr,
+        fromCode === 'DUB' ? 'Ryanair' : 'Ryanair',
+        direction,
+        flightDate,
+        String(row[7] || '').trim(),
+        '',
+        String(row[8] || '').trim(),
+        '',
+        status,
+        notes,
+        '',
+      );
+      inserted++;
+    } catch (_) { skipped++; }
+  }
+
+  res.json({ ok: true, inserted, skipped });
 });
 
 async function aviationstackLookup(flightNumber, flightDate) {
