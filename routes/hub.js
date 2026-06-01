@@ -2340,52 +2340,61 @@ router.post('/api/flights/import', requireAuth, requireSameOrigin, uploadLimiter
   res.json({ ok: true, inserted, skipped });
 });
 
-async function aviationstackLookup(flightNumber, flightDate) {
-  const key = process.env.AVIATIONSTACK_KEY;
-  if (!key) throw new Error('AVIATIONSTACK_KEY not set');
+async function aviationstackLookup(flightNumber, flightDate, direction) {
+  const key = process.env.AERODATABOX_KEY;
+  if (!key) throw new Error('AERODATABOX_KEY not set');
 
-  const url = `http://api.aviationstack.com/v1/flights?access_key=${encodeURIComponent(key)}&flight_iata=${encodeURIComponent(flightNumber)}&flight_date=${flightDate}`;
-  const resp = await fetch(url);
+  const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(flightNumber)}/${flightDate}?withAircraftImage=false&withLocation=false&withFlightPlan=false&dateLocalRole=Both`;
+  const resp = await fetch(url, {
+    headers: {
+      'x-rapidapi-host': 'aerodatabox.p.rapidapi.com',
+      'x-rapidapi-key': key,
+    },
+  });
   if (!resp.ok) throw new Error(`API HTTP ${resp.status}`);
   const json = await resp.json();
-  if (json.error) throw new Error(json.error.message || 'AviationStack error');
-  if (!json.data?.length) return null;
+  if (json.message) throw new Error(json.message);
+  if (!Array.isArray(json) || !json.length) return null;
 
-  const DUB_EDI = new Set(['DUB', 'EDI', 'EIDW', 'EGPH']);
-  const f = json.data.find(d =>
-    DUB_EDI.has(d.departure?.iata) || DUB_EDI.has(d.arrival?.iata)
-  ) || json.data[0];
-
-  function t(iso) {
-    if (!iso) return '';
-    const m = iso.match(/T(\d{2}:\d{2})/);
+  function extractTime(t) {
+    if (!t) return '';
+    const s = t.local || t.utc || '';
+    const m = s.match(/\d{4}-\d{2}-\d{2} (\d{2}:\d{2})/);
     return m ? m[1] : '';
   }
 
+  // Match the right leg by direction (e.g. DUB-EDI)
+  const [fromCode, toCode] = (direction || '').split('-');
+  const f = (fromCode && toCode)
+    ? json.find(d => d.departure?.airport?.iata === fromCode && d.arrival?.airport?.iata === toCode) || json[0]
+    : json[0];
+
+  const status = f.status === 'Cancelled' ? 'cancelled'
+               : f.status === 'Diverted'  ? 'diverted'
+               : 'completed';
+
   return {
-    scheduled_dep: t(f.departure?.scheduled),
-    actual_dep:    t(f.departure?.actual),
-    scheduled_arr: t(f.arrival?.scheduled),
-    actual_arr:    t(f.arrival?.actual),
-    status:  f.flight_status === 'cancelled' ? 'cancelled'
-           : f.flight_status === 'diverted'  ? 'diverted'
-           : 'completed',
+    scheduled_dep: extractTime(f.departure?.scheduledTime),
+    actual_dep:    extractTime(f.departure?.revisedTime),
+    scheduled_arr: extractTime(f.arrival?.scheduledTime),
+    actual_arr:    extractTime(f.arrival?.revisedTime),
+    status,
     airline: f.airline?.name || '',
-    dep_iata: f.departure?.iata || '',
-    arr_iata: f.arrival?.iata  || '',
+    dep_iata: f.departure?.airport?.iata || '',
+    arr_iata: f.arrival?.airport?.iata  || '',
   };
 }
 
 router.post('/api/flights/lookup', requireAuth, requireSameOrigin, async (req, res) => {
-  const { flight_number, flight_date } = req.body;
+  const { flight_number, flight_date, direction } = req.body;
   if (!flight_number || !flight_date) {
     return res.status(400).json({ error: 'flight_number and flight_date are required' });
   }
-  if (!process.env.AVIATIONSTACK_KEY) {
-    return res.status(503).json({ error: 'AVIATIONSTACK_KEY not configured on this server' });
+  if (!process.env.AERODATABOX_KEY) {
+    return res.status(503).json({ error: 'AERODATABOX_KEY not configured on this server' });
   }
   try {
-    const data = await aviationstackLookup(flight_number.trim().toUpperCase(), flight_date);
+    const data = await aviationstackLookup(flight_number.trim().toUpperCase(), flight_date, direction);
     if (!data) return res.status(404).json({ error: 'No flight data found for that number and date' });
     res.json(data);
   } catch (err) {
@@ -2396,12 +2405,12 @@ router.post('/api/flights/lookup', requireAuth, requireSameOrigin, async (req, r
 
 router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, async (req, res) => {
   const user = req.hubUser;
-  if (!process.env.AVIATIONSTACK_KEY) {
-    return res.status(503).json({ error: 'AVIATIONSTACK_KEY not configured on this server' });
+  if (!process.env.AERODATABOX_KEY) {
+    return res.status(503).json({ error: 'AERODATABOX_KEY not configured on this server' });
   }
 
   const candidates = db.hub().prepare(`
-    SELECT id, flight_number, flight_date FROM flights
+    SELECT id, flight_number, flight_date, direction FROM flights
     WHERE user = ? AND flight_number != '' AND (scheduled_dep = '' OR actual_arr = '')
     ORDER BY flight_date ASC
   `).all(user);
@@ -2412,9 +2421,9 @@ router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, async (r
   let updated = 0, failed = 0;
 
   for (const row of candidates) {
-    await new Promise(r => setTimeout(r, 350)); // stay well within free-tier rate limits
+    await new Promise(r => setTimeout(r, 2000)); // AeroDataBox free tier rate limit
     try {
-      const data = await aviationstackLookup(row.flight_number, row.flight_date);
+      const data = await aviationstackLookup(row.flight_number, row.flight_date, row.direction);
       if (!data) { failed++; results.push({ id: row.id, ok: false, error: 'No data' }); continue; }
 
       db.hub().prepare(`
