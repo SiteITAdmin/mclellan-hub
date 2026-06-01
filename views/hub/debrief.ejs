@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Daily Debrief — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; margin: 0; }
+body.hub-page { height: 100vh !important; overflow: hidden !important; display: flex; flex-direction: column; background: var(--bg-page, #f4f3fb); }
+
+.shell {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 32px 24px 48px; text-align: center;
+  max-width: 480px; margin: 0 auto; width: 100%;
+}
+
+/* Idle */
+.date-line { font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
+.title-line { font-size: 28px; font-weight: 700; margin: 0 0 6px; }
+.desc-line { font-size: 14px; color: var(--text-dim); margin: 0 0 36px; line-height: 1.5; }
+
+.start-btn {
+  padding: 20px 56px; background: var(--accent, #8083ff); color: #fff;
+  border: none; border-radius: 60px; font-size: 18px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 6px 24px rgba(128,131,255,.35); transition: transform .15s, box-shadow .15s;
+  -webkit-appearance: none;
+}
+.start-btn:active { transform: scale(.97); }
+
+.back-link { margin-top: 24px; font-size: 13px; color: var(--text-dim); text-decoration: none; display: block; }
+.back-link:hover { color: var(--accent, #8083ff); }
+
+/* Interview */
+.question-text {
+  font-size: 22px; font-weight: 600; line-height: 1.45; color: var(--text);
+  margin: 0 0 32px; min-height: 64px;
+}
+@media (max-width: 380px) { .question-text { font-size: 18px; } }
+
+.pulse-wrap { margin: 0 auto 20px; position: relative; width: 88px; height: 88px; }
+.pulse-bg {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: rgba(128,131,255,.12);
+  transition: background .4s;
+}
+.pulse-bg.listening { animation: pulse-listen 1.5s ease-in-out infinite; }
+.pulse-bg.speaking { background: rgba(46,125,96,.12); }
+@keyframes pulse-listen {
+  0%,100% { box-shadow: 0 0 0 0 rgba(128,131,255,.35); }
+  50% { box-shadow: 0 0 0 20px rgba(128,131,255,0); }
+}
+.pulse-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+
+.status-line { font-size: 14px; color: var(--text-dim); margin: 0 0 6px; min-height: 20px; }
+.interim-line {
+  font-size: 13px; color: var(--text-muted, #888); font-style: italic;
+  min-height: 18px; max-width: 340px; margin: 0 auto 28px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.finish-btn {
+  padding: 11px 28px; background: transparent; border: 1px solid var(--border);
+  border-radius: 40px; font-size: 14px; color: var(--text-dim); cursor: pointer;
+  -webkit-appearance: none;
+}
+.finish-btn:active { border-color: #c4342b; color: #c4342b; }
+
+/* Saving / Done */
+.big-icon { font-size: 40px; margin-bottom: 12px; }
+.save-label { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.save-sub { font-size: 13px; color: var(--text-dim); font-family: var(--mono); word-break: break-all; }
+.hub-link { margin-top: 28px; font-size: 14px; color: var(--accent, #8083ff); text-decoration: none; display: block; }
+</style>
+</head>
+<body class="hub-page">
+<main style="flex:1;display:flex;flex-direction:column;">
+<div class="shell">
+
+  <!-- ── Idle ──────────────────────────────────────────────────────────────── -->
+  <div id="s-idle">
+    <p class="date-line"><%= today %></p>
+    <h1 class="title-line">Daily Debrief</h1>
+    <p class="desc-line">Hands-free interview for the drive home.<br>Tap start and talk.</p>
+    <button class="start-btn" onclick="startInterview()">Start interview</button>
+    <a href="/" class="back-link">← Back to hub</a>
+  </div>
+
+  <!-- ── Interview ─────────────────────────────────────────────────────────── -->
+  <div id="s-interview" style="display:none;width:100%">
+    <p class="question-text" id="question-text"></p>
+    <div class="pulse-wrap">
+      <div class="pulse-bg" id="pulse-bg"></div>
+      <div class="pulse-icon" id="pulse-icon">⏳</div>
+    </div>
+    <p class="status-line" id="status-line">Starting…</p>
+    <p class="interim-line" id="interim-line"></p>
+    <button class="finish-btn" onclick="finishInterview()">Finish &amp; save</button>
+  </div>
+
+  <!-- ── Saving ─────────────────────────────────────────────────────────────── -->
+  <div id="s-saving" style="display:none">
+    <div class="big-icon">💾</div>
+    <p class="save-label">Saving your notes…</p>
+  </div>
+
+  <!-- ── Done ──────────────────────────────────────────────────────────────── -->
+  <div id="s-done" style="display:none">
+    <div class="big-icon">✓</div>
+    <p class="save-label">Debrief saved</p>
+    <p class="save-sub" id="done-path"></p>
+    <a href="/" class="hub-link">← Back to hub</a>
+  </div>
+
+</div>
+</main>
+
+<script>
+const TODAY_EVENTS = <%- JSON.stringify(events) %>;
+const SESSION_ID   = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36));
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let messages        = [];   // [{role, content}] LLM history
+let transcriptLines = [];   // displayed Q&A for saving
+let interviewActive = false;
+let isListening     = false;
+let silenceTimer    = null;
+let accumulated     = '';   // answer text built up across recognition results
+let recognition     = null;
+
+function show(id) {
+  ['s-idle','s-interview','s-saving','s-done'].forEach(s =>
+    document.getElementById(s).style.display = s === id ? '' : 'none'
+  );
+}
+
+// ── Screen wake ───────────────────────────────────────────────────────────────
+// iOS exempts playing <video> from the idle timer at OS level (same reason
+// YouTube doesn't lock your screen). We generate a 1×1 canvas stream and
+// pipe it into a hidden video element — no audio conflict with TTS, no
+// external file needed.
+let _wakeVideo = null;
+
+function keepAwake() {
+  try {
+    if (_wakeVideo) return; // already running
+    const canvas = document.createElement('canvas');
+    canvas.width = 1; canvas.height = 1;
+    canvas.getContext('2d').fillRect(0, 0, 1, 1);
+    _wakeVideo = document.createElement('video');
+    _wakeVideo.srcObject = canvas.captureStream(1);
+    _wakeVideo.muted = true;
+    _wakeVideo.playsInline = true;
+    _wakeVideo.loop = true;
+    _wakeVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0.01;pointer-events:none';
+    document.body.appendChild(_wakeVideo);
+    _wakeVideo.play().catch(() => {});
+  } catch (_) {}
+}
+
+function releaseWake() {
+  if (_wakeVideo) {
+    _wakeVideo.pause();
+    _wakeVideo.srcObject = null;
+    _wakeVideo.remove();
+    _wakeVideo = null;
+  }
+}
+
+// ── TTS ───────────────────────────────────────────────────────────────────────
+let voicesLoaded = false;
+window.speechSynthesis.onvoiceschanged = () => { voicesLoaded = true; };
+
+function speak(text, onDone) {
+  if (window._nativeSpeak) {
+    if (window._nativeCancel) window._nativeCancel();
+    window._nativeSpeak(text, 0.92, 1.0, onDone);
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'en-GB';
+  utt.rate = 0.92;
+  utt.pitch = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const voice = voices.find(v => /en[-_]GB/i.test(v.lang) && v.localService)
+    || voices.find(v => /en[-_]GB/i.test(v.lang))
+    || voices.find(v => v.lang.startsWith('en'))
+    || voices[0];
+  if (voice) utt.voice = voice;
+  utt.onend  = () => onDone && onDone();
+  utt.onerror = () => onDone && onDone();
+  window.speechSynthesis.speak(utt);
+}
+
+// ── Speech recognition ────────────────────────────────────────────────────────
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function startListening() {
+  if (!SR) { setStatus('Speech recognition not available — use Safari on iOS.'); return; }
+  accumulated = '';
+  isListening = true;
+  setPulse('listening');
+  setStatus('Listening…');
+  setInterim('');
+  startRecognition();
+}
+
+function startRecognition() {
+  if (!isListening || !interviewActive) return;
+  if (!SR) {
+    setStatus('Speech recognition unavailable — please use Safari on iOS.');
+    return;
+  }
+  try {
+    recognition = new SR();
+    recognition.lang = 'en-GB';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = e => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          accumulated += (accumulated ? ' ' : '') + e.results[i][0].transcript;
+        } else {
+          interim = e.results[i][0].transcript;
+          clearTimeout(silenceTimer);
+          silenceTimer = setTimeout(endTurn, 4000);
+        }
+      }
+      setInterim(interim || accumulated);
+    };
+
+    recognition.onspeechend = () => {
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(endTurn, 4000);
+    };
+
+    recognition.onend = () => {
+      if (isListening && interviewActive) setTimeout(startRecognition, 150);
+    };
+
+    recognition.onerror = e => {
+      if (e.error === 'not-allowed') {
+        setStatus('Mic permission denied — allow in Settings and restart.');
+        interviewActive = false;
+      } else if (e.error === 'no-speech' && isListening && interviewActive) {
+        setTimeout(startRecognition, 150);
+      } else if (e.error !== 'aborted') {
+        setStatus('Mic error: ' + e.error + ' — tap Finish to save.');
+      }
+    };
+
+    recognition.start();
+  } catch (err) {
+    setStatus('Could not start mic: ' + err.message);
+  }
+}
+
+function stopListening() {
+  isListening = false;
+  clearTimeout(silenceTimer);
+  if (recognition) { try { recognition.stop(); } catch (_) {} recognition = null; }
+}
+
+// ── Interview flow ────────────────────────────────────────────────────────────
+async function startInterview() {
+  // ── Must happen synchronously inside the tap — iOS blocks both APIs after any await ──
+  // 1. Unlock TTS (only needed for web speechSynthesis; native bridge needs no unlock)
+  if (!window._nativeSpeak) {
+    try {
+      const unlock = new SpeechSynthesisUtterance(' ');
+      unlock.volume = 0.01;
+      window.speechSynthesis.speak(unlock);
+    } catch (_) {}
+  }
+
+  // 2. Request mic permission and unlock SpeechRecognition
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+  } catch (err) {
+    show('s-idle');
+    setStatus('Microphone access denied — please allow mic in Settings and try again.');
+    document.getElementById('status-line').style.display = 'block';
+    return;
+  }
+
+  show('s-interview');
+  setStatus('Starting…');
+  setQuestion('Getting your first question…');
+
+  keepAwake();
+  interviewActive = true;
+  await nextQuestion();
+}
+
+async function endTurn() {
+  if (!interviewActive || !isListening) return;
+  stopListening();
+  const answer = accumulated.trim();
+  setInterim('');
+  setPulse('thinking');
+  setStatus('Got it…');
+  if (answer) {
+    transcriptLines.push(`**You:** ${answer}`);
+    messages.push({ role: 'user', content: answer });
+  }
+  await nextQuestion();
+}
+
+async function nextQuestion() {
+  setPulse('thinking');
+  setStatus('Thinking…');
+  try {
+    const r = await fetch('/api/debrief/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, events: TODAY_EVENTS, sessionId: SESSION_ID }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+
+    const reply = d.reply;
+    messages.push({ role: 'assistant', content: reply });
+    transcriptLines.push(`**Interviewer:** ${reply}`);
+
+    // Show the question part of the reply
+    const sentences = reply.match(/[^.!?]+[.!?]*/g) || [reply];
+    const qSentence = [...sentences].reverse().find(s => s.includes('?')) || reply;
+    setQuestion(qSentence.trim());
+
+    if (d.done) {
+      interviewActive = false;
+      setPulse('speaking');
+      setStatus('');
+      speak(reply, () => setTimeout(finishInterview, 600));
+    } else {
+      setPulse('speaking');
+      setStatus('');
+      speak(reply, () => { if (interviewActive) startListening(); });
+    }
+  } catch (err) {
+    setStatus('Error: ' + err.message + ' — tap Finish to save what we have.');
+  }
+}
+
+async function finishInterview() {
+  interviewActive = false;
+  stopListening();
+  if (window._nativeCancel) window._nativeCancel(); else window.speechSynthesis.cancel();
+  show('s-saving');
+
+  const transcript = transcriptLines.join('\n\n');
+  try {
+    const r = await fetch('/api/debrief/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript, sessionId: SESSION_ID }),
+    });
+    const d = await r.json();
+    releaseWake();
+    document.getElementById('done-path').textContent = d.notePath || '';
+    show('s-done');
+  } catch (err) {
+    releaseWake();
+    document.getElementById('done-path').textContent = 'Save failed: ' + err.message;
+    show('s-done');
+  }
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function setQuestion(t) { document.getElementById('question-text').textContent = t; }
+function setStatus(t)   { document.getElementById('status-line').textContent = t; }
+function setInterim(t)  { document.getElementById('interim-line').textContent = t; }
+function setPulse(state) {
+  const bg   = document.getElementById('pulse-bg');
+  const icon = document.getElementById('pulse-icon');
+  bg.className = 'pulse-bg' + (state === 'listening' ? ' listening' : state === 'speaking' ? ' speaking' : '');
+  icon.textContent = state === 'listening' ? '🎤' : state === 'speaking' ? '🔊' : '⏳';
+  if (state === 'listening') setStatus('Listening…');
+}
+</script>
+</body>
+</html>

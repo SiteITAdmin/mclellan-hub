@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debrief logs — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+.session-grid { display: flex; flex-direction: column; gap: 12px; }
+.session-card {
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); overflow: hidden;
+}
+.session-card.has-error { border-color: #e06c6c; }
+.session-head {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding: 12px 16px; cursor: pointer; user-select: none;
+}
+.session-head:hover { background: var(--accent-light); }
+.session-time { font-size: 13px; font-family: var(--mono); color: var(--text-dim); }
+.session-turns { font-size: 12px; color: var(--accent); font-weight: 600; }
+.session-dur { font-size: 12px; color: var(--text-dim); }
+.session-path { font-size: 12px; color: var(--text-muted); font-family: var(--mono); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-err-badge { font-size: 11px; background: #fde8e8; color: #c4342b; border-radius: 4px; padding: 2px 6px; font-weight: 600; }
+.session-chevron { font-size: 12px; color: var(--text-dim); margin-left: auto; flex-shrink: 0; }
+
+.session-body { display: none; border-top: 1px solid var(--border); }
+.session-body.open { display: block; }
+
+.body-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.body-section:last-child { border-bottom: none; }
+.body-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); margin-bottom: 8px; }
+
+/* Transcript */
+.transcript-lines { display: flex; flex-direction: column; gap: 8px; }
+.t-line { display: flex; gap: 8px; }
+.t-role { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; min-width: 80px; padding-top: 2px; }
+.t-role.interviewer { color: var(--accent); }
+.t-role.you { color: #2e7d60; }
+.t-text { font-size: 13px; line-height: 1.55; color: var(--text); }
+
+/* Extraction */
+.ext-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 600px) { .ext-grid { grid-template-columns: 1fr; } }
+.ext-col { }
+.ext-col-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); margin-bottom: 6px; }
+.ext-tag {
+  display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 12px; margin: 2px;
+  border: 1px solid var(--border); background: var(--accent-light); color: var(--accent);
+}
+.ext-tag.action { background: #f0faf5; border-color: #4caf8a; color: #1a6644; }
+.ext-empty { font-size: 12px; color: var(--text-muted); font-style: italic; }
+
+/* Calendar */
+.cal-pill { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; padding: 3px 10px; border-radius: 20px; margin: 2px; background: rgba(128,131,255,.08); border: 1px solid var(--accent); color: var(--accent); }
+.cal-time { opacity: .7; font-size: 11px; }
+
+/* Error */
+.err-text { font-size: 12px; font-family: var(--mono); color: #c4342b; white-space: pre-wrap; word-break: break-word; }
+
+.empty { color: var(--text-muted); font-size: 14px; padding: 32px 0; text-align: center; }
+.controls { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; font-size: 13px; }
+.controls a { color: var(--text-dim); text-decoration: none; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); }
+.controls a:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Debrief logs — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/shortcuts">Cards</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <a href="/admin/debrief" style="font-weight:600">Debrief logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+
+  <div class="controls">
+    <span style="color:var(--text-dim)">Showing last <%= limit %></span>
+    <% [30, 50, 100].forEach(n => { %>
+      <a href="?limit=<%= n %>" style="<%= limit === n ? 'font-weight:600;border-color:var(--accent);color:var(--accent)' : '' %>"><%= n %></a>
+    <% }) %>
+  </div>
+
+  <% if (!sessions.length) { %>
+    <p class="empty">No debrief sessions yet.</p>
+  <% } else { %>
+  <div class="session-grid">
+    <% sessions.forEach((s, i) => { %>
+    <div class="session-card<%= s.error ? ' has-error' : '' %>">
+      <div class="session-head" onclick="toggle(<%= i %>)">
+        <span class="session-time"><%= new Date(s.started_at * 1000).toLocaleString('en-GB', { timeZone: 'Europe/London', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) %></span>
+        <span class="session-turns"><%= s.turns %> turn<%= s.turns !== 1 ? 's' : '' %></span>
+        <% if (s.duration) { %><span class="session-dur"><%= Math.round(s.duration / 60) %>m</span><% } %>
+        <% if (s.note_path) { %><span class="session-path"><%= s.note_path %></span><% } %>
+        <% if (s.error) { %><span class="session-err-badge">ERROR</span><% } %>
+        <span class="session-chevron" id="chev-<%= i %>">▼</span>
+      </div>
+
+      <div class="session-body" id="body-<%= i %>">
+
+        <!-- Calendar context -->
+        <% if (s.calendar_events?.length) { %>
+        <div class="body-section">
+          <p class="body-label">Calendar context</p>
+          <% s.calendar_events.forEach(ev => { %>
+            <span class="cal-pill"><% if (ev.time) { %><span class="cal-time"><%= ev.time %></span><% } %><%= ev.summary %></span>
+          <% }) %>
+        </div>
+        <% } %>
+
+        <!-- Transcript -->
+        <% if (s.transcript) { %>
+        <div class="body-section">
+          <p class="body-label">Transcript</p>
+          <div class="transcript-lines">
+            <% s.transcript.split('\n\n').forEach(line => {
+              const isInterviewer = line.startsWith('**Interviewer:**');
+              const isYou = line.startsWith('**You:**');
+              const text = line.replace(/^\*\*(Interviewer|You):\*\*\s*/, '');
+            %>
+            <% if (isInterviewer || isYou) { %>
+            <div class="t-line">
+              <span class="t-role <%= isInterviewer ? 'interviewer' : 'you' %>"><%= isInterviewer ? 'Interviewer' : 'You' %></span>
+              <span class="t-text"><%= text %></span>
+            </div>
+            <% } else if (line.trim()) { %>
+            <div class="t-line">
+              <span class="t-role" style="color:var(--text-dim)">—</span>
+              <span class="t-text"><%= line.trim() %></span>
+            </div>
+            <% } %>
+            <% }) %>
+          </div>
+        </div>
+        <% } %>
+
+        <!-- Extraction results -->
+        <% if (s.extraction) { %>
+        <div class="body-section">
+          <p class="body-label">Extraction results</p>
+          <div class="ext-grid">
+            <div class="ext-col">
+              <p class="ext-col-label">People → CRM</p>
+              <% if (s.extraction.people?.length) { %>
+                <% s.extraction.people.forEach(p => { %><span class="ext-tag"><%= p %></span><% }) %>
+              <% } else { %><span class="ext-empty">none found</span><% } %>
+            </div>
+            <div class="ext-col">
+              <p class="ext-col-label">Projects</p>
+              <% if (s.extraction.projects?.length) { %>
+                <% s.extraction.projects.forEach(p => { %><span class="ext-tag"><%= p %></span><% }) %>
+              <% } else { %><span class="ext-empty">none found</span><% } %>
+            </div>
+            <div class="ext-col">
+              <p class="ext-col-label">Actions</p>
+              <% if (s.extraction.actions?.length) { %>
+                <% s.extraction.actions.forEach(a => { %><span class="ext-tag action"><%= a %></span><% }) %>
+              <% } else { %><span class="ext-empty">none found</span><% } %>
+            </div>
+          </div>
+        </div>
+        <% } else if (s.note_path) { %>
+        <div class="body-section">
+          <p class="body-label">Extraction</p>
+          <span class="ext-empty">Pending or not yet run</span>
+        </div>
+        <% } %>
+
+        <!-- Error -->
+        <% if (s.error) { %>
+        <div class="body-section">
+          <p class="body-label">Error</p>
+          <pre class="err-text"><%= s.error %></pre>
+        </div>
+        <% } %>
+
+      </div><!-- session-body -->
+    </div><!-- session-card -->
+    <% }) %>
+  </div>
+  <% } %>
+
+</section>
+
+<script>
+function toggle(i) {
+  const body = document.getElementById('body-' + i);
+  const chev = document.getElementById('chev-' + i);
+  const open = body.classList.toggle('open');
+  chev.textContent = open ? '▲' : '▼';
+}
+</script>
+</body>
+</html>

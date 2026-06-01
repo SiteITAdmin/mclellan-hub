@@ -303,6 +303,41 @@ router.get('/admin/chatlogs', requireHubAdmin, (req, res) => {
   res.render('hub-admin/chatlogs', { user: req.hubUser, logs, limit, rating, sort: req.query.sort || 'newest' });
 });
 
+// ── Debrief session logs ──────────────────────────────────────────────────────
+router.get('/admin/debrief', requireHubAdmin, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 30, 200);
+  const sessions = db.hub().prepare(`
+    SELECT id, user, started_at, ended_at, turns, note_path, extraction, error, calendar_events
+    FROM debrief_sessions
+    WHERE user = ?
+    ORDER BY started_at DESC
+    LIMIT ?
+  `).all(req.hubUser, limit);
+
+  // Parse JSON fields
+  const parsed = sessions.map(s => ({
+    ...s,
+    extraction: s.extraction ? (() => { try { return JSON.parse(s.extraction); } catch { return null; } })() : null,
+    calendar_events: s.calendar_events ? (() => { try { return JSON.parse(s.calendar_events); } catch { return []; } })() : [],
+    duration: s.ended_at && s.started_at ? s.ended_at - s.started_at : null,
+  }));
+
+  res.render('hub-admin/debrief', { user: req.hubUser, sessions: parsed, limit });
+});
+
+router.get('/admin/debrief/:id', requireHubAdmin, (req, res) => {
+  const session = db.hub().prepare('SELECT * FROM debrief_sessions WHERE id = ? AND user = ?')
+    .get(req.params.id, req.hubUser);
+  if (!session) return res.status(404).send('Not found');
+  const parsed = {
+    ...session,
+    extraction: session.extraction ? (() => { try { return JSON.parse(session.extraction); } catch { return null; } })() : null,
+    calendar_events: session.calendar_events ? (() => { try { return JSON.parse(session.calendar_events); } catch { return []; } })() : [],
+    duration: session.ended_at && session.started_at ? session.ended_at - session.started_at : null,
+  };
+  res.render('hub-admin/debrief-detail', { user: req.hubUser, session: parsed });
+});
+
 // ── Model management ──────────────────────────────────────────────────────────
 const { DEFAULT_MODELS } = require('../lib/router');
 

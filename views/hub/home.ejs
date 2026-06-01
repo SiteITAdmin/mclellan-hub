@@ -73,12 +73,6 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <div class="today-strip-title">Today</div>
     <div class="today-items">
 
-      <% if (journalToday) { %>
-        <span class="today-item done"><span class="today-dot"></span> Journal recorded</span>
-      <% } else { %>
-        <a href="/debrief" class="today-item warn"><span class="today-dot"></span> Journal not recorded yet</a>
-      <% } %>
-
       <% if (calendarEvents.length === 0) { %>
         <a href="https://calendar.google.com" target="_blank" rel="noopener" class="today-item warn"><span class="today-dot"></span> Check Google Calendar</a>
       <% } else { %>
@@ -118,8 +112,8 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
     <a href="/debrief" class="hub-tile">
       <div class="hub-tile-icon">🎤</div>
-      <div class="hub-tile-label">Voice Notes</div>
-      <div class="hub-tile-desc">Meeting debrief, daily interview, or verbal thoughts. Analysed and saved.</div>
+      <div class="hub-tile-label">Daily Debrief</div>
+      <div class="hub-tile-desc">Record the day — transcribed and saved verbatim to Obsidian.</div>
     </a>
 
     <a href="/lin" class="hub-tile">
