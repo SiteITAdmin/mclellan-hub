@@ -31,6 +31,15 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
 /* ── Stats cards ──────────────────────────────────────────────────────────── */
 .fl-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.fl-reality-section { margin-top: 24px; margin-bottom: 20px; }
+.fl-reality-heading {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-muted); margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.fl-reality-note {
+  font-size: 12px; color: var(--text-muted); margin-top: 10px; line-height: 1.5;
+}
 
 .fl-stat {
   background: var(--surface); border: 1px solid var(--border);
@@ -315,6 +324,62 @@ table.fl-table thead th:first-child {
     <div class="fl-dir-chip"><span>GLA → DUB</span><span class="count"><%= stats.glaToDub %></span></div>
     <% } %>
   </div>
+
+  <!-- Schedule vs reality -->
+  <% if (stats.avgActualDuration !== null) { %>
+  <div class="fl-reality-section">
+    <div class="fl-reality-heading">Schedule vs reality</div>
+    <div class="fl-stats" style="margin-bottom:0">
+
+      <div class="fl-stat good">
+        <div class="fl-stat-value"><%= stats.avgActualDuration %>m</div>
+        <div class="fl-stat-label">Avg actual flight</div>
+        <div class="fl-stat-sub">Gate to gate · <%= stats.avgActualDuration < 60 ? stats.avgActualDuration + ' min' : Math.floor(stats.avgActualDuration/60) + 'h ' + (stats.avgActualDuration%60) + 'm' %></div>
+      </div>
+
+      <div class="fl-stat warn">
+        <div class="fl-stat-value"><%= stats.avgSchedDuration !== null ? (Math.floor(stats.avgSchedDuration/60) + 'h ' + (stats.avgSchedDuration%60) + 'm') : '—' %></div>
+        <div class="fl-stat-label">Advertised block time</div>
+        <div class="fl-stat-sub">What you're sold on the booking</div>
+      </div>
+
+      <div class="fl-stat <%= stats.bufferMinutes > 15 ? 'warn' : '' %>">
+        <div class="fl-stat-value">+<%= stats.bufferMinutes %>m</div>
+        <div class="fl-stat-label">Built-in buffer</div>
+        <div class="fl-stat-sub">Per flight · boosts airline on-time stats</div>
+      </div>
+
+      <% if (stats.depOnTimePct !== null) { %>
+      <div class="fl-stat <%= stats.depOnTimePct >= 75 ? 'good' : stats.depOnTimePct >= 50 ? 'warn' : 'bad' %>">
+        <div class="fl-stat-value"><%= stats.depOnTimePct %>%</div>
+        <div class="fl-stat-label">Departed on time</div>
+        <div class="fl-stat-sub">≤5 min after sched dep · <%= stats.depOnTimeSample %> flights</div>
+      </div>
+      <% } %>
+
+      <% if (stats.realOnTimePct !== null) { %>
+      <div class="fl-stat <%= stats.realOnTimePct >= 75 ? 'good' : stats.realOnTimePct >= 50 ? 'warn' : 'bad' %>">
+        <div class="fl-stat-value"><%= stats.realOnTimePct %>%</div>
+        <div class="fl-stat-label">On time — fair measure</div>
+        <div class="fl-stat-sub">Landed within sched dep + <%= stats.avgActualDuration %>m + 5 · <%= stats.realLateSample %> flights</div>
+      </div>
+      <% } %>
+
+      <% if (stats.onTimePct !== null) { %>
+      <div class="fl-stat <%= stats.onTimePct >= 75 ? 'good' : stats.onTimePct >= 50 ? 'warn' : 'bad' %>">
+        <div class="fl-stat-value"><%= stats.onTimePct %>%</div>
+        <div class="fl-stat-label">On time — airline's claim</div>
+        <div class="fl-stat-sub">Landed ≤5 min after padded arrival · <%= stats.onTimeSample %> flights</div>
+      </div>
+      <% } %>
+
+    </div>
+    <p class="fl-reality-note">
+      Both airlines schedule <%= stats.avgSchedDuration !== null ? Math.floor(stats.avgSchedDuration/60) + 'h ' + (stats.avgSchedDuration%60) + 'm' : '~1h 07m' %> for a route that consistently takes <%= stats.avgActualDuration %>m in the air.
+      The <%= stats.bufferMinutes %>-minute buffer means a plane can push back late and still clock as "on time" — which is exactly what's happening.
+    </p>
+  </div>
+  <% } %>
 
   <!-- API / tracker note -->
   <div class="fl-tracker-note">

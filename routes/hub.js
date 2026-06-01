@@ -2111,6 +2111,15 @@ function parseFlightMinutes(t) {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 }
 
+function flightDuration(dep, arr) {
+  const d = parseFlightMinutes(dep);
+  const a = parseFlightMinutes(arr);
+  if (d === null || a === null) return null;
+  let diff = a - d;
+  if (diff < 0) diff += 1440; // overnight flights (e.g. EDI-DUB 23:35→00:17)
+  return diff;
+}
+
 function flightDelay(scheduled, actual) {
   const s = parseFlightMinutes(scheduled);
   const a = parseFlightMinutes(actual);
@@ -2148,6 +2157,56 @@ function computeFlightStats(flights) {
     };
   }
 
+  // ── Schedule vs reality ───────────────────────────────────────────────────
+
+  // Actual flight durations (gate-to-gate, sanity-bounded 20–180 min)
+  const actualDurations = completed
+    .filter(f => f.actual_dep && f.actual_arr)
+    .map(f => flightDuration(f.actual_dep, f.actual_arr))
+    .filter(d => d !== null && d > 20 && d < 180);
+  const avgActualDuration = actualDurations.length
+    ? Math.round(actualDurations.reduce((a, b) => a + b, 0) / actualDurations.length)
+    : null;
+
+  // Scheduled block times
+  const schedDurations = completed
+    .filter(f => f.scheduled_dep && f.scheduled_arr)
+    .map(f => flightDuration(f.scheduled_dep, f.scheduled_arr))
+    .filter(d => d !== null && d > 20 && d < 180);
+  const avgSchedDuration = schedDurations.length
+    ? Math.round(schedDurations.reduce((a, b) => a + b, 0) / schedDurations.length)
+    : null;
+
+  // Departure punctuality: actual_dep vs scheduled_dep
+  const depDelays = completed
+    .filter(f => f.scheduled_dep && f.actual_dep)
+    .map(f => flightDelay(f.scheduled_dep, f.actual_dep))
+    .filter(d => d !== null);
+  const depOnTimePct = depDelays.length
+    ? Math.round(depDelays.filter(d => d <= 5).length / depDelays.length * 100)
+    : null;
+
+  // Real arrival on-time: actual_arr vs (scheduled_dep + avgActualDuration)
+  // "If you left at the advertised time, did you land within a fair window?"
+  const realArrDelays = avgActualDuration !== null
+    ? completed
+        .filter(f => f.scheduled_dep && f.actual_arr)
+        .map(f => {
+          const expected = (parseFlightMinutes(f.scheduled_dep) + avgActualDuration) % 1440;
+          const a = parseFlightMinutes(f.actual_arr);
+          if (a === null) return null;
+          let diff = a - expected;
+          if (diff < -720) diff += 1440;
+          if (diff > 720) diff -= 1440;
+          return diff;
+        })
+        .filter(d => d !== null)
+    : [];
+  const realOnTimePct = realArrDelays.length
+    ? Math.round(realArrDelays.filter(d => d <= 5).length / realArrDelays.length * 100)
+    : null;
+  const realLateSample = realArrDelays.length;
+
   return {
     total: flights.length,
     cancelled: flights.filter(f => f.status === 'cancelled').length,
@@ -2161,6 +2220,14 @@ function computeFlightStats(flights) {
     glaToDub: flights.filter(f => f.direction === 'GLA-DUB').length,
     ryanair: airlineStats('Ryanair'),
     aerLingus: airlineStats('Aer Lingus'),
+    avgActualDuration,
+    avgSchedDuration,
+    bufferMinutes: (avgActualDuration !== null && avgSchedDuration !== null)
+      ? avgSchedDuration - avgActualDuration : null,
+    depOnTimePct,
+    depOnTimeSample: depDelays.length,
+    realOnTimePct,
+    realLateSample,
   };
 }
 
