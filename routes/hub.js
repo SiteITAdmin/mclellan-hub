@@ -2340,48 +2340,81 @@ router.post('/api/flights/import', requireAuth, requireSameOrigin, uploadLimiter
   res.json({ ok: true, inserted, skipped });
 });
 
+const FR24_IATA_TO_ICAO = {
+  DUB: 'EIDW', EDI: 'EGPH', GLA: 'EGPF',
+  REU: 'LERS', PRG: 'LKPR', LHR: 'EGLL', BRU: 'EBBR',
+};
+const FR24_ICAO_AIRLINE = { RYR: 'Ryanair', EAI: 'Aer Lingus', EIN: 'Aer Lingus' };
+
 async function aviationstackLookup(flightNumber, flightDate, direction) {
-  const key = process.env.AERODATABOX_KEY;
-  if (!key) throw new Error('AERODATABOX_KEY not set');
+  const key = process.env.FR24_API_TOKEN;
+  if (!key) throw new Error('FR24_API_TOKEN not set');
 
-  const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(flightNumber)}/${flightDate}?withAircraftImage=false&withLocation=false&withFlightPlan=false&dateLocalRole=Both`;
-  const resp = await fetch(url, {
-    headers: {
-      'x-rapidapi-host': 'aerodatabox.p.rapidapi.com',
-      'x-rapidapi-key': key,
-    },
-  });
-  if (!resp.ok) throw new Error(`API HTTP ${resp.status}`);
-  const json = await resp.json();
-  if (json.message) throw new Error(json.message);
-  if (!Array.isArray(json) || !json.length) return null;
+  const [fromIata, toIata] = (direction || '').split('-');
+  const fromIcao = FR24_IATA_TO_ICAO[fromIata] || '';
+  const toIcao   = FR24_IATA_TO_ICAO[toIata]   || '';
 
-  function extractTime(t) {
-    if (!t) return '';
-    const s = t.local || t.utc || '';
-    const m = s.match(/\d{4}-\d{2}-\d{2} (\d{2}:\d{2})/);
-    return m ? m[1] : '';
+  function utcToLocalHHMM(isoStr) {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('sv-SE', {
+      timeZone: 'Europe/Dublin',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).slice(0, 5);
   }
 
-  // Match the right leg by direction (e.g. DUB-EDI)
-  const [fromCode, toCode] = (direction || '').split('-');
-  const f = (fromCode && toCode)
-    ? json.find(d => d.departure?.airport?.iata === fromCode && d.arrival?.airport?.iata === toCode) || json[0]
-    : json[0];
+  async function queryDay(date) {
+    const params = new URLSearchParams({
+      flight_datetime_from: `${date}T00:00:00Z`,
+      flight_datetime_to:   `${date}T23:59:59Z`,
+      callsigns: flightNumber,
+      limit: '10',
+    });
+    const resp = await fetch(`https://fr24api.flightradar24.com/api/flight-summary/light?${params}`, {
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Accept-version': 'v1',
+        Accept: 'application/json',
+      },
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.message || `FR24 API HTTP ${resp.status}`);
+    }
+    const json = await resp.json();
+    return Array.isArray(json.data) ? json.data : [];
+  }
 
-  const status = f.status === 'Cancelled' ? 'cancelled'
-               : f.status === 'Diverted'  ? 'diverted'
-               : 'completed';
+  let records = await queryDay(flightDate);
+
+  // Late-night departures: landing may be recorded on the next calendar day
+  if (records.length > 0 && records.some(r => r.datetime_takeoff && !r.datetime_landed)) {
+    const next = new Date(flightDate + 'T12:00:00Z');
+    next.setUTCDate(next.getUTCDate() + 1);
+    const nextRecords = await queryDay(next.toISOString().slice(0, 10));
+    records = [...records, ...nextRecords];
+  }
+
+  // Best-match: prefer exact origin+dest, then origin only, then flight number alone
+  const f = (fromIcao && toIcao)
+    ? (records.find(r => r.flight === flightNumber && r.orig_icao === fromIcao && r.dest_icao_actual === toIcao)
+      || records.find(r => r.flight === flightNumber && r.orig_icao === fromIcao)
+      || records.find(r => r.flight === flightNumber))
+    : (records.find(r => r.flight === flightNumber) || records[0]);
+
+  if (!f) return null;
 
   return {
-    scheduled_dep: extractTime(f.departure?.scheduledTime),
-    actual_dep:    extractTime(f.departure?.revisedTime),
-    scheduled_arr: extractTime(f.arrival?.scheduledTime),
-    actual_arr:    extractTime(f.arrival?.revisedTime),
-    status,
-    airline: f.airline?.name || '',
-    dep_iata: f.departure?.airport?.iata || '',
-    arr_iata: f.arrival?.airport?.iata  || '',
+    scheduled_dep: '',
+    actual_dep:    utcToLocalHHMM(f.datetime_takeoff),
+    scheduled_arr: '',
+    actual_arr:    utcToLocalHHMM(f.datetime_landed),
+    status: 'completed',
+    airline: FR24_ICAO_AIRLINE[f.operating_as] || FR24_ICAO_AIRLINE[f.painted_as] || f.operating_as || '',
+    dep_iata: fromIata || '',
+    arr_iata: toIata  || '',
   };
 }
 
@@ -2390,8 +2423,8 @@ router.post('/api/flights/lookup', requireAuth, requireSameOrigin, async (req, r
   if (!flight_number || !flight_date) {
     return res.status(400).json({ error: 'flight_number and flight_date are required' });
   }
-  if (!process.env.AERODATABOX_KEY) {
-    return res.status(503).json({ error: 'AERODATABOX_KEY not configured on this server' });
+  if (!process.env.FR24_API_TOKEN) {
+    return res.status(503).json({ error: 'FR24_API_TOKEN not configured on this server' });
   }
   try {
     const data = await aviationstackLookup(flight_number.trim().toUpperCase(), flight_date, direction);
@@ -2405,8 +2438,8 @@ router.post('/api/flights/lookup', requireAuth, requireSameOrigin, async (req, r
 
 router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, async (req, res) => {
   const user = req.hubUser;
-  if (!process.env.AERODATABOX_KEY) {
-    return res.status(503).json({ error: 'AERODATABOX_KEY not configured on this server' });
+  if (!process.env.FR24_API_TOKEN) {
+    return res.status(503).json({ error: 'FR24_API_TOKEN not configured on this server' });
   }
 
   const candidates = db.hub().prepare(`
@@ -2421,7 +2454,7 @@ router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, async (r
   let updated = 0, failed = 0;
 
   for (const row of candidates) {
-    await new Promise(r => setTimeout(r, 2000)); // AeroDataBox free tier rate limit
+    await new Promise(r => setTimeout(r, 500));
     try {
       const data = await aviationstackLookup(row.flight_number, row.flight_date, row.direction);
       if (!data) { failed++; results.push({ id: row.id, ok: false, error: 'No data' }); continue; }

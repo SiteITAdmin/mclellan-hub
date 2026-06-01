@@ -305,7 +305,7 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
   <!-- API / tracker note -->
   <div class="fl-tracker-note">
     Add your flights using just the flight number + date from your Ryanair app, then click
-    <strong>Fetch missing times</strong> to auto-fill scheduled/actual times via AeroDataBox.
+    <strong>Fetch missing times</strong> to auto-fill actual times via Flightradar24.
     Ryanair: FR#### · Aer Lingus: EI### · easyJet: U2####.
   </div>
 
@@ -538,7 +538,7 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
       </div>
 
       <div class="fl-lookup-row">
-        <button type="button" id="lookup-btn" class="fl-lookup-btn">Look up times via AeroDataBox</button>
+        <button type="button" id="lookup-btn" class="fl-lookup-btn">Look up times via Flightradar24</button>
         <span id="lookup-status" class="fl-lookup-status"></span>
       </div>
 
@@ -761,11 +761,11 @@ table.fl-table tbody tr:hover { background: var(--surface2); }
       lookupStatus.textContent = '✖ ' + err.message;
     } finally {
       lookupBtn.disabled = false;
-      lookupBtn.textContent = 'Look up times via AeroDataBox';
+      lookupBtn.textContent = 'Look up times via Flightradar24';
     }
   });
 
-  // ── AviationStack bulk lookup ─────────────────────────────────────────────
+  // ── Flightradar24 bulk lookup ─────────────────────────────────────────────
   const bulkBtn = document.getElementById('bulk-lookup-btn');
   const bulkStatus = document.getElementById('bulk-status');
 
