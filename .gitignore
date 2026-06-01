@@ -14,3 +14,5 @@ config/mclellan-hub-*.json
 .claude/
 *.zip
 *.rtf
+*.csv
+.rsyncignore
