@@ -265,7 +265,7 @@ table.fl-table thead th:first-child {
     <div class="fl-stat <%= stats.avgArrDelay <= 0 ? 'good' : stats.avgArrDelay <= 20 ? 'warn' : 'bad' %>">
       <div class="fl-stat-value"><%= stats.avgArrDelay > 0 ? '+' : '' %><%= stats.avgArrDelay %>m</div>
       <div class="fl-stat-label">Avg arrival delay</div>
-      <div class="fl-stat-sub">Completed flights only</div>
+      <div class="fl-stat-sub"><%= stats.onTimeSample %> flights with data</div>
     </div>
     <% } else { %>
     <div class="fl-stat">
@@ -289,13 +289,19 @@ table.fl-table thead th:first-child {
     </div>
     <% } %>
 
-    <% if (stats.topAirline) { %>
     <div class="fl-stat">
-      <div class="fl-stat-value" style="font-size:20px"><%= stats.topAirline.name %></div>
-      <div class="fl-stat-label">Top airline</div>
-      <div class="fl-stat-sub"><%= stats.topAirline.count %> of <%= stats.total %> flights</div>
+      <div class="fl-stat-value" style="font-size:22px">FR</div>
+      <div class="fl-stat-label">Ryanair</div>
+      <div class="fl-stat-sub"><%= stats.ryanair.count %> flights
+        <% if (stats.ryanair.onTimePct !== null) { %> · <%= stats.ryanair.onTimePct %>% on time (<%= stats.ryanair.sample %> with data)<% } %></div>
     </div>
-    <% } %>
+
+    <div class="fl-stat">
+      <div class="fl-stat-value" style="font-size:22px">EI</div>
+      <div class="fl-stat-label">Aer Lingus</div>
+      <div class="fl-stat-sub"><%= stats.aerLingus.count %> flights
+        <% if (stats.aerLingus.onTimePct !== null) { %> · <%= stats.aerLingus.onTimePct %>% on time (<%= stats.aerLingus.sample %> with data)<% } %></div>
+    </div>
   </div>
 
   <!-- Direction split -->

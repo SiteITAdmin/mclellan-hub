@@ -2128,18 +2128,25 @@ function computeFlightStats(flights) {
     .map(f => flightDelay(f.scheduled_arr, f.actual_arr))
     .filter(d => d !== null);
 
-  const onTime = arrDelays.filter(d => d <= 5).length;
-  const avgArr = arrDelays.length
-    ? Math.round(arrDelays.reduce((a, b) => a + b, 0) / arrDelays.length)
+  const onTime = arrDelays.length ? arrDelays.filter(d => d <= 5).length : 0;
+  const rawAvg = arrDelays.length
+    ? arrDelays.reduce((a, b) => a + b, 0) / arrDelays.length
     : null;
+  const avgArr = rawAvg !== null ? Math.round(rawAvg * 10) / 10 : null;
   const worstArr = arrDelays.length ? Math.max(...arrDelays) : null;
 
-  const airlineCounts = {};
-  for (const f of flights) {
-    const a = (f.airline || '').trim();
-    if (a) airlineCounts[a] = (airlineCounts[a] || 0) + 1;
+  function airlineStats(name) {
+    const af = flights.filter(f => (f.airline || '').trim() === name);
+    const delays = af
+      .filter(f => f.status !== 'cancelled' && f.scheduled_arr && f.actual_arr)
+      .map(f => flightDelay(f.scheduled_arr, f.actual_arr))
+      .filter(d => d !== null);
+    return {
+      count: af.length,
+      onTimePct: delays.length ? Math.round(delays.filter(d => d <= 5).length / delays.length * 100) : null,
+      sample: delays.length,
+    };
   }
-  const topEntry = Object.entries(airlineCounts).sort((a, b) => b[1] - a[1])[0];
 
   return {
     total: flights.length,
@@ -2152,7 +2159,8 @@ function computeFlightStats(flights) {
     ediToDub: flights.filter(f => f.direction === 'EDI-DUB').length,
     dubToGla: flights.filter(f => f.direction === 'DUB-GLA').length,
     glaToDub: flights.filter(f => f.direction === 'GLA-DUB').length,
-    topAirline: topEntry ? { name: topEntry[0], count: topEntry[1] } : null,
+    ryanair: airlineStats('Ryanair'),
+    aerLingus: airlineStats('Aer Lingus'),
   };
 }
 
