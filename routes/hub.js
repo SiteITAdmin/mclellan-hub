@@ -2128,7 +2128,7 @@ function computeFlightStats(flights) {
     .map(f => flightDelay(f.scheduled_arr, f.actual_arr))
     .filter(d => d !== null);
 
-  const onTime = arrDelays.filter(d => d <= 15).length;
+  const onTime = arrDelays.filter(d => d <= 5).length;
   const avgArr = arrDelays.length
     ? Math.round(arrDelays.reduce((a, b) => a + b, 0) / arrDelays.length)
     : null;
