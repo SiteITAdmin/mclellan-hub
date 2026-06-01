@@ -481,6 +481,8 @@ table.fl-table thead th:first-child {
                   <span class="fl-delay <%= delayClass(depDelay) %>"><%= delayLabel(depDelay) %></span>
                 <% } %>
               </div>
+            <% } else if (f.actual_dep) { %>
+              <span class="fl-time-actual"><%= f.actual_dep %></span>
             <% } else { %>
               <span style="color:var(--text-muted)">—</span>
             <% } %>
@@ -495,6 +497,8 @@ table.fl-table thead th:first-child {
                   <span class="fl-delay <%= delayClass(arrDelay) %>"><%= delayLabel(arrDelay) %></span>
                 <% } %>
               </div>
+            <% } else if (f.actual_arr) { %>
+              <span class="fl-time-actual"><%= f.actual_arr %></span>
             <% } else { %>
               <span style="color:var(--text-muted)">—</span>
             <% } %>
