@@ -104,7 +104,11 @@ function collectCodex() {
     for (const event of readJsonLines(file)) {
       if (event?.type !== "event_msg" || event?.payload?.type !== "token_count") continue;
 
-      const total = Number(event?.payload?.info?.last_token_usage?.total_tokens || 0);
+      const total = Number(
+        event?.payload?.info?.total_token_usage?.total_tokens ||
+          event?.payload?.info?.last_token_usage?.total_tokens ||
+          0,
+      );
       if (total <= 0) continue;
 
       const date = toLocalDate(event.timestamp);

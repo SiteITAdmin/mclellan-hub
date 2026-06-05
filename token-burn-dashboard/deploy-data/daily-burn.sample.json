@@ -69,7 +69,7 @@
   },
   {
     "date": "2026-04-23",
-    "codex_tokens": 227042,
+    "codex_tokens": 32125298,
     "claude_code_tokens": 954153,
     "claude_code_calls": 6,
     "api_tokens": 436736,
@@ -81,12 +81,12 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
+    "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export"
   },
   {
     "date": "2026-04-24",
-    "codex_tokens": 189743,
+    "codex_tokens": 18099293,
     "claude_code_tokens": 0,
     "claude_code_calls": 0,
     "api_tokens": 171316,
@@ -103,7 +103,7 @@
   },
   {
     "date": "2026-04-25",
-    "codex_tokens": 233523,
+    "codex_tokens": 20751849,
     "claude_code_tokens": 0,
     "claude_code_calls": 0,
     "api_tokens": 260330,
@@ -115,12 +115,12 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "hub ingestion",
+    "driver": "shipping",
     "evidence": "Codex session token counters; OpenRouter activity export"
   },
   {
     "date": "2026-04-26",
-    "codex_tokens": 158804,
+    "codex_tokens": 23552473,
     "claude_code_tokens": 7616781,
     "claude_code_calls": 84,
     "api_tokens": 230739,
@@ -132,7 +132,7 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
+    "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export"
   },
   {
@@ -154,7 +154,7 @@
   },
   {
     "date": "2026-04-28",
-    "codex_tokens": 188622,
+    "codex_tokens": 28516721,
     "claude_code_tokens": 0,
     "claude_code_calls": 0,
     "api_tokens": 43224,
@@ -290,7 +290,7 @@
   },
   {
     "date": "2026-05-08",
-    "codex_tokens": 329906,
+    "codex_tokens": 36267043,
     "claude_code_tokens": 12996167,
     "claude_code_calls": 155,
     "api_tokens": 125745,
@@ -302,12 +302,12 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
+    "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export; Synthadoc audit logs"
   },
   {
     "date": "2026-05-09",
-    "codex_tokens": 213906,
+    "codex_tokens": 31364794,
     "claude_code_tokens": 400462,
     "claude_code_calls": 3,
     "api_tokens": 47648,
@@ -319,7 +319,7 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
+    "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export"
   },
   {
@@ -358,7 +358,7 @@
   },
   {
     "date": "2026-05-12",
-    "codex_tokens": 71932,
+    "codex_tokens": 3088068,
     "claude_code_tokens": 39685631,
     "claude_code_calls": 420,
     "api_tokens": 112062,
@@ -375,7 +375,7 @@
   },
   {
     "date": "2026-05-13",
-    "codex_tokens": 248192,
+    "codex_tokens": 12596071,
     "claude_code_tokens": 38807172,
     "claude_code_calls": 403,
     "api_tokens": 194087,
@@ -392,7 +392,7 @@
   },
   {
     "date": "2026-05-14",
-    "codex_tokens": 234093,
+    "codex_tokens": 17978862,
     "claude_code_tokens": 12611966,
     "claude_code_calls": 120,
     "api_tokens": 159807,
@@ -404,12 +404,12 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
+    "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export; Synthadoc audit logs"
   },
   {
     "date": "2026-05-15",
-    "codex_tokens": 183925,
+    "codex_tokens": 4677849,
     "claude_code_tokens": 44875789,
     "claude_code_calls": 448,
     "api_tokens": 652021,
@@ -426,7 +426,7 @@
   },
   {
     "date": "2026-05-16",
-    "codex_tokens": 230045,
+    "codex_tokens": 30594477,
     "claude_code_tokens": 36910725,
     "claude_code_calls": 381,
     "api_tokens": 173199,
@@ -443,7 +443,7 @@
   },
   {
     "date": "2026-05-17",
-    "codex_tokens": 37337,
+    "codex_tokens": 169593,
     "claude_code_tokens": 35739979,
     "claude_code_calls": 362,
     "api_tokens": 575649,
@@ -698,7 +698,7 @@
   },
   {
     "date": "2026-06-01",
-    "codex_tokens": 221811,
+    "codex_tokens": 21001662,
     "claude_code_tokens": 34250562,
     "claude_code_calls": 395,
     "api_tokens": 38452,
@@ -766,7 +766,7 @@
   },
   {
     "date": "2026-06-05",
-    "codex_tokens": 382967,
+    "codex_tokens": 33175443,
     "claude_code_tokens": 1674905,
     "claude_code_calls": 28,
     "api_tokens": 77545,
@@ -778,7 +778,7 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
+    "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export"
   }
 ]
