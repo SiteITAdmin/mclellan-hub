@@ -16,6 +16,13 @@ const { writeMeetingNote } = require('../lib/meeting');
 const { listNotes, readNote, searchNotes, writeNote, vaultRoot } = require('../lib/obsidian-vault');
 const { getWikiPagesByTags } = require('../lib/wiki-tags');
 const {
+  buildTokenBurnPage,
+  buildTokenBurnSummary,
+  formatTokens,
+  formatUsd,
+  heatLevel,
+} = require('../lib/token-burn');
+const {
   buildPromptInjectionGuard,
   createRateLimiter,
   requireSameOrigin,
@@ -458,7 +465,20 @@ router.get('/', requireAuth, async (req, res) => {
   let calendarEvents = [];
   try { calendarEvents = await fetchTodayCalendarEvents(user); } catch (_) {}
 
-  res.render('hub/home', { user, projects, recentConvs, today, calendarEvents, recentMeeting });
+  const tokenBurn = buildTokenBurnSummary(user);
+
+  res.render('hub/home', { user, projects, recentConvs, today, calendarEvents, recentMeeting, tokenBurn, formatTokens });
+});
+
+router.get('/token-burn', requireAuth, (req, res) => {
+  const tokenBurn = buildTokenBurnPage(req.hubUser);
+  res.render('hub/token-burn', {
+    user: req.hubUser,
+    tokenBurn,
+    formatTokens,
+    formatUsd,
+    heatLevel,
+  });
 });
 
 router.get('/_home', requireAuth, (req, res) => {
@@ -889,7 +909,7 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
     if (!recallQuery) {
       const rawQ = messageContent.slice(0, 600);
       const rawA = result.content.replace(/!\[.*?\]\(data:.*?\)/g, '[image]').slice(0, 800);
-      tagConversation(rawQ, rawA).then(tags => {
+      tagConversation(rawQ, rawA, req.hubUser).then(tags => {
         try {
           db.hub().prepare(
             `INSERT INTO recall_entries (id, conversation_id, user, question, answer, tags)
@@ -2104,6 +2124,15 @@ router.post('/api/content/posts/:id/delete', requireAuth, requireSameOrigin, wri
 
 // ── Flights (DUB ↔ EDI personal log) ─────────────────────────────────────────
 
+const FLIGHT_DIRECTIONS = [
+  'DUB-EDI', 'EDI-DUB',
+  'DUB-GLA', 'GLA-DUB',
+  'DUB-REU', 'REU-DUB',
+  'DUB-MAN', 'MAN-DUB',
+  'DUB-STN', 'STN-DUB',
+];
+const FLIGHT_STATUSES = ['scheduled', 'completed', 'cancelled', 'diverted'];
+
 function parseFlightMinutes(t) {
   if (!t || typeof t !== 'string') return null;
   const m = t.match(/^(\d{1,2}):(\d{2})$/);
@@ -2131,7 +2160,7 @@ function flightDelay(scheduled, actual) {
 }
 
 function computeFlightStats(flights) {
-  const completed = flights.filter(f => f.status !== 'cancelled');
+  const completed = flights.filter(f => f.status === 'completed');
   const withArr = completed.filter(f => f.scheduled_arr && f.actual_arr);
   const arrDelays = withArr
     .map(f => flightDelay(f.scheduled_arr, f.actual_arr))
@@ -2145,9 +2174,9 @@ function computeFlightStats(flights) {
   const worstArr = arrDelays.length ? Math.max(...arrDelays) : null;
 
   function airlineStats(name) {
-    const af = flights.filter(f => (f.airline || '').trim() === name);
+    const af = completed.filter(f => (f.airline || '').trim() === name);
     const delays = af
-      .filter(f => f.status !== 'cancelled' && f.scheduled_arr && f.actual_arr)
+      .filter(f => f.scheduled_arr && f.actual_arr)
       .map(f => flightDelay(f.scheduled_arr, f.actual_arr))
       .filter(d => d !== null);
     return {
@@ -2208,16 +2237,16 @@ function computeFlightStats(flights) {
   const realLateSample = realArrDelays.length;
 
   return {
-    total: flights.length,
+    total: completed.length,
     cancelled: flights.filter(f => f.status === 'cancelled').length,
     onTimePct: arrDelays.length ? Math.round((onTime / arrDelays.length) * 100) : null,
     onTimeSample: arrDelays.length,
     avgArrDelay: avgArr,
     worstArrDelay: worstArr,
-    dubToEdi: flights.filter(f => f.direction === 'DUB-EDI').length,
-    ediToDub: flights.filter(f => f.direction === 'EDI-DUB').length,
-    dubToGla: flights.filter(f => f.direction === 'DUB-GLA').length,
-    glaToDub: flights.filter(f => f.direction === 'GLA-DUB').length,
+    dubToEdi: completed.filter(f => f.direction === 'DUB-EDI').length,
+    ediToDub: completed.filter(f => f.direction === 'EDI-DUB').length,
+    dubToGla: completed.filter(f => f.direction === 'DUB-GLA').length,
+    glaToDub: completed.filter(f => f.direction === 'GLA-DUB').length,
     ryanair: airlineStats('Ryanair'),
     aerLingus: airlineStats('Aer Lingus'),
     avgActualDuration,
@@ -2254,8 +2283,11 @@ router.post('/api/flights', requireAuth, requireSameOrigin, writeLimiter, (req, 
   if (!direction || !flight_date) {
     return res.status(400).json({ error: 'direction and flight_date are required' });
   }
-  if (!['DUB-EDI', 'EDI-DUB', 'DUB-GLA', 'GLA-DUB'].includes(direction)) {
+  if (!FLIGHT_DIRECTIONS.includes(direction)) {
     return res.status(400).json({ error: 'Invalid direction' });
+  }
+  if (status && !FLIGHT_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(flight_date)) {
     return res.status(400).json({ error: 'Invalid date format' });
@@ -2293,8 +2325,11 @@ router.put('/api/flights/:id', requireAuth, requireSameOrigin, writeLimiter, (re
     scheduled_dep, actual_dep, scheduled_arr, actual_arr,
     status, notes, tracker_url } = req.body;
 
-  if (!['DUB-EDI', 'EDI-DUB', 'DUB-GLA', 'GLA-DUB'].includes(direction)) {
+  if (!FLIGHT_DIRECTIONS.includes(direction)) {
     return res.status(400).json({ error: 'Invalid direction' });
+  }
+  if (status && !FLIGHT_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
   }
 
   db.hub().prepare(`
@@ -2334,7 +2369,7 @@ router.post('/api/flights/import', requireAuth, requireSameOrigin, uploadLimiter
     return res.status(500).json({ error: 'xlsx package not available on this server' });
   }
 
-  const VALID = new Set(['DUB-EDI', 'EDI-DUB', 'DUB-GLA', 'GLA-DUB']);
+  const VALID = new Set(FLIGHT_DIRECTIONS);
   const MONTHS = { Jan:1, Feb:2, Mar:3, Apr:4, May:5, Jun:6, Jul:7, Aug:8, Sep:9, Oct:10, Nov:11, Dec:12 };
 
   function parseExcelDate(s) {
@@ -2415,7 +2450,7 @@ router.post('/api/flights/import', requireAuth, requireSameOrigin, uploadLimiter
   res.json({ ok: true, inserted, skipped });
 });
 
-async function aviationstackLookup(flightNumber, flightDate, direction) {
+async function aerodataboxLookup(flightNumber, flightDate, direction) {
   const key = process.env.AERODATABOX_KEY;
   if (!key) throw new Error('AERODATABOX_KEY not set');
 
@@ -2462,7 +2497,8 @@ async function aviationstackLookup(flightNumber, flightDate, direction) {
   const status = rawStatus.includes('landed') ? 'completed'
     : rawStatus.includes('cancel') ? 'cancelled'
     : rawStatus.includes('diverted') ? 'diverted'
-    : 'completed';
+    : rawStatus.includes('arrived') ? 'completed'
+    : null; // caller decides default based on flight date
 
   return {
     scheduled_dep: localHHMM(f.departure?.scheduledTime),
@@ -2481,12 +2517,16 @@ router.post('/api/flights/lookup', requireAuth, requireSameOrigin, async (req, r
   if (!flight_number || !flight_date) {
     return res.status(400).json({ error: 'flight_number and flight_date are required' });
   }
+  if (flight_date >= new Date().toISOString().slice(0, 10)) {
+    return res.status(400).json({ error: 'Cannot look up future flights — date must be in the past' });
+  }
   if (!process.env.AERODATABOX_KEY) {
     return res.status(503).json({ error: 'AERODATABOX_KEY not configured on this server' });
   }
   try {
-    const data = await aviationstackLookup(flight_number.trim().toUpperCase(), flight_date, direction);
+    const data = await aerodataboxLookup(flight_number.trim().toUpperCase(), flight_date, direction);
     if (!data) return res.status(404).json({ error: 'No flight data found for that number and date' });
+    if (!data.status) data.status = 'completed';
     res.json(data);
   } catch (err) {
     console.error('[flights lookup]', err.message);
@@ -2503,6 +2543,7 @@ router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, async (r
   const candidates = db.hub().prepare(`
     SELECT id, flight_number, flight_date, direction FROM flights
     WHERE user = ? AND flight_number != '' AND (scheduled_dep = '' OR actual_arr = '')
+      AND flight_date < date('now')
     ORDER BY flight_date ASC
   `).all(user);
 
@@ -2514,8 +2555,9 @@ router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, async (r
   for (const row of candidates) {
     await new Promise(r => setTimeout(r, 500));
     try {
-      const data = await aviationstackLookup(row.flight_number, row.flight_date, row.direction);
+      const data = await aerodataboxLookup(row.flight_number, row.flight_date, row.direction);
       if (!data) { failed++; results.push({ id: row.id, ok: false, error: 'No data' }); continue; }
+      if (!data.status) data.status = 'completed';
 
       db.hub().prepare(`
         UPDATE flights SET

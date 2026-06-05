@@ -49,6 +49,13 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .hub-tile-icon { font-size: 28px; line-height: 1; }
 .hub-tile-label { font-size: 16px; font-weight: 700; }
 .hub-tile-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.hub-tile-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.hub-tile-pill {
+  display: inline-flex; align-items: center;
+  min-height: 20px; padding: 3px 8px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-dim);
+  font-size: 11px; font-weight: 700; line-height: 1;
+}
 
 /* Recent section */
 .recents-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); margin: 0 0 12px; }
@@ -126,6 +133,16 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       <div class="hub-tile-icon">✈️</div>
       <div class="hub-tile-label">Flights</div>
       <div class="hub-tile-desc">Dublin ↔ Edinburgh flight log. Scheduled vs actual, delay tracking.</div>
+    </a>
+
+    <a href="/token-burn" class="hub-tile">
+      <div class="hub-tile-icon">◈</div>
+      <div class="hub-tile-label">Token Burn</div>
+      <div class="hub-tile-desc">Codex, Claude Code, and McLellan OpenRouter usage by day. Exact logs stay separate from estimates.</div>
+      <div class="hub-tile-meta">
+        <span class="hub-tile-pill"><%= formatTokens(tokenBurn.importedExact) %> exact</span>
+        <span class="hub-tile-pill"><%= tokenBurn.lastDate || 'no rows' %></span>
+      </div>
     </a>
 
   </div>

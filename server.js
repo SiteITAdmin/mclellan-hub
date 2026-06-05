@@ -12,6 +12,8 @@ const wikiRouter = require('./routes/wiki');
 const { sendDailyBriefing, sendEmailBriefing } = require('./lib/crm');
 const { processNewEmails } = require('./lib/email-processor');
 const { runRegulatoryMonitor } = require('./lib/regulatory-monitor');
+const { sendWeeklyDigest } = require('./lib/weekly-digest');
+const { sendRhStats } = require('./lib/rh-stats');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -126,6 +128,13 @@ function nowIn(tz) {
 
 const BRIEFING_USERS = (process.env.BRIEFING_USERS || 'douglas,nakai').split(',').map(u => u.trim()).filter(Boolean);
 
+// ── rholdsworthconsulting.com daily stats (07:00 Europe/Dublin) ──────────────
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getHours() !== 7 || now.getMinutes() !== 0) return;
+  sendRhStats().catch(err => console.error('[rh-stats] error:', err));
+}, 60 * 1000);
+
 // ── Morning CRM briefing (07:30 Europe/London) ────────────────────────────────
 const BRIEFING_HOUR = parseInt(process.env.BRIEFING_HOUR || '7');
 const BRIEFING_MINUTE = parseInt(process.env.BRIEFING_MINUTE || '30');
@@ -156,6 +165,15 @@ setInterval(() => {
     processNewEmails(user).catch(err => console.error(`[email] process error for ${user}:`, err));
   }
 }, 15 * 60 * 1000);
+
+// ── Weekly digest (Sunday 14:00 Europe/Dublin) ───────────────────────────────
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getDay() !== 0 || now.getHours() !== 14 || now.getMinutes() !== 0) return;
+  for (const user of BRIEFING_USERS) {
+    sendWeeklyDigest(user).catch(err => console.error(`[weekly] digest error for ${user}:`, err));
+  }
+}, 60 * 1000);
 
 // ── Regulatory monitor (08:00 Europe/Dublin, daily) ───────────────────────────
 const REG_MONITOR_HOUR   = parseInt(process.env.REG_MONITOR_HOUR   || '8');

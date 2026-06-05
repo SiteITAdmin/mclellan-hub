@@ -100,6 +100,12 @@ table.fl-table thead th:first-child {
 .fl-dir-badge.edi-dub { background: rgba(47,138,90,.12); color: #217a4d; }
 .fl-dir-badge.dub-gla { background: rgba(200,100,0,.1); color: #904000; }
 .fl-dir-badge.gla-dub { background: rgba(140,60,160,.1); color: #6a1a80; }
+.fl-dir-badge.dub-reu,
+.fl-dir-badge.reu-dub { background: rgba(220,80,70,.1); color: #9b342d; }
+.fl-dir-badge.dub-man,
+.fl-dir-badge.man-dub { background: rgba(60,130,110,.1); color: #28705e; }
+.fl-dir-badge.dub-stn,
+.fl-dir-badge.stn-dub { background: rgba(80,100,180,.1); color: #394f9d; }
 
 .fl-time-cell { white-space: nowrap; }
 .fl-time-row { display: flex; align-items: center; gap: 6px; }
@@ -120,6 +126,7 @@ table.fl-table thead th:first-child {
   display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;
 }
 .fl-status-badge.completed  { background: rgba(47,138,90,.1); color: #217a4d; }
+.fl-status-badge.scheduled  { background: rgba(70,72,212,.1); color: #3537b8; }
 .fl-status-badge.cancelled  { background: rgba(196,52,43,.1); color: var(--error); }
 .fl-status-badge.diverted   { background: rgba(232,160,0,.12); color: #8a5a00; }
 
@@ -451,7 +458,7 @@ table.fl-table thead th:first-child {
           <td class="fl-date"><%= dateFormatted %></td>
           <td>
             <%
-              const dirClass = { 'DUB-EDI':'dub-edi','EDI-DUB':'edi-dub','DUB-GLA':'dub-gla','GLA-DUB':'gla-dub' }[f.direction] || '';
+              const dirClass = (f.direction || '').toLowerCase();
               const dirLabel = f.direction.replace('-',' → ');
             %>
             <span class="fl-dir-badge <%= dirClass %>"><%= dirLabel %></span>
@@ -559,11 +566,18 @@ table.fl-table thead th:first-child {
           <option value="EDI-DUB">EDI → Dublin (DUB)</option>
           <option value="DUB-GLA">DUB → Glasgow (GLA)</option>
           <option value="GLA-DUB">GLA → Dublin (DUB)</option>
+          <option value="DUB-REU">DUB → Reus (REU)</option>
+          <option value="REU-DUB">Reus (REU) → DUB</option>
+          <option value="DUB-MAN">DUB → Manchester (MAN)</option>
+          <option value="MAN-DUB">Manchester (MAN) → DUB</option>
+          <option value="DUB-STN">DUB → London Stansted (STN)</option>
+          <option value="STN-DUB">London Stansted (STN) → DUB</option>
         </select>
       </div>
       <div class="fl-field">
         <label class="fl-label" for="f-status">Status *</label>
         <select id="f-status" class="fl-select">
+          <option value="scheduled">Scheduled</option>
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
           <option value="diverted">Diverted</option>
@@ -614,7 +628,7 @@ table.fl-table thead th:first-child {
       </div>
 
       <div class="fl-lookup-row">
-        <button type="button" id="lookup-btn" class="fl-lookup-btn">Look up times via Flightradar24</button>
+        <button type="button" id="lookup-btn" class="fl-lookup-btn">Look up times via AeroDataBox</button>
         <span id="lookup-status" class="fl-lookup-status"></span>
       </div>
 
@@ -804,7 +818,7 @@ table.fl-table thead th:first-child {
     }
   });
 
-  // ── AviationStack single-flight lookup ────────────────────────────────────
+  // ── AeroDataBox single-flight lookup ──────────────────────────────────────
   const lookupBtn = document.getElementById('lookup-btn');
   const lookupStatus = document.getElementById('lookup-status');
 
@@ -822,7 +836,7 @@ table.fl-table thead th:first-child {
       const r = await fetch('/api/flights/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify({ flight_number: flnr, flight_date: date }),
+        body: JSON.stringify({ flight_number: flnr, flight_date: date, direction: fields.direction.value }),
       });
       const d = await r.json();
       if (!r.ok) { lookupStatus.textContent = '✖ ' + (d.error || 'Lookup failed'); return; }
@@ -837,11 +851,11 @@ table.fl-table thead th:first-child {
       lookupStatus.textContent = '✖ ' + err.message;
     } finally {
       lookupBtn.disabled = false;
-      lookupBtn.textContent = 'Look up times via Flightradar24';
+      lookupBtn.textContent = 'Look up times via AeroDataBox';
     }
   });
 
-  // ── Flightradar24 bulk lookup ─────────────────────────────────────────────
+  // ── AeroDataBox bulk lookup ────────────────────────────────────────────────
   const bulkBtn = document.getElementById('bulk-lookup-btn');
   const bulkStatus = document.getElementById('bulk-status');
 
