@@ -70,6 +70,7 @@ rsync -avz --progress -e "$RSYNC_RSH" \
   --exclude .git \
   --exclude .claude \
   --exclude .tools \
+  --exclude .next \
   --exclude node_modules \
   --exclude data \
   --exclude .env \
