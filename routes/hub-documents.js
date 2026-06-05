@@ -1,0 +1,199 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../lib/db');
+const { DEFAULT_MODELS } = require('../lib/router');
+const {
+  writeLimiter, requireAuth, requireSameOrigin,
+} = require('./hub-shared');
+
+// ── Documents (user-facing) ───────────────────────────────────────────────────
+router.get('/api/projects/:slug/documents', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const project = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? AND slug = ?')
+                     .get(req.hubUser, req.params.slug);
+  if (!project) return res.status(404).json({ error: 'Not found' });
+  const docs = hub.prepare(
+    'SELECT id, filename, size_bytes, uploaded_at FROM documents WHERE project_id = ? ORDER BY uploaded_at DESC'
+  ).all(project.id);
+  res.json({ project, documents: docs });
+});
+
+router.get('/api/documents/:id', requireAuth, (req, res) => {
+  const doc = db.hub().prepare('SELECT * FROM documents WHERE id = ? AND user = ?')
+                      .get(req.params.id, req.hubUser);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+  res.json({
+    id: doc.id, filename: doc.filename, size_bytes: doc.size_bytes,
+    uploaded_at: doc.uploaded_at, markdown: doc.markdown,
+  });
+});
+
+router.post('/api/documents/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const doc = hub.prepare('SELECT * FROM documents WHERE id = ? AND user = ?')
+                 .get(req.params.id, req.hubUser);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+  hub.prepare('DELETE FROM documents WHERE id = ?').run(doc.id);
+  res.json({ ok: true });
+});
+
+// ── Save a single Q&A pair from a chat into a project ────────────────────────
+router.post('/api/messages/:msgId/save-to-project', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const { projectSlug } = req.body;
+  if (!projectSlug) return res.status(400).json({ error: 'projectSlug required' });
+
+  const project = hub.prepare('SELECT * FROM projects WHERE user = ? AND slug = ?')
+                     .get(req.hubUser, projectSlug);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const asstMsg = hub.prepare('SELECT * FROM messages WHERE id = ? AND user = ? AND role = ?')
+                     .get(req.params.msgId, req.hubUser, 'assistant');
+  if (!asstMsg) return res.status(404).json({ error: 'Message not found' });
+
+  const userMsg = hub.prepare(`
+    SELECT * FROM messages
+     WHERE user = ? AND role = 'user'
+       AND (conversation_id = ? OR project_id = ?)
+       AND ts < ?
+     ORDER BY ts DESC LIMIT 1
+  `).get(req.hubUser, asstMsg.conversation_id, asstMsg.project_id, asstMsg.ts);
+
+  const question = userMsg?.content || '(no question)';
+  const answer   = asstMsg.content || '(no answer)';
+  const title    = question.slice(0, 60).replace(/\n/g, ' ').replace(/[^\w\s-]/g, '') || 'Chat note';
+  const markdown = `# ${title}\n\n**Q:** ${question}\n\n**A:** ${answer}`;
+  const filename = `${title.slice(0, 50)} [chat].md`;
+
+  const docId = require('crypto').randomUUID();
+  hub.prepare(`
+    INSERT INTO documents (id, user, project_id, filename, mimetype, size_bytes, markdown)
+    VALUES (?, ?, ?, ?, 'text/markdown', ?, ?)
+  `).run(docId, req.hubUser, project.id, filename, Buffer.byteLength(markdown), markdown);
+
+  res.json({ ok: true, projectSlug, filename });
+});
+
+// ── Save message to wiki ──────────────────────────────────────────────────────
+router.post('/api/wiki/save', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const hub    = db.hub();
+  const msgId  = req.body.msgId;
+  if (!msgId) return res.status(400).json({ error: 'msgId required' });
+
+  const asstMsg = hub.prepare('SELECT * FROM messages WHERE id = ? AND user = ? AND role = ?')
+                     .get(msgId, req.hubUser, 'assistant');
+  if (!asstMsg) return res.status(404).json({ error: 'Message not found' });
+
+  const userMsg = hub.prepare(`
+    SELECT content FROM messages
+     WHERE user = ? AND role = 'user'
+       AND (conversation_id = ? OR project_id = ?)
+       AND ts < ?
+     ORDER BY ts DESC LIMIT 1
+  `).get(req.hubUser, asstMsg.conversation_id, asstMsg.project_id, asstMsg.ts);
+
+  try {
+    const { saveToWiki } = require('../lib/wiki-engine');
+    const result = await saveToWiki({
+      question: userMsg?.content || '',
+      answer:   asstMsg.content || '',
+    });
+    res.json({ ok: true, slug: result.slug, title: result.title });
+  } catch (err) {
+    console.error('[wiki-save]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Move conversation into a project ─────────────────────────────────────────
+router.post('/api/conversations/:convId/move', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const conv = hub.prepare('SELECT * FROM conversations WHERE id = ? AND user = ?')
+                  .get(req.params.convId, req.hubUser);
+  if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+  const { projectSlug } = req.body;
+  const project = hub.prepare('SELECT * FROM projects WHERE user = ? AND slug = ?')
+                     .get(req.hubUser, projectSlug);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  hub.prepare(
+    'UPDATE messages SET project_id = ?, conversation_id = NULL WHERE conversation_id = ? AND user = ?'
+  ).run(project.id, conv.id, req.hubUser);
+  hub.prepare('DELETE FROM conversations WHERE id = ?').run(conv.id);
+
+  res.json({ ok: true, projectSlug: project.slug });
+});
+
+// ── Projects API ──────────────────────────────────────────────────────────────
+router.get('/api/projects', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const projects = hub.prepare(
+    'SELECT * FROM projects WHERE user = ? ORDER BY name'
+  ).all(req.hubUser);
+  res.json(projects);
+});
+
+function slugify(s) {
+  return String(s).toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
+router.post('/api/projects', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const { name, slug, contextDepth } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const finalSlug = slugify(slug || name);
+  if (!finalSlug) return res.status(400).json({ error: 'invalid slug' });
+  const hub = db.hub();
+  try {
+    const id = Buffer.from(require('crypto').randomBytes(8)).toString('hex');
+    hub.prepare(
+      'INSERT INTO projects (id, user, name, slug, context_depth) VALUES (?, ?, ?, ?, ?)'
+    ).run(id, req.hubUser, name.trim(), finalSlug, contextDepth || 20);
+    res.json({ ok: true, project: { id, name: name.trim(), slug: finalSlug } });
+  } catch (err) {
+    res.status(400).json({ error: 'Slug already exists' });
+  }
+});
+
+// ── Request logs (debugging) ──────────────────────────────────────────────────
+router.get('/logs', requireAuth, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  const logs = db.hub().prepare(
+    `SELECT * FROM request_logs ORDER BY ts DESC LIMIT ?`
+  ).all(limit);
+  res.render('hub/logs', { user: req.hubUser, logs, limit });
+});
+
+router.get('/api/logs', requireAuth, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  const logs = db.hub().prepare(
+    `SELECT * FROM request_logs ORDER BY ts DESC LIMIT ?`
+  ).all(limit);
+  res.json(logs);
+});
+
+// ── Settings (model config) ───────────────────────────────────────────────────
+router.get('/settings', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const insert = hub.prepare(
+    'INSERT OR IGNORE INTO model_config (key, label, endpoint, model_id, tier, search, enabled) VALUES (?, ?, ?, ?, ?, ?, 1)'
+  );
+  for (const [key, def] of Object.entries(DEFAULT_MODELS)) {
+    insert.run(key, key, def.endpoint, def.id, def.tier, def.search);
+  }
+  const models = hub.prepare('SELECT * FROM model_config ORDER BY tier, key').all();
+  res.render('hub/settings', { user: req.hubUser, models });
+});
+
+router.post('/settings/models/:key', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const { model_id, label, enabled } = req.body;
+  db.hub().prepare(
+    'UPDATE model_config SET model_id = ?, label = ?, enabled = ? WHERE key = ?'
+  ).run(model_id, label, enabled ? 1 : 0, req.params.key);
+  res.redirect('/settings');
+});
+
+module.exports = router;
