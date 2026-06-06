@@ -296,6 +296,7 @@
   <h2>Email integration</h2>
   <p>Fetches new emails from Google, classifies them against your projects and contacts, and sends a digest to Google Chat at 4pm.</p>
   <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+    <a href="/admin/email-taxonomy"><button type="button">Manage email taxonomy</button></a>
     <button id="btn-fetch-email" onclick="triggerEmailAction('fetch')">Fetch &amp; classify emails now</button>
     <button id="btn-digest-email" onclick="triggerEmailAction('digest')">Send email digest now</button>
     <span id="email-status" style="font-size:13px;color:var(--text-muted);"></span>

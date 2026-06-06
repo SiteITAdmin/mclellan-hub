@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Newsletter — Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+  :root {
+    --card-radius: 12px;
+    --card-border: var(--border, #dddaf0);
+    --card-bg: var(--bg, #faf9fb);
+    --accent: var(--primary, #7c6af5);
+  }
+  .week-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .week-bar select { padding: 7px 10px; font-size: 13px; border: 1px solid var(--card-border); border-radius: 7px; background: var(--card-bg); color: var(--text, #1b1b23); font-family: inherit; }
+  .stats-row { display: flex; gap: 16px; font-size: 13px; color: var(--text-dim, #767586); margin-bottom: 20px; flex-wrap: wrap; }
+  .stats-row strong { color: var(--text, #15131e); }
+
+  .category-group { margin-bottom: 28px; }
+  .category-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 8px; }
+  .topic-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .topic-card {
+    border: 1px solid var(--card-border); border-radius: var(--card-radius);
+    background: var(--card-bg); padding: 13px 15px;
+    display: flex; gap: 10px; align-items: flex-start;
+    transition: box-shadow 0.12s;
+  }
+  .topic-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .topic-card.deselected { opacity: 0.45; }
+  .topic-check { flex-shrink: 0; margin-top: 2px; width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+  .topic-body { flex: 1; min-width: 0; }
+  .topic-headline { font-size: 13px; font-weight: 600; color: var(--text, #15131e); line-height: 1.35; margin-bottom: 3px; }
+  .topic-meta { font-size: 11px; color: var(--text-dim); }
+  .topic-summary { font-size: 12px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
+
+  .action-bar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--card-bg); border-bottom: 1px solid var(--card-border);
+    padding: 12px 0; margin-bottom: 20px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  .btn { padding: 8px 16px; font-size: 13px; border-radius: 8px; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: var(--text, #15131e); font-family: inherit; font-weight: 600; transition: background 0.12s; }
+  .btn:hover { background: rgba(0,0,0,0.05); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #6a58e0; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: var(--text, #15131e); font-family: inherit; transition: background 0.12s; }
+  .btn-sm:hover { background: rgba(0,0,0,0.05); }
+  .btn-sm.danger { color: #ba1a1a; border-color: #ffdad6; }
+  .btn-sm.danger:hover { background: rgba(186,26,26,0.06); }
+
+  .preview-area { background: #fff; border: 1px solid var(--card-border); border-radius: var(--card-radius); padding: 0; margin-top: 16px; overflow: hidden; }
+  .preview-area iframe { width: 100%; min-height: 500px; border: none; display: block; }
+
+  .section-divider { border: none; border-top: 1px solid var(--card-border); margin: 8px 0; }
+  .empty-state { color: var(--text-dim); font-size: 14px; padding: 24px 0; text-align: center; }
+
+  /* Management sections */
+  .mgmt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 10px; }
+  .mgmt-card { border: 1px solid var(--card-border); border-radius: var(--card-radius); background: var(--card-bg); padding: 14px 16px; }
+  .mgmt-card-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .mgmt-card-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; }
+  .edit-panel { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--card-border); }
+  .edit-panel.open { display: block; }
+  .model-form { display: flex; flex-direction: column; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+  .field input, .field select, .field textarea { padding: 7px 10px; font-size: 13px; font-family: inherit; border: 1px solid var(--card-border); border-radius: 7px; background: var(--bg, #fcf8ff); color: var(--text); box-sizing: border-box; width: 100%; }
+  .field textarea { min-height: 120px; resize: vertical; }
+  .form-actions { display: flex; gap: 8px; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-on { background: rgba(40,167,69,0.12); color: #1a7a35; }
+  .badge-off { background: rgba(0,0,0,0.06); color: #666; }
+  .badge-default { background: rgba(124,106,245,0.12); color: #5b4ac4; }
+
+  .backfill-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 8px; }
+  .backfill-row .field { flex: 1; min-width: 160px; }
+  #backfill-status { font-size: 13px; color: var(--text-dim); margin-top: 8px; }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Newsletter — <%= user %></h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM</a>
+    <a href="/admin/models">Models</a>
+    <a href="/admin/shortcuts">Cards</a>
+    <a href="/admin/test">Test</a>
+    <a href="/admin/linkedin">Content</a>
+    <a href="/admin/newsletter" style="font-weight:600">Newsletter</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+  <h2>Topics</h2>
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px">
+    Topics extracted from newsletters as they arrive. Select what to include in your briefing, then generate.
+  </p>
+
+  <div class="week-bar">
+    <form method="GET" action="/admin/newsletter" style="display:flex;align-items:center;gap:8px">
+      <label style="font-size:13px;font-weight:600">Week:</label>
+      <select name="week" onchange="this.form.submit()">
+        <% if (!weeks.find(w => w.week_key === weekKey)) { %>
+          <option value="<%= weekKey %>" selected><%= weekLabel %> (current)</option>
+        <% } %>
+        <% for (const w of weeks) { %>
+          <option value="<%= w.week_key %>" <%= w.week_key === weekKey ? 'selected' : '' %>>
+            <%= w.week_key %> — <%= w.total %> topics (<%= w.selected %> selected)
+          </option>
+        <% } %>
+      </select>
+    </form>
+  </div>
+
+  <div class="stats-row">
+    <span><strong><%= totalTopics %></strong> topics this week</span>
+    <span><strong><%= selectedTopics %></strong> selected</span>
+    <% if (totalTopics > 0) { %>
+    <form method="POST" action="/admin/newsletter/topics/toggle-week" style="display:inline">
+      <input type="hidden" name="week" value="<%= weekKey %>">
+      <input type="hidden" name="value" value="1">
+      <button class="btn-sm" type="submit">Select all</button>
+    </form>
+    <form method="POST" action="/admin/newsletter/topics/toggle-week" style="display:inline">
+      <input type="hidden" name="week" value="<%= weekKey %>">
+      <input type="hidden" name="value" value="0">
+      <button class="btn-sm" type="submit">Deselect all</button>
+    </form>
+    <% } %>
+  </div>
+
+  <% if (totalTopics === 0) { %>
+    <div class="empty-state">No topics yet for <%= weekLabel %> — use Backfill below to import from Gmail, or they will arrive as newsletters are processed.</div>
+  <% } else { %>
+    <% for (const [category, catTopics] of Object.entries(grouped)) { %>
+    <div class="category-group">
+      <div class="category-label"><%= category %> (<%= catTopics.length %>)</div>
+      <div class="topic-cards">
+        <% for (const t of catTopics) { %>
+        <div class="topic-card <%= t.selected ? '' : 'deselected' %>" id="topic-<%= t.id %>">
+          <form method="POST" action="/admin/newsletter/topics/toggle" style="display:contents">
+            <input type="hidden" name="id" value="<%= t.id %>">
+            <input type="hidden" name="week" value="<%= weekKey %>">
+            <button type="submit" style="all:unset;cursor:pointer;flex-shrink:0;margin-top:2px">
+              <span style="display:inline-block;width:16px;height:16px;border-radius:4px;border:2px solid <%= t.selected ? 'var(--accent)' : 'var(--card-border)' %>;background:<%= t.selected ? 'var(--accent)' : 'transparent' %>;position:relative;">
+                <% if (t.selected) { %><span style="position:absolute;top:1px;left:3px;color:#fff;font-size:10px;font-weight:900">✓</span><% } %>
+              </span>
+            </button>
+          </form>
+          <div class="topic-body">
+            <div class="topic-headline"><%= t.headline %></div>
+            <div class="topic-meta"><%= t.from_name %> · <%= new Date(t.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+            <% if (t.summary) { %><div class="topic-summary"><%= t.summary %></div><% } %>
+          </div>
+        </div>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+  <% } %>
+</section>
+
+<!-- Generate & Send -->
+<section class="admin-section">
+  <h2>Generate briefing</h2>
+  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+    <div class="field" style="min-width:200px">
+      <label>Format</label>
+      <select id="gen-format">
+        <% for (const f of formats) { %>
+        <option value="<%= f.id %>" <%= f.is_default ? 'selected' : '' %>><%= f.name %></option>
+        <% } %>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="generateBriefing()">Generate</button>
+    <span id="gen-status" style="font-size:13px;color:var(--text-dim)"></span>
+  </div>
+
+  <div id="preview-wrap" style="display:none">
+    <div class="preview-area">
+      <iframe id="preview-frame" title="Briefing preview"></iframe>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+      <button class="btn btn-primary" id="send-btn" onclick="sendBriefing()">Send to email</button>
+      <span id="send-status" style="font-size:13px;color:var(--text-dim)"></span>
+    </div>
+  </div>
+
+  <% if (briefings.length) { %>
+  <h3 style="margin-top:24px;font-size:14px;font-weight:600;color:var(--text-dim)">Recent briefings</h3>
+  <div class="mgmt-grid" style="margin-top:10px">
+    <% for (const b of briefings) { %>
+    <div class="mgmt-card">
+      <div class="mgmt-card-name"><%= b.week_key %></div>
+      <div class="mgmt-card-meta">
+        <%= b.topic_count %> topics · <%= b.format_name || 'unknown format' %>
+        <% if (b.sent_at) { %> · Sent <%= new Date(b.sent_at * 1000).toLocaleDateString('en-GB') %><% } %>
+      </div>
+      <% if (!b.sent_at) { %>
+      <button class="btn-sm" onclick="resendBriefing('<%= b.id %>')">Send</button>
+      <% } %>
+    </div>
+    <% } %>
+  </div>
+  <% } %>
+</section>
+
+<!-- Backfill -->
+<section class="admin-section" id="backfill">
+  <h2>Import from Gmail</h2>
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Fetch emails from Gmail labels and extract topics. Useful for catching up on emails that arrived before the pipeline was running.</p>
+  <div class="backfill-row">
+    <div class="field">
+      <label>Gmail labels (comma-separated)</label>
+      <input id="bf-labels" type="text" value="AI news, Nate" placeholder="AI news, Nate">
+    </div>
+    <div class="field" style="flex:0 0 80px">
+      <label>Days back</label>
+      <input id="bf-days" type="number" value="7" min="1" max="30">
+    </div>
+    <button class="btn" onclick="runBackfill()">Import</button>
+  </div>
+  <div id="backfill-status"></div>
+</section>
+
+<!-- Formats -->
+<section class="admin-section" id="formats">
+  <h2>Briefing formats</h2>
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:14px">Define how the briefing is written. The instructions become the system prompt for the LLM. The default format is used when generating unless you pick another.</p>
+
+  <div class="mgmt-grid">
+    <% for (const f of formats) { %>
+    <div class="mgmt-card">
+      <div class="mgmt-card-name"><%= f.name %> <% if (f.is_default) { %><span class="badge badge-default">default</span><% } %></div>
+      <div class="mgmt-card-meta"><%= f.instructions.slice(0, 80) %>…</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn-sm" onclick="toggleEdit('fmt-<%= f.id %>')">Edit</button>
+        <% if (!f.is_default) { %>
+        <form method="POST" action="/admin/newsletter/formats/delete" style="display:inline">
+          <input type="hidden" name="id" value="<%= f.id %>">
+          <button class="btn-sm danger" type="submit" onclick="return confirm('Delete format?')">Delete</button>
+        </form>
+        <% } %>
+      </div>
+      <div class="edit-panel" id="fmt-<%= f.id %>">
+        <form method="POST" action="/admin/newsletter/formats/update" class="model-form">
+          <input type="hidden" name="id" value="<%= f.id %>">
+          <div class="field">
+            <label>Name</label>
+            <input name="name" value="<%= f.name %>" required>
+          </div>
+          <div class="field">
+            <label>Instructions (system prompt)</label>
+            <textarea name="instructions" rows="8"><%= f.instructions %></textarea>
+          </div>
+          <div class="field" style="flex-direction:row;align-items:center;gap:8px">
+            <input type="checkbox" name="is_default" id="def-<%= f.id %>" <%= f.is_default ? 'checked' : '' %>>
+            <label for="def-<%= f.id %>" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:normal">Set as default</label>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <button type="button" class="btn-sm" onclick="toggleEdit('fmt-<%= f.id %>')">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <% } %>
+  </div>
+
+  <details style="margin-top:16px">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Add a format</summary>
+    <form method="POST" action="/admin/newsletter/formats" class="model-form" style="margin-top:12px;max-width:560px">
+      <div class="field">
+        <label>Name</label>
+        <input name="name" placeholder="Quick brief" required>
+      </div>
+      <div class="field">
+        <label>Instructions</label>
+        <textarea name="instructions" rows="6" placeholder="Write a concise intelligence briefing…" required></textarea>
+      </div>
+      <div class="field" style="flex-direction:row;align-items:center;gap:8px">
+        <input type="checkbox" name="is_default" id="new-default">
+        <label for="new-default" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:normal">Set as default</label>
+      </div>
+      <div class="form-actions">
+        <button type="submit" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">Add format</button>
+      </div>
+    </form>
+  </details>
+</section>
+
+<!-- Interests / categories -->
+<section class="admin-section" id="interests">
+  <h2>Interests & categories</h2>
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:14px">The extractor tags each topic against these categories. Auto-include topics in those categories are pre-selected when extracted.</p>
+
+  <div class="mgmt-grid">
+    <% for (const i of interests) { %>
+    <div class="mgmt-card">
+      <div class="mgmt-card-name"><%= i.name %></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <form method="POST" action="/admin/newsletter/interests/toggle-auto" style="display:inline">
+          <input type="hidden" name="id" value="<%= i.id %>">
+          <button class="btn-sm" type="submit">
+            <span class="badge <%= i.auto_include ? 'badge-on' : 'badge-off' %>"><%= i.auto_include ? 'auto-include' : 'manual' %></span>
+          </button>
+        </form>
+        <form method="POST" action="/admin/newsletter/interests/delete" style="display:inline">
+          <input type="hidden" name="id" value="<%= i.id %>">
+          <button class="btn-sm danger" type="submit" onclick="return confirm('Delete interest?')">Delete</button>
+        </form>
+      </div>
+    </div>
+    <% } %>
+  </div>
+
+  <form method="POST" action="/admin/newsletter/interests" style="margin-top:16px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;max-width:480px">
+    <div class="field" style="flex:1;min-width:160px">
+      <label>New category</label>
+      <input name="name" placeholder="e.g. Regulation & Compliance" required>
+    </div>
+    <div class="field" style="flex-direction:row;align-items:center;gap:6px;padding-bottom:8px">
+      <input type="checkbox" name="auto_include" id="new-auto" checked>
+      <label for="new-auto" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:normal">Auto-include</label>
+    </div>
+    <button type="submit" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600;white-space:nowrap;margin-bottom:0">Add</button>
+  </form>
+</section>
+
+<script>
+(function () {
+  window.toggleEdit = function(id) {
+    document.getElementById(id)?.classList.toggle('open');
+  };
+
+  let currentBriefingId = null;
+
+  window.generateBriefing = async function() {
+    const formatId = document.getElementById('gen-format')?.value;
+    const status = document.getElementById('gen-status');
+    status.textContent = 'Generating…';
+    try {
+      const r = await fetch('/admin/newsletter/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `week=<%= weekKey %>&format_id=${encodeURIComponent(formatId || '')}`,
+      });
+      const data = await r.json();
+      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); return; }
+
+      currentBriefingId = data.id;
+      status.textContent = `✓ Generated — ${data.topicCount} topics`;
+
+      const wrap = document.getElementById('preview-wrap');
+      const frame = document.getElementById('preview-frame');
+      wrap.style.display = 'block';
+      frame.srcdoc = data.html;
+    } catch (err) {
+      status.textContent = '⚠ ' + err.message;
+    }
+  };
+
+  window.sendBriefing = async function() {
+    if (!currentBriefingId) return;
+    const btn = document.getElementById('send-btn');
+    const status = document.getElementById('send-status');
+    btn.disabled = true;
+    status.textContent = 'Sending…';
+    try {
+      const r = await fetch('/admin/newsletter/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `briefing_id=${encodeURIComponent(currentBriefingId)}`,
+      });
+      const data = await r.json();
+      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); btn.disabled = false; return; }
+      status.textContent = `✓ Sent to ${data.to}`;
+    } catch (err) {
+      status.textContent = '⚠ ' + err.message;
+      btn.disabled = false;
+    }
+  };
+
+  window.resendBriefing = async function(id) {
+    const r = await fetch('/admin/newsletter/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `briefing_id=${encodeURIComponent(id)}`,
+    });
+    const data = await r.json();
+    alert(r.ok ? `Sent to ${data.to}` : '⚠ ' + (data.error || 'Failed'));
+    if (r.ok) location.reload();
+  };
+
+  window.runBackfill = async function() {
+    const labels = document.getElementById('bf-labels').value;
+    const days = document.getElementById('bf-days').value;
+    const status = document.getElementById('backfill-status');
+    status.textContent = 'Importing… this may take a minute.';
+    try {
+      const r = await fetch('/admin/newsletter/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `labels=${encodeURIComponent(labels)}&days=${encodeURIComponent(days)}`,
+      });
+      const data = await r.json();
+      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); return; }
+      const lines = Object.entries(data.results).map(([label, r]) =>
+        r.error ? `${label}: ⚠ ${r.error}` : `${label}: ${r.emails} emails → ${r.topics} topics`
+      ).join(' · ');
+      status.textContent = '✓ ' + lines;
+      setTimeout(() => location.reload(), 1500);
+    } catch (err) {
+      status.textContent = '⚠ ' + err.message;
+    }
+  };
+})();
+</script>
+</body>
+</html>

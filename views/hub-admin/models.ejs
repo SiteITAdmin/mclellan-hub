@@ -56,6 +56,7 @@
   .badge-search-plugin  { background: rgba(255,149,0,0.12);  color: #b35e00; }
   .badge-search-none    { background: rgba(0,0,0,0.06);       color: #666; }
   .badge-off    { background: rgba(186,26,26,0.1);   color: #ba1a1a; }
+  .badge-default { background: rgba(40,167,69,0.12); color: #1a7a35; }
 
   .model-card-cost {
     font-size: 11px; color: var(--text-dim, #767586);
@@ -145,6 +146,15 @@
 
   /* ── Category datalist styling (hint only — browsers style differently) ── */
   .cat-suggestions { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+
+  /* ── System model section ── */
+  .sys-group-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim, #767586);
+    margin: 20px 0 8px;
+  }
+  .sys-group-label:first-child { margin-top: 0; }
+
 </style>
 </head>
 <body class="admin-page">
@@ -184,7 +194,10 @@
           <div class="model-card-name"><%= m.label %></div>
           <div class="model-card-id"><%= m.model_id %></div>
         </div>
-        <% if (!m.enabled) { %><span class="badge badge-off">off</span><% } %>
+        <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+          <% if (m.key === defaultModel) { %><span class="badge badge-default">default</span><% } %>
+          <% if (!m.enabled) { %><span class="badge badge-off">off</span><% } %>
+        </div>
       </div>
 
       <div class="model-card-badges">
@@ -213,6 +226,12 @@
           <input type="hidden" name="key" value="<%= m.key %>">
           <button class="btn-sm" type="submit"><%= m.enabled ? 'Disable' : 'Enable' %></button>
         </form>
+        <% if (m.key !== defaultModel) { %>
+        <form method="POST" action="/admin/models/_set-default" style="display:inline">
+          <input type="hidden" name="key" value="<%= m.key %>">
+          <button class="btn-sm" type="submit">Set default</button>
+        </form>
+        <% } %>
         <% if (!m.enabled) { %>
         <form method="POST" action="/admin/models/_delete" style="display:inline"
           onsubmit="return confirm('Delete model <%= m.key %>?')">
@@ -302,6 +321,72 @@
     </div>
   <% } %>
   </div>
+</section>
+
+<section class="admin-section" id="system-models">
+  <h2>System models</h2>
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">
+    Models used by background and automated features. Changes apply immediately — no restart needed.
+    Per-user slots show settings for <strong><%= user %></strong> only; other accounts have separate settings.
+    Leave a slot unset to use its built-in fallback model.
+  </p>
+
+  <% for (const group of systemGroups) { %>
+  <div class="sys-group-label"><%= group.label %></div>
+  <div class="model-cards" style="margin-bottom:4px">
+    <% for (const slot of group.slots) { %>
+    <div class="model-card" id="sys-<%= slot.feature %>">
+      <div class="model-card-head">
+        <div>
+          <div class="model-card-name"><%= slot.label %></div>
+          <div class="model-card-id"><%= slot.note %></div>
+        </div>
+        <span class="badge <%= slot.scope === 'system' ? 'badge-tier' : 'badge-cat' %>"><%= slot.scope %></span>
+      </div>
+
+      <div class="model-card-badges">
+        <% if (slot.currentKey) { %>
+          <span class="badge badge-default"><%= slot.currentLabel || slot.currentKey %></span>
+        <% } else { %>
+          <span class="badge badge-search-none">fallback: <%= slot.fallback %></span>
+        <% } %>
+      </div>
+
+      <div class="model-card-actions">
+        <button class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Edit</button>
+        <% if (slot.currentKey) { %>
+        <form method="POST" action="/admin/system-models/_set" style="display:inline">
+          <input type="hidden" name="feature" value="<%= slot.feature %>">
+          <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
+          <input type="hidden" name="model_key" value="">
+          <button class="btn-sm danger" type="submit">Unset</button>
+        </form>
+        <% } %>
+      </div>
+
+      <div class="edit-panel" id="sys-edit-<%= slot.feature %>">
+        <form method="POST" action="/admin/system-models/_set" class="model-form">
+          <input type="hidden" name="feature" value="<%= slot.feature %>">
+          <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
+          <div class="field">
+            <label>Model</label>
+            <select name="model_key">
+              <option value="">Use fallback (<%= slot.fallback %>)</option>
+              <% for (const m of models.filter(m => m.enabled)) { %>
+              <option value="<%= m.key %>"<%= slot.currentKey === m.key ? ' selected' : '' %>><%= m.label %></option>
+              <% } %>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <button type="button" class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <% } %>
+  </div>
+  <% } %>
 </section>
 
 <section class="admin-section">
@@ -501,6 +586,17 @@
     // key may contain '/' — use sanitised ID (slashes replaced with __)
     const safeId = key.replace(/\//g, '__');
     const panel = document.getElementById('edit-' + safeId);
+    if (panel) panel.classList.toggle('open');
+  };
+
+  window.toggleTierEdit = function(key) {
+    const panel = document.getElementById('tier-edit-' + key);
+    if (panel) panel.classList.toggle('open');
+  };
+
+  // ── System model edit toggle ─────────────────────────────────────────────
+  window.toggleSysEdit = function(feature) {
+    const panel = document.getElementById('sys-edit-' + feature);
     if (panel) panel.classList.toggle('open');
   };
 

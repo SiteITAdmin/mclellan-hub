@@ -346,14 +346,8 @@ router.post('/api/crm/briefing-push', writeLimiter, async (req, res) => {
 
 // ── CRM view page ─────────────────────────────────────────────────────────────
 router.get('/crm', requireAuth, (req, res) => {
-  const hub = db.hub();
-  const contacts = hub.prepare(
-    'SELECT c.*, (SELECT COUNT(*) FROM crm_facts f WHERE f.contact_id = c.id AND f.status = \'active\') AS fact_count FROM contacts c WHERE c.user = ? ORDER BY c.name'
-  ).all(req.hubUser);
-  const recentFacts = hub.prepare(
-    'SELECT f.*, c.name AS contact_name FROM crm_facts f JOIN contacts c ON c.id = f.contact_id WHERE f.user = ? ORDER BY f.created_at DESC LIMIT 20'
-  ).all(req.hubUser);
-  res.render('hub/crm', { user: req.hubUser, contacts, recentFacts });
+  const contacts = listContacts(req.hubUser);
+  res.render('hub/crm', { user: req.hubUser, contacts });
 });
 
 router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {

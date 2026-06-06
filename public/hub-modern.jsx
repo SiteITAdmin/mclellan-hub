@@ -1568,9 +1568,10 @@ function ChatApp() {
 // ── CRM View ───────────────────────────────────────────────────────────────
 function ContactCard({ contact, onDeleteContact, onDeleteFact }) {
   const [histOpen, setHistOpen] = React.useState(false);
-  const activeFacts  = contact.facts.filter(f => f.status === 'active');
-  const followUps    = contact.facts.filter(f => f.status === 'follow_up');
-  const doneFacts    = contact.facts.filter(f => f.status === 'done' || f.status === 'closed');
+  const facts        = Array.isArray(contact.facts) ? contact.facts : [];
+  const activeFacts  = facts.filter(f => f.status === 'active');
+  const followUps    = facts.filter(f => f.status === 'follow_up');
+  const doneFacts    = facts.filter(f => f.status === 'done' || f.status === 'closed');
   const openCount    = activeFacts.length + followUps.length;
 
   return (
