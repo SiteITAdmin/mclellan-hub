@@ -8,6 +8,12 @@ const { createRateLimiter, requireSameOrigin } = require('../lib/security');
 const { exaSearch, braveSearch, WEB_SEARCH_TOOL } = require('../lib/router');
 const multer = require('multer');
 const { fileToMarkdown: extractFileToMarkdown } = require('../lib/extract');
+const {
+  RULE_TYPES: EMAIL_RULE_TYPES,
+  listEmailTaxonomy,
+  normalizeRuleType,
+} = require('../lib/email-taxonomy');
+const { uuid } = require('../lib/id');
 const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 // Ensure test_jobs table exists (safe to run every startup)
@@ -37,6 +43,7 @@ function requireHubAdmin(req, res, next) {
   if (req.session?.hubAdminUser === req.hubUser) return next();
   res.redirect('/admin/login');
 }
+
 
 // Bearer-token auth for MCP. Falls back to admin session for browser testing.
 function requireMcpAuth(req, res, next) {
@@ -279,6 +286,194 @@ router.post('/admin/contacts/:id/wiki-tags', requireHubAdmin, (req, res) => {
   res.redirect('/admin/crm');
 });
 
+// ── Email taxonomy admin ──────────────────────────────────────────────────────
+router.get('/admin/email-taxonomy', requireHubAdmin, (req, res) => {
+  const taxonomy = listEmailTaxonomy(req.hubUser);
+  const pending = db.hub().prepare(`
+    SELECT 'gmail' AS source, gmail_message_id AS message_id,
+           from_name, from_email, subject, created_at
+    FROM email_classification_pending
+    WHERE user = ? AND status = 'pending'
+    UNION ALL
+    SELECT source, external_message_id AS message_id,
+           from_name, from_email, subject, processed_at AS created_at
+    FROM inbound_email_records
+    WHERE user = ? AND status = 'review'
+    ORDER BY created_at DESC
+    LIMIT 50
+  `).all(req.hubUser, req.hubUser);
+  res.render('hub-admin/email-taxonomy', {
+    user: req.hubUser,
+    labels: taxonomy.labels,
+    rules: taxonomy.rules,
+    ruleTypes: EMAIL_RULE_TYPES,
+    pending,
+  });
+});
+
+router.post('/admin/email-taxonomy/labels', requireHubAdmin, (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name || name.length > 120) return res.redirect('/admin/email-taxonomy');
+  try {
+    db.hub().prepare(`
+      INSERT INTO email_taxonomy_labels (id, user, name, display_order)
+      VALUES (?, ?, ?, ?)
+    `).run(uuid(), req.hubUser, name, parseInt(req.body.display_order, 10) || 0);
+  } catch (err) {
+    console.warn('[email-taxonomy] add label:', err.message);
+  }
+  res.redirect('/admin/email-taxonomy');
+});
+
+router.post('/admin/email-taxonomy/labels/:id', requireHubAdmin, (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name || name.length > 120) return res.redirect('/admin/email-taxonomy');
+  const hub = db.hub();
+  const current = hub.prepare(
+    'SELECT name FROM email_taxonomy_labels WHERE id = ? AND user = ?'
+  ).get(req.params.id, req.hubUser);
+  if (!current) return res.redirect('/admin/email-taxonomy');
+  const update = hub.transaction(() => {
+    hub.prepare(`
+      UPDATE email_taxonomy_labels
+      SET name = ?, display_order = ?, enabled = ?
+      WHERE id = ? AND user = ?
+    `).run(
+      name,
+      parseInt(req.body.display_order, 10) || 0,
+      req.body.enabled ? 1 : 0,
+      req.params.id,
+      req.hubUser
+    );
+    if (current.name !== name) {
+      hub.prepare(`
+        UPDATE email_taxonomy_rules SET target_label = ?
+        WHERE user = ? AND target_label = ?
+      `).run(name, req.hubUser, current.name);
+    }
+  });
+  try { update(); } catch (err) {
+    console.warn('[email-taxonomy] update label:', err.message);
+  }
+  res.redirect('/admin/email-taxonomy');
+});
+
+router.post('/admin/email-taxonomy/labels/:id/delete', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const label = hub.prepare(
+    'SELECT name FROM email_taxonomy_labels WHERE id = ? AND user = ?'
+  ).get(req.params.id, req.hubUser);
+  if (label) {
+    const used = hub.prepare(
+      'SELECT 1 FROM email_taxonomy_rules WHERE user = ? AND target_label = ? LIMIT 1'
+    ).get(req.hubUser, label.name);
+    if (!used) {
+      hub.prepare('DELETE FROM email_taxonomy_labels WHERE id = ? AND user = ?')
+        .run(req.params.id, req.hubUser);
+    }
+  }
+  res.redirect('/admin/email-taxonomy');
+});
+
+router.post('/admin/email-taxonomy/rules', requireHubAdmin, (req, res) => {
+  const matchType = normalizeRuleType(req.body.match_type);
+  const matchValue = String(req.body.match_value || '').trim();
+  const targetLabel = String(req.body.target_label || '').trim();
+  const label = db.hub().prepare(
+    'SELECT 1 FROM email_taxonomy_labels WHERE user = ? AND name = ?'
+  ).get(req.hubUser, targetLabel);
+  if (!matchType || !matchValue || !label) return res.redirect('/admin/email-taxonomy');
+  try {
+    db.hub().prepare(`
+      INSERT INTO email_taxonomy_rules
+        (id, user, match_type, match_value, target_label, notes, priority, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(
+      uuid(), req.hubUser, matchType, matchValue, targetLabel,
+      String(req.body.notes || '').trim(),
+      parseInt(req.body.priority, 10) || 100
+    );
+  } catch (err) {
+    console.warn('[email-taxonomy] add rule:', err.message);
+  }
+  res.redirect('/admin/email-taxonomy');
+});
+
+router.post('/admin/email-taxonomy/rules/:id', requireHubAdmin, (req, res) => {
+  const matchType = normalizeRuleType(req.body.match_type);
+  const matchValue = String(req.body.match_value || '').trim();
+  const targetLabel = String(req.body.target_label || '').trim();
+  const label = db.hub().prepare(
+    'SELECT 1 FROM email_taxonomy_labels WHERE user = ? AND name = ?'
+  ).get(req.hubUser, targetLabel);
+  if (matchType && matchValue && label) {
+    try {
+      db.hub().prepare(`
+        UPDATE email_taxonomy_rules
+        SET match_type = ?, match_value = ?, target_label = ?, notes = ?,
+            priority = ?, enabled = ?
+        WHERE id = ? AND user = ?
+      `).run(
+        matchType, matchValue, targetLabel, String(req.body.notes || '').trim(),
+        parseInt(req.body.priority, 10) || 100, req.body.enabled ? 1 : 0,
+        req.params.id, req.hubUser
+      );
+    } catch (err) {
+      console.warn('[email-taxonomy] update rule:', err.message);
+    }
+  }
+  res.redirect('/admin/email-taxonomy');
+});
+
+router.post('/admin/email-taxonomy/rules/:id/delete', requireHubAdmin, (req, res) => {
+  db.hub().prepare(
+    'DELETE FROM email_taxonomy_rules WHERE id = ? AND user = ?'
+  ).run(req.params.id, req.hubUser);
+  res.redirect('/admin/email-taxonomy');
+});
+
+router.post('/admin/email-taxonomy/agentmail-classify', requireHubAdmin, async (req, res) => {
+  const messageId = String(req.body.message_id || '');
+  const targetLabel = String(req.body.target_label || '').trim();
+  const hub = db.hub();
+  const label = hub.prepare(
+    'SELECT 1 FROM email_taxonomy_labels WHERE user = ? AND name = ? AND enabled = 1'
+  ).get(req.hubUser, targetLabel);
+  const record = hub.prepare(`
+    SELECT from_email FROM inbound_email_records
+    WHERE user = ? AND source = 'agentmail' AND external_message_id = ?
+  `).get(req.hubUser, messageId);
+  if (!label || !record) return res.redirect('/admin/email-taxonomy');
+
+  if (record.from_email) {
+    hub.prepare(`
+      INSERT INTO email_taxonomy_rules
+        (id, user, match_type, match_value, target_label, notes, priority, enabled)
+      VALUES (?, ?, 'sender_email', ?, ?, 'Learned from AgentMail review', 200, 1)
+      ON CONFLICT(user, match_type, match_value) DO UPDATE SET
+        target_label = excluded.target_label,
+        notes = excluded.notes,
+        priority = excluded.priority,
+        enabled = 1
+    `).run(uuid(), req.hubUser, record.from_email, targetLabel);
+  }
+  hub.prepare(`
+    UPDATE inbound_email_records
+    SET classification = ?, status = 'processed'
+    WHERE user = ? AND source = 'agentmail' AND external_message_id = ?
+  `).run(targetLabel, req.hubUser, messageId);
+  try {
+    const { updateMessage } = require('../lib/agentmail');
+    await updateMessage(messageId, {
+      addLabels: ['hub-processed'],
+      removeLabels: ['hub:review'],
+    });
+  } catch (err) {
+    console.warn('[agentmail] review label update:', err.message);
+  }
+  res.redirect('/admin/email-taxonomy');
+});
+
 // ── Chat logs ─────────────────────────────────────────────────────────────────
 router.get('/admin/chatlogs', requireHubAdmin, (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit)  || 50, 500);
@@ -339,7 +534,50 @@ router.get('/admin/debrief/:id', requireHubAdmin, (req, res) => {
 });
 
 // ── Model management ──────────────────────────────────────────────────────────
-const { DEFAULT_MODELS } = require('../lib/router');
+const { DEFAULT_MODELS, getDefaultModel } = require('../lib/router');
+const { uuid: uuidId } = require('../lib/id');
+const { getSystemModelId, setSystemModel, getSystemModelLabel } = require('../lib/settings');
+
+// System model slots — displayed as configurable cards in /admin/models.
+// scope 'system' = shared across users; scope 'user' = per-user (stored under req.hubUser).
+const SYSTEM_MODEL_GROUPS = [
+  { id: 'chat-infra', label: 'Chat infrastructure', slots: [
+    { feature: 'recall_tagger',          scope: 'system', label: 'Recall tagger',          note: 'Fires silently after every chat turn — prefer cheapest available.', fallback: 'meta-llama/llama-3.1-8b-instruct:free' },
+    { feature: 'multisearch_planner',    scope: 'system', label: 'Multi-search planner',   note: 'Plans search queries for orchestrated research.', fallback: 'deepseek/deepseek-v3.2' },
+    { feature: 'multisearch_synthesiser',scope: 'system', label: 'Multi-search synthesiser',note: 'Writes the final report from gathered sources.', fallback: 'google/gemini-2.5-pro-preview' },
+  ]},
+  { id: 'background', label: 'Background processing', slots: [
+    { feature: 'crm_parser',       scope: 'system', label: 'CRM intent parser',   note: 'Runs when you save a CRM note.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'email_classifier', scope: 'system', label: 'Email classifier',    note: 'Runs on Gmail ingestion.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'reg_synopsis',     scope: 'system', label: 'Regulatory synopsis', note: 'Writes 2-sentence summaries of regulatory publications.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'prompt_improver',  scope: 'system', label: 'Prompt improver',     note: 'Rewrites prompts in the admin test panel.', fallback: 'google/gemini-2.5-flash-lite' },
+    { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
+  ]},
+  { id: 'debrief', label: 'Debrief', slots: [
+    { feature: 'debrief_interviewer', scope: 'user', label: 'Debrief interviewer', note: 'Conducts the end-of-day voice debrief. Must be fast with short outputs.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'debrief_extractor',  scope: 'user', label: 'Debrief extractor',   note: 'Extracts CRM facts and actions from the transcript.', fallback: 'deepseek/deepseek-v3.2' },
+  ]},
+  { id: 'linkedin', label: 'LinkedIn pipeline', slots: [
+    { feature: 'linkedin_planner',    scope: 'user', label: 'Query planner',          note: 'Generates search queries for a LinkedIn topic.', fallback: 'deepseek/deepseek-v3.2' },
+    { feature: 'linkedin_synthesiser',scope: 'user', label: 'Research synthesiser',   note: 'Writes a research briefing from gathered sources.', fallback: 'anthropic/claude-sonnet-4-6' },
+    { feature: 'linkedin_drafter',    scope: 'user', label: 'Post drafter',           note: 'Writes the initial teaser post.', fallback: 'deepseek/deepseek-v4-flash' },
+    { feature: 'linkedin_scorer',     scope: 'user', label: 'Post scorer',            note: 'Evaluates and scores the draft against the rubric.', fallback: 'anthropic/claude-sonnet-4-6' },
+    { feature: 'linkedin_carousel',   scope: 'user', label: 'Carousel generator',     note: 'Generates carousel slide content from research.', fallback: 'deepseek/deepseek-v4-flash' },
+    { feature: 'linkedin_refiner',    scope: 'user', label: 'Draft refiner / reviewer', note: 'Refines the teaser post and reviews carousel slides.', fallback: 'mistralai/mistral-medium-3' },
+    { feature: 'linkedin_image',      scope: 'user', label: 'Image prompt writer',    note: 'Writes the prompt used for image generation.', fallback: 'deepseek/deepseek-chat' },
+  ]},
+  { id: 'workday', label: 'Workday', slots: [
+    { feature: 'workday_narrative', scope: 'user', label: 'Narrative writer', note: 'Converts a workday voice transcript into a structured Markdown note.', fallback: 'free (or WORKDAY_NARRATIVE_MODEL env)' },
+  ]},
+  { id: 'portfolio', label: 'Public portfolio', slots: [
+    { feature: 'portfolio_chat', scope: 'user', label: '"Ask me" chat',  note: 'Public-facing portfolio chat — anyone can trigger. Prefer fast, cheap models.', fallback: 'free' },
+    { feature: 'jd_analyser',   scope: 'user', label: 'JD analyser',    note: 'Public-facing JD analyser — anyone can trigger. Prefer fast, cheap models.', fallback: 'free' },
+  ]},
+  { id: 'newsletter', label: 'Newsletter intelligence', slots: [
+    { feature: 'newsletter_extractor', scope: 'system', label: 'Topic extractor', note: 'Extracts structured topics from newsletter emails. Runs on every newsletter received.', fallback: 'google/gemini-2.5-flash-lite' },
+    { feature: 'newsletter_briefing',  scope: 'user',   label: 'Briefing writer',  note: 'Writes the weekly intelligence briefing from selected topics.', fallback: 'anthropic/claude-sonnet-4-6' },
+  ]},
+];
 
 function getAdminTiers(hub) {
   return hub.prepare('SELECT key, label, search_default, display_order FROM model_tiers ORDER BY display_order, key').all();
@@ -347,7 +585,7 @@ function getAdminTiers(hub) {
 
 router.get('/admin/models', requireHubAdmin, (req, res) => {
   const hub = db.hub();
-  // Seed defaults only if the table is completely empty (first run only)
+  // Seed the free fallback if the table is completely empty (first run only)
   const hasAny = hub.prepare('SELECT 1 FROM model_config LIMIT 1').get();
   if (!hasAny) {
     const insert = hub.prepare(
@@ -363,7 +601,36 @@ router.get('/admin/models', requireHubAdmin, (req, res) => {
       ORDER BY (user IS NULL) DESC, tier, display_order, key`
   ).all(req.hubUser);
   const tiers = getAdminTiers(hub);
-  res.render('hub-admin/models', { user: req.hubUser, models, tiers });
+  const defaultModel = getDefaultModel(req.hubUser);
+  // Resolve current setting for each system model slot
+  const systemGroups = SYSTEM_MODEL_GROUPS.map(group => ({
+    ...group,
+    slots: group.slots.map(slot => {
+      const resolvedScope = slot.scope === 'user' ? req.hubUser : 'system';
+      const current = getSystemModelLabel(slot.feature, resolvedScope);
+      return { ...slot, resolvedScope, currentKey: current?.key || null, currentLabel: current?.label || null };
+    }),
+  }));
+  res.render('hub-admin/models', { user: req.hubUser, models, tiers, defaultModel, systemGroups });
+});
+
+router.post('/admin/models/_set-default', requireHubAdmin, (req, res) => {
+  const { key } = req.body;
+  if (!key) return res.redirect('/admin/models');
+  db.hub().prepare(`
+    INSERT INTO crm_context (id, user, key, value)
+    VALUES (?, ?, 'hub_default_model', ?)
+    ON CONFLICT(user, key) DO UPDATE SET value = excluded.value
+  `).run(uuidId(), req.hubUser, key);
+  res.redirect('/admin/models');
+});
+
+router.post('/admin/system-models/_set', requireHubAdmin, (req, res) => {
+  const { feature, scope, model_key } = req.body;
+  if (!feature) return res.redirect('/admin/models');
+  const resolvedScope = scope === 'system' ? 'system' : req.hubUser;
+  setSystemModel(feature, resolvedScope, model_key || null);
+  res.redirect('/admin/models#sys-' + feature);
 });
 
 router.post('/admin/models', requireHubAdmin, (req, res) => {
@@ -591,7 +858,7 @@ router.post('/admin/test/upload', requireHubAdmin, testUpload.single('file'), as
   }
 });
 
-const IMPROVE_PROMPT_MODEL = 'google/gemini-2.5-flash-lite';
+const IMPROVE_PROMPT_FALLBACK = 'google/gemini-2.5-flash-lite';
 const IMPROVE_META_PROMPT = `You are an expert prompt engineer acting as a STRUCTURAL editor only. A user has written a prompt they want to send to an AI model. Rewrite it to significantly improve the quality of the response they'll get.
 
 Your role is to improve structure, clarity, and framing — NOT to fact-check or validate content. Preserve all proper nouns, product names, brand names, technical terms, and capitalised terms exactly as written, even if you don't recognise them. Unknown terms are intentional — treat them as correct and keep them verbatim.
@@ -621,7 +888,7 @@ router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
       method: 'POST',
       headers: orHeaders,
       body: JSON.stringify({
-        model: IMPROVE_PROMPT_MODEL,
+        model: getSystemModelId('prompt_improver', 'system', IMPROVE_PROMPT_FALLBACK),
         messages: [
           { role: 'system', content: IMPROVE_META_PROMPT },
           { role: 'user', content: question },
@@ -674,7 +941,7 @@ async function runComboInternal(question, model, search) {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: orHeaders,
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
+        model: getSystemModelId('admin_synthesiser', 'system', 'google/gemini-2.5-flash-lite'),
         messages: [
           { role: 'system', content: 'Synthesise the search results below to answer the question. Be accurate and concise.' },
           { role: 'user', content: `${combinedContext}\n\n---\n\n${question}` },
@@ -1052,6 +1319,16 @@ router.post('/admin/trigger-email-fetch', requireHubAdmin, async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     res.json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/admin/trigger-agentmail-fetch', requireHubAdmin, async (req, res) => {
+  const { processAgentMail } = require('../lib/agentmail-processor');
+  try {
+    const result = await processAgentMail(req.hubUser);
+    res.redirect(`/admin/email-taxonomy?agentmail=${encodeURIComponent(JSON.stringify(result))}`);
+  } catch (err) {
+    res.redirect(`/admin/email-taxonomy?agentmail_error=${encodeURIComponent(err.message)}`);
   }
 });
 

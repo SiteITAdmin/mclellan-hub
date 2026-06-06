@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../lib/db');
 const { routeMessage } = require('../lib/router');
 const { uuid } = require('../lib/id');
+const { getSystemModelKey } = require('../lib/settings');
 const PDFDocument = require('pdfkit');
 const {
   AI_ASSISTED_APP_BUILDS_INTRO,
@@ -599,8 +600,8 @@ router.get('/chat', (req, res) => {
 });
 
 // ── Portfolio AI chat ─────────────────────────────────────────────────────────
-const PUBLIC_PORTFOLIO_CHAT_MODEL = 'deepseek-v3';
-const PUBLIC_PORTFOLIO_ANALYSER_MODEL = 'deepseek-v3';
+const PUBLIC_PORTFOLIO_CHAT_FALLBACK = 'free';
+const PUBLIC_PORTFOLIO_ANALYSER_FALLBACK = 'free';
 
 router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) => {
   const { message, sessionId } = req.body;
@@ -739,7 +740,7 @@ ${wrapUntrustedBlock('candidate_context', (cvContext || 'No CV context loaded ye
   try {
     let full = '';
     const result = await routeMessage({
-      model: PUBLIC_PORTFOLIO_CHAT_MODEL,
+      model: getSystemModelKey('portfolio_chat', req.portfolioUser, PUBLIC_PORTFOLIO_CHAT_FALLBACK),
       messages,
       user: req.portfolioUser,
       noSearch: true,
@@ -820,7 +821,7 @@ Provide:
 
   try {
     const result = await routeMessage({
-      model: PUBLIC_PORTFOLIO_ANALYSER_MODEL,
+      model: getSystemModelKey('jd_analyser', req.portfolioUser, PUBLIC_PORTFOLIO_ANALYSER_FALLBACK),
       messages,
       user: req.portfolioUser,
       noSearch: true,

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email taxonomy — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+  .intro { max-width: 820px; color: var(--text-muted); font-size: 14px; }
+  .taxonomy-grid { display:grid; grid-template-columns:minmax(280px, 0.8fr) minmax(520px, 1.6fr); gap:20px; align-items:start; }
+  .panel { border:1px solid var(--border,#ddd); border-radius:12px; padding:18px; background:var(--surface,#fff); }
+  .panel h2 { margin-top:0; }
+  .stack { display:flex; flex-direction:column; gap:10px; }
+  .row-form { display:grid; gap:8px; padding:10px; border:1px solid var(--border,#e5e5e5); border-radius:8px; }
+  .label-form { grid-template-columns:minmax(180px,1fr) 70px auto auto; align-items:center; }
+  .rule-form { grid-template-columns:130px minmax(150px,1fr) minmax(180px,1fr) 70px auto; align-items:center; }
+  .rule-notes { grid-column:1 / -1; }
+  input, select { width:100%; box-sizing:border-box; }
+  .check { display:flex; align-items:center; gap:5px; font-size:12px; white-space:nowrap; }
+  .check input { width:auto; }
+  .actions { display:flex; gap:6px; }
+  .danger { color:#a12626; }
+  .add-form { margin-bottom:16px; padding:14px; background:var(--surface-raised,#f5f5f7); border-radius:10px; }
+  .hint { font-size:12px; color:var(--text-muted); margin:4px 0 0; }
+  .source { display:inline-block; margin-right:6px; padding:2px 6px; border-radius:999px; background:var(--surface-raised,#eee); font-size:11px; text-transform:uppercase; }
+  code { font-size:12px; }
+  @media (max-width: 1000px) {
+    .taxonomy-grid { grid-template-columns:1fr; }
+    .rule-form, .label-form { grid-template-columns:1fr; }
+    .rule-notes { grid-column:auto; }
+  }
+</style>
+</head>
+<body class="admin-page">
+
+<header class="admin-header">
+  <h1>Email taxonomy</h1>
+  <nav style="display:flex;gap:12px;align-items:center;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM</a>
+    <a href="/admin/email-taxonomy" style="font-weight:600">Email</a>
+    <a href="/admin/models">Models</a>
+    <a href="/newsletter">Newsletter</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+
+<section class="admin-section">
+  <p class="intro">
+    Canonical labels are the small folder structure visible in Gmail and Apple Mail.
+    Rules classify new Gmail and AgentMail messages. AgentMail also feeds work facts
+    and newsletter topics into the Hub without deleting, moving, or marking mail read.
+  </p>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <form method="POST" action="/admin/trigger-agentmail-fetch" style="float:right">
+      <button type="submit">Fetch AgentMail now</button>
+    </form>
+    <h2>Waiting for training (<%= pending.length %>)</h2>
+    <p class="hint">
+      These messages were left unclassified because Hub was not confident. For Gmail,
+      apply a canonical label and Hub will learn the sender. AgentMail review items stay
+      here for manual classification in the Hub.
+    </p>
+    <% if (pending.length) { %>
+    <div class="stack" style="margin-top:12px;">
+      <% for (const item of pending) { %>
+      <div class="row-form">
+        <strong><span class="source"><%= item.source %></span><%= item.subject || '(no subject)' %></strong>
+        <span class="hint"><%= item.from_name || item.from_email %> &lt;<%= item.from_email %>&gt;</span>
+        <% if (item.source === 'agentmail') { %>
+        <form method="POST" action="/admin/email-taxonomy/agentmail-classify" style="display:flex;gap:8px;align-items:center">
+          <input type="hidden" name="message_id" value="<%= item.message_id %>">
+          <select name="target_label" required>
+            <% for (const label of labels.filter(l => l.enabled)) { %>
+            <option value="<%= label.name %>"><%= label.name %></option>
+            <% } %>
+          </select>
+          <button type="submit">Classify and learn sender</button>
+        </form>
+        <% } %>
+      </div>
+      <% } %>
+    </div>
+    <% } else { %>
+    <p class="hint">Nothing is waiting for classification.</p>
+    <% } %>
+  </div>
+
+  <div class="taxonomy-grid">
+    <div class="panel">
+      <h2>Canonical labels</h2>
+      <form class="add-form stack" method="POST" action="/admin/email-taxonomy/labels">
+        <strong>Add label</strong>
+        <input name="name" maxlength="120" placeholder="Resources/Learning" required>
+        <input name="display_order" type="number" value="100" aria-label="Display order">
+        <button type="submit">Add label</button>
+      </form>
+
+      <div class="stack">
+        <% for (const label of labels) { %>
+        <form class="row-form label-form" method="POST" action="/admin/email-taxonomy/labels/<%= label.id %>">
+          <input name="name" value="<%= label.name %>" maxlength="120" required>
+          <input name="display_order" type="number" value="<%= label.display_order %>" title="Display order">
+          <label class="check"><input name="enabled" type="checkbox" <%= label.enabled ? 'checked' : '' %>> Enabled</label>
+          <div class="actions">
+            <button type="submit">Save</button>
+            <button class="danger" type="submit" formaction="/admin/email-taxonomy/labels/<%= label.id %>/delete"
+              onclick="return confirm('Delete this label from Hub configuration? It will not delete Gmail messages or folders. Labels used by rules cannot be deleted.')">Delete</button>
+          </div>
+        </form>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Classification rules</h2>
+      <form class="add-form stack" method="POST" action="/admin/email-taxonomy/rules">
+        <strong>Add rule</strong>
+        <select name="match_type" required>
+          <% for (const type of ruleTypes) { %><option value="<%= type %>"><%= type %></option><% } %>
+        </select>
+        <input name="match_value" placeholder="sender@example.com or phrase" required>
+        <select name="target_label" required>
+          <% for (const label of labels.filter(l => l.enabled)) { %>
+          <option value="<%= label.name %>"><%= label.name %></option>
+          <% } %>
+        </select>
+        <input name="priority" type="number" value="100" aria-label="Priority">
+        <input name="notes" placeholder="Why this rule exists">
+        <button type="submit">Add rule</button>
+        <p class="hint">Higher priority rules run first. Exact sender-email rules are best for important people.</p>
+      </form>
+
+      <div class="stack">
+        <% for (const rule of rules) { %>
+        <form class="row-form rule-form" method="POST" action="/admin/email-taxonomy/rules/<%= rule.id %>">
+          <select name="match_type">
+            <% for (const type of ruleTypes) { %>
+            <option value="<%= type %>" <%= rule.match_type === type ? 'selected' : '' %>><%= type %></option>
+            <% } %>
+          </select>
+          <input name="match_value" value="<%= rule.match_value %>" required>
+          <select name="target_label">
+            <% for (const label of labels) { %>
+            <option value="<%= label.name %>" <%= rule.target_label === label.name ? 'selected' : '' %>><%= label.name %></option>
+            <% } %>
+          </select>
+          <input name="priority" type="number" value="<%= rule.priority %>" title="Priority">
+          <label class="check"><input name="enabled" type="checkbox" <%= rule.enabled ? 'checked' : '' %>> Enabled</label>
+          <input class="rule-notes" name="notes" value="<%= rule.notes %>" placeholder="Notes">
+          <div class="actions rule-notes">
+            <button type="submit">Save</button>
+            <button class="danger" type="submit" formaction="/admin/email-taxonomy/rules/<%= rule.id %>/delete"
+              onclick="return confirm('Delete this classification rule?')">Delete</button>
+          </div>
+        </form>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

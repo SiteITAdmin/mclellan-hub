@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "default_user": "douglas",
+  "principles": {
+    "gmail_role": "A small, stable navigation layer for humans.",
+    "hub_role": "The canonical metadata and relationship layer.",
+    "retention": "Keep all mail except messages explicitly deleted by the user.",
+    "primary_label_rule": "Each filed message has one primary Gmail label; Hub metadata may have many dimensions."
+  },
+  "canonical_roots": [
+    "Action",
+    "People",
+    "Organisations",
+    "Projects",
+    "Travel",
+    "Finance",
+    "Commerce",
+    "Systems",
+    "Resources"
+  ],
+  "canonical_labels": [
+    "Action/Reply",
+    "Action/Waiting",
+    "Action/Review",
+    "People/Alister McLellan",
+    "People/Nakai McLellan",
+    "Organisations/Beacon Hospital",
+    "Organisations/Wicklow Dementia Support",
+    "Projects/CV",
+    "Projects/Knowledge Base",
+    "Projects/Second Brain",
+    "Projects/VIPBackups",
+    "Travel/Bookings",
+    "Travel/Price Alerts",
+    "Finance/Banking",
+    "Finance/Receipts and Billing",
+    "Commerce/Orders",
+    "Commerce/Offers",
+    "Systems/Accounts and Security",
+    "Systems/Agents",
+    "Systems/Services",
+    "Resources/Learning",
+    "Resources/Newsletters",
+    "Resources/Research"
+  ],
+  "people": [
+    {
+      "canonical_name": "Alister McLellan",
+      "aliases": ["Dad", "Iain"],
+      "gmail_label": "People/Alister McLellan",
+      "confidence": "confirmed"
+    },
+    {
+      "canonical_name": "Nakai McLellan",
+      "aliases": ["Nakai Mutenga", "Kai"],
+      "gmail_label": "People/Nakai McLellan",
+      "importance": "high",
+      "confidence": "confirmed"
+    }
+  ],
+  "legacy_mappings": {
+    "Dad": "People/Alister McLellan",
+    "Alister McLellan": "People/Alister McLellan",
+    "Iain": "People/Alister McLellan",
+    "Kai": "People/Nakai McLellan",
+    "Nakai McLellan": "People/Nakai McLellan",
+    "Nakai Mutenga": "People/Nakai McLellan",
+    "Beacon": "Organisations/Beacon Hospital",
+    "Wicklow Dementia": "Organisations/Wicklow Dementia Support",
+    "WDS": "Organisations/Wicklow Dementia Support",
+    "CV": "Projects/CV",
+    "Knowledge Base": "Projects/Knowledge Base",
+    "Second Brain": "Projects/Second Brain",
+    "VIPBackups": "Projects/VIPBackups",
+    "Ryanair": "Travel/Bookings",
+    "Dublin Airport": "Travel/Bookings",
+    "SkyScanner": "Travel/Price Alerts",
+    "Bank of Ireland": "Finance/Banking",
+    "Shopping": "Commerce/Orders",
+    "Kildare Village": "Commerce/Offers",
+    "_agent": "Systems/Agents",
+    "agent": "Systems/Agents",
+    "Agents": "Systems/Agents",
+    "Elementor": "Systems/Services",
+    "M365 Learning": "Resources/Learning",
+    "MoreMins": "Systems/Services",
+    "Ollama": "Systems/Services",
+    "OpenRouter": "Systems/Services",
+    "Proton": "Systems/Services",
+    "Slack": "Systems/Services",
+    "Supabase": "Systems/Services",
+    "Workspace": "Systems/Services",
+    "All Other Substacks": "Resources/Newsletters",
+    "Edwina Voice of AI": "Resources/Newsletters",
+    "Forte Labs Newsletter": "Resources/Newsletters",
+    "Forward Future": "Resources/Newsletters",
+    "Futurepedia": "Resources/Newsletters",
+    "Grace Leung": "Resources/Newsletters",
+    "Jeff Su": "Resources/Newsletters",
+    "Simple AI": "Resources/Newsletters",
+    "The Rundown AI": "Resources/Newsletters",
+    "AI News": "Resources/Newsletters",
+    "MasterClass": "Resources/Newsletters",
+    "Matthew Berman": "Resources/Newsletters",
+    "Nate": "Resources/Newsletters",
+    "Peter Simmons": "Resources/Newsletters",
+    "Team Maven": "Resources/Newsletters",
+    "null": "Resources/Research"
+  },
+  "review_required": [
+    {
+      "legacy_label": "Kai",
+      "question": "Canonical person is Nakai McLellan, alias Nakai Mutenga/Kai. Reclassify unrelated retail, travel, security, and newsletter messages individually."
+    },
+    {
+      "legacy_label": "Follow-up",
+      "question": "Reclassify per message; the current sample is a newsletter, not an actionable follow-up."
+    },
+    {
+      "legacy_label": "Personal",
+      "question": "Mixed bucket containing people, events, finance, systems, and resources; reclassify each message."
+    }
+  ],
+  "classification_rules": [
+    {
+      "match_type": "sender_email",
+      "match_value": "kaimutenga@icloud.com",
+      "target_label": "People/Nakai McLellan",
+      "notes": "Nakai McLellan; aliases Nakai Mutenga and Kai.",
+      "priority": 1000
+    },
+    {
+      "match_type": "sender_email",
+      "match_value": "natesnewsletter@substack.com",
+      "target_label": "Resources/Newsletters",
+      "notes": "Nate's Substack; keep direct sender classification consistent regardless of article topic.",
+      "priority": 1000
+    }
+  ],
+  "signal_sources": [
+    {
+      "source_key": "skyscanner-price-alert",
+      "gmail_primary_label": "Travel/Price Alerts",
+      "signal_type": "travel.price_observation",
+      "retention": "indefinite"
+    }
+  ]
+}

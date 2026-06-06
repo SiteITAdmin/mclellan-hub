@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intelligence — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
+.nl-wrap { max-width: 900px; margin: 0 auto; padding: 32px 16px 80px; }
+.nl-heading { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+.nl-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 28px; }
+
+:root {
+  --card-radius: 12px;
+  --card-border: var(--border, #dddaf0);
+  --card-bg: var(--bg, #faf9fb);
+  --accent: var(--primary, #7c6af5);
+}
+
+.week-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.week-bar select { padding: 7px 10px; font-size: 13px; border: 1px solid var(--card-border); border-radius: 7px; background: var(--card-bg); color: var(--text, #1b1b23); font-family: inherit; }
+.stats-row { display: flex; gap: 16px; font-size: 13px; color: var(--text-dim, #767586); margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+.stats-row strong { color: var(--text, #15131e); }
+
+.category-group { margin-bottom: 28px; }
+.category-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 8px; }
+.topic-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.topic-card {
+  border: 1px solid var(--card-border); border-radius: var(--card-radius);
+  background: var(--card-bg); padding: 13px 15px;
+  display: flex; gap: 10px; align-items: flex-start;
+  transition: box-shadow 0.12s;
+}
+.topic-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+.topic-card.deselected { opacity: 0.45; }
+.topic-body { flex: 1; min-width: 0; }
+.topic-headline { font-size: 13px; font-weight: 600; color: var(--text, #15131e); line-height: 1.35; margin-bottom: 3px; }
+.topic-meta { font-size: 11px; color: var(--text-dim); }
+.topic-summary { font-size: 12px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
+
+.section-card {
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: var(--card-radius); padding: 22px 24px; margin-bottom: 20px;
+}
+.section-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+.section-desc { font-size: 12px; color: var(--text-dim); margin: 0 0 16px; }
+
+.btn { padding: 8px 16px; font-size: 13px; border-radius: 8px; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: var(--text, #15131e); font-family: inherit; font-weight: 600; transition: background 0.12s; }
+.btn:hover { background: rgba(0,0,0,0.05); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: #6a58e0; }
+.btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: var(--text, #15131e); font-family: inherit; transition: background 0.12s; }
+.btn-sm:hover { background: rgba(0,0,0,0.05); }
+.btn-sm.danger { color: #ba1a1a; border-color: #ffdad6; }
+.btn-sm.danger:hover { background: rgba(186,26,26,0.06); }
+
+.preview-area { background: #fff; border: 1px solid var(--card-border); border-radius: var(--card-radius); padding: 0; margin-top: 16px; overflow: hidden; }
+.preview-area iframe { width: 100%; min-height: 500px; border: none; display: block; }
+
+.empty-state { color: var(--text-dim); font-size: 14px; padding: 24px 0; text-align: center; }
+
+.mgmt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 10px; }
+.mgmt-card { border: 1px solid var(--card-border); border-radius: var(--card-radius); background: var(--card-bg); padding: 14px 16px; }
+.mgmt-card-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.mgmt-card-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; }
+.edit-panel { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--card-border); }
+.edit-panel.open { display: block; }
+.model-form { display: flex; flex-direction: column; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+.field input, .field select, .field textarea { padding: 7px 10px; font-size: 13px; font-family: inherit; border: 1px solid var(--card-border); border-radius: 7px; background: var(--bg, #fcf8ff); color: var(--text); box-sizing: border-box; width: 100%; }
+.field textarea { min-height: 120px; resize: vertical; }
+.form-actions { display: flex; gap: 8px; }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-on { background: rgba(40,167,69,0.12); color: #1a7a35; }
+.badge-off { background: rgba(0,0,0,0.06); color: #666; }
+.badge-default { background: rgba(124,106,245,0.12); color: #5b4ac4; }
+
+.backfill-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 8px; }
+.backfill-row .field { flex: 1; min-width: 160px; }
+#backfill-status { font-size: 13px; color: var(--text-dim); margin-top: 8px; }
+
+.back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); text-decoration: none; margin-bottom: 20px; }
+.back-link:hover { color: var(--text); }
+</style>
+</head>
+<body class="hub-page" style="background: var(--bg-page, #f4f3fb);">
+<main>
+<div class="nl-wrap">
+
+  <a href="/" class="back-link">← Home</a>
+  <p class="nl-heading">Intelligence briefing</p>
+  <p class="nl-sub">Topics extracted from your newsletters. Select what matters, generate a briefing, send it.</p>
+
+  <!-- ── Topics ─────────────────────────────────────────────────────────────── -->
+  <div class="section-card">
+    <p class="section-title">Topics — <%= weekLabel %></p>
+    <p class="section-desc">Topics extracted from newsletters as they arrive. Select what to include in your briefing, then generate.</p>
+
+    <div class="week-bar">
+      <form method="GET" action="/newsletter" style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:13px;font-weight:600">Week:</label>
+        <select name="week" onchange="this.form.submit()">
+          <% if (!weeks.find(w => w.week_key === weekKey)) { %>
+            <option value="<%= weekKey %>" selected><%= weekLabel %> (current)</option>
+          <% } %>
+          <% for (const w of weeks) { %>
+            <option value="<%= w.week_key %>" <%= w.week_key === weekKey ? 'selected' : '' %>>
+              <%= w.week_key %> — <%= w.total %> topics (<%= w.selected %> selected)
+            </option>
+          <% } %>
+        </select>
+      </form>
+    </div>
+
+    <div class="stats-row">
+      <span><strong><%= totalTopics %></strong> topics this week</span>
+      <span><strong><%= selectedTopics %></strong> selected</span>
+      <% if (totalTopics > 0) { %>
+      <form method="POST" action="/newsletter/topics/toggle-week" style="display:inline">
+        <input type="hidden" name="week" value="<%= weekKey %>">
+        <input type="hidden" name="value" value="1">
+        <button class="btn-sm" type="submit">Select all</button>
+      </form>
+      <form method="POST" action="/newsletter/topics/toggle-week" style="display:inline">
+        <input type="hidden" name="week" value="<%= weekKey %>">
+        <input type="hidden" name="value" value="0">
+        <button class="btn-sm" type="submit">Deselect all</button>
+      </form>
+      <% } %>
+    </div>
+
+    <% if (totalTopics === 0) { %>
+      <div class="empty-state">No topics yet for <%= weekLabel %> — use Import below to pull from Gmail, or they'll arrive automatically as newsletters come in.</div>
+    <% } else { %>
+      <% for (const [category, catTopics] of Object.entries(grouped)) { %>
+      <div class="category-group">
+        <div class="category-label"><%= category %> (<%= catTopics.length %>)</div>
+        <div class="topic-cards">
+          <% for (const t of catTopics) { %>
+          <div class="topic-card <%= t.selected ? '' : 'deselected' %>" id="topic-<%= t.id %>">
+            <form method="POST" action="/newsletter/topics/toggle" style="display:contents">
+              <input type="hidden" name="id" value="<%= t.id %>">
+              <input type="hidden" name="week" value="<%= weekKey %>">
+              <button type="submit" style="all:unset;cursor:pointer;flex-shrink:0;margin-top:2px">
+                <span style="display:inline-block;width:16px;height:16px;border-radius:4px;border:2px solid <%= t.selected ? 'var(--accent)' : 'var(--card-border)' %>;background:<%= t.selected ? 'var(--accent)' : 'transparent' %>;position:relative;">
+                  <% if (t.selected) { %><span style="position:absolute;top:1px;left:3px;color:#fff;font-size:10px;font-weight:900">✓</span><% } %>
+                </span>
+              </button>
+            </form>
+            <div class="topic-body">
+              <div class="topic-headline"><%= t.headline %></div>
+              <div class="topic-meta"><%= t.from_name %> · <%= new Date(t.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+              <% if (t.summary) { %><div class="topic-summary"><%= t.summary %></div><% } %>
+            </div>
+          </div>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+    <% } %>
+  </div>
+
+  <!-- ── Generate & Send ───────────────────────────────────────────────────── -->
+  <div class="section-card">
+    <p class="section-title">Generate briefing</p>
+    <p class="section-desc">Choose a format and generate a briefing from the selected topics above.</p>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+      <div class="field" style="min-width:200px">
+        <label>Format</label>
+        <select id="gen-format">
+          <% for (const f of formats) { %>
+          <option value="<%= f.id %>" <%= f.is_default ? 'selected' : '' %>><%= f.name %></option>
+          <% } %>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="generateBriefing()">Generate</button>
+      <span id="gen-status" style="font-size:13px;color:var(--text-dim)"></span>
+    </div>
+
+    <div id="preview-wrap" style="display:none">
+      <div class="preview-area">
+        <iframe id="preview-frame" title="Briefing preview"></iframe>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+        <button class="btn btn-primary" id="send-btn" onclick="sendBriefing()">Send to email</button>
+        <span id="send-status" style="font-size:13px;color:var(--text-dim)"></span>
+      </div>
+    </div>
+
+    <% if (briefings.length) { %>
+    <p style="margin-top:24px;margin-bottom:10px;font-size:13px;font-weight:600;color:var(--text-dim)">Recent briefings</p>
+    <div class="mgmt-grid">
+      <% for (const b of briefings) { %>
+      <div class="mgmt-card">
+        <div class="mgmt-card-name"><%= b.week_key %></div>
+        <div class="mgmt-card-meta">
+          <%= b.topic_count %> topics · <%= b.format_name || 'unknown format' %>
+          <% if (b.sent_at) { %> · Sent <%= new Date(b.sent_at * 1000).toLocaleDateString('en-GB') %><% } %>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <% if (!b.sent_at) { %>
+          <button class="btn-sm" onclick="resendBriefing('<%= b.id %>')">Send</button>
+          <% } %>
+          <a href="/newsletter/briefing/<%= b.id %>/pdf" class="btn-sm" download>Download PDF</a>
+        </div>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+  </div>
+
+  <!-- ── Import from Gmail ─────────────────────────────────────────────────── -->
+  <div class="section-card" id="backfill">
+    <p class="section-title">Import from Gmail</p>
+    <p class="section-desc">Fetch emails from Gmail labels and extract topics. Useful for catching up on emails that arrived before the pipeline was running.</p>
+    <div class="backfill-row">
+      <div class="field">
+        <label>Gmail labels (comma-separated)</label>
+        <input id="bf-labels" type="text" placeholder="e.g. AI news, Newsletters">
+      </div>
+      <div class="field" style="flex:0 0 80px">
+        <label>Days back</label>
+        <input id="bf-days" type="number" value="7" min="1" max="30">
+      </div>
+      <button class="btn" onclick="runBackfill()">Import</button>
+      <button class="btn" type="button" onclick="browseLabels()">Browse labels</button>
+    </div>
+    <div id="label-list" style="display:none;margin-top:10px;display:none">
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:6px">Click a label to add it:</p>
+      <div id="label-chips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div id="backfill-status"></div>
+  </div>
+
+  <!-- ── Briefing formats ──────────────────────────────────────────────────── -->
+  <div class="section-card" id="formats">
+    <p class="section-title">Briefing formats</p>
+    <p class="section-desc">Define how each briefing is written. Instructions are the LLM system prompt. Target words and max tokens override the automatic scaling. Model overrides the system default.</p>
+
+    <div class="mgmt-grid">
+      <% for (const f of formats) { %>
+      <div class="mgmt-card">
+        <div class="mgmt-card-name"><%= f.name %> <% if (f.is_default) { %><span class="badge badge-default">default</span><% } %></div>
+        <div class="mgmt-card-meta" style="margin-bottom:6px"><%= f.instructions.slice(0, 72) %>…</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <% if (f.target_words) { %><span class="badge badge-off"><%= f.target_words %> words</span><% } %>
+          <% if (f.max_tokens) { %><span class="badge badge-off"><%= f.max_tokens %> tokens</span><% } %>
+          <% if (f.model_id) { %><span class="badge badge-default"><%= f.model_id.split('/')[1] || f.model_id %></span><% } %>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-sm" onclick="toggleEdit('fmt-<%= f.id %>')">Edit</button>
+          <% if (!f.is_default) { %>
+          <form method="POST" action="/newsletter/formats/delete" style="display:inline">
+            <input type="hidden" name="id" value="<%= f.id %>">
+            <button class="btn-sm danger" type="submit" onclick="return confirm('Delete format?')">Delete</button>
+          </form>
+          <% } %>
+        </div>
+        <div class="edit-panel" id="fmt-<%= f.id %>">
+          <form method="POST" action="/newsletter/formats/update" class="model-form">
+            <input type="hidden" name="id" value="<%= f.id %>">
+            <div class="field">
+              <label>Name</label>
+              <input name="name" value="<%= f.name %>" required>
+            </div>
+            <div class="field">
+              <label>Instructions (system prompt)</label>
+              <textarea name="instructions" rows="8"><%= f.instructions %></textarea>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field">
+                <label>Target words <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = auto)</span></label>
+                <input name="target_words" type="number" min="50" max="5000" value="<%= f.target_words || '' %>" placeholder="auto">
+              </div>
+              <div class="field">
+                <label>Max tokens <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = auto)</span></label>
+                <input name="max_tokens" type="number" min="200" value="<%= f.max_tokens || '' %>" placeholder="auto">
+              </div>
+            </div>
+            <div class="field">
+              <label>Model <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = system default)</span></label>
+              <select name="model_id">
+                <option value="">— system default —</option>
+                <% for (const m of models) { %>
+                <option value="<%= m.model_id %>" <%= f.model_id === m.model_id ? 'selected' : '' %>><%= m.label %></option>
+                <% } %>
+              </select>
+            </div>
+            <div class="field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" name="is_default" id="def-<%= f.id %>" <%= f.is_default ? 'checked' : '' %>>
+              <label for="def-<%= f.id %>" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:normal">Set as default</label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+              <button type="button" class="btn-sm" onclick="toggleEdit('fmt-<%= f.id %>')">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <% } %>
+    </div>
+
+    <details style="margin-top:16px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Add a format</summary>
+      <form method="POST" action="/newsletter/formats" class="model-form" style="margin-top:12px;max-width:580px">
+        <div class="field">
+          <label>Name</label>
+          <input name="name" placeholder="Quick brief" required>
+        </div>
+        <div class="field">
+          <label>Instructions</label>
+          <textarea name="instructions" rows="6" placeholder="Write a concise intelligence briefing…" required></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field">
+            <label>Target words <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = auto)</span></label>
+            <input name="target_words" type="number" min="50" max="5000" placeholder="auto">
+          </div>
+          <div class="field">
+            <label>Max tokens <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = auto)</span></label>
+            <input name="max_tokens" type="number" min="200" placeholder="auto">
+          </div>
+        </div>
+        <div class="field">
+          <label>Model <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = system default)</span></label>
+          <select name="model_id">
+            <option value="">— system default —</option>
+            <% for (const m of models) { %>
+            <option value="<%= m.model_id %>"><%= m.label %></option>
+            <% } %>
+          </select>
+        </div>
+        <div class="field" style="flex-direction:row;align-items:center;gap:8px">
+          <input type="checkbox" name="is_default" id="new-default">
+          <label for="new-default" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:normal">Set as default</label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">Add format</button>
+        </div>
+      </form>
+    </details>
+  </div>
+
+  <!-- ── Interests / categories ────────────────────────────────────────────── -->
+  <div class="section-card" id="interests">
+    <p class="section-title">Interests & categories</p>
+    <p class="section-desc">The extractor tags each topic against these categories. Each can be linked to a Gmail label — use Sync to import your labels automatically.</p>
+
+    <div style="margin-bottom:14px">
+      <button class="btn-sm" onclick="syncLabels()">Sync from Gmail labels</button>
+      <span id="sync-status" style="font-size:12px;color:var(--text-dim);margin-left:10px"></span>
+    </div>
+
+    <div class="mgmt-grid">
+      <% for (const i of interests) { %>
+      <div class="mgmt-card">
+        <div class="mgmt-card-name"><%= i.name %></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+          <% if (i.gmail_label) { %><span class="badge badge-off">Gmail: <%= i.gmail_label %></span><% } %>
+          <% const modeLabel = {full:'full',minimal:'minimal',skip:'skip'}[i.mode]; if (modeLabel) { %><span class="badge <%= i.mode==='skip'?'badge-off':i.mode==='full'?'badge-default':'badge-on' %>"><%= modeLabel %></span><% } %>
+          <% if (i.body_limit) { %><span class="badge badge-off"><%= (i.body_limit/1000).toFixed(0) %>k chars</span><% } %>
+          <% if (i.extract_max_tokens) { %><span class="badge badge-off"><%= i.extract_max_tokens %> tok</span><% } %>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <form method="POST" action="/newsletter/interests/toggle-auto" style="display:inline">
+            <input type="hidden" name="id" value="<%= i.id %>">
+            <button class="btn-sm" type="submit">
+              <span class="badge <%= i.auto_include ? 'badge-on' : 'badge-off' %>"><%= i.auto_include ? 'auto-include' : 'manual' %></span>
+            </button>
+          </form>
+          <button class="btn-sm" onclick="toggleEdit('int-<%= i.id %>')">Edit</button>
+          <form method="POST" action="/newsletter/interests/delete" style="display:inline">
+            <input type="hidden" name="id" value="<%= i.id %>">
+            <button class="btn-sm danger" type="submit" onclick="return confirm('Delete?')">Delete</button>
+          </form>
+        </div>
+        <div class="edit-panel" id="int-<%= i.id %>">
+          <form method="POST" action="/newsletter/interests/update" class="model-form">
+            <input type="hidden" name="id" value="<%= i.id %>">
+            <div class="field">
+              <label>Category name</label>
+              <input name="name" value="<%= i.name %>" required>
+            </div>
+            <div class="field">
+              <label>Linked Gmail label <span style="font-weight:400;text-transform:none;letter-spacing:0">(exact name)</span></label>
+              <input name="gmail_label" value="<%= i.gmail_label || '' %>" placeholder="e.g. AI news">
+            </div>
+            <div class="field">
+              <label>Extraction mode</label>
+              <select name="mode">
+                <option value="selective" <%= (i.mode||'selective')==='selective'?'selected':'' %>>Selective — extract distinct topics, filter noise</option>
+                <option value="full" <%= i.mode==='full'?'selected':'' %>>Full — capture everything verbatim (good for work briefings)</option>
+                <option value="minimal" <%= i.mode==='minimal'?'selected':'' %>>Minimal — 1–2 headlines only</option>
+                <option value="skip" <%= i.mode==='skip'?'selected':'' %>>Skip — don't extract from this source</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field">
+                <label>Body limit <span style="font-weight:400;text-transform:none;letter-spacing:0">chars (blank = 20 000)</span></label>
+                <input name="body_limit" type="number" min="500" max="100000" value="<%= i.body_limit || '' %>" placeholder="20000">
+              </div>
+              <div class="field">
+                <label>Max extract tokens <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = 4 000)</span></label>
+                <input name="extract_max_tokens" type="number" min="200" value="<%= i.extract_max_tokens || '' %>" placeholder="4000">
+              </div>
+            </div>
+            <div class="field">
+              <label>Custom extraction prompt <span style="font-weight:400;text-transform:none;letter-spacing:0">(overrides mode default)</span></label>
+              <textarea name="extraction_prompt" rows="6" placeholder="Leave blank to use the mode default. Write a full prompt to control exactly how this source is processed."><%= i.extraction_prompt || '' %></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+              <button type="button" class="btn-sm" onclick="toggleEdit('int-<%= i.id %>')">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <% } %>
+    </div>
+
+    <details style="margin-top:16px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Add a category</summary>
+      <form method="POST" action="/newsletter/interests" style="margin-top:12px;display:flex;flex-direction:column;gap:10px;max-width:520px">
+        <div class="field">
+          <label>Category name</label>
+          <input name="name" placeholder="e.g. Regulation & Compliance" required>
+        </div>
+        <div class="field">
+          <label>Linked Gmail label <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+          <input name="gmail_label" placeholder="e.g. Healthcare news">
+        </div>
+        <div class="field">
+          <label>Extraction mode</label>
+          <select name="mode">
+            <option value="selective">Selective — extract distinct topics, filter noise</option>
+            <option value="full">Full — capture everything verbatim</option>
+            <option value="minimal">Minimal — 1–2 headlines only</option>
+            <option value="skip">Skip — don't extract from this source</option>
+          </select>
+        </div>
+        <div class="field" style="flex-direction:row;align-items:center;gap:6px">
+          <input type="checkbox" name="auto_include" id="new-auto" checked>
+          <label for="new-auto" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:normal">Auto-include topics from this category</label>
+        </div>
+        <div>
+          <button type="submit" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">Add</button>
+        </div>
+      </form>
+    </details>
+  </div>
+
+</div>
+</main>
+
+<script>
+(function () {
+  window.toggleEdit = function(id) {
+    document.getElementById(id)?.classList.toggle('open');
+  };
+
+  let currentBriefingId = null;
+
+  window.generateBriefing = async function() {
+    const formatId = document.getElementById('gen-format')?.value;
+    const status = document.getElementById('gen-status');
+    status.textContent = 'Generating…';
+    try {
+      const r = await fetch('/newsletter/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `week=<%= weekKey %>&format_id=${encodeURIComponent(formatId || '')}`,
+      });
+      const data = await r.json();
+      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); return; }
+
+      currentBriefingId = data.id;
+      status.textContent = `✓ Generated — ${data.topicCount} topics`;
+
+      const wrap = document.getElementById('preview-wrap');
+      const frame = document.getElementById('preview-frame');
+      wrap.style.display = 'block';
+      frame.srcdoc = data.html;
+    } catch (err) {
+      status.textContent = '⚠ ' + err.message;
+    }
+  };
+
+  window.sendBriefing = async function() {
+    if (!currentBriefingId) return;
+    const btn = document.getElementById('send-btn');
+    const status = document.getElementById('send-status');
+    btn.disabled = true;
+    status.textContent = 'Sending…';
+    try {
+      const r = await fetch('/newsletter/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `briefing_id=${encodeURIComponent(currentBriefingId)}`,
+      });
+      const data = await r.json();
+      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); btn.disabled = false; return; }
+      status.textContent = `✓ Sent to ${data.to}`;
+    } catch (err) {
+      status.textContent = '⚠ ' + err.message;
+      btn.disabled = false;
+    }
+  };
+
+  window.resendBriefing = async function(id) {
+    const r = await fetch('/newsletter/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `briefing_id=${encodeURIComponent(id)}`,
+    });
+    const data = await r.json();
+    alert(r.ok ? `Sent to ${data.to}` : '⚠ ' + (data.error || 'Failed'));
+    if (r.ok) location.reload();
+  };
+
+  window.syncLabels = async function() {
+    const status = document.getElementById('sync-status');
+    status.textContent = 'Syncing…';
+    try {
+      const r = await fetch('/newsletter/interests/sync-labels', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const data = await r.json();
+      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); return; }
+      status.textContent = `✓ Added ${data.added} new categor${data.added !== 1 ? 'ies' : 'y'} from ${data.total} Gmail labels`;
+      if (data.added > 0) setTimeout(() => location.reload(), 1200);
+    } catch (err) {
+      status.textContent = '⚠ ' + err.message;
+    }
+  };
+
+  window.browseLabels = async function() {
+    const wrap = document.getElementById('label-list');
+    const chips = document.getElementById('label-chips');
+    chips.textContent = 'Loading…';
+    wrap.style.display = 'block';
+    try {
+      const r = await fetch('/newsletter/gmail-labels');
+      const data = await r.json();
+      if (!r.ok) { chips.textContent = '⚠ ' + (data.error || 'Failed'); return; }
+      chips.innerHTML = '';
+      for (const label of data.labels) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-sm';
+        btn.style.cssText = 'cursor:pointer;font-size:12px';
+        btn.textContent = label;
+        btn.onclick = () => {
+          const inp = document.getElementById('bf-labels');
+          const current = inp.value.split(',').map(s => s.trim()).filter(Boolean);
+          if (!current.includes(label)) {
+            inp.value = [...current, label].join(', ');
+          }
+          btn.style.background = 'rgba(124,106,245,0.15)';
+          btn.style.borderColor = 'var(--accent)';
+        };
+        chips.appendChild(btn);
+      }
+    } catch (err) {
+      chips.textContent = '⚠ ' + err.message;
+    }
+  };
+
+  window.runBackfill = async function() {
+    const labels = document.getElementById('bf-labels').value;
+    const days = document.getElementById('bf-days').value;
+    const status = document.getElementById('backfill-status');
+    status.textContent = 'Importing… this may take a minute.';
+    try {
+      const r = await fetch('/newsletter/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `labels=${encodeURIComponent(labels)}&days=${encodeURIComponent(days)}`,
+      });
+      const data = await r.json();
+      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); return; }
+      const lines = Object.entries(data.results).map(([label, r]) =>
+        r.error ? `${label}: ⚠ ${r.error}` : `${label}: ${r.emails} emails → ${r.topics} topics`
+      ).join(' · ');
+      status.textContent = '✓ ' + lines;
+      setTimeout(() => location.reload(), 1500);
+    } catch (err) {
+      status.textContent = '⚠ ' + err.message;
+    }
+  };
+})();
+</script>
+</body>
+</html>

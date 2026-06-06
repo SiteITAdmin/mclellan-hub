@@ -135,6 +135,16 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       <div class="hub-tile-desc">Dublin ↔ Edinburgh flight log. Scheduled vs actual, delay tracking.</div>
     </a>
 
+    <a href="/newsletter" class="hub-tile">
+      <div class="hub-tile-icon">📰</div>
+      <div class="hub-tile-label">Intelligence</div>
+      <div class="hub-tile-desc">Weekly briefing from your newsletters. Curate topics and generate a digest.</div>
+      <div class="hub-tile-meta">
+        <span class="hub-tile-pill"><%= nlThisWeek.total %> topics</span>
+        <% if (nlThisWeek.total > 0) { %><span class="hub-tile-pill"><%= nlThisWeek.selected %> selected</span><% } %>
+      </div>
+    </a>
+
     <a href="/token-burn" class="hub-tile">
       <div class="hub-tile-icon">◈</div>
       <div class="hub-tile-label">Token Burn</div>

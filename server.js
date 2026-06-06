@@ -11,9 +11,11 @@ const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
 const { sendDailyBriefing, sendEmailBriefing } = require('./lib/crm');
 const { processNewEmails } = require('./lib/email-processor');
+const { processAgentMail } = require('./lib/agentmail-processor');
 const { runRegulatoryMonitor } = require('./lib/regulatory-monitor');
 const { sendWeeklyDigest } = require('./lib/weekly-digest');
 const { sendRhStats } = require('./lib/rh-stats');
+const { sendWeeklyReminder } = require('./lib/newsletter-pipeline');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -166,12 +168,28 @@ setInterval(() => {
   }
 }, 15 * 60 * 1000);
 
+// ── AgentMail ingestion (every 15 minutes) ───────────────────────────────────
+setInterval(() => {
+  if (!process.env.AGENTMAIL_API_KEY || !process.env.AGENTMAIL_INBOX_ID) return;
+  processAgentMail('douglas')
+    .catch(err => console.error('[agentmail] process error:', err));
+}, 15 * 60 * 1000);
+
 // ── Weekly digest (Sunday 14:00 Europe/Dublin) ───────────────────────────────
 setInterval(() => {
   const now = nowIn('Europe/Dublin');
   if (now.getDay() !== 0 || now.getHours() !== 14 || now.getMinutes() !== 0) return;
   for (const user of BRIEFING_USERS) {
     sendWeeklyDigest(user).catch(err => console.error(`[weekly] digest error for ${user}:`, err));
+  }
+}, 60 * 1000);
+
+// ── Newsletter Saturday reminder (09:00 Europe/Dublin, Saturday) ─────────────
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getDay() !== 6 || now.getHours() !== 9 || now.getMinutes() !== 0) return;
+  for (const user of BRIEFING_USERS) {
+    sendWeeklyReminder(user).catch(err => console.error(`[newsletter] reminder error for ${user}:`, err));
   }
 }, 60 * 1000);
 

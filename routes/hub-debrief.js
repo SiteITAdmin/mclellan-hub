@@ -7,6 +7,7 @@ const { fetchTodayCalendarEvents } = require('../lib/crm');
 const { writeNote } = require('../lib/obsidian-vault');
 const { writeMeetingNote } = require('../lib/meeting');
 const { uuid } = require('../lib/id');
+const { getSystemModelId } = require('../lib/settings');
 const {
   chatLimiter, uploadLimiter, writeLimiter,
   requireAuth, requireSameOrigin, audioUpload,
@@ -98,7 +99,7 @@ When the interview feels naturally complete, or ${displayName} signals they want
         'X-Title': 'McLellan Hub Debrief',
       },
       body: JSON.stringify({
-        model: 'anthropic/claude-haiku-4-5',
+        model: getSystemModelId('debrief_interviewer', user, 'anthropic/claude-haiku-4-5'),
         messages: [{ role: 'system', content: systemPrompt }, ...history],
         temperature: 0.4,
         max_tokens: 180,
@@ -227,7 +228,7 @@ ${transcript.trim()}`;
       'HTTP-Referer': 'https://dchat.mclellan.scot',
     },
     body: JSON.stringify({
-      model: 'deepseek/deepseek-v3.2',
+      model: getSystemModelId('debrief_extractor', user, 'deepseek/deepseek-v3.2'),
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0,

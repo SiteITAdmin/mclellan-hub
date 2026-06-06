@@ -766,9 +766,9 @@
   },
   {
     "date": "2026-06-05",
-    "codex_tokens": 33175443,
-    "claude_code_tokens": 1674905,
-    "claude_code_calls": 28,
+    "codex_tokens": 35575436,
+    "claude_code_tokens": 8407221,
+    "claude_code_calls": 89,
     "api_tokens": 77545,
     "chatgpt_conversations": 0,
     "chatgpt_messages": 0,
