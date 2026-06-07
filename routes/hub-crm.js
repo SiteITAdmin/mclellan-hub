@@ -17,7 +17,9 @@ const {
   writeLimiter, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
 const {
-  createTask, syncTasks, completeTask, deleteTask, restoreTask, getCachedTasks,
+  createTask, createSubtask, updateTask,
+  syncTasks, completeTask, deleteTask, restoreTask,
+  getTask, getCachedTasks,
 } = require('../lib/google-tasks');
 
 const googleChatClient = new OAuth2Client();
@@ -799,6 +801,64 @@ router.post('/api/tasks/:id/restore', requireAuth, requireSameOrigin, writeLimit
   const ok = restoreTask(req.hubUser, req.params.id);
   if (!ok) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });
+});
+
+router.get('/crm/tasks/:id', requireAuth, async (req, res) => {
+  // Sync from Google first so the page always shows fresh data (due dates, etc.)
+  try { await syncTasks(req.hubUser); } catch (err) {
+    console.warn('[tasks] sync on detail load failed:', err.message);
+  }
+  const task = getTask(req.hubUser, req.params.id);
+  if (!task) return res.status(404).send('Task not found');
+  const hub = db.hub();
+  const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
+  const projects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  res.render('hub/crm-task', { ...crmPageData(req.hubUser), task, contacts, companies, projects });
+});
+
+router.post('/api/tasks/sync', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const items = await syncTasks(req.hubUser);
+    res.json({ ok: true, count: items.length });
+  } catch (err) {
+    console.error('[tasks] manual sync error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const {
+    title, notes, due, deadline,
+    contact_id: contactId, company_id: companyId, project_slug: projectSlug,
+  } = req.body;
+  try {
+    await updateTask(req.hubUser, req.params.id, {
+      ...(title !== undefined && { title: String(title).trim() }),
+      ...(notes !== undefined && { notes: String(notes).trim() }),
+      ...(due !== undefined && { due: due || null }),
+      ...(deadline !== undefined && { deadline: deadline || null }),
+      ...(contactId !== undefined && { contactId: contactId || null }),
+      ...(companyId !== undefined && { companyId: companyId || null }),
+      ...(projectSlug !== undefined && { projectSlug: projectSlug || null }),
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[tasks] update error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/tasks/:id/subtasks', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const title = String(req.body.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'title required' });
+  try {
+    const sub = await createSubtask(req.hubUser, req.params.id, title);
+    res.json({ ok: true, subtask: sub });
+  } catch (err) {
+    console.error('[tasks] subtask create error', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/api/crm/note', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {

@@ -1,0 +1,225 @@
+<%- include('partials/crm-head', { title: task.title, active: 'tasks' }) %>
+
+<a class="crm-back" href="/crm/tasks">Tasks</a>
+
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">
+      <% if (task.contact_name) { %><a href="/crm/contact/<%= task.contact_id %>"><%= task.contact_name %></a><% } %>
+      <% if (task.contact_name && task.company_name) { %> · <% } %>
+      <% if (task.company_name) { %><a href="/crm/company/<%= task.company_id %>"><%= task.company_name %></a><% } %>
+      <% if (!task.contact_name && !task.company_name) { %>Task<% } %>
+    </p>
+    <h1><%= task.title %></h1>
+    <% if (task.status === 'completed') { %><span class="crm-badge" style="background:#d1fae5;color:#065f46;">Completed</span><% } %>
+    <% if (task.deleted_at) { %><span class="crm-badge" style="background:#fee2e2;color:#991b1b;">Deleted</span><% } %>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <% if (!task.deleted_at && task.status === 'needsAction') { %>
+      <button class="btn" onclick="taskAction('<%= task.id %>', 'complete')">Mark done</button>
+      <button class="btn" style="opacity:.6;" onclick="taskAction('<%= task.id %>', 'delete')">Delete</button>
+    <% } else if (task.deleted_at) { %>
+      <button class="btn" onclick="taskAction('<%= task.id %>', 'restore')">Restore</button>
+    <% } %>
+  </div>
+</section>
+
+<div class="crm-two-col">
+
+  <!-- ── Edit form ──────────────────────────────────────────────────────── -->
+  <div class="crm-stack">
+    <section class="section-card">
+      <h2>Task details</h2>
+      <form class="crm-form-grid" id="task-edit-form">
+        <label class="wide">Title
+          <input name="title" value="<%= task.title %>" required>
+        </label>
+        <label class="wide">Notes
+          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= task.notes || '' %></textarea>
+        </label>
+        <label>Due date
+          <input name="due" type="date" value="<%= task.due || '' %>">
+        </label>
+        <label>Due time <span style="font-size:11px;opacity:.6;">(local only)</span>
+          <input name="deadline" type="datetime-local"
+            value="<%= task.deadline ? task.deadline.slice(0,16) : (task.due ? task.due + 'T09:00' : '') %>">
+        </label>
+        <label>Person
+          <select name="contact_id">
+            <option value="">— none —</option>
+            <% for (const c of contacts) { %>
+              <option value="<%= c.id %>" <%= task.contact_id === c.id ? 'selected' : '' %>><%= c.name %></option>
+            <% } %>
+          </select>
+        </label>
+        <label>Company
+          <select name="company_id">
+            <option value="">— none —</option>
+            <% for (const co of companies) { %>
+              <option value="<%= co.id %>" <%= task.company_id === co.id ? 'selected' : '' %>><%= co.name %></option>
+            <% } %>
+          </select>
+        </label>
+        <label>Project
+          <select name="project_slug">
+            <option value="">— none —</option>
+            <% for (const p of projects) { %>
+              <option value="<%= p.slug %>" <%= task.project_slug === p.slug ? 'selected' : '' %>><%= p.name %></option>
+            <% } %>
+          </select>
+        </label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn" type="submit">Save changes</button>
+          <span class="crm-muted" id="edit-msg" style="font-size:12px;"></span>
+        </div>
+      </form>
+    </section>
+
+    <section class="section-card">
+      <h2>Source &amp; sync</h2>
+      <dl class="crm-dl">
+        <dt>Source</dt><dd><%= task.source %><% if (task.source_id) { %> <span class="crm-muted">(<%= task.source_id.slice(0, 20) %>…)</span><% } %></dd>
+        <dt>Google Task ID</dt><dd style="font-size:11px;word-break:break-all;"><%= task.google_task_id %></dd>
+        <dt>Created</dt><dd><%= new Date(task.created_at * 1000).toLocaleString('en-GB') %></dd>
+        <dt>Last synced</dt><dd><%= new Date(task.synced_at * 1000).toLocaleString('en-GB') %></dd>
+      </dl>
+    </section>
+  </div>
+
+  <!-- ── Subtasks ───────────────────────────────────────────────────────── -->
+  <section class="section-card">
+    <h2>Subtasks
+      <% const openSubs = task.subtasks.filter(s => s.status === 'needsAction' && !s.deleted_at); %>
+      <% const doneSubs = task.subtasks.filter(s => s.status === 'completed' || s.deleted_at); %>
+      <% if (task.subtasks.length) { %>
+        <span class="crm-count"><%= openSubs.length %> open</span>
+      <% } %>
+    </h2>
+
+    <% if (!task.subtasks.length) { %>
+      <p class="crm-muted">No subtasks yet.</p>
+    <% } %>
+
+    <% for (const s of openSubs) { %>
+      <div class="crm-subtask-row" id="sub-<%= s.id %>">
+        <label class="crm-subtask-check">
+          <input type="checkbox" onchange="completeSub('<%= s.id %>', '<%= s.google_task_id %>')">
+          <span class="crm-subtask-title"><%= s.title %></span>
+        </label>
+        <button class="crm-subtask-del" onclick="deleteSub('<%= s.id %>')" title="Delete subtask">×</button>
+      </div>
+    <% } %>
+
+    <% if (doneSubs.length) { %>
+      <details style="margin-top:12px;">
+        <summary style="font-size:12px;color:var(--crm-muted);cursor:pointer;user-select:none;">
+          <%= doneSubs.length %> completed / deleted
+        </summary>
+        <% for (const s of doneSubs) { %>
+          <div class="crm-subtask-row task-done" style="margin-top:8px;">
+            <span class="crm-subtask-title" style="text-decoration:line-through;opacity:.5;"><%= s.title %></span>
+            <% if (s.deleted_at) { %>
+              <button class="crm-subtask-del" onclick="restoreSub('<%= s.id %>')" title="Restore">↩</button>
+            <% } %>
+          </div>
+        <% } %>
+      </details>
+    <% } %>
+
+    <!-- Add subtask inline -->
+    <form class="crm-inline-form" id="subtask-form" style="margin-top:16px;">
+      <input name="title" placeholder="Add a subtask…" required style="flex:1;">
+      <button class="btn btn-sm" type="submit">Add</button>
+    </form>
+    <p class="crm-muted" id="subtask-msg" style="font-size:12px;margin-top:4px;"></p>
+  </section>
+
+</div>
+
+<script>
+const TASK_ID = '<%= task.id %>';
+
+// Save edits
+document.getElementById('task-edit-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('edit-msg');
+  const btn = e.target.querySelector('button[type=submit]');
+  const data = Object.fromEntries(new FormData(e.target));
+  btn.disabled = true;
+  msg.textContent = 'Saving…';
+  try {
+    const r = await fetch(`/api/tasks/${TASK_ID}/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      msg.textContent = 'Saved.';
+      setTimeout(() => { msg.textContent = ''; }, 2500);
+    } else {
+      msg.textContent = j.error || 'Error saving.';
+    }
+  } catch (err) {
+    msg.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Top-level task actions (complete / delete / restore)
+async function taskAction(id, action) {
+  const r = await fetch(`/api/tasks/${id}/${action}`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) window.location.href = '/crm/tasks';
+  else alert('Error: ' + (j.error || action));
+}
+
+// Add subtask
+document.getElementById('subtask-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('subtask-msg');
+  const input = e.target.querySelector('input[name=title]');
+  const title = input.value.trim();
+  if (!title) return;
+  msg.textContent = 'Adding…';
+  try {
+    const r = await fetch(`/api/tasks/${TASK_ID}/subtasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    const j = await r.json();
+    if (j.ok) { input.value = ''; msg.textContent = ''; location.reload(); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+});
+
+// Complete a subtask by checking the checkbox
+async function completeSub(localId, googleTaskId) {
+  const row = document.getElementById('sub-' + localId);
+  if (row) row.style.opacity = '.4';
+  try {
+    const r = await fetch(`/api/tasks/${localId}/complete`, { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) setTimeout(() => location.reload(), 400);
+    else { if (row) row.style.opacity = ''; alert('Error: ' + j.error); }
+  } catch (err) { if (row) row.style.opacity = ''; alert(err.message); }
+}
+
+async function deleteSub(localId) {
+  const r = await fetch(`/api/tasks/${localId}/delete`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+
+async function restoreSub(localId) {
+  const r = await fetch(`/api/tasks/${localId}/restore`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+</script>
+
+<%- include('partials/crm-foot') %>
