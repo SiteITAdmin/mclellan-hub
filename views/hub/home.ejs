@@ -90,7 +90,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       <% } %>
 
       <% if (recentMeeting) { %>
-        <span class="today-item">Last meeting: <strong style="margin-left:4px"><%= recentMeeting %></strong></span>
+        <a href="/crm/meeting/<%= recentMeeting.id %>" class="today-item">Last meeting: <strong style="margin-left:4px"><%= recentMeeting.title %></strong></a>
       <% } %>
 
     </div>
@@ -107,14 +107,14 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
     <a href="https://wiki.mclellan.scot" class="hub-tile">
       <div class="hub-tile-icon">📚</div>
-      <div class="hub-tile-label">Projects &amp; Wiki</div>
-      <div class="hub-tile-desc">Browse synthesised knowledge by project, topic, or person.</div>
+      <div class="hub-tile-label">Wiki</div>
+      <div class="hub-tile-desc">Synthesised knowledge by topic, person, and area. Fed from CRM and debriefs.</div>
     </a>
 
-    <a href="/crm" class="hub-tile">
+    <a href="/crm/contacts" class="hub-tile">
       <div class="hub-tile-icon">👥</div>
-      <div class="hub-tile-label">CRM &amp; People</div>
-      <div class="hub-tile-desc">Contacts, meeting history, facts, and briefings.</div>
+      <div class="hub-tile-label">CRM</div>
+      <div class="hub-tile-desc">People, companies, meetings, tasks, and projects — your relationship hub.</div>
     </a>
 
     <a href="/debrief" class="hub-tile">

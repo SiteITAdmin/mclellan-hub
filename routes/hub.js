@@ -187,17 +187,13 @@ router.get('/', requireAuth, async (req, res) => {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London',
   });
 
-  // Most recent meeting note
-  const fs = require('fs');
-  const path = require('path');
-  const vault = vaultRoot();
+  // Most recent meeting from database
   let recentMeeting = null;
   try {
-    const meetDir = path.join(vault, 'Meetings');
-    if (fs.existsSync(meetDir)) {
-      const files = fs.readdirSync(meetDir).filter(f => f.endsWith('.md')).sort().reverse();
-      if (files.length) recentMeeting = files[0].replace(/\.md$/, '').replace(/^\d{4}-\d{2}-\d{2}-/, '').replace(/-/g, ' ');
-    }
+    const meetRow = hub.prepare(
+      `SELECT id, title, meeting_date FROM meetings WHERE user = ? ORDER BY meeting_date DESC, created_at DESC LIMIT 1`
+    ).get(user);
+    if (meetRow) recentMeeting = { id: meetRow.id, title: meetRow.title, date: meetRow.meeting_date };
   } catch (_) {}
 
   // Calendar events

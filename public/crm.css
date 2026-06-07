@@ -105,3 +105,12 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .crm-dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 13px; margin: 0; }
 .crm-dl dt { color: var(--crm-muted); font-weight: 500; white-space: nowrap; }
 .crm-dl dd { margin: 0; word-break: break-word; }
+
+/* ── Upcoming meetings ───────────────────────────────────────────────────── */
+.crm-timeline-upcoming { border-left-color: var(--crm-accent); background: rgba(86,83,232,.04); border-radius: 0 6px 6px 0; }
+.crm-row-upcoming { background: rgba(86,83,232,.04); border-radius: 6px; padding-left: 10px; }
+
+/* ── Fact archive ────────────────────────────────────────────────────────── */
+.crm-timeline-archived { opacity: .45; }
+.crm-fact-archive { border: 0; background: transparent; color: var(--crm-muted); font-size: 11px; cursor: pointer; padding: 0 2px; white-space: nowrap; }
+.crm-fact-archive:hover { color: var(--crm-accent); }
