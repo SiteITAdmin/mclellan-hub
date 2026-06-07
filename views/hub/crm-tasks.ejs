@@ -1,0 +1,107 @@
+<%- include('partials/crm-head', { title: 'Tasks', active: 'tasks' }) %>
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Google Tasks</p>
+    <h1>Tasks</h1>
+    <p>All tasks synced from Google Tasks, with links to people, companies, and projects.</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <a href="/crm/tasks?show_history=<%= showHistory ? '0' : '1' %>" class="btn btn-sm" style="opacity:.7;">
+      <%= showHistory ? 'Hide history' : 'Show history' %>
+    </a>
+  </div>
+</section>
+
+<!-- Add task form -->
+<section class="section-card" style="margin-bottom:24px;">
+  <h2>Add task</h2>
+  <form class="crm-form-grid" id="task-add-form">
+    <label class="wide">Title<input name="title" required placeholder="What needs doing?"></label>
+    <label class="wide">Notes<input name="notes" placeholder="Optional details or context"></label>
+    <label>Due date<input name="due" type="date"></label>
+    <label>Person
+      <select name="contact_id">
+        <option value="">— no person —</option>
+        <% for (const c of contacts) { %><option value="<%= c.id %>"><%= c.name %></option><% } %>
+      </select>
+    </label>
+    <label>Company
+      <select name="company_id">
+        <option value="">— no company —</option>
+        <% for (const co of companies) { %><option value="<%= co.id %>"><%= co.name %></option><% } %>
+      </select>
+    </label>
+    <label>Project
+      <select name="project_slug">
+        <option value="">— no project —</option>
+        <% for (const p of projects) { %><option value="<%= p.slug %>"><%= p.name %></option><% } %>
+      </select>
+    </label>
+    <button class="btn" type="submit">Add to Google Tasks</button>
+    <p class="crm-muted task-form-msg" id="task-form-msg"></p>
+  </form>
+</section>
+
+<!-- Task list -->
+<% const open = tasks.filter(t => t.status === 'needsAction' && !t.deleted_at); %>
+<% const done = tasks.filter(t => t.status === 'completed' && !t.deleted_at); %>
+<% const deleted = tasks.filter(t => t.deleted_at); %>
+
+<section class="section-card">
+  <h2>Open (<%= open.length %>)</h2>
+  <% if (!open.length) { %><p class="crm-muted">No open tasks. Nice.</p><% } %>
+  <% for (const t of open) { %>
+    <%- include('partials/task-row', { t, showHistory }) %>
+  <% } %>
+</section>
+
+<% if (showHistory && done.length) { %>
+<section class="section-card" style="margin-top:16px;">
+  <h2>Completed (<%= done.length %>)</h2>
+  <% for (const t of done) { %>
+    <%- include('partials/task-row', { t, showHistory }) %>
+  <% } %>
+</section>
+<% } %>
+
+<% if (showHistory && deleted.length) { %>
+<section class="section-card" style="margin-top:16px;">
+  <h2>Deleted (<%= deleted.length %>)</h2>
+  <% for (const t of deleted) { %>
+    <%- include('partials/task-row', { t, showHistory }) %>
+  <% } %>
+</section>
+<% } %>
+
+<script>
+document.getElementById('task-add-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('task-form-msg');
+  const btn = e.target.querySelector('button[type=submit]');
+  const data = Object.fromEntries(new FormData(e.target));
+  btn.disabled = true;
+  msg.textContent = 'Adding…';
+  try {
+    const r = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = 'Added! Refreshing…'; setTimeout(() => location.reload(), 800); }
+    else msg.textContent = j.error || 'Error adding task.';
+  } catch (err) {
+    msg.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function taskAction(id, action) {
+  const r = await fetch(`/api/tasks/${id}/${action}`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + (j.error || action + ' failed'));
+}
+</script>
+<%- include('partials/crm-foot') %>

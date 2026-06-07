@@ -1,0 +1,29 @@
+<div class="crm-task-row<%= t.deleted_at ? ' task-deleted' : t.status === 'completed' ? ' task-done' : '' %>">
+  <div class="crm-task-main">
+    <span class="crm-task-title"><%= t.title %></span>
+    <% if (t.notes) { %><span class="crm-task-notes"><%= t.notes.split('\n')[0].slice(0, 120) %></span><% } %>
+    <div class="crm-task-meta">
+      <% if (t.due) { %>
+        <span class="crm-badge"><%= new Date(t.due).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></span>
+      <% } %>
+      <% if (t.contact_name) { %>
+        <a class="crm-badge" href="/crm/contact/<%= t.contact_id %>"><%= t.contact_name %></a>
+      <% } %>
+      <% if (t.company_name) { %>
+        <a class="crm-badge subtle" href="/crm/company/<%= t.company_id %>"><%= t.company_name %></a>
+      <% } %>
+      <% if (t.project_slug) { %>
+        <a class="crm-badge subtle" href="/c/<%= t.project_slug %>"><%= t.project_slug %></a>
+      <% } %>
+      <span class="crm-badge subtle"><%= t.source %></span>
+    </div>
+  </div>
+  <div class="crm-task-actions">
+    <% if (!t.deleted_at && t.status === 'needsAction') { %>
+      <button class="btn btn-sm" onclick="taskAction('<%= t.id %>', 'complete')">Done</button>
+      <button class="btn btn-sm btn-ghost" onclick="taskAction('<%= t.id %>', 'delete')">Delete</button>
+    <% } else if (t.deleted_at) { %>
+      <button class="btn btn-sm btn-ghost" onclick="taskAction('<%= t.id %>', 'restore')">Restore</button>
+    <% } %>
+  </div>
+</div>

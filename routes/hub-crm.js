@@ -16,6 +16,9 @@ const { uuid } = require('../lib/id');
 const {
   writeLimiter, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
+const {
+  createTask, syncTasks, completeTask, deleteTask, restoreTask, getCachedTasks,
+} = require('../lib/google-tasks');
 
 const googleChatClient = new OAuth2Client();
 const GOOGLE_CHAT_ADDON_EMAIL_RE = /^service-\d+@gcp-sa-gsuiteaddons\.iam\.gserviceaccount\.com$/;
@@ -368,6 +371,7 @@ function crmPageData(user) {
       { href: '/crm/contacts', label: 'People' },
       { href: '/crm/companies', label: 'Companies' },
       { href: '/crm/meetings', label: 'Meetings' },
+      { href: '/crm/tasks', label: 'Tasks' },
     ],
   };
 }
@@ -429,9 +433,11 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
   }
   const workedWith = [...coworkerIds].map(id => contactMap.get(id)).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
   const openActions = facts.filter(f => f.fact_type === 'action' && ['active', 'follow_up'].includes(f.status));
+  const showHistory = req.query.show_history === '1';
+  const tasks = getCachedTasks(req.hubUser, { contactId: contact.id }, showHistory);
 
   res.render('hub/crm-contact', {
-    ...crmPageData(req.hubUser), contact, companies, meetings, facts, workedWith, openActions,
+    ...crmPageData(req.hubUser), contact, companies, meetings, facts, workedWith, openActions, tasks, showHistory,
   });
 });
 
@@ -491,8 +497,11 @@ router.get('/crm/company/:id', requireAuth, (req, res) => {
     || parseJsonArray(f.linked_contacts).some(id => contactIds.has(id))
   );
   const availableContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  const showHistory = req.query.show_history === '1';
+  const tasks = getCachedTasks(req.hubUser, { companyId: company.id }, showHistory);
+
   res.render('hub/crm-company', {
-    ...crmPageData(req.hubUser), company, contacts, meetings, facts, availableContacts,
+    ...crmPageData(req.hubUser), company, contacts, meetings, facts, availableContacts, tasks, showHistory,
   });
 });
 
@@ -725,6 +734,70 @@ router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writ
 router.post('/api/crm/facts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const result = db.hub().prepare('DELETE FROM crm_facts WHERE id = ? AND user = ?').run(req.params.id, req.hubUser);
   if (!result.changes) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+
+router.get('/crm/tasks', requireAuth, async (req, res) => {
+  const showHistory = req.query.show_history === '1';
+  try {
+    await syncTasks(req.hubUser);
+  } catch (err) {
+    console.warn('[tasks] sync on page load failed:', err.message);
+  }
+  const tasks = getCachedTasks(req.hubUser, {}, showHistory);
+  const hub = db.hub();
+  const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
+  const projects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  res.render('hub/crm-tasks', { ...crmPageData(req.hubUser), tasks, showHistory, contacts, companies, projects });
+});
+
+router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const title = String(req.body.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'title required' });
+  try {
+    const task = await createTask(req.hubUser, {
+      title,
+      notes: String(req.body.notes || '').trim() || null,
+      due: req.body.due || null,
+      source: 'manual',
+      contactId: req.body.contact_id || null,
+      companyId: req.body.company_id || null,
+      projectSlug: req.body.project_slug || null,
+    });
+    res.json({ ok: true, task });
+  } catch (err) {
+    console.error('[tasks] create error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/tasks/:id/complete', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const hub = db.hub();
+  const row = hub.prepare('SELECT * FROM google_tasks WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  try {
+    await completeTask(req.hubUser, row.google_task_id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[tasks] complete error', err);
+    // Fall back to local-only complete if Google API fails
+    hub.prepare("UPDATE google_tasks SET status = 'completed' WHERE id = ?").run(row.id);
+    res.json({ ok: true, localOnly: true });
+  }
+});
+
+router.post('/api/tasks/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const ok = deleteTask(req.hubUser, req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+router.post('/api/tasks/:id/restore', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const ok = restoreTask(req.hubUser, req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });
 });
 
