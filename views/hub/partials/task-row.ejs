@@ -1,6 +1,6 @@
 <div class="crm-task-row<%= t.deleted_at ? ' task-deleted' : t.status === 'completed' ? ' task-done' : '' %>">
   <div class="crm-task-main">
-    <span class="crm-task-title"><%= t.title %></span>
+    <a class="crm-task-title" href="/crm/tasks/<%= t.id %>"><%= t.title %></a>
     <% if (t.notes) { %><span class="crm-task-notes"><%= t.notes.split('\n')[0].slice(0, 120) %></span><% } %>
     <div class="crm-task-meta">
       <% if (t.due) { %>
