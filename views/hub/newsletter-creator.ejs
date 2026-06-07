@@ -46,16 +46,22 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <strong style="font-size:14px;">Articles (<%= articles.length %>)</strong>
-        <button class="btn btn-subtle btn-sm" id="fetch-btn" onclick="fetchFeed()">↻ Fetch now</button>
+        <div style="display:flex;gap:6px;">
+          <% if (articles.length) { %>
+            <a class="btn btn-subtle btn-sm" href="/newsletter/creator/<%= feed.creator_slug %>/read">Reading list ↗</a>
+          <% } %>
+          <button class="btn btn-subtle btn-sm" id="fetch-btn" onclick="fetchFeed()">↻ Fetch now</button>
+        </div>
       </div>
       <p class="status-msg" id="fetch-msg"></p>
       <div class="article-list">
         <% for (const a of articles) { %>
           <div class="article-card">
-            <h3><a href="<%= a.url %>" target="_blank" rel="noopener"><%= a.title %></a></h3>
+            <h3><a href="/newsletter/creator/<%= feed.creator_slug %>/article/<%= a.id %>"><%= a.title %></a></h3>
             <div class="article-meta">
               <%= new Date(a.published_at * 1000).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) %>
               · <%= a.word_count %> words
+              · <a href="<%= a.url %>" target="_blank" rel="noopener" style="color:var(--text-dim)">Substack ↗</a>
             </div>
             <div class="article-excerpt"><%= (a.excerpt || '').replace(/\n+/g, ' ').slice(0, 220) %>…</div>
           </div>

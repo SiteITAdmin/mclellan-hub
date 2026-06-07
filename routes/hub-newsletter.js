@@ -13,6 +13,29 @@ const { ingestFeed } = require('../lib/rss-ingest');
 const { listUserLabels } = require('../lib/gmail');
 const { writeWikiPage } = require('../lib/vault');
 
+function markdownToHtml(md) {
+  return String(md || '')
+    .replace(/^#{4}\s+(.*)$/gm, '<h4>$1</h4>')
+    .replace(/^#{3}\s+(.*)$/gm, '<h3>$1</h3>')
+    .replace(/^#{2}\s+(.*)$/gm, '<h2>$1</h2>')
+    .replace(/^#{1}\s+(.*)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/^---+$/gm, '<hr>')
+    .replace(/^>\s+(.*)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/^[-*]\s+(.*)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    .split(/\n{2,}/)
+    .map(block => {
+      block = block.trim();
+      if (!block) return '';
+      if (/^<(h[1-6]|ul|ol|li|blockquote|hr)/.test(block)) return block;
+      return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+    })
+    .join('\n');
+}
+
 // ── Main curation page ────────────────────────────────────────────────────────
 
 router.get('/', (req, res) => {
@@ -357,6 +380,31 @@ router.get('/creator/:slug', (req, res) => {
     ORDER BY created_at DESC LIMIT 10
   `).all(req.hubUser, `creator-${req.params.slug}-%`);
   res.render('hub/newsletter-creator', { user: req.hubUser, feed, articles, briefings });
+});
+
+router.get('/creator/:slug/read', (req, res) => {
+  const hub = db.hub();
+  const feed = hub.prepare('SELECT * FROM rss_feeds WHERE user = ? AND creator_slug = ?').get(req.hubUser, req.params.slug);
+  if (!feed) return res.status(404).send('Creator not found');
+  const articles = hub.prepare(`
+    SELECT id, title, url, published_at, word_count, content_markdown
+    FROM rss_articles WHERE user = ? AND creator_slug = ?
+    ORDER BY published_at DESC
+  `).all(req.hubUser, req.params.slug);
+  res.render('hub/newsletter-readinglist', { user: req.hubUser, feed, articles, markdownToHtml });
+});
+
+router.get('/creator/:slug/article/:id', (req, res) => {
+  const hub = db.hub();
+  const feed = hub.prepare('SELECT * FROM rss_feeds WHERE user = ? AND creator_slug = ?').get(req.hubUser, req.params.slug);
+  if (!feed) return res.status(404).send('Creator not found');
+  const article = hub.prepare('SELECT * FROM rss_articles WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!article) return res.status(404).send('Article not found');
+  const allArticles = hub.prepare('SELECT id, title, published_at FROM rss_articles WHERE user = ? AND creator_slug = ? ORDER BY published_at DESC').all(req.hubUser, req.params.slug);
+  const idx = allArticles.findIndex(a => a.id === article.id);
+  const prev = allArticles[idx + 1] || null;
+  const next = allArticles[idx - 1] || null;
+  res.render('hub/newsletter-article', { user: req.hubUser, feed, article, prev, next, markdownToHtml });
 });
 
 router.post('/creator/:slug/briefing', async (req, res) => {
