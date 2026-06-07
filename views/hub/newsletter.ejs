@@ -166,7 +166,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <!-- ── Generate & Send ───────────────────────────────────────────────────── -->
   <div class="section-card">
     <p class="section-title">Generate briefing</p>
-    <p class="section-desc">Choose a format and generate a briefing from the selected topics above.</p>
+    <p class="section-desc">Choose a format and date range. The briefing uses selected topics received within that range.</p>
     <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
       <div class="field" style="min-width:200px">
         <label>Format</label>
@@ -175,6 +175,14 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
           <option value="<%= f.id %>" <%= f.is_default ? 'selected' : '' %>><%= f.name %></option>
           <% } %>
         </select>
+      </div>
+      <div class="field" style="min-width:150px">
+        <label>From</label>
+        <input id="gen-date-from" type="date" value="<%= defaultDateFrom %>" required>
+      </div>
+      <div class="field" style="min-width:150px">
+        <label>To</label>
+        <input id="gen-date-to" type="date" value="<%= defaultDateTo %>" required>
       </div>
       <button class="btn btn-primary" onclick="generateBriefing()">Generate</button>
       <span id="gen-status" style="font-size:13px;color:var(--text-dim)"></span>
@@ -195,7 +203,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <div class="mgmt-grid">
       <% for (const b of briefings) { %>
       <div class="mgmt-card">
-        <div class="mgmt-card-name"><%= b.week_key %></div>
+        <div class="mgmt-card-name"><%= briefingPeriodLabel(b) %></div>
         <div class="mgmt-card-meta">
           <%= b.topic_count %> topics · <%= b.format_name || 'unknown format' %>
           <% if (b.sent_at) { %> · Sent <%= new Date(b.sent_at * 1000).toLocaleDateString('en-GB') %><% } %>
@@ -468,19 +476,34 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
   window.generateBriefing = async function() {
     const formatId = document.getElementById('gen-format')?.value;
+    const dateFrom = document.getElementById('gen-date-from')?.value;
+    const dateTo = document.getElementById('gen-date-to')?.value;
     const status = document.getElementById('gen-status');
+    if (!dateFrom || !dateTo) {
+      status.textContent = '⚠ Choose both From and To dates.';
+      return;
+    }
+    if (dateFrom > dateTo) {
+      status.textContent = '⚠ From date must be on or before To date.';
+      return;
+    }
     status.textContent = 'Generating…';
     try {
       const r = await fetch('/newsletter/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `week=<%= weekKey %>&format_id=${encodeURIComponent(formatId || '')}`,
+        body: new URLSearchParams({
+          week: '<%= weekKey %>',
+          format_id: formatId || '',
+          date_from: dateFrom,
+          date_to: dateTo,
+        }).toString(),
       });
       const data = await r.json();
       if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); return; }
 
       currentBriefingId = data.id;
-      status.textContent = `✓ Generated — ${data.topicCount} topics`;
+      status.textContent = `✓ Generated — ${data.topicCount} topics · ${data.periodLabel}`;
 
       const wrap = document.getElementById('preview-wrap');
       const frame = document.getElementById('preview-frame');

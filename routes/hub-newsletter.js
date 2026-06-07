@@ -6,6 +6,7 @@ const db = require('../lib/db');
 const { uuid } = require('../lib/id');
 const {
   getWeekKey, weekKeyLabel,
+  weekKeyRange, briefingPeriodLabel,
   backfillFromLabels, generateBriefing, buildBriefingPdf, sendBriefing,
 } = require('../lib/newsletter-pipeline');
 const { listUserLabels } = require('../lib/gmail');
@@ -16,7 +17,9 @@ const { writeWikiPage } = require('../lib/vault');
 router.get('/', (req, res) => {
   const user = req.hubUser;
   const hub = db.hub();
-  const weekKey = req.query.week || getWeekKey();
+  const requestedWeek = req.query.week || getWeekKey();
+  const defaultRange = weekKeyRange(requestedWeek) || weekKeyRange(getWeekKey());
+  const weekKey = weekKeyRange(requestedWeek) ? requestedWeek : getWeekKey();
 
   // Available weeks (last 8)
   const weeks = hub.prepare(`
@@ -51,6 +54,9 @@ router.get('/', (req, res) => {
 
   res.render('hub/newsletter', {
     user, weekKey, weekLabel: weekKeyLabel(weekKey),
+    defaultDateFrom: defaultRange.dateFrom,
+    defaultDateTo: defaultRange.dateTo,
+    briefingPeriodLabel,
     weeks, grouped, formats, interests, briefings, models,
     totalTopics: topics.length,
     selectedTopics: topics.filter(t => t.selected).length,
@@ -108,10 +114,16 @@ router.post('/backfill', async (req, res) => {
 // ── Generate briefing ─────────────────────────────────────────────────────────
 
 router.post('/generate', async (req, res) => {
-  const { week, format_id } = req.body;
+  const { week, format_id, date_from, date_to } = req.body;
   const weekKey = week || getWeekKey();
   try {
-    const result = await generateBriefing({ user: req.hubUser, weekKey, formatId: format_id || null });
+    const result = await generateBriefing({
+      user: req.hubUser,
+      weekKey,
+      formatId: format_id || null,
+      dateFrom: date_from,
+      dateTo: date_to,
+    });
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[newsletter] generate error:', err);
@@ -148,9 +160,12 @@ router.post('/briefing/:id/wiki', (req, res) => {
   const b = hub.prepare('SELECT * FROM nl_briefings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
   if (!b) return res.status(404).json({ error: 'Briefing not found' });
 
-  const slug = `briefing-${b.week_key.toLowerCase()}`;
+  const periodLabel = briefingPeriodLabel(b);
+  const slug = b.date_from && b.date_to
+    ? `briefing-${b.date_from}-to-${b.date_to}`
+    : `briefing-${b.week_key.toLowerCase()}`;
   const dateStr = new Date(b.created_at * 1000).toISOString().slice(0, 10);
-  const frontmatter = `title: "Intelligence Briefing — ${weekKeyLabel(b.week_key)}"\ndate: ${dateStr}\ntags: [briefing, intelligence]\nsource: hub-newsletter`;
+  const frontmatter = `title: "Intelligence Briefing — ${periodLabel}"\ndate: ${dateStr}\ntags: [briefing, intelligence]\nsource: hub-newsletter`;
 
   writeWikiPage(slug, frontmatter, b.text_content || '');
   hub.prepare('UPDATE nl_briefings SET wiki_slug = ? WHERE id = ?').run(slug, b.id);
