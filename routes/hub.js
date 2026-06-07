@@ -187,12 +187,32 @@ router.get('/', requireAuth, async (req, res) => {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London',
   });
 
-  // Most recent meeting from database
+  // Most recent completed meeting from database
   let recentMeeting = null;
   try {
+    const nowParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Dublin',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const nowPart = type => nowParts.find(part => part.type === type)?.value;
+    const todayIso = `${nowPart('year')}-${nowPart('month')}-${nowPart('day')}`;
+    const currentTime = `${nowPart('hour')}:${nowPart('minute')}`;
     const meetRow = hub.prepare(
-      `SELECT id, title, meeting_date FROM meetings WHERE user = ? ORDER BY meeting_date DESC, created_at DESC LIMIT 1`
-    ).get(user);
+      `SELECT id, title, meeting_date
+       FROM meetings
+       WHERE user = ?
+         AND (
+           meeting_date < ?
+           OR (meeting_date = ? AND meeting_time != '' AND meeting_time <= ?)
+         )
+       ORDER BY meeting_date DESC, meeting_time DESC, created_at DESC
+       LIMIT 1`
+    ).get(user, todayIso, todayIso, currentTime);
     if (meetRow) recentMeeting = { id: meetRow.id, title: meetRow.title, date: meetRow.meeting_date };
   } catch (_) {}
 
