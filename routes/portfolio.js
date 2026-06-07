@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../lib/db');
+const { weekKeyLabel } = require('../lib/newsletter-pipeline');
 const { routeMessage } = require('../lib/router');
 const { uuid } = require('../lib/id');
 const { getSystemModelKey } = require('../lib/settings');
@@ -456,6 +457,137 @@ function getGmailTransport() {
     auth: { user, pass },
   });
 }
+
+// ── RSS feed ─────────────────────────────────────────────────────────────────
+
+router.get('/feed.xml', (req, res) => {
+  if (req.portfolioUser !== 'douglas') return res.status(404).end();
+  const hub = db.hub();
+
+  const briefings = hub.prepare(`
+    SELECT id, week_key, text_content, topic_count, created_at, published_at
+    FROM nl_briefings WHERE user = 'douglas' AND published_at IS NOT NULL
+    ORDER BY published_at DESC LIMIT 20
+  `).all();
+
+  const linkedinPosts = hub.prepare(`
+    SELECT id, topic, refined_draft, draft, created_at
+    FROM linkedin_posts WHERE user = 'douglas' AND status = 'published'
+    ORDER BY created_at DESC LIMIT 20
+  `).all();
+
+  const escXml = s => String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+  const toRfc822 = ts => new Date(ts * 1000).toUTCString();
+
+  const items = [
+    ...briefings.map(b => ({
+      title: `Intelligence Briefing — ${weekKeyLabel(b.week_key)}`,
+      link: `https://douglas.mclellan.scot/briefing/${b.id}`,
+      description: (b.text_content || '').slice(0, 500).replace(/[#*`]/g, '').trim() + '…',
+      pubDate: toRfc822(b.published_at),
+      category: 'Intelligence Briefing',
+      ts: b.published_at,
+    })),
+    ...linkedinPosts.map(p => ({
+      title: escXml(p.topic),
+      link: `https://douglas.mclellan.scot/`,
+      description: ((p.refined_draft || p.draft || '').slice(0, 500).replace(/[#*`]/g, '').trim()) + '…',
+      pubDate: toRfc822(p.created_at),
+      category: 'LinkedIn',
+      ts: p.created_at,
+    })),
+  ].sort((a, b) => b.ts - a.ts);
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Douglas McLellan — Intelligence &amp; Analysis</title>
+    <link>https://douglas.mclellan.scot</link>
+    <description>Weekly intelligence briefings and analysis on AI, Microsoft 365, healthcare IT, and technology strategy by Douglas McLellan.</description>
+    <language>en-GB</language>
+    <atom:link href="https://douglas.mclellan.scot/feed.xml" rel="self" type="application/rss+xml"/>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+${items.map(item => `    <item>
+      <title>${escXml(item.title)}</title>
+      <link>${escXml(item.link)}</link>
+      <description>${escXml(item.description)}</description>
+      <pubDate>${item.pubDate}</pubDate>
+      <category>${escXml(item.category)}</category>
+      <guid isPermaLink="false">${escXml(item.link)}-${item.ts}</guid>
+    </item>`).join('\n')}
+  </channel>
+</rss>`;
+
+  res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
+  res.send(xml);
+});
+
+// ── llms.txt ─────────────────────────────────────────────────────────────────
+
+router.get('/llms.txt', (req, res) => {
+  if (req.portfolioUser !== 'douglas') return res.status(404).end();
+  const hub = db.hub();
+
+  const briefings = hub.prepare(`
+    SELECT week_key, text_content, topic_count, published_at
+    FROM nl_briefings WHERE user = 'douglas' AND published_at IS NOT NULL
+    ORDER BY published_at DESC LIMIT 10
+  `).all();
+
+  const linkedinPosts = hub.prepare(`
+    SELECT topic, refined_draft, draft, created_at
+    FROM linkedin_posts WHERE user = 'douglas' AND status = 'published'
+    ORDER BY created_at DESC LIMIT 10
+  `).all();
+
+  const lines = [
+    '# Douglas McLellan',
+    '',
+    '> Senior technology professional specialising in AI strategy, Microsoft 365, identity governance, and healthcare IT. Based in Ireland.',
+    '',
+    '## About',
+    '',
+    '- Role: IT Manager / AI Strategist, Beacon Hospital Private Clinic',
+    '- Focus: Microsoft 365 administration, AI governance, EU AI Act compliance, Zero Trust identity',
+    '- Location: Ireland',
+    '- Contact: https://douglas.mclellan.scot',
+    '',
+    '## Intelligence Briefings',
+    '',
+    'Weekly curated analysis of AI, Microsoft 365, healthcare IT, and technology policy.',
+    '',
+  ];
+
+  for (const b of briefings) {
+    const date = new Date(b.published_at * 1000).toISOString().slice(0, 10);
+    lines.push(`### Intelligence Briefing — ${weekKeyLabel(b.week_key)} (${date})`);
+    lines.push('');
+    lines.push((b.text_content || '').replace(/^#{1,6} /gm, '#### ').trim());
+    lines.push('');
+  }
+
+  if (linkedinPosts.length) {
+    lines.push('## Published Analysis');
+    lines.push('');
+    for (const p of linkedinPosts) {
+      const date = new Date(p.created_at * 1000).toISOString().slice(0, 10);
+      lines.push(`### ${p.topic} (${date})`);
+      lines.push('');
+      lines.push((p.refined_draft || p.draft || '').trim());
+      lines.push('');
+    }
+  }
+
+  lines.push('## Feed');
+  lines.push('');
+  lines.push('RSS: https://douglas.mclellan.scot/feed.xml');
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(lines.join('\n'));
+});
 
 // ── Public portfolio ──────────────────────────────────────────────────────────
 router.get('/', (req, res) => {

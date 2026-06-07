@@ -9,6 +9,7 @@ const {
   backfillFromLabels, generateBriefing, buildBriefingPdf, sendBriefing,
 } = require('../lib/newsletter-pipeline');
 const { listUserLabels } = require('../lib/gmail');
+const { writeWikiPage } = require('../lib/vault');
 
 // ── Main curation page ────────────────────────────────────────────────────────
 
@@ -130,6 +131,46 @@ router.post('/send', async (req, res) => {
     console.error('[newsletter] send error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Delete briefing ───────────────────────────────────────────────────────────
+
+router.post('/briefing/:id/delete', (req, res) => {
+  const hub = db.hub();
+  hub.prepare('DELETE FROM nl_briefings WHERE id = ? AND user = ?').run(req.params.id, req.hubUser);
+  res.json({ ok: true });
+});
+
+// ── Export briefing to wiki ───────────────────────────────────────────────────
+
+router.post('/briefing/:id/wiki', (req, res) => {
+  const hub = db.hub();
+  const b = hub.prepare('SELECT * FROM nl_briefings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!b) return res.status(404).json({ error: 'Briefing not found' });
+
+  const slug = `briefing-${b.week_key.toLowerCase()}`;
+  const dateStr = new Date(b.created_at * 1000).toISOString().slice(0, 10);
+  const frontmatter = `title: "Intelligence Briefing — ${weekKeyLabel(b.week_key)}"\ndate: ${dateStr}\ntags: [briefing, intelligence]\nsource: hub-newsletter`;
+
+  writeWikiPage(slug, frontmatter, b.text_content || '');
+  hub.prepare('UPDATE nl_briefings SET wiki_slug = ? WHERE id = ?').run(slug, b.id);
+  res.json({ ok: true, slug });
+});
+
+// ── Publish / unpublish briefing to public feed ───────────────────────────────
+
+router.post('/briefing/:id/publish', (req, res) => {
+  const hub = db.hub();
+  const b = hub.prepare('SELECT id FROM nl_briefings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!b) return res.status(404).json({ error: 'Briefing not found' });
+  hub.prepare('UPDATE nl_briefings SET published_at = unixepoch() WHERE id = ?').run(b.id);
+  res.json({ ok: true });
+});
+
+router.post('/briefing/:id/unpublish', (req, res) => {
+  const hub = db.hub();
+  hub.prepare('UPDATE nl_briefings SET published_at = NULL WHERE id = ? AND user = ?').run(req.params.id, req.hubUser);
+  res.json({ ok: true });
 });
 
 // ── PDF download ──────────────────────────────────────────────────────────────
