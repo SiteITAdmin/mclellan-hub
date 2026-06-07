@@ -8,6 +8,7 @@ const { fileToMarkdown, withProjectFrontmatter, SUPPORTED_EXTS, fetchUrl } = req
 const { uuid } = require('../lib/id');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { processCrmCommand, fetchTodayCalendarEvents } = require('../lib/crm');
+const { createTask, syncTasks, completeTask, getCachedTasks } = require('../lib/google-tasks');
 const { compactProject } = require('../lib/memory-compactor');
 const { vaultRoot } = require('../lib/obsidian-vault');
 const { getWikiPagesByTags } = require('../lib/wiki-tags');
@@ -155,6 +156,7 @@ router.get('/auth/google', (req, res, next) =>
       'https://www.googleapis.com/auth/drive.readonly',
       'https://www.googleapis.com/auth/drive.file',
       'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/tasks',
     ],
   })(req, res, next)
 );
@@ -402,6 +404,71 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
       console.error('[crm] command error', err);
       res.write(`data: ${JSON.stringify({ chunk: '\x00' + '_CRM error: ' + err.message + '_' })}\n\n`);
       res.write(`data: ${JSON.stringify({ done: true, convId, model: 'crm', projectSlug: null })}\n\n`);
+    }
+    try { res.end(); } catch (_) {}
+    return;
+  }
+
+  // Detect /tasks command — list, add, or complete tasks via Google Tasks API
+  // Syntax: /tasks               → list open tasks (sync from Google first)
+  //         /tasks add <title>   → create a new task
+  //         /tasks done <title>  → complete a task by title match
+  const tasksCmd = content.match(/^\/tasks(?:\s+([\s\S]+))?$/i);
+  if (tasksCmd) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    const convId = existingConvId || uuid();
+    if (!existingConvId) {
+      db.hub().prepare('INSERT INTO conversations (id, user, title) VALUES (?, ?, ?)').run(convId, req.hubUser, content.slice(0, 60));
+    }
+    res.write(`data: ${JSON.stringify({ convId, userMsgId: uuid(), projectSlug: null })}\n\n`);
+    db.hub().prepare(
+      `INSERT INTO messages (id, conversation_id, role, content, user) VALUES (?, ?, 'user', ?, ?)`
+    ).run(uuid(), convId, content, req.hubUser);
+    try {
+      const arg = (tasksCmd[1] || '').trim();
+      let reply = '';
+      const addMatch = arg.match(/^add\s+(.+)$/i);
+      const doneMatch = arg.match(/^done\s+(.+)$/i);
+      if (addMatch) {
+        const title = addMatch[1].trim();
+        await createTask(req.hubUser, { title, source: 'manual' });
+        reply = `Task added: **${title}**`;
+      } else if (doneMatch) {
+        const query = doneMatch[1].trim().toLowerCase();
+        const tasks = getCachedTasks(req.hubUser);
+        const match = tasks.find(t => t.title.toLowerCase().includes(query));
+        if (match) {
+          await completeTask(req.hubUser, match.google_task_id);
+          reply = `Completed: ~~${match.title}~~`;
+        } else {
+          reply = `No open task matching "${doneMatch[1]}" — try \`/tasks\` to see current list.`;
+        }
+      } else {
+        // List tasks — sync first
+        const items = await syncTasks(req.hubUser);
+        if (!items.length) {
+          reply = '_No open tasks in Google Tasks._';
+        } else {
+          const lines = ['*Open tasks:*'];
+          for (const t of items) {
+            const due = t.due ? ` _(due ${new Date(t.due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})_` : '';
+            lines.push(`• ${t.title}${due}${t.notes ? `\n  ${t.notes.split('\n')[0]}` : ''}`);
+          }
+          reply = lines.join('\n');
+        }
+      }
+      const asstMsgId = uuid();
+      db.hub().prepare(
+        `INSERT INTO messages (id, conversation_id, role, content, user, model) VALUES (?, ?, 'assistant', ?, ?, 'tasks')`
+      ).run(asstMsgId, convId, reply, req.hubUser);
+      res.write(`data: ${JSON.stringify({ chunk: '\x00' + reply })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, convId, msgId: asstMsgId, model: 'tasks', projectSlug: null })}\n\n`);
+    } catch (err) {
+      console.error('[tasks] command error', err);
+      res.write(`data: ${JSON.stringify({ chunk: '\x00_Tasks error: ' + err.message + '_' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, convId, model: 'tasks', projectSlug: null })}\n\n`);
     }
     try { res.end(); } catch (_) {}
     return;

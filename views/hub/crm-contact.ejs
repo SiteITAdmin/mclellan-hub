@@ -1,4 +1,12 @@
 <%- include('partials/crm-head', { title: contact.name, active: 'contacts' }) %>
+<script>
+async function taskAction(id, action) {
+  const r = await fetch(`/api/tasks/${id}/${action}`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + (j.error || action + ' failed'));
+}
+</script>
 <a class="crm-back" href="/crm/contacts">People</a>
 <section class="crm-hero">
   <div>
@@ -50,6 +58,32 @@
       <% } %>
       <% if (!openActions.length) { %><p class="crm-muted">No open actions.</p><% } %>
     </section>
+
+    <section class="section-card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+        <h2 style="margin:0;">Tasks</h2>
+        <a href="?show_history=<%= showHistory ? '0' : '1' %>" style="font-size:12px;opacity:.6;"><%= showHistory ? 'Hide history' : 'Show history' %></a>
+      </div>
+      <% const openTasks = tasks.filter(t => t.status === 'needsAction' && !t.deleted_at); %>
+      <% const histTasks = tasks.filter(t => t.status !== 'needsAction' || t.deleted_at); %>
+      <% for (const t of openTasks) { %>
+        <%- include('partials/task-row', { t, showHistory }) %>
+      <% } %>
+      <% if (!openTasks.length) { %><p class="crm-muted">No open tasks.</p><% } %>
+      <% if (showHistory) { %>
+        <% for (const t of histTasks) { %>
+          <%- include('partials/task-row', { t, showHistory }) %>
+        <% } %>
+      <% } %>
+      <!-- Quick add task for this contact -->
+      <form class="crm-inline-form" id="contact-task-form" style="margin-top:12px;">
+        <input name="title" placeholder="Add a task…" required style="flex:1;">
+        <input name="contact_id" type="hidden" value="<%= contact.id %>">
+        <button class="btn btn-sm" type="submit">Add</button>
+      </form>
+      <p class="crm-muted" id="contact-task-msg" style="font-size:12px;margin-top:4px;"></p>
+    </section>
+
     <section class="section-card">
       <h2>Also worked with</h2>
       <div class="crm-badges">
@@ -59,4 +93,18 @@
     </section>
   </aside>
 </div>
+<script>
+document.getElementById('contact-task-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('contact-task-msg');
+  const data = Object.fromEntries(new FormData(e.target));
+  msg.textContent = 'Adding…';
+  try {
+    const r = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = 'Added!'; e.target.reset(); setTimeout(() => location.reload(), 800); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+});
+</script>
 <%- include('partials/crm-foot') %>

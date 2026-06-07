@@ -8,6 +8,7 @@ const { writeNote } = require('../lib/obsidian-vault');
 const { writeMeetingNote } = require('../lib/meeting');
 const { uuid } = require('../lib/id');
 const { getSystemModelId } = require('../lib/settings');
+const { createTask } = require('../lib/google-tasks');
 const {
   chatLimiter, uploadLimiter, writeLimiter,
   requireAuth, requireSameOrigin, audioUpload,
@@ -263,7 +264,7 @@ ${transcript.trim()}`;
     }
   }
 
-  // Save action items to a debrief actions note
+  // Save action items to a debrief actions note and Google Tasks
   if (extracted.actions?.length) {
     const actionLines = extracted.actions.map(a => `- [ ] ${a}`).join('\n');
     await writeNote({
@@ -278,6 +279,15 @@ ${transcript.trim()}`;
       ].join('\n'),
       mode: 'create',
     });
+
+    for (const action of extracted.actions) {
+      createTask(user, {
+        title: action,
+        notes: `From debrief on ${dateIso}`,
+        source: 'debrief',
+        sourceId: `${sessionId || dateIso}:${action.slice(0, 60)}`,
+      }).catch(err => console.warn('[tasks] debrief task create failed:', err.message));
+    }
   }
 
   console.log(`[debrief extraction] ${user}: people=${extracted.people?.length || 0} projects=${extracted.projects?.length || 0} actions=${extracted.actions?.length || 0}`);

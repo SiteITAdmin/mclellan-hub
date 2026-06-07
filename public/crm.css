@@ -78,3 +78,16 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
   .crm-hero, .crm-note-form { flex-direction: column; }
   .crm-note-form input, .crm-note-form .btn { width: 100%; }
 }
+
+/* ── Tasks ─────────────────────────────────────────────────────────────────── */
+.crm-task-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--crm-line); }
+.crm-task-row:last-child { border-bottom: 0; }
+.crm-task-row.task-done .crm-task-title { text-decoration: line-through; opacity: .5; }
+.crm-task-row.task-deleted { opacity: .4; }
+.crm-task-main { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.crm-task-title { font-size: 13px; font-weight: 500; line-height: 1.4; }
+.crm-task-notes { font-size: 12px; color: var(--crm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-task-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.crm-task-actions { display: flex; gap: 6px; flex-shrink: 0; margin-top: 2px; }
+.btn-ghost { background: transparent; color: var(--crm-muted); border: 1px solid var(--crm-line); }
+.btn-ghost:hover { background: rgba(0,0,0,.04); }
