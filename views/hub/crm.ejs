@@ -15,12 +15,24 @@
   <p class="crm-form-message" id="crm-note-message"></p>
 </section>
 
+<section class="section-card" id="add-person-section" style="display:none">
+  <h3 style="margin:0 0 12px">Add person</h3>
+  <form method="POST" action="/crm/contacts" class="crm-note-form">
+    <input name="name" placeholder="Full name" required style="flex:2">
+    <input name="notes" placeholder="Notes (optional)" style="flex:3">
+    <button class="btn" type="submit">Add</button>
+  </form>
+</section>
+<div style="margin:0 0 16px">
+  <button class="btn btn-subtle" id="toggle-add-person">+ Add person</button>
+</div>
+
 <section class="crm-card-grid">
   <% for (const contact of contacts) { %>
     <a class="mgmt-card crm-link-card" href="/crm/contact/<%= contact.id %>">
       <div class="crm-card-title">
         <span><%= contact.name %></span>
-        <span class="crm-count"><%= contact.facts.length %> open</span>
+        <% if (contact.facts.length) { %><span class="crm-count"><%= contact.facts.length %> fact<%= contact.facts.length !== 1 ? 's' : '' %></span><% } %>
       </div>
       <% if (contact.company_name) { %>
         <div class="crm-badges">
@@ -31,18 +43,25 @@
       <% if (contact.facts.length) { %>
         <ul class="crm-compact-list">
           <% for (const fact of contact.facts.slice(0, 3)) { %>
-            <li><span class="crm-type <%= fact.fact_type || 'fact' %>"><%= fact.fact_type || fact.status %></span><%= fact.fact %></li>
+            <li><%= fact.fact %></li>
           <% } %>
         </ul>
-      <% } else { %>
-        <p class="crm-muted">No open items.</p>
       <% } %>
     </a>
   <% } %>
 </section>
-<% if (!contacts.length) { %><div class="crm-empty">No contacts yet. Add a natural-language note above.</div><% } %>
+<% if (!contacts.length) { %><div class="crm-empty">No contacts yet. Use the note form above or add a person directly.</div><% } %>
 
 <script>
+document.getElementById('toggle-add-person').addEventListener('click', () => {
+  const section = document.getElementById('add-person-section');
+  const btn = document.getElementById('toggle-add-person');
+  const open = section.style.display === 'none';
+  section.style.display = open ? '' : 'none';
+  btn.textContent = open ? '− Cancel' : '+ Add person';
+  if (open) section.querySelector('input[name=name]').focus();
+});
+
 document.getElementById('crm-note-form').addEventListener('submit', async event => {
   event.preventDefault();
   const input = document.getElementById('crm-note');

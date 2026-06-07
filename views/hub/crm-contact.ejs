@@ -24,9 +24,21 @@ async function taskAction(id, action) {
 
 <div class="crm-two-col">
   <section class="section-card">
+    <% if (upcomingMeetings.length) { %>
+      <h2>Upcoming meetings</h2>
+      <div class="crm-timeline" style="margin-bottom:24px;">
+        <% for (const meeting of upcomingMeetings) { %>
+          <a class="crm-timeline-item crm-timeline-upcoming" href="/crm/meeting/<%= meeting.id %>">
+            <time><%= meeting.meeting_date %><%= meeting.meeting_time ? ` · ${meeting.meeting_time}` : '' %></time>
+            <strong><%= meeting.title %></strong>
+            <span><%= meeting.company_name || 'Meeting' %></span>
+          </a>
+        <% } %>
+      </div>
+    <% } %>
     <h2>Timeline</h2>
     <div class="crm-timeline">
-      <% for (const meeting of meetings) { %>
+      <% for (const meeting of pastMeetings) { %>
         <a class="crm-timeline-item" href="/crm/meeting/<%= meeting.id %>">
           <time><%= meeting.meeting_date %><%= meeting.meeting_time ? ` · ${meeting.meeting_time}` : '' %></time>
           <strong><%= meeting.title %></strong>
@@ -34,12 +46,19 @@ async function taskAction(id, action) {
         </a>
       <% } %>
       <% for (const fact of facts) { %>
-        <div class="crm-timeline-item">
-          <time><%= new Date(fact.created_at * 1000).toLocaleDateString('en-GB') %></time>
-          <strong><span class="crm-type <%= fact.fact_type || 'fact' %>"><%= fact.fact_type || 'fact' %></span> <%= fact.fact %></strong>
-          <span>
-            Subject: <%= fact.subject_name %>
-            <% if (fact.meeting_id) { %> · <a href="/crm/meeting/<%= fact.meeting_id %>"><%= fact.meeting_title %></a><% } %>
+        <div class="crm-timeline-item<%= fact.status === 'archived' ? ' crm-timeline-archived' : '' %>">
+          <time><%= new Date(fact.created_at * 1000).toLocaleDateString('en-GB') %>
+            <% if (fact.status === 'follow_up') { %><span class="crm-type follow_up" style="margin-left:6px;">follow-up</span><% } %>
+            <% if (fact.status === 'archived') { %><span style="font-size:10px;opacity:.5;margin-left:6px;">archived</span><% } %>
+          </time>
+          <strong><%= fact.fact %></strong>
+          <span style="display:flex;justify-content:space-between;align-items:center;">
+            <span><% if (fact.meeting_id) { %><a href="/crm/meeting/<%= fact.meeting_id %>"><%= fact.meeting_title %></a> · <% } %><%= fact.source !== 'dchat' ? fact.source : '' %></span>
+            <% if (fact.status !== 'archived') { %>
+              <button class="crm-fact-archive" onclick="archiveFact('<%= fact.id %>')" title="Archive this fact">Archive</button>
+            <% } else { %>
+              <button class="crm-fact-archive" onclick="unarchiveFact('<%= fact.id %>')" title="Restore fact">Restore</button>
+            <% } %>
           </span>
         </div>
       <% } %>
@@ -48,17 +67,6 @@ async function taskAction(id, action) {
   </section>
 
   <aside class="crm-stack">
-    <section class="section-card">
-      <h2>Open actions</h2>
-      <% for (const action of openActions) { %>
-        <div class="crm-action">
-          <span><%= action.fact %></span>
-          <form method="post" action="/crm/facts/<%= action.id %>/complete"><button class="btn btn-sm" type="submit">Done</button></form>
-        </div>
-      <% } %>
-      <% if (!openActions.length) { %><p class="crm-muted">No open actions.</p><% } %>
-    </section>
-
     <section class="section-card">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
         <h2 style="margin:0;">Tasks</h2>
@@ -91,9 +99,113 @@ async function taskAction(id, action) {
       </div>
       <% if (!workedWith.length) { %><p class="crm-muted">No shared context yet.</p><% } %>
     </section>
+
+    <section class="section-card">
+      <h2>Projects</h2>
+      <% if (!linkedProjects.length) { %><p class="crm-muted">No projects linked.</p><% } %>
+      <% for (const p of linkedProjects) { %>
+        <div class="crm-action">
+          <a href="/crm/project/<%= p.slug %>"><strong><%= p.name %></strong><% if (p.role) { %> <span class="crm-muted">· <%= p.role %></span><% } %></a>
+          <button class="btn btn-sm btn-ghost" onclick="unlinkProject('<%= p.id %>')">Remove</button>
+        </div>
+      <% } %>
+      <% if (availableProjects.length) { %>
+        <form class="crm-inline-form" id="link-project-form" style="margin-top:12px;">
+          <select name="project_id" required style="flex:1;">
+            <option value="">Link a project…</option>
+            <% for (const p of availableProjects) { %>
+              <option value="<%= p.id %>"><%= p.name %></option>
+            <% } %>
+          </select>
+          <input name="role" placeholder="Role (optional)" style="max-width:140px;">
+          <button class="btn btn-sm" type="submit">Link</button>
+        </form>
+        <p class="crm-muted" id="link-project-msg" style="font-size:12px;margin-top:4px;"></p>
+      <% } %>
+    </section>
+
+    <section class="section-card">
+      <h2>Edit contact</h2>
+      <form class="crm-form-grid" id="contact-edit-form">
+        <label class="wide">Name
+          <input name="name" value="<%= contact.name %>" required>
+        </label>
+        <label class="wide">Aliases <span style="font-size:11px;opacity:.6;">comma-separated</span>
+          <input name="aliases" value="<%= (() => { try { return JSON.parse(contact.aliases || '[]').join(', '); } catch { return ''; } })() %>">
+        </label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn" type="submit">Save</button>
+          <span class="crm-muted" id="contact-edit-msg" style="font-size:12px;"></span>
+        </div>
+      </form>
+    </section>
   </aside>
 </div>
 <script>
+// Fact archive/unarchive
+async function archiveFact(id) {
+  const r = await fetch(`/api/crm/facts/${id}/archive`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+async function unarchiveFact(id) {
+  const r = await fetch(`/api/crm/facts/${id}/unarchive`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+
+// Project link/unlink
+const linkProjectForm = document.getElementById('link-project-form');
+if (linkProjectForm) {
+  linkProjectForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = document.getElementById('link-project-msg');
+    const data = Object.fromEntries(new FormData(e.target));
+    msg.textContent = 'Linking…';
+    try {
+      const r = await fetch('/api/crm/contacts/<%= contact.id %>/projects', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      const j = await r.json();
+      if (j.ok) location.reload();
+      else msg.textContent = j.error || 'Error';
+    } catch (err) { msg.textContent = err.message; }
+  });
+}
+
+async function unlinkProject(projectId) {
+  const r = await fetch('/api/crm/contacts/<%= contact.id %>/projects/unlink', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: projectId }),
+  });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+
+document.getElementById('contact-edit-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('contact-edit-msg');
+  const btn = e.target.querySelector('button[type=submit]');
+  const data = Object.fromEntries(new FormData(e.target));
+  btn.disabled = true; msg.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/crm/contacts/<%= contact.id %>/edit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      msg.textContent = 'Saved.';
+      document.title = data.name + ' — McLellan Hub CRM';
+      document.querySelector('.crm-hero h1').textContent = data.name;
+      setTimeout(() => { msg.textContent = ''; }, 2500);
+    } else { msg.textContent = j.error || 'Error'; }
+  } catch (err) { msg.textContent = err.message; }
+  finally { btn.disabled = false; }
+});
+
 document.getElementById('contact-task-form').addEventListener('submit', async e => {
   e.preventDefault();
   const msg = document.getElementById('contact-task-msg');

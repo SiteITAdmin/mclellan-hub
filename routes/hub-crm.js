@@ -374,6 +374,7 @@ function crmPageData(user) {
       { href: '/crm/companies', label: 'Companies' },
       { href: '/crm/meetings', label: 'Meetings' },
       { href: '/crm/tasks', label: 'Tasks' },
+      { href: '/crm/projects', label: 'Projects' },
     ],
   };
 }
@@ -392,6 +393,17 @@ router.get('/crm/contacts', requireAuth, (req, res) => {
   res.render('hub/crm', { ...crmPageData(req.hubUser), contacts });
 });
 
+router.post('/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).send('Name required');
+  const hub = db.hub();
+  const id = uuid();
+  hub.prepare('INSERT INTO contacts (id, user, name, notes) VALUES (?, ?, ?, ?)').run(
+    id, req.hubUser, name, String(req.body.notes || '').trim() || null
+  );
+  res.redirect('/crm/contact/' + id);
+});
+
 router.get('/crm/contact/:id', requireAuth, (req, res) => {
   const hub = db.hub();
   const contact = hub.prepare('SELECT * FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
@@ -404,21 +416,26 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
     WHERE cc.contact_id = ?
     ORDER BY cc.is_primary DESC, co.name
   `).all(contact.id);
-  const meetings = hub.prepare(`
+  const allMeetings = hub.prepare(`
     SELECT m.*, co.name AS company_name
     FROM meeting_attendees ma
     JOIN meetings m ON m.id = ma.meeting_id
     LEFT JOIN companies co ON co.id = m.company_id
     WHERE ma.contact_id = ? AND m.user = ?
-    ORDER BY m.meeting_date DESC, m.meeting_time DESC
+    ORDER BY m.meeting_date ASC, m.meeting_time ASC
   `).all(contact.id, req.hubUser);
+  const todayIsoStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+  const upcomingMeetings = allMeetings.filter(m => m.meeting_date >= todayIsoStr);
+  const pastMeetings = allMeetings.filter(m => m.meeting_date < todayIsoStr).reverse();
+  const meetings = allMeetings; // kept for coworker logic below
+  const showHistory = req.query.show_history === '1';
   const allFacts = hub.prepare(`
     SELECT f.*, c.name AS subject_name, m.title AS meeting_title, co.name AS company_name
     FROM crm_facts f
     JOIN contacts c ON c.id = f.contact_id
     LEFT JOIN meetings m ON m.id = f.meeting_id
     LEFT JOIN companies co ON co.id = f.company_id
-    WHERE f.user = ?
+    WHERE f.user = ? ${showHistory ? '' : "AND f.status != 'archived'"}
     ORDER BY f.created_at DESC
   `).all(req.hubUser);
   const facts = allFacts.filter(f => f.contact_id === contact.id || parseJsonArray(f.linked_contacts).includes(contact.id));
@@ -434,12 +451,22 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
     for (const id of parseJsonArray(fact.linked_contacts)) if (id !== contact.id) coworkerIds.add(id);
   }
   const workedWith = [...coworkerIds].map(id => contactMap.get(id)).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
-  const openActions = facts.filter(f => f.fact_type === 'action' && ['active', 'follow_up'].includes(f.status));
-  const showHistory = req.query.show_history === '1';
   const tasks = getCachedTasks(req.hubUser, { contactId: contact.id }, showHistory);
 
+  const linkedProjects = hub.prepare(`
+    SELECT p.*, cp.role FROM contact_projects cp
+    JOIN projects p ON p.id = cp.project_id
+    WHERE cp.contact_id = ? ORDER BY p.name
+  `).all(contact.id);
+  const allProjects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  const linkedProjectIds = new Set(linkedProjects.map(p => p.id));
+  const availableProjects = allProjects.filter(p => !linkedProjectIds.has(p.id));
+
   res.render('hub/crm-contact', {
-    ...crmPageData(req.hubUser), contact, companies, meetings, facts, workedWith, openActions, tasks, showHistory,
+    ...crmPageData(req.hubUser), contact, companies,
+    meetings, upcomingMeetings, pastMeetings,
+    facts, workedWith, tasks, showHistory,
+    linkedProjects, availableProjects,
   });
 });
 
@@ -481,10 +508,14 @@ router.get('/crm/company/:id', requireAuth, (req, res) => {
     FROM contact_companies cc JOIN contacts c ON c.id = cc.contact_id
     WHERE cc.company_id = ? ORDER BY c.name
   `).all(company.id);
-  const meetings = hub.prepare(`
+  const allCompanyMeetings = hub.prepare(`
     SELECT * FROM meetings WHERE user = ? AND company_id = ?
-    ORDER BY meeting_date DESC, meeting_time DESC
+    ORDER BY meeting_date ASC, meeting_time ASC
   `).all(req.hubUser, company.id);
+  const todayIsoStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+  const upcomingMeetings = allCompanyMeetings.filter(m => m.meeting_date >= todayIsoStr);
+  const pastMeetings = allCompanyMeetings.filter(m => m.meeting_date < todayIsoStr).reverse();
+  const meetings = allCompanyMeetings;
   const contactIds = new Set(contacts.map(c => c.id));
   const facts = hub.prepare(`
     SELECT f.*, c.name AS subject_name, m.title AS meeting_title
@@ -503,7 +534,9 @@ router.get('/crm/company/:id', requireAuth, (req, res) => {
   const tasks = getCachedTasks(req.hubUser, { companyId: company.id }, showHistory);
 
   res.render('hub/crm-company', {
-    ...crmPageData(req.hubUser), company, contacts, meetings, facts, availableContacts, tasks, showHistory,
+    ...crmPageData(req.hubUser), company, contacts,
+    meetings, upcomingMeetings, pastMeetings,
+    facts, availableContacts, tasks, showHistory,
   });
 });
 
@@ -713,6 +746,36 @@ router.post('/crm/facts/:id/complete', requireAuth, requireSameOrigin, writeLimi
   res.redirect(safeBack(req, '/crm/contacts'));
 });
 
+router.post('/api/crm/contacts/:id/projects', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  const project = hub.prepare('SELECT id FROM projects WHERE id = ? AND user = ?').get(req.body.project_id, req.hubUser);
+  if (!contact || !project) return res.status(404).json({ error: 'Not found' });
+  hub.prepare(`
+    INSERT OR IGNORE INTO contact_projects (contact_id, project_id, role) VALUES (?, ?, ?)
+  `).run(contact.id, project.id, String(req.body.role || '').trim() || null);
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/contacts/:id/projects/unlink', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  hub.prepare('DELETE FROM contact_projects WHERE contact_id = ? AND project_id = ?')
+    .run(req.params.id, req.body.project_id);
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/contacts/:id/edit', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!contact) return res.status(404).json({ error: 'Not found' });
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name required' });
+  const aliases = String(req.body.aliases || '').split(',').map(a => a.trim()).filter(Boolean);
+  hub.prepare('UPDATE contacts SET name = ?, aliases = ? WHERE id = ?')
+    .run(name, JSON.stringify(aliases), contact.id);
+  res.json({ ok: true });
+});
+
 router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
@@ -730,6 +793,22 @@ router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writ
     }
     hub.prepare('DELETE FROM contacts WHERE id = ?').run(contact.id);
   })();
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/facts/:id/archive', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const result = db.hub().prepare(
+    "UPDATE crm_facts SET status = 'archived', updated_at = unixepoch() WHERE id = ? AND user = ?"
+  ).run(req.params.id, req.hubUser);
+  if (!result.changes) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/facts/:id/unarchive', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const result = db.hub().prepare(
+    "UPDATE crm_facts SET status = 'active', updated_at = unixepoch() WHERE id = ? AND user = ?"
+  ).run(req.params.id, req.hubUser);
+  if (!result.changes) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });
 });
 
@@ -859,6 +938,95 @@ router.post('/api/tasks/:id/subtasks', requireAuth, requireSameOrigin, writeLimi
     console.error('[tasks] subtask create error', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+
+router.get('/crm/projects', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+
+  // Annotate each project with open task count and last activity
+  const annotated = projects.map(p => {
+    const openTasks = hub.prepare(
+      "SELECT COUNT(*) AS n FROM google_tasks WHERE user = ? AND project_slug = ? AND status = 'needsAction' AND deleted_at IS NULL"
+    ).get(req.hubUser, p.slug)?.n || 0;
+    const lastMsg = hub.prepare(
+      'SELECT MAX(ts) AS ts FROM messages WHERE project_id = ?'
+    ).get(p.id)?.ts;
+    return { ...p, openTasks, lastActivity: lastMsg };
+  });
+
+  res.render('hub/crm-projects', { ...crmPageData(req.hubUser), projects: annotated });
+});
+
+router.get('/crm/project/:slug', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const project = hub.prepare(
+    'SELECT * FROM projects WHERE user = ? AND slug = ?'
+  ).get(req.hubUser, req.params.slug);
+  if (!project) return res.status(404).send('Project not found');
+
+  const todayIsoStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+  const showHistory = req.query.show_history === '1';
+
+  // Tasks for this project
+  const tasks = getCachedTasks(req.hubUser, { projectSlug: project.slug }, showHistory);
+
+  // Contacts: directly linked first, then via tasks/emails
+  const directContacts = hub.prepare(`
+    SELECT c.*, cp.role AS project_role, cc.name AS company_name
+    FROM contact_projects cp
+    JOIN contacts c ON c.id = cp.contact_id
+    LEFT JOIN contact_companies ccj ON ccj.contact_id = c.id AND ccj.is_primary = 1
+    LEFT JOIN companies cc ON cc.id = ccj.company_id
+    WHERE cp.project_id = ? ORDER BY c.name
+  `).all(project.id);
+  const directContactIds = new Set(directContacts.map(c => c.id));
+
+  const contactIdsFromTasks = tasks.map(t => t.contact_id).filter(Boolean);
+  const contactIdsFromEmail = hub.prepare(
+    "SELECT DISTINCT contact_id FROM email_summaries WHERE user = ? AND project_slug = ? AND contact_id IS NOT NULL"
+  ).all(req.hubUser, project.slug).map(r => r.contact_id);
+  const indirectIds = [...new Set([...contactIdsFromTasks, ...contactIdsFromEmail])].filter(id => !directContactIds.has(id));
+  const indirectContacts = indirectIds.length
+    ? hub.prepare(
+        `SELECT c.*, cc.name AS company_name
+         FROM contacts c
+         LEFT JOIN contact_companies ccj ON ccj.contact_id = c.id AND ccj.is_primary = 1
+         LEFT JOIN companies cc ON cc.id = ccj.company_id
+         WHERE c.id IN (${indirectIds.map(() => '?').join(',')})
+         ORDER BY c.name`
+      ).all(...indirectIds)
+    : [];
+  const contacts = [...directContacts, ...indirectContacts];
+
+  // Available contacts to link
+  const allContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  const availableContacts = allContacts.filter(c => !directContactIds.has(c.id));
+
+  // Recent email summaries for this project
+  const recentEmails = hub.prepare(`
+    SELECT e.*, c.name AS contact_name
+    FROM email_summaries e
+    LEFT JOIN contacts c ON c.id = e.contact_id
+    WHERE e.user = ? AND e.project_slug = ?
+    ORDER BY e.received_at DESC
+    LIMIT 10
+  `).all(req.hubUser, project.slug);
+
+  // Recent messages in the project chat (for last-activity context)
+  const recentMessages = hub.prepare(`
+    SELECT role, content, ts FROM messages
+    WHERE project_id = ? AND role IN ('user','assistant')
+    ORDER BY ts DESC LIMIT 5
+  `).all(project.id);
+
+  res.render('hub/crm-project', {
+    ...crmPageData(req.hubUser),
+    project, tasks, contacts, directContactIds: [...directContactIds],
+    availableContacts, recentEmails, recentMessages, showHistory, todayIsoStr,
+  });
 });
 
 router.post('/api/crm/note', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {

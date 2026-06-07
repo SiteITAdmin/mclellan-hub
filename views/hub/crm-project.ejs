@@ -1,0 +1,192 @@
+<%- include('partials/crm-head', { title: project.name, active: 'projects' }) %>
+<script>
+async function taskAction(id, action) {
+  const r = await fetch(`/api/tasks/${id}/${action}`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + (j.error || action));
+}
+</script>
+
+<a class="crm-back" href="/crm/projects">Projects</a>
+
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Project</p>
+    <h1><%= project.name %></h1>
+    <p style="font-family:monospace;font-size:13px;opacity:.6;">/<%= project.slug %></p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <a class="btn" href="/c/<%= project.slug %>">Open AI Chat →</a>
+  </div>
+</section>
+
+<div class="crm-two-col">
+
+  <!-- ── Left: Tasks + People ──────────────────────────────────────────── -->
+  <div class="crm-stack">
+
+    <section class="section-card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+        <h2 style="margin:0;">Tasks
+          <% const openTasks = tasks.filter(t => t.status === 'needsAction' && !t.deleted_at); %>
+          <% if (openTasks.length) { %><span class="crm-count"><%= openTasks.length %></span><% } %>
+        </h2>
+        <a href="?show_history=<%= showHistory ? '0' : '1' %>" style="font-size:12px;opacity:.6;">
+          <%= showHistory ? 'Hide history' : 'Show history' %>
+        </a>
+      </div>
+      <% const histTasks = tasks.filter(t => t.status !== 'needsAction' || t.deleted_at); %>
+      <% for (const t of openTasks) { %>
+        <%- include('partials/task-row', { t, showHistory }) %>
+      <% } %>
+      <% if (!openTasks.length) { %><p class="crm-muted">No open tasks for this project.</p><% } %>
+      <% if (showHistory) { %>
+        <% for (const t of histTasks) { %>
+          <%- include('partials/task-row', { t, showHistory }) %>
+        <% } %>
+      <% } %>
+      <!-- Quick-add task for this project -->
+      <form class="crm-inline-form" id="project-task-form" style="margin-top:12px;">
+        <input name="title" placeholder="Add a task…" required style="flex:1;">
+        <input name="project_slug" type="hidden" value="<%= project.slug %>">
+        <button class="btn btn-sm" type="submit">Add</button>
+      </form>
+      <p class="crm-muted" id="project-task-msg" style="font-size:12px;margin-top:4px;"></p>
+    </section>
+
+    <section class="section-card">
+      <h2>People</h2>
+      <% if (!contacts.length) { %>
+        <p class="crm-muted">No people linked yet.</p>
+      <% } %>
+      <% for (const c of contacts) { %>
+        <div class="crm-action">
+          <a href="/crm/contact/<%= c.id %>">
+            <strong><%= c.name %></strong>
+            <% if (c.project_role) { %><span class="crm-muted"> · <%= c.project_role %></span><% } %>
+            <% if (c.company_name) { %><span class="crm-muted"> · <%= c.company_name %></span><% } %>
+            <% if (!directContactIds.includes(c.id)) { %><span class="crm-badge subtle" style="margin-left:6px;">via tasks</span><% } %>
+          </a>
+          <% if (directContactIds.includes(c.id)) { %>
+            <button class="btn btn-sm btn-ghost" onclick="unlinkContact('<%= c.id %>')">Remove</button>
+          <% } %>
+        </div>
+      <% } %>
+      <% if (availableContacts.length) { %>
+        <form class="crm-inline-form" id="link-contact-form" style="margin-top:12px;">
+          <select name="contact_id" required style="flex:1;">
+            <option value="">Link a person…</option>
+            <% for (const c of availableContacts) { %>
+              <option value="<%= c.id %>"><%= c.name %></option>
+            <% } %>
+          </select>
+          <input name="role" placeholder="Role (optional)" style="max-width:140px;">
+          <button class="btn btn-sm" type="submit">Link</button>
+        </form>
+        <p class="crm-muted" id="link-contact-msg" style="font-size:12px;margin-top:4px;"></p>
+      <% } %>
+    </section>
+
+  </div>
+
+  <!-- ── Right: Recent activity ────────────────────────────────────────── -->
+  <div class="crm-stack">
+
+    <% if (recentEmails.length) { %>
+    <section class="section-card">
+      <h2>Recent emails</h2>
+      <div class="crm-timeline">
+        <% for (const e of recentEmails) { %>
+          <div class="crm-timeline-item">
+            <time><%= new Date(e.received_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></time>
+            <strong><%= e.subject %></strong>
+            <span>
+              <%= e.from_name || e.from_email %>
+              <% if (e.contact_name) { %> · <a href="/crm/contact/<%= e.contact_id %>"><%= e.contact_name %></a><% } %>
+            </span>
+            <% if (e.summary) { %><p style="font-size:12px;color:var(--crm-muted);margin:2px 0 0;"><%= e.summary %></p><% } %>
+          </div>
+        <% } %>
+      </div>
+    </section>
+    <% } %>
+
+    <% if (recentMessages.length) { %>
+    <section class="section-card">
+      <h2>Recent chat activity</h2>
+      <div class="crm-timeline">
+        <% for (const m of recentMessages) { %>
+          <div class="crm-timeline-item">
+            <time><%= new Date(m.ts * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %></time>
+            <strong style="font-weight:<%= m.role === 'user' ? '600' : '400' %>;">
+              <%= m.role === 'user' ? 'You' : 'AI' %>
+            </strong>
+            <span style="white-space:pre-wrap;font-size:12px;"><%= m.content.slice(0, 200) %><%= m.content.length > 200 ? '…' : '' %></span>
+          </div>
+        <% } %>
+      </div>
+      <a class="btn btn-sm" href="/c/<%= project.slug %>" style="margin-top:12px;display:inline-block;">Open chat →</a>
+    </section>
+    <% } %>
+
+    <% if (!recentEmails.length && !recentMessages.length) { %>
+    <section class="section-card">
+      <p class="crm-muted">No email or chat activity yet for this project.</p>
+    </section>
+    <% } %>
+
+  </div>
+</div>
+
+<script>
+// Link contact to project
+const linkContactForm = document.getElementById('link-contact-form');
+if (linkContactForm) {
+  linkContactForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = document.getElementById('link-contact-msg');
+    const data = Object.fromEntries(new FormData(e.target));
+    // Link from the contact's side (same junction table)
+    msg.textContent = 'Linking…';
+    try {
+      const r = await fetch(`/api/crm/contacts/${data.contact_id}/projects`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: '<%= project.id %>', role: data.role }),
+      });
+      const j = await r.json();
+      if (j.ok) location.reload();
+      else msg.textContent = j.error || 'Error';
+    } catch (err) { msg.textContent = err.message; }
+  });
+}
+
+async function unlinkContact(contactId) {
+  const r = await fetch(`/api/crm/contacts/${contactId}/projects/unlink`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: '<%= project.id %>' }),
+  });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+
+document.getElementById('project-task-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('project-task-msg');
+  const data = Object.fromEntries(new FormData(e.target));
+  msg.textContent = 'Adding…';
+  try {
+    const r = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = 'Added!'; e.target.reset(); setTimeout(() => location.reload(), 800); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+});
+</script>
+
+<%- include('partials/crm-foot') %>

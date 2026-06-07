@@ -69,8 +69,21 @@ async function taskAction(id, action) {
       </form>
     </section>
     <section class="section-card">
-      <h2>Meetings</h2>
-      <% for (const meeting of meetings) { %><a class="crm-row-link" href="/crm/meeting/<%= meeting.id %>"><strong><%= meeting.title %></strong><span><%= meeting.meeting_date %></span></a><% } %>
+      <% if (upcomingMeetings.length) { %>
+        <h2>Upcoming meetings</h2>
+        <% for (const meeting of upcomingMeetings) { %>
+          <a class="crm-row-link crm-row-upcoming" href="/crm/meeting/<%= meeting.id %>">
+            <strong><%= meeting.title %></strong>
+            <span><%= meeting.meeting_date %><%= meeting.meeting_time ? ` · ${meeting.meeting_time}` : '' %></span>
+          </a>
+        <% } %>
+        <% if (pastMeetings.length) { %>
+          <h2 style="margin-top:20px;">Past meetings</h2>
+        <% } %>
+      <% } else { %>
+        <h2>Meetings</h2>
+      <% } %>
+      <% for (const meeting of pastMeetings) { %><a class="crm-row-link" href="/crm/meeting/<%= meeting.id %>"><strong><%= meeting.title %></strong><span><%= meeting.meeting_date %></span></a><% } %>
       <% if (!meetings.length) { %><p class="crm-muted">No meetings yet.</p><% } %>
     </section>
   </div>
