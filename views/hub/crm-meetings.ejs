@@ -1,0 +1,29 @@
+<%- include('partials/crm-head', { title: 'Meetings', active: 'meetings' }) %>
+<section class="crm-hero">
+  <div><p class="crm-eyebrow">Connected CRM</p><h1>Meetings</h1><p>Stored calendar events and manually captured conversations.</p></div>
+  <form method="post" action="/crm/meetings/sync-calendar"><button class="btn" type="submit">Sync calendar</button></form>
+</section>
+<% if (typeof query !== 'undefined' && query.synced) { %><p class="crm-notice">Synced <%= query.synced %> events and matched <%= query.matched || 0 %> attendees.</p><% } %>
+<section class="section-card">
+  <h2>Add meeting</h2>
+  <form class="crm-form-grid" method="post" action="/crm/meetings">
+    <label class="wide">Title<input name="title" required></label>
+    <label>Date<input name="meeting_date" type="date" required></label>
+    <label>Time<input name="meeting_time" type="time"></label>
+    <label>Duration<input name="duration_mins" type="number" min="0" placeholder="60"></label>
+    <label>Company<select name="company_id"><option value="">None</option><% for (const company of companies) { %><option value="<%= company.id %>"><%= company.name %></option><% } %></select></label>
+    <label class="wide">Location<input name="location"></label>
+    <fieldset class="wide"><legend>Attendees</legend><div class="crm-check-grid"><% for (const contact of contacts) { %><label class="crm-checkbox"><input type="checkbox" name="attendee_ids" value="<%= contact.id %>"><%= contact.name %></label><% } %></div></fieldset>
+    <label class="wide">Notes<textarea name="notes" rows="3"></textarea></label>
+    <button class="btn" type="submit">Create meeting</button>
+  </form>
+</section>
+<section class="crm-list">
+  <% for (const meeting of meetings) { %>
+    <a class="mgmt-card crm-row-link" href="/crm/meeting/<%= meeting.id %>">
+      <span><strong><%= meeting.title %></strong><small><%= meeting.company_name || meeting.source %> · <%= meeting.attendee_count %> attendees</small></span>
+      <time><%= meeting.meeting_date %><%= meeting.meeting_time ? ` · ${meeting.meeting_time}` : '' %></time>
+    </a>
+  <% } %>
+</section>
+<%- include('partials/crm-foot') %>

@@ -1,0 +1,62 @@
+<%- include('partials/crm-head', { title: contact.name, active: 'contacts' }) %>
+<a class="crm-back" href="/crm/contacts">People</a>
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Contact</p>
+    <h1><%= contact.name %></h1>
+    <% if (companies.length) { %>
+      <p>
+        <% for (const company of companies) { %>
+          <a href="/crm/company/<%= company.id %>"><%= company.name %></a><%= company.role ? ` · ${company.role}` : '' %>
+        <% } %>
+      </p>
+    <% } else { %><p>No company linked yet.</p><% } %>
+  </div>
+</section>
+
+<div class="crm-two-col">
+  <section class="section-card">
+    <h2>Timeline</h2>
+    <div class="crm-timeline">
+      <% for (const meeting of meetings) { %>
+        <a class="crm-timeline-item" href="/crm/meeting/<%= meeting.id %>">
+          <time><%= meeting.meeting_date %><%= meeting.meeting_time ? ` · ${meeting.meeting_time}` : '' %></time>
+          <strong><%= meeting.title %></strong>
+          <span><%= meeting.company_name || 'Meeting' %></span>
+        </a>
+      <% } %>
+      <% for (const fact of facts) { %>
+        <div class="crm-timeline-item">
+          <time><%= new Date(fact.created_at * 1000).toLocaleDateString('en-GB') %></time>
+          <strong><span class="crm-type <%= fact.fact_type || 'fact' %>"><%= fact.fact_type || 'fact' %></span> <%= fact.fact %></strong>
+          <span>
+            Subject: <%= fact.subject_name %>
+            <% if (fact.meeting_id) { %> · <a href="/crm/meeting/<%= fact.meeting_id %>"><%= fact.meeting_title %></a><% } %>
+          </span>
+        </div>
+      <% } %>
+      <% if (!meetings.length && !facts.length) { %><p class="crm-muted">Nothing in the timeline yet.</p><% } %>
+    </div>
+  </section>
+
+  <aside class="crm-stack">
+    <section class="section-card">
+      <h2>Open actions</h2>
+      <% for (const action of openActions) { %>
+        <div class="crm-action">
+          <span><%= action.fact %></span>
+          <form method="post" action="/crm/facts/<%= action.id %>/complete"><button class="btn btn-sm" type="submit">Done</button></form>
+        </div>
+      <% } %>
+      <% if (!openActions.length) { %><p class="crm-muted">No open actions.</p><% } %>
+    </section>
+    <section class="section-card">
+      <h2>Also worked with</h2>
+      <div class="crm-badges">
+        <% for (const person of workedWith) { %><a class="crm-badge" href="/crm/contact/<%= person.id %>"><%= person.name %></a><% } %>
+      </div>
+      <% if (!workedWith.length) { %><p class="crm-muted">No shared context yet.</p><% } %>
+    </section>
+  </aside>
+</div>
+<%- include('partials/crm-foot') %>
