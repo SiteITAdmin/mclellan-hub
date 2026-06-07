@@ -9,7 +9,7 @@ const hubAdminRouter = require('./routes/hub-admin');
 const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
-const { sendDailyBriefing, sendEmailBriefing } = require('./lib/crm');
+const { sendDailyBriefing, sendEmailBriefing, syncCalendarMeetings } = require('./lib/crm');
 const { processNewEmails } = require('./lib/email-processor');
 const { processAgentMail } = require('./lib/agentmail-processor');
 const { runRegulatoryMonitor } = require('./lib/regulatory-monitor');
@@ -129,6 +129,15 @@ function nowIn(tz) {
 }
 
 const BRIEFING_USERS = (process.env.BRIEFING_USERS || 'douglas,nakai').split(',').map(u => u.trim()).filter(Boolean);
+
+// ── CRM calendar sync (06:45 Europe/Dublin) ──────────────────────────────────
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getHours() !== 6 || now.getMinutes() !== 45) return;
+  for (const user of BRIEFING_USERS) {
+    syncCalendarMeetings(user).catch(err => console.error(`[crm] calendar sync error for ${user}:`, err));
+  }
+}, 60 * 1000);
 
 // ── rholdsworthconsulting.com daily stats (07:00 Europe/Dublin) ──────────────
 setInterval(() => {

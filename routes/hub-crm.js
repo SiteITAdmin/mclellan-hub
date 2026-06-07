@@ -3,7 +3,14 @@ const router = express.Router();
 const fetch = require('node-fetch');
 const { OAuth2Client } = require('google-auth-library');
 const db = require('../lib/db');
-const { processCrmCommand, listContacts, buildBriefingText, fetchTodayCalendarEvents } = require('../lib/crm');
+const {
+  processCrmCommand,
+  listContacts,
+  buildBriefingText,
+  fetchTodayCalendarEvents,
+  syncCalendarMeetings,
+  parseJsonArray,
+} = require('../lib/crm');
 const { readNote, searchNotes, writeNote } = require('../lib/obsidian-vault');
 const { uuid } = require('../lib/id');
 const {
@@ -346,16 +353,372 @@ router.post('/api/crm/briefing-push', writeLimiter, async (req, res) => {
 
 // ── CRM view page ─────────────────────────────────────────────────────────────
 router.get('/crm', requireAuth, (req, res) => {
+  res.redirect('/crm/contacts');
+});
+
+function asArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return value ? [value] : [];
+}
+
+function crmPageData(user) {
+  return {
+    user,
+    nav: [
+      { href: '/crm/contacts', label: 'People' },
+      { href: '/crm/companies', label: 'Companies' },
+      { href: '/crm/meetings', label: 'Meetings' },
+    ],
+  };
+}
+
+function safeBack(req, fallback) {
+  try {
+    const url = new URL(String(req.headers.referer || ''), 'http://local');
+    return url.pathname.startsWith('/crm/') ? `${url.pathname}${url.search}` : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+router.get('/crm/contacts', requireAuth, (req, res) => {
   const contacts = listContacts(req.hubUser);
-  res.render('hub/crm', { user: req.hubUser, contacts });
+  res.render('hub/crm', { ...crmPageData(req.hubUser), contacts });
+});
+
+router.get('/crm/contact/:id', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT * FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!contact) return res.status(404).send('Contact not found');
+
+  const companies = hub.prepare(`
+    SELECT co.*, cc.role, cc.is_primary
+    FROM contact_companies cc
+    JOIN companies co ON co.id = cc.company_id
+    WHERE cc.contact_id = ?
+    ORDER BY cc.is_primary DESC, co.name
+  `).all(contact.id);
+  const meetings = hub.prepare(`
+    SELECT m.*, co.name AS company_name
+    FROM meeting_attendees ma
+    JOIN meetings m ON m.id = ma.meeting_id
+    LEFT JOIN companies co ON co.id = m.company_id
+    WHERE ma.contact_id = ? AND m.user = ?
+    ORDER BY m.meeting_date DESC, m.meeting_time DESC
+  `).all(contact.id, req.hubUser);
+  const allFacts = hub.prepare(`
+    SELECT f.*, c.name AS subject_name, m.title AS meeting_title, co.name AS company_name
+    FROM crm_facts f
+    JOIN contacts c ON c.id = f.contact_id
+    LEFT JOIN meetings m ON m.id = f.meeting_id
+    LEFT JOIN companies co ON co.id = f.company_id
+    WHERE f.user = ?
+    ORDER BY f.created_at DESC
+  `).all(req.hubUser);
+  const facts = allFacts.filter(f => f.contact_id === contact.id || parseJsonArray(f.linked_contacts).includes(contact.id));
+  const contactMap = new Map(hub.prepare('SELECT id, name FROM contacts WHERE user = ?').all(req.hubUser).map(c => [c.id, c]));
+  const coworkerIds = new Set();
+  for (const meeting of meetings) {
+    for (const row of hub.prepare('SELECT contact_id FROM meeting_attendees WHERE meeting_id = ?').all(meeting.id)) {
+      if (row.contact_id !== contact.id) coworkerIds.add(row.contact_id);
+    }
+  }
+  for (const fact of facts) {
+    if (fact.contact_id !== contact.id) coworkerIds.add(fact.contact_id);
+    for (const id of parseJsonArray(fact.linked_contacts)) if (id !== contact.id) coworkerIds.add(id);
+  }
+  const workedWith = [...coworkerIds].map(id => contactMap.get(id)).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+  const openActions = facts.filter(f => f.fact_type === 'action' && ['active', 'follow_up'].includes(f.status));
+
+  res.render('hub/crm-contact', {
+    ...crmPageData(req.hubUser), contact, companies, meetings, facts, workedWith, openActions,
+  });
+});
+
+router.get('/crm/companies', requireAuth, (req, res) => {
+  const companies = db.hub().prepare(`
+    SELECT co.*,
+      COUNT(DISTINCT cc.contact_id) AS contact_count,
+      COUNT(DISTINCT m.id) AS meeting_count
+    FROM companies co
+    LEFT JOIN contact_companies cc ON cc.company_id = co.id
+    LEFT JOIN meetings m ON m.company_id = co.id
+    WHERE co.user = ?
+    GROUP BY co.id
+    ORDER BY co.name
+  `).all(req.hubUser);
+  res.render('hub/crm-companies', { ...crmPageData(req.hubUser), companies });
+});
+
+router.post('/crm/companies', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).send('Company name required');
+  const id = uuid();
+  db.hub().prepare(`
+    INSERT INTO companies (id, user, name, type, website, notes)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    id, req.hubUser, name, String(req.body.type || '').trim() || null,
+    String(req.body.website || '').trim() || null, String(req.body.notes || '').trim() || null
+  );
+  res.redirect(`/crm/company/${id}`);
+});
+
+router.get('/crm/company/:id', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const company = hub.prepare('SELECT * FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!company) return res.status(404).send('Company not found');
+  const contacts = hub.prepare(`
+    SELECT c.*, cc.role, cc.is_primary
+    FROM contact_companies cc JOIN contacts c ON c.id = cc.contact_id
+    WHERE cc.company_id = ? ORDER BY c.name
+  `).all(company.id);
+  const meetings = hub.prepare(`
+    SELECT * FROM meetings WHERE user = ? AND company_id = ?
+    ORDER BY meeting_date DESC, meeting_time DESC
+  `).all(req.hubUser, company.id);
+  const contactIds = new Set(contacts.map(c => c.id));
+  const facts = hub.prepare(`
+    SELECT f.*, c.name AS subject_name, m.title AS meeting_title
+    FROM crm_facts f
+    JOIN contacts c ON c.id = f.contact_id
+    LEFT JOIN meetings m ON m.id = f.meeting_id
+    WHERE f.user = ?
+    ORDER BY f.created_at DESC
+  `).all(req.hubUser).filter(f =>
+    f.company_id === company.id
+    || contactIds.has(f.contact_id)
+    || parseJsonArray(f.linked_contacts).some(id => contactIds.has(id))
+  );
+  const availableContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  res.render('hub/crm-company', {
+    ...crmPageData(req.hubUser), company, contacts, meetings, facts, availableContacts,
+  });
+});
+
+router.post('/crm/company/:id/contacts', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.body.contact_id, req.hubUser);
+  if (!company || !contact) return res.status(404).send('Company or contact not found');
+  if (req.body.is_primary) {
+    hub.prepare('UPDATE contact_companies SET is_primary = 0 WHERE contact_id = ?').run(contact.id);
+  }
+  hub.prepare(`
+    INSERT INTO contact_companies (contact_id, company_id, role, is_primary)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(contact_id, company_id) DO UPDATE SET role = excluded.role, is_primary = excluded.is_primary
+  `).run(contact.id, company.id, String(req.body.role || '').trim() || null, req.body.is_primary ? 1 : 0);
+  res.redirect(`/crm/company/${company.id}`);
+});
+
+router.post('/crm/company/:id', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).send('Company name required');
+  const result = db.hub().prepare(`
+    UPDATE companies SET name = ?, type = ?, website = ?, notes = ?
+    WHERE id = ? AND user = ?
+  `).run(
+    name, String(req.body.type || '').trim() || null,
+    String(req.body.website || '').trim() || null, String(req.body.notes || '').trim() || null,
+    req.params.id, req.hubUser
+  );
+  if (!result.changes) return res.status(404).send('Company not found');
+  res.redirect(`/crm/company/${req.params.id}`);
+});
+
+router.post('/crm/company/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!company) return res.status(404).send('Company not found');
+  hub.transaction(() => {
+    hub.prepare('DELETE FROM contact_companies WHERE company_id = ?').run(company.id);
+    hub.prepare('UPDATE meetings SET company_id = NULL WHERE company_id = ? AND user = ?').run(company.id, req.hubUser);
+    hub.prepare('UPDATE crm_facts SET company_id = NULL WHERE company_id = ? AND user = ?').run(company.id, req.hubUser);
+    hub.prepare('DELETE FROM companies WHERE id = ?').run(company.id);
+  })();
+  res.redirect('/crm/companies');
+});
+
+router.get('/crm/meetings', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const meetings = hub.prepare(`
+    SELECT m.*, co.name AS company_name, COUNT(ma.contact_id) AS attendee_count
+    FROM meetings m
+    LEFT JOIN companies co ON co.id = m.company_id
+    LEFT JOIN meeting_attendees ma ON ma.meeting_id = m.id
+    WHERE m.user = ?
+    GROUP BY m.id
+    ORDER BY m.meeting_date DESC, m.meeting_time DESC
+  `).all(req.hubUser);
+  const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
+  res.render('hub/crm-meetings', {
+    ...crmPageData(req.hubUser), meetings, contacts, companies, query: req.query,
+  });
+});
+
+router.post('/crm/meetings', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const title = String(req.body.title || '').trim();
+  const meetingDate = String(req.body.meeting_date || '').trim();
+  if (!title || !meetingDate) return res.status(400).send('Title and date required');
+  const id = uuid();
+  const requestedCompanyId = String(req.body.company_id || '').trim();
+  const company = requestedCompanyId
+    ? hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(requestedCompanyId, req.hubUser)
+    : null;
+  const create = hub.transaction(() => {
+    hub.prepare(`
+      INSERT INTO meetings
+        (id, user, title, meeting_date, meeting_time, duration_mins, location, notes, company_id, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')
+    `).run(
+      id, req.hubUser, title, meetingDate, String(req.body.meeting_time || '').trim() || null,
+      Number(req.body.duration_mins) || null, String(req.body.location || '').trim() || null,
+      String(req.body.notes || '').trim() || null, company?.id || null
+    );
+    const insert = hub.prepare('INSERT OR IGNORE INTO meeting_attendees (meeting_id, contact_id) VALUES (?, ?)');
+    for (const contactId of asArray(req.body.attendee_ids)) {
+      const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(contactId, req.hubUser);
+      if (contact) insert.run(id, contact.id);
+    }
+  });
+  create();
+  res.redirect(`/crm/meeting/${id}`);
+});
+
+router.post('/crm/meetings/sync-calendar', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const result = await syncCalendarMeetings(req.hubUser);
+    res.redirect(`/crm/meetings?synced=${result.events}&matched=${result.attendeesMatched}`);
+  } catch (err) {
+    console.error('[crm calendar sync]', err);
+    res.status(500).send(`Calendar sync failed: ${err.message}`);
+  }
+});
+
+router.get('/crm/meeting/:id', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const meeting = hub.prepare(`
+    SELECT m.*, co.name AS company_name
+    FROM meetings m LEFT JOIN companies co ON co.id = m.company_id
+    WHERE m.id = ? AND m.user = ?
+  `).get(req.params.id, req.hubUser);
+  if (!meeting) return res.status(404).send('Meeting not found');
+  const attendees = hub.prepare(`
+    SELECT c.* FROM meeting_attendees ma JOIN contacts c ON c.id = ma.contact_id
+    WHERE ma.meeting_id = ? ORDER BY c.name
+  `).all(meeting.id);
+  const facts = hub.prepare(`
+    SELECT f.*, c.name AS subject_name
+    FROM crm_facts f JOIN contacts c ON c.id = f.contact_id
+    WHERE f.user = ? AND f.meeting_id = ?
+    ORDER BY f.created_at DESC
+  `).all(req.hubUser, meeting.id);
+  const contactMap = new Map(hub.prepare('SELECT id, name FROM contacts WHERE user = ?').all(req.hubUser).map(c => [c.id, c]));
+  const touchedIds = new Set(attendees.map(c => c.id));
+  for (const fact of facts) {
+    touchedIds.add(fact.contact_id);
+    for (const id of parseJsonArray(fact.linked_contacts)) touchedIds.add(id);
+  }
+  const touchedContacts = [...touchedIds].map(id => contactMap.get(id)).filter(Boolean);
+  const contacts = [...contactMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
+  res.render('hub/crm-meeting', {
+    ...crmPageData(req.hubUser), meeting, attendees, facts, touchedContacts, contacts, companies,
+  });
+});
+
+router.post('/crm/meeting/:id/fact', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const meeting = hub.prepare('SELECT * FROM meetings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.body.contact_id, req.hubUser);
+  const fact = String(req.body.fact || '').trim();
+  const factType = ['fact', 'decision', 'action', 'note'].includes(req.body.fact_type) ? req.body.fact_type : 'fact';
+  if (!meeting || !contact || !fact) return res.status(400).send('Meeting, subject, and text required');
+  const validContactIds = new Set(
+    hub.prepare('SELECT id FROM contacts WHERE user = ?').all(req.hubUser).map(row => row.id)
+  );
+  const linked = asArray(req.body.linked_contacts)
+    .filter(id => id !== contact.id && validContactIds.has(id));
+  hub.prepare(`
+    INSERT INTO crm_facts
+      (id, user, contact_id, fact, status, source, meeting_id, company_id, linked_contacts, fact_type)
+    VALUES (?, ?, ?, ?, 'active', 'meeting', ?, ?, ?, ?)
+  `).run(uuid(), req.hubUser, contact.id, fact, meeting.id, meeting.company_id, JSON.stringify(linked), factType);
+  res.redirect(`/crm/meeting/${meeting.id}`);
+});
+
+router.post('/crm/meeting/:id', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const meeting = hub.prepare('SELECT id FROM meetings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!meeting) return res.status(404).send('Meeting not found');
+  const title = String(req.body.title || '').trim();
+  const meetingDate = String(req.body.meeting_date || '').trim();
+  if (!title || !meetingDate) return res.status(400).send('Title and date required');
+  const company = req.body.company_id
+    ? hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.body.company_id, req.hubUser)
+    : null;
+  hub.transaction(() => {
+    hub.prepare(`
+      UPDATE meetings SET title = ?, meeting_date = ?, meeting_time = ?, duration_mins = ?,
+        location = ?, notes = ?, company_id = ?
+      WHERE id = ? AND user = ?
+    `).run(
+      title, meetingDate,
+      String(req.body.meeting_time || '').trim() || null, Number(req.body.duration_mins) || null,
+      String(req.body.location || '').trim() || null, String(req.body.notes || '').trim() || null,
+      company?.id || null, meeting.id, req.hubUser
+    );
+    hub.prepare('DELETE FROM meeting_attendees WHERE meeting_id = ?').run(meeting.id);
+    const insert = hub.prepare('INSERT OR IGNORE INTO meeting_attendees (meeting_id, contact_id) VALUES (?, ?)');
+    const validIds = new Set(hub.prepare('SELECT id FROM contacts WHERE user = ?').all(req.hubUser).map(row => row.id));
+    for (const contactId of asArray(req.body.attendee_ids)) {
+      if (validIds.has(contactId)) insert.run(meeting.id, contactId);
+    }
+  })();
+  res.redirect(`/crm/meeting/${meeting.id}`);
+});
+
+router.post('/crm/meeting/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const meeting = hub.prepare('SELECT id FROM meetings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!meeting) return res.status(404).send('Meeting not found');
+  hub.transaction(() => {
+    hub.prepare('DELETE FROM meeting_attendees WHERE meeting_id = ?').run(meeting.id);
+    hub.prepare('UPDATE crm_facts SET meeting_id = NULL WHERE meeting_id = ? AND user = ?').run(meeting.id, req.hubUser);
+    hub.prepare('DELETE FROM meetings WHERE id = ?').run(meeting.id);
+  })();
+  res.redirect('/crm/meetings');
+});
+
+router.post('/crm/facts/:id/complete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const result = db.hub().prepare(`
+    UPDATE crm_facts SET status = 'done', updated_at = unixepoch()
+    WHERE id = ? AND user = ?
+  `).run(req.params.id, req.hubUser);
+  if (!result.changes) return res.status(404).send('Fact not found');
+  res.redirect(safeBack(req, '/crm/contacts'));
 });
 
 router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
   if (!contact) return res.status(404).json({ error: 'Not found' });
-  hub.prepare('DELETE FROM crm_facts WHERE contact_id = ?').run(contact.id);
-  hub.prepare('DELETE FROM contacts WHERE id = ?').run(contact.id);
+  hub.transaction(() => {
+    hub.prepare('DELETE FROM contact_companies WHERE contact_id = ?').run(contact.id);
+    hub.prepare('DELETE FROM meeting_attendees WHERE contact_id = ?').run(contact.id);
+    hub.prepare('DELETE FROM crm_facts WHERE contact_id = ? AND user = ?').run(contact.id, req.hubUser);
+    const linkedFacts = hub.prepare(
+      "SELECT id, linked_contacts FROM crm_facts WHERE user = ? AND linked_contacts LIKE ?"
+    ).all(req.hubUser, `%"${contact.id}"%`);
+    const updateLinks = hub.prepare('UPDATE crm_facts SET linked_contacts = ? WHERE id = ?');
+    for (const fact of linkedFacts) {
+      updateLinks.run(JSON.stringify(parseJsonArray(fact.linked_contacts).filter(id => id !== contact.id)), fact.id);
+    }
+    hub.prepare('DELETE FROM contacts WHERE id = ?').run(contact.id);
+  })();
   res.json({ ok: true });
 });
 

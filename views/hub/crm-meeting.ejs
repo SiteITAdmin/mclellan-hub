@@ -1,0 +1,59 @@
+<%- include('partials/crm-head', { title: meeting.title, active: 'meetings' }) %>
+<a class="crm-back" href="/crm/meetings">Meetings</a>
+<section class="crm-hero"><div><p class="crm-eyebrow"><%= meeting.meeting_date %><%= meeting.meeting_time ? ` · ${meeting.meeting_time}` : '' %></p><h1><%= meeting.title %></h1><p><%= meeting.company_name || meeting.location || meeting.source %></p></div></section>
+
+<div class="crm-two-col">
+  <aside class="crm-stack">
+    <section class="section-card">
+      <h2>Meeting details</h2>
+      <form class="crm-form-grid" method="post" action="/crm/meeting/<%= meeting.id %>">
+        <label class="wide">Title<input name="title" value="<%= meeting.title %>" required></label>
+        <label>Date<input name="meeting_date" type="date" value="<%= meeting.meeting_date %>" required></label>
+        <label>Time<input name="meeting_time" type="time" value="<%= meeting.meeting_time || '' %>"></label>
+        <label>Duration<input name="duration_mins" type="number" min="0" value="<%= meeting.duration_mins || '' %>"></label>
+        <label>Company<select name="company_id"><option value="">None</option><% for (const company of companies) { %><option value="<%= company.id %>" <%= meeting.company_id === company.id ? 'selected' : '' %>><%= company.name %></option><% } %></select></label>
+        <label class="wide">Location<input name="location" value="<%= meeting.location || '' %>"></label>
+        <fieldset class="wide"><legend>Attendees</legend><div class="crm-check-grid"><% const attendeeIds = new Set(attendees.map(c => c.id)); for (const contact of contacts) { %><label class="crm-checkbox"><input type="checkbox" name="attendee_ids" value="<%= contact.id %>" <%= attendeeIds.has(contact.id) ? 'checked' : '' %>><%= contact.name %></label><% } %></div></fieldset>
+        <label class="wide">Notes<textarea name="notes" rows="3"><%= meeting.notes || '' %></textarea></label>
+        <button class="btn" type="submit">Save meeting</button>
+      </form>
+      <form class="crm-danger-form" method="post" action="/crm/meeting/<%= meeting.id %>/delete" onsubmit="return confirm('Delete this meeting? Its outcomes will be kept without the meeting link.')">
+        <button type="submit">Delete meeting</button>
+      </form>
+    </section>
+    <section class="section-card">
+      <h2>Attendees</h2>
+      <div class="crm-badges"><% for (const contact of attendees) { %><a class="crm-badge" href="/crm/contact/<%= contact.id %>"><%= contact.name %></a><% } %></div>
+      <% if (!attendees.length) { %><p class="crm-muted">No matched attendees.</p><% } %>
+    </section>
+    <section class="section-card">
+      <h2>People touched</h2>
+      <div class="crm-badges"><% for (const contact of touchedContacts) { %><a class="crm-badge" href="/crm/contact/<%= contact.id %>"><%= contact.name %></a><% } %></div>
+    </section>
+    <% if (meeting.notes) { %><section class="section-card"><h2>Notes</h2><p class="crm-pre"><%= meeting.notes %></p></section><% } %>
+  </aside>
+
+  <div class="crm-stack">
+    <section class="section-card">
+      <h2>Outcomes</h2>
+      <% for (const fact of facts) { %>
+        <div class="crm-action">
+          <span><span class="crm-type <%= fact.fact_type || 'fact' %>"><%= fact.fact_type || 'fact' %></span> <strong><%= fact.subject_name %></strong>: <%= fact.fact %></span>
+          <% if (fact.fact_type === 'action' && fact.status !== 'done') { %><form method="post" action="/crm/facts/<%= fact.id %>/complete"><button class="btn btn-sm" type="submit">Done</button></form><% } %>
+        </div>
+      <% } %>
+      <% if (!facts.length) { %><p class="crm-muted">No outcomes captured yet.</p><% } %>
+    </section>
+    <section class="section-card">
+      <h2>Add outcome</h2>
+      <form class="crm-form-grid" method="post" action="/crm/meeting/<%= meeting.id %>/fact">
+        <label>Type<select name="fact_type"><option>fact</option><option>decision</option><option>action</option><option>note</option></select></label>
+        <label>Subject<select name="contact_id" required><option value="">Choose person</option><% for (const contact of contacts) { %><option value="<%= contact.id %>"><%= contact.name %></option><% } %></select></label>
+        <label class="wide">What happened<textarea name="fact" rows="3" required></textarea></label>
+        <fieldset class="wide"><legend>Also involves</legend><div class="crm-check-grid"><% for (const contact of contacts) { %><label class="crm-checkbox"><input type="checkbox" name="linked_contacts" value="<%= contact.id %>"><%= contact.name %></label><% } %></div></fieldset>
+        <button class="btn" type="submit">Add outcome</button>
+      </form>
+    </section>
+  </div>
+</div>
+<%- include('partials/crm-foot') %>

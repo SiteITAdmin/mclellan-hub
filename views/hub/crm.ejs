@@ -1,44 +1,68 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>People — McLellan Hub</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/hub.modern.css?v=20260507b">
-</head>
-<body>
-<div id="root"></div>
+<%- include('partials/crm-head', { title: 'People', active: 'contacts' }) %>
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Connected CRM</p>
+    <h1>People</h1>
+    <p>Contacts, their companies, shared meetings, decisions, and open work.</p>
+  </div>
+</section>
+
+<section class="section-card">
+  <form class="crm-note-form" id="crm-note-form">
+    <input name="text" id="crm-note" placeholder="Add a note, e.g. Rob approved the lite licence for Jina" required>
+    <button class="btn" type="submit">Add note</button>
+  </form>
+  <p class="crm-form-message" id="crm-note-message"></p>
+</section>
+
+<section class="crm-card-grid">
+  <% for (const contact of contacts) { %>
+    <a class="mgmt-card crm-link-card" href="/crm/contact/<%= contact.id %>">
+      <div class="crm-card-title">
+        <span><%= contact.name %></span>
+        <span class="crm-count"><%= contact.facts.length %> open</span>
+      </div>
+      <% if (contact.company_name) { %>
+        <div class="crm-badges">
+          <span class="crm-badge"><%= contact.company_name %></span>
+          <% if (contact.company_role) { %><span class="crm-badge subtle"><%= contact.company_role %></span><% } %>
+        </div>
+      <% } %>
+      <% if (contact.facts.length) { %>
+        <ul class="crm-compact-list">
+          <% for (const fact of contact.facts.slice(0, 3)) { %>
+            <li><span class="crm-type <%= fact.fact_type || 'fact' %>"><%= fact.fact_type || fact.status %></span><%= fact.fact %></li>
+          <% } %>
+        </ul>
+      <% } else { %>
+        <p class="crm-muted">No open items.</p>
+      <% } %>
+    </a>
+  <% } %>
+</section>
+<% if (!contacts.length) { %><div class="crm-empty">No contacts yet. Add a natural-language note above.</div><% } %>
 
 <script>
-window.HUB_VIEW = 'crm';
-window.HUB_DATA = {
-  user: '<%- locals.user || "" %>',
-  projects: <%- JSON.stringify(locals.projects || []) %>,
-  recentConvs: <%- JSON.stringify(locals.recentConvs || []) %>,
-  activeProject: null,
-  conv: null,
-  messages: [],
-  availableModels: [],
-  projectDocs: [],
-};
-window.CRM_DATA = {
-  contacts: <%- JSON.stringify(locals.contacts || []) %>,
-  context: <%- JSON.stringify(locals.context || []) %>,
-};
-window.CONV_ID = '';
-window.PROJECT_SLUG = '';
-window.TWEAK_DEFAULTS = {};
+document.getElementById('crm-note-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const input = document.getElementById('crm-note');
+  const message = document.getElementById('crm-note-message');
+  message.textContent = 'Saving...';
+  try {
+    const response = await fetch('/api/crm/note', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: input.value }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || result.message || 'Could not save note');
+    message.textContent = result.message;
+    input.value = '';
+    setTimeout(() => location.reload(), 700);
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.add('error');
+  }
+});
 </script>
-
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="/tweaks-panel.jsx" type="text/babel" data-presets="react"></script>
-<script src="/hub-modern.jsx?v=20260507b" type="text/babel" data-presets="react"></script>
-</body>
-</html>
+<%- include('partials/crm-foot') %>

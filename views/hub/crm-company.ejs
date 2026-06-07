@@ -1,0 +1,49 @@
+<%- include('partials/crm-head', { title: company.name, active: 'companies' }) %>
+<a class="crm-back" href="/crm/companies">Companies</a>
+<section class="crm-hero"><div><p class="crm-eyebrow"><%= company.type || 'Company' %></p><h1><%= company.name %></h1><p><%= company.notes || 'Company context and activity.' %></p></div><% if (company.website) { %><a class="btn" href="<%= company.website %>" target="_blank" rel="noreferrer">Website</a><% } %></section>
+
+<div class="crm-two-col">
+  <div class="crm-stack">
+    <section class="section-card">
+      <h2>Company details</h2>
+      <form class="crm-form-grid" method="post" action="/crm/company/<%= company.id %>">
+        <label>Name<input name="name" value="<%= company.name %>" required></label>
+        <label>Type<select name="type"><option value="">Not set</option><% for (const type of ['employer','client','vendor','partner']) { %><option value="<%= type %>" <%= company.type === type ? 'selected' : '' %>><%= type %></option><% } %></select></label>
+        <label class="wide">Website<input name="website" type="url" value="<%= company.website || '' %>"></label>
+        <label class="wide">Notes<textarea name="notes" rows="3"><%= company.notes || '' %></textarea></label>
+        <button class="btn" type="submit">Save details</button>
+      </form>
+      <form class="crm-danger-form" method="post" action="/crm/company/<%= company.id %>/delete" onsubmit="return confirm('Delete this company? Meetings and facts will be kept without the company link.')">
+        <button type="submit">Delete company</button>
+      </form>
+    </section>
+    <section class="section-card">
+      <h2>People</h2>
+      <% for (const contact of contacts) { %>
+        <a class="crm-row-link" href="/crm/contact/<%= contact.id %>"><strong><%= contact.name %></strong><span><%= contact.role || 'Role not set' %></span></a>
+      <% } %>
+      <% if (!contacts.length) { %><p class="crm-muted">No contacts linked.</p><% } %>
+      <form class="crm-inline-form" method="post" action="/crm/company/<%= company.id %>/contacts">
+        <select name="contact_id" required><option value="">Link a contact</option><% for (const contact of availableContacts) { %><option value="<%= contact.id %>"><%= contact.name %></option><% } %></select>
+        <input name="role" placeholder="Role">
+        <label class="crm-checkbox"><input type="checkbox" name="is_primary" value="1"> Primary</label>
+        <button class="btn btn-sm" type="submit">Link</button>
+      </form>
+    </section>
+    <section class="section-card">
+      <h2>Meetings</h2>
+      <% for (const meeting of meetings) { %><a class="crm-row-link" href="/crm/meeting/<%= meeting.id %>"><strong><%= meeting.title %></strong><span><%= meeting.meeting_date %></span></a><% } %>
+      <% if (!meetings.length) { %><p class="crm-muted">No meetings yet.</p><% } %>
+    </section>
+  </div>
+  <section class="section-card">
+    <h2>Company timeline</h2>
+    <div class="crm-timeline">
+      <% for (const fact of facts) { %>
+        <div class="crm-timeline-item"><time><%= new Date(fact.created_at * 1000).toLocaleDateString('en-GB') %></time><strong><span class="crm-type <%= fact.fact_type || 'fact' %>"><%= fact.fact_type || 'fact' %></span> <%= fact.fact %></strong><span><a href="/crm/contact/<%= fact.contact_id %>"><%= fact.subject_name %></a><% if (fact.meeting_id) { %> · <a href="/crm/meeting/<%= fact.meeting_id %>"><%= fact.meeting_title %></a><% } %></span></div>
+      <% } %>
+      <% if (!facts.length) { %><p class="crm-muted">No facts across this company yet.</p><% } %>
+    </div>
+  </section>
+</div>
+<%- include('partials/crm-foot') %>
