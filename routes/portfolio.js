@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../lib/db');
-const { weekKeyLabel } = require('../lib/newsletter-pipeline');
+const { briefingPeriodLabel } = require('../lib/newsletter-pipeline');
 const { routeMessage } = require('../lib/router');
 const { uuid } = require('../lib/id');
 const { getSystemModelKey } = require('../lib/settings');
@@ -465,7 +465,7 @@ router.get('/feed.xml', (req, res) => {
   const hub = db.hub();
 
   const briefings = hub.prepare(`
-    SELECT id, week_key, text_content, topic_count, created_at, published_at
+    SELECT id, week_key, date_from, date_to, text_content, topic_count, created_at, published_at
     FROM nl_briefings WHERE user = 'douglas' AND published_at IS NOT NULL
     ORDER BY published_at DESC LIMIT 20
   `).all();
@@ -484,7 +484,7 @@ router.get('/feed.xml', (req, res) => {
 
   const items = [
     ...briefings.map(b => ({
-      title: `Intelligence Briefing — ${weekKeyLabel(b.week_key)}`,
+      title: `Intelligence Briefing — ${briefingPeriodLabel(b)}`,
       link: `https://douglas.mclellan.scot/briefing/${b.id}`,
       description: (b.text_content || '').slice(0, 500).replace(/[#*`]/g, '').trim() + '…',
       pubDate: toRfc822(b.published_at),
@@ -532,7 +532,7 @@ router.get('/llms.txt', (req, res) => {
   const hub = db.hub();
 
   const briefings = hub.prepare(`
-    SELECT week_key, text_content, topic_count, published_at
+    SELECT week_key, date_from, date_to, text_content, topic_count, published_at
     FROM nl_briefings WHERE user = 'douglas' AND published_at IS NOT NULL
     ORDER BY published_at DESC LIMIT 10
   `).all();
@@ -563,7 +563,7 @@ router.get('/llms.txt', (req, res) => {
 
   for (const b of briefings) {
     const date = new Date(b.published_at * 1000).toISOString().slice(0, 10);
-    lines.push(`### Intelligence Briefing — ${weekKeyLabel(b.week_key)} (${date})`);
+    lines.push(`### Intelligence Briefing — ${briefingPeriodLabel(b)} (${date})`);
     lines.push('');
     lines.push((b.text_content || '').replace(/^#{1,6} /gm, '#### ').trim());
     lines.push('');
