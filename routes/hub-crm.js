@@ -174,7 +174,7 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
   if (lower.startsWith('search ') || lower.startsWith('find ')) {
     const query = text.replace(/^(search|find)\s+/i, '').trim();
     if (!query) return 'Search for what? Example: search Dad physio';
-    const results = searchNotes({ query, limit: 5 });
+    const results = await searchNotes({ query, limit: 5 });
     if (!results.length) return `No vault matches for: ${query}`;
     return results.map((r, i) => `${i + 1}. ${r.path}\n${(r.excerpt || '').slice(0, 280)}`).join('\n\n');
   }
