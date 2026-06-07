@@ -16,6 +16,7 @@ const { runRegulatoryMonitor } = require('./lib/regulatory-monitor');
 const { sendWeeklyDigest } = require('./lib/weekly-digest');
 const { sendRhStats } = require('./lib/rh-stats');
 const { sendWeeklyReminder } = require('./lib/newsletter-pipeline');
+const { ingestAllFeeds } = require('./lib/rss-ingest');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -190,6 +191,15 @@ setInterval(() => {
   if (now.getDay() !== 0 || now.getHours() !== 14 || now.getMinutes() !== 0) return;
   for (const user of BRIEFING_USERS) {
     sendWeeklyDigest(user).catch(err => console.error(`[weekly] digest error for ${user}:`, err));
+  }
+}, 60 * 1000);
+
+// ── RSS feed ingest (09:30 Europe/Dublin, daily) ──────────────────────────────
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getHours() !== 9 || now.getMinutes() !== 30) return;
+  for (const user of BRIEFING_USERS) {
+    ingestAllFeeds(user).catch(err => console.error(`[rss] ingest error for ${user}:`, err));
   }
 }, 60 * 1000);
 

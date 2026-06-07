@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Briefing — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 32px 16px 80px; }
+.heading { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+.sub { font-size: 13px; color: var(--text-dim); margin: 0 0 28px; }
+.content-card { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 12px; padding: 28px 32px; line-height: 1.65; font-size: 14px; white-space: pre-wrap; font-family: inherit; }
+.action-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.btn { padding: 7px 14px; font-size: 13px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border, #dddaf0); background: transparent; color: inherit; font-family: inherit; font-weight: 600; text-decoration: none; display: inline-block; }
+.btn-primary { background: var(--primary, #7c6af5); color: #fff; border-color: transparent; }
+.btn-danger { color: #c62828; border-color: #e57373; }
+.status { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+</style>
+</head>
+<body class="hub-page">
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+    <h1 class="heading">Intelligence Briefing</h1>
+    <a href="/newsletter" style="font-size:13px;color:var(--text-dim);">← Newsletter</a>
+  </div>
+  <p class="sub">
+    <%= briefingPeriodLabel(briefing) %>
+    · <%= briefing.topic_count || 0 %> topics
+    · <%= new Date(briefing.created_at * 1000).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) %>
+  </p>
+
+  <div class="action-row">
+    <a class="btn btn-primary" href="/newsletter/briefing/<%= briefing.id %>/pdf" download>Download PDF</a>
+    <button class="btn" id="wiki-btn" onclick="exportWiki()">Export to wiki</button>
+    <% if (!briefing.published_at) { %>
+      <button class="btn" onclick="publishBriefing()">Publish</button>
+    <% } else { %>
+      <button class="btn" onclick="unpublishBriefing()">Unpublish</button>
+    <% } %>
+    <button class="btn btn-danger" onclick="deleteBriefing()">Delete</button>
+  </div>
+  <p class="status" id="status-msg"><% if (briefing.wiki_slug) { %>Exported to wiki: <%= briefing.wiki_slug %><% } %></p>
+
+  <div class="content-card"><%= briefing.text_content || '(No content)' %></div>
+</div>
+<script>
+async function exportWiki() {
+  const btn = document.getElementById('wiki-btn');
+  const msg = document.getElementById('status-msg');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/newsletter/briefing/<%= briefing.id %>/wiki', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) msg.textContent = 'Exported to wiki: ' + j.slug;
+    else msg.textContent = j.error || 'Error';
+  } finally { btn.disabled = false; }
+}
+async function publishBriefing() {
+  await fetch('/newsletter/briefing/<%= briefing.id %>/publish', { method: 'POST' });
+  location.reload();
+}
+async function unpublishBriefing() {
+  await fetch('/newsletter/briefing/<%= briefing.id %>/unpublish', { method: 'POST' });
+  location.reload();
+}
+async function deleteBriefing() {
+  if (!confirm('Delete this briefing?')) return;
+  const r = await fetch('/newsletter/briefing/<%= briefing.id %>/delete', { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) window.location.href = '/newsletter';
+}
+</script>
+</body>
+</html>
