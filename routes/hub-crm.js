@@ -399,7 +399,7 @@ router.post('/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req,
   const hub = db.hub();
   const id = uuid();
   hub.prepare('INSERT INTO contacts (id, user, name, notes) VALUES (?, ?, ?, ?)').run(
-    id, req.hubUser, name, String(req.body.notes || '').trim() || null
+    id, req.hubUser, name, String(req.body.notes || '').trim()
   );
   res.redirect('/crm/contact/' + id);
 });
