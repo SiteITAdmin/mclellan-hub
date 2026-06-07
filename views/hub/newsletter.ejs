@@ -204,7 +204,10 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
           <% if (!b.sent_at) { %>
           <button class="btn-sm" onclick="resendBriefing('<%= b.id %>')">Send</button>
           <% } %>
-          <a href="/newsletter/briefing/<%= b.id %>/pdf" class="btn-sm" download>Download PDF</a>
+          <a href="/newsletter/briefing/<%= b.id %>/pdf" class="btn-sm" download>PDF</a>
+          <button class="btn-sm" onclick="exportToWiki('<%= b.id %>', this)" title="<%= b.wiki_slug ? 'Exported: ' + b.wiki_slug : 'Export to wiki' %>"><%= b.wiki_slug ? '✓ Wiki' : 'Wiki' %></button>
+          <button class="btn-sm" onclick="togglePublish('<%= b.id %>', <%= b.published_at ? 'true' : 'false' %>, this)" style="<%= b.published_at ? 'background:var(--accent);color:#fff' : '' %>"><%= b.published_at ? 'Published' : 'Publish' %></button>
+          <button class="btn-sm" onclick="deleteBriefing('<%= b.id %>', this)" style="color:#c0392b">Delete</button>
         </div>
       </div>
       <% } %>
@@ -507,6 +510,40 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       status.textContent = '⚠ ' + err.message;
       btn.disabled = false;
     }
+  };
+
+  window.deleteBriefing = async function(id, btn) {
+    if (!confirm('Delete this briefing? This cannot be undone.')) return;
+    const r = await fetch(`/newsletter/briefing/${id}/delete`, { method: 'POST' });
+    if (r.ok) { btn.closest('.mgmt-card').remove(); }
+    else { alert('⚠ Delete failed'); }
+  };
+
+  window.exportToWiki = async function(id, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Exporting…';
+    const r = await fetch(`/newsletter/briefing/${id}/wiki`, { method: 'POST' });
+    const data = await r.json();
+    if (r.ok) { btn.textContent = '✓ Wiki'; btn.title = 'Exported: ' + data.slug; }
+    else { btn.textContent = 'Wiki'; btn.disabled = false; alert('⚠ ' + (data.error || 'Failed')); }
+  };
+
+  window.togglePublish = async function(id, isPublished, btn) {
+    const action = isPublished ? 'unpublish' : 'publish';
+    const r = await fetch(`/newsletter/briefing/${id}/${action}`, { method: 'POST' });
+    if (r.ok) {
+      if (action === 'publish') {
+        btn.textContent = 'Published';
+        btn.style.background = 'var(--accent)';
+        btn.style.color = '#fff';
+        btn.setAttribute('onclick', `togglePublish('${id}', true, this)`);
+      } else {
+        btn.textContent = 'Publish';
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.setAttribute('onclick', `togglePublish('${id}', false, this)`);
+      }
+    } else { alert('⚠ Failed'); }
   };
 
   window.resendBriefing = async function(id) {

@@ -767,8 +767,8 @@
   {
     "date": "2026-06-05",
     "codex_tokens": 35575436,
-    "claude_code_tokens": 8407221,
-    "claude_code_calls": 89,
+    "claude_code_tokens": 15142254,
+    "claude_code_calls": 165,
     "api_tokens": 77545,
     "chatgpt_conversations": 0,
     "chatgpt_messages": 0,
@@ -780,5 +780,22 @@
     "confidence": "measured",
     "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export"
+  },
+  {
+    "date": "2026-06-06",
+    "codex_tokens": 34533744,
+    "claude_code_tokens": 48488706,
+    "claude_code_calls": 481,
+    "api_tokens": 0,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "Hub Development",
+    "evidence": "Codex session token counters; Claude Code message usage"
   }
 ]
