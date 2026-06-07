@@ -764,6 +764,24 @@ router.post('/api/crm/contacts/:id/projects/unlink', requireAuth, requireSameOri
   res.json({ ok: true });
 });
 
+router.post('/api/crm/companies/:id/projects', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  const project = hub.prepare('SELECT id FROM projects WHERE id = ? AND user = ?').get(req.body.project_id, req.hubUser);
+  if (!company || !project) return res.status(404).json({ error: 'Not found' });
+  hub.prepare(`
+    INSERT OR IGNORE INTO company_projects (company_id, project_id, role) VALUES (?, ?, ?)
+  `).run(company.id, project.id, String(req.body.role || '').trim() || null);
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/companies/:id/projects/unlink', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  hub.prepare('DELETE FROM company_projects WHERE company_id = ? AND project_id = ?')
+    .run(req.params.id, req.body.project_id);
+  res.json({ ok: true });
+});
+
 router.post('/api/crm/contacts/:id/edit', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
@@ -1005,6 +1023,17 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
   const allContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   const availableContacts = allContacts.filter(c => !directContactIds.has(c.id));
 
+  // Companies: directly linked
+  const linkedCompanies = hub.prepare(`
+    SELECT co.id, co.name, cp.role AS project_role
+    FROM company_projects cp
+    JOIN companies co ON co.id = cp.company_id
+    WHERE cp.project_id = ? ORDER BY co.name
+  `).all(project.id);
+  const linkedCompanyIds = new Set(linkedCompanies.map(c => c.id));
+  const allCompanies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
+  const availableCompanies = allCompanies.filter(c => !linkedCompanyIds.has(c.id));
+
   // Recent email summaries for this project
   const recentEmails = hub.prepare(`
     SELECT e.*, c.name AS contact_name
@@ -1025,7 +1054,8 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),
     project, tasks, contacts, directContactIds: [...directContactIds],
-    availableContacts, recentEmails, recentMessages, showHistory, todayIsoStr,
+    availableContacts, linkedCompanies, linkedCompanyIds: [...linkedCompanyIds],
+    availableCompanies, recentEmails, recentMessages, showHistory, todayIsoStr,
   });
 });
 

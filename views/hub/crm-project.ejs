@@ -88,6 +88,35 @@ async function taskAction(id, action) {
       <% } %>
     </section>
 
+    <section class="section-card">
+      <h2>Companies</h2>
+      <% if (!linkedCompanies.length) { %>
+        <p class="crm-muted">No companies linked yet.</p>
+      <% } %>
+      <% for (const co of linkedCompanies) { %>
+        <div class="crm-action">
+          <a href="/crm/company/<%= co.id %>">
+            <strong><%= co.name %></strong>
+            <% if (co.project_role) { %><span class="crm-muted"> · <%= co.project_role %></span><% } %>
+          </a>
+          <button class="btn btn-sm btn-ghost" onclick="unlinkCompany('<%= co.id %>')">Remove</button>
+        </div>
+      <% } %>
+      <% if (availableCompanies.length) { %>
+        <form class="crm-inline-form" id="link-company-form" style="margin-top:12px;">
+          <select name="company_id" required style="flex:1;">
+            <option value="">Link a company…</option>
+            <% for (const co of availableCompanies) { %>
+              <option value="<%= co.id %>"><%= co.name %></option>
+            <% } %>
+          </select>
+          <input name="role" placeholder="Role (optional)" style="max-width:140px;">
+          <button class="btn btn-sm" type="submit">Link</button>
+        </form>
+        <p class="crm-muted" id="link-company-msg" style="font-size:12px;margin-top:4px;"></p>
+      <% } %>
+    </section>
+
   </div>
 
   <!-- ── Right: Recent activity ────────────────────────────────────────── -->
@@ -159,6 +188,35 @@ if (linkContactForm) {
       else msg.textContent = j.error || 'Error';
     } catch (err) { msg.textContent = err.message; }
   });
+}
+
+const linkCompanyForm = document.getElementById('link-company-form');
+if (linkCompanyForm) {
+  linkCompanyForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = document.getElementById('link-company-msg');
+    const data = Object.fromEntries(new FormData(e.target));
+    msg.textContent = 'Linking…';
+    try {
+      const r = await fetch(`/api/crm/companies/${data.company_id}/projects`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: '<%= project.id %>', role: data.role }),
+      });
+      const j = await r.json();
+      if (j.ok) location.reload();
+      else msg.textContent = j.error || 'Error';
+    } catch (err) { msg.textContent = err.message; }
+  });
+}
+
+async function unlinkCompany(companyId) {
+  const r = await fetch(`/api/crm/companies/${companyId}/projects/unlink`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: '<%= project.id %>' }),
+  });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
 }
 
 async function unlinkContact(contactId) {
