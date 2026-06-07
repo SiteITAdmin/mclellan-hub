@@ -74,11 +74,11 @@ router.get('/api/obsidian/notes', requireHermesAuth, (req, res) => {
   }
 });
 
-router.get('/api/obsidian/search', requireHermesAuth, (req, res) => {
+router.get('/api/obsidian/search', requireHermesAuth, async (req, res) => {
   const { q, limit } = req.query;
   if (!q) return res.status(400).json({ error: 'q required' });
   try {
-    const results = searchNotes({ query: q, limit: parseInt(limit) || 10 });
+    const results = await searchNotes({ query: q, limit: parseInt(limit) || 10 });
     res.json({ ok: true, results });
   } catch (err) {
     res.status(500).json({ error: err.message });
