@@ -144,15 +144,11 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         <div class="topic-cards">
           <% for (const t of catTopics) { %>
           <div class="topic-card <%= t.selected ? '' : 'deselected' %>" id="topic-<%= t.id %>">
-            <form method="POST" action="/newsletter/topics/toggle" style="display:contents">
-              <input type="hidden" name="id" value="<%= t.id %>">
-              <input type="hidden" name="week" value="<%= weekKey %>">
-              <button type="submit" style="all:unset;cursor:pointer;flex-shrink:0;margin-top:2px">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:4px;border:2px solid <%= t.selected ? 'var(--accent)' : 'var(--card-border)' %>;background:<%= t.selected ? 'var(--accent)' : 'transparent' %>;position:relative;">
-                  <% if (t.selected) { %><span style="position:absolute;top:1px;left:3px;color:#fff;font-size:10px;font-weight:900">✓</span><% } %>
-                </span>
-              </button>
-            </form>
+            <button type="button" onclick="toggleTopic('<%= t.id %>')" style="all:unset;cursor:pointer;flex-shrink:0;margin-top:2px">
+              <span class="topic-check" id="check-<%= t.id %>" style="display:inline-block;width:16px;height:16px;border-radius:4px;border:2px solid <%= t.selected ? 'var(--accent)' : 'var(--card-border)' %>;background:<%= t.selected ? 'var(--accent)' : 'transparent' %>;position:relative;">
+                <span class="topic-tick" style="position:absolute;top:1px;left:3px;color:#fff;font-size:10px;font-weight:900"><%= t.selected ? '✓' : '' %></span>
+              </span>
+            </button>
             <div class="topic-body">
               <div class="topic-headline"><%= t.headline %></div>
               <div class="topic-meta"><%= t.from_name %> · <%= new Date(t.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
@@ -471,6 +467,35 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
 <script>
 (function () {
+  window.toggleTopic = async function(id) {
+    const card = document.getElementById('topic-' + id);
+    const check = document.getElementById('check-' + id);
+    const tick = check?.querySelector('.topic-tick');
+    const isSelected = card?.classList.contains('deselected') === false && !card?.classList.contains('deselected');
+    // optimistic UI update
+    const nowSelected = card.classList.toggle('deselected') === false;
+    if (check) {
+      check.style.background = nowSelected ? 'var(--accent)' : 'transparent';
+      check.style.borderColor = nowSelected ? 'var(--accent)' : 'var(--card-border)';
+    }
+    if (tick) tick.textContent = nowSelected ? '✓' : '';
+    try {
+      await fetch('/newsletter/topics/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ id, week: '<%= weekKey %>' }),
+      });
+    } catch (e) {
+      // revert on failure
+      card.classList.toggle('deselected');
+      if (check) {
+        check.style.background = nowSelected ? 'transparent' : 'var(--accent)';
+        check.style.borderColor = nowSelected ? 'var(--card-border)' : 'var(--accent)';
+      }
+      if (tick) tick.textContent = nowSelected ? '' : '✓';
+    }
+  };
+
   window.toggleEdit = function(id) {
     document.getElementById(id)?.classList.toggle('open');
   };
