@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= feed.name %> — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
+.nl-wrap { max-width: 960px; margin: 0 auto; padding: 32px 16px 80px; }
+.nl-heading { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+.nl-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 28px; }
+.two-col { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
+@media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+.article-list { display: flex; flex-direction: column; gap: 12px; }
+.article-card { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 10px; padding: 16px; }
+.article-card h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.article-card h3 a { text-decoration: none; color: inherit; }
+.article-card h3 a:hover { color: var(--primary, #7c6af5); }
+.article-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+.article-excerpt { font-size: 12px; color: var(--text-dim); line-height: 1.5; white-space: pre-wrap; }
+.side-card { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+.side-card h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+.btn { padding: 8px 16px; background: var(--primary, #7c6af5); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn-subtle { background: transparent; color: var(--primary, #7c6af5); border: 1px solid var(--border, #dddaf0); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.briefing-row { padding: 8px 0; border-bottom: 1px solid var(--border, #dddaf0); font-size: 13px; }
+.briefing-row:last-child { border: none; }
+.date-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.date-row input { flex: 1; padding: 6px 8px; border: 1px solid var(--border, #dddaf0); border-radius: 6px; font-size: 12px; background: var(--input-bg, #fff); color: inherit; }
+.status-msg { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+</style>
+</head>
+<body class="hub-page">
+<%- include('partials/hub-nav', { active: 'newsletter' }) %>
+<div class="nl-wrap">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+    <h1 class="nl-heading"><%= feed.name %></h1>
+    <a href="/newsletter/creators" style="font-size:13px;color:var(--text-dim);">← Creators</a>
+  </div>
+  <p class="nl-sub"><%= feed.article_count %> articles · <a href="<%= feed.url %>" target="_blank" rel="noopener" style="color:var(--text-dim);font-size:12px;">RSS feed ↗</a></p>
+
+  <div class="two-col">
+
+    <!-- Articles -->
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <strong style="font-size:14px;">Articles (<%= articles.length %>)</strong>
+        <button class="btn btn-subtle btn-sm" id="fetch-btn" onclick="fetchFeed()">↻ Fetch now</button>
+      </div>
+      <p class="status-msg" id="fetch-msg"></p>
+      <div class="article-list">
+        <% for (const a of articles) { %>
+          <div class="article-card">
+            <h3><a href="<%= a.url %>" target="_blank" rel="noopener"><%= a.title %></a></h3>
+            <div class="article-meta">
+              <%= new Date(a.published_at * 1000).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) %>
+              · <%= a.word_count %> words
+            </div>
+            <div class="article-excerpt"><%= (a.excerpt || '').replace(/\n+/g, ' ').slice(0, 220) %>…</div>
+          </div>
+        <% } %>
+        <% if (!articles.length) { %>
+          <p style="color:var(--text-dim);font-size:13px;">No articles yet. Click "Fetch now" to ingest the feed.</p>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div>
+      <div class="side-card">
+        <h3>Generate briefing</h3>
+        <div class="date-row">
+          <input type="date" id="date-from" placeholder="From">
+          <input type="date" id="date-to" placeholder="To">
+        </div>
+        <button class="btn" style="width:100%;" onclick="generateBriefing()">Generate briefing</button>
+        <p class="status-msg" id="briefing-msg"></p>
+      </div>
+
+      <% if (briefings.length) { %>
+      <div class="side-card">
+        <h3>Past briefings</h3>
+        <% for (const b of briefings) { %>
+          <div class="briefing-row">
+            <a href="/newsletter/briefing/<%= b.id %>" style="color:inherit;text-decoration:none;">
+              <%= b.date_from %><% if (b.date_to && b.date_to !== b.date_from) { %> – <%= b.date_to %><% } %>
+              <span style="color:var(--text-dim);font-size:11px;margin-left:6px;"><%= b.topic_count %> articles</span>
+            </a>
+          </div>
+        <% } %>
+      </div>
+      <% } %>
+    </div>
+
+  </div>
+</div>
+<script>
+async function fetchFeed() {
+  const btn = document.getElementById('fetch-btn');
+  const msg = document.getElementById('fetch-msg');
+  btn.disabled = true; msg.textContent = 'Fetching…';
+  try {
+    const r = await fetch('/newsletter/creator/<%= feed.creator_slug %>/fetch', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = `Done: ${j.ingested} new, ${j.skipped} skipped`; setTimeout(() => location.reload(), 1200); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+  finally { btn.disabled = false; }
+}
+
+async function generateBriefing() {
+  const msg = document.getElementById('briefing-msg');
+  const dateFrom = document.getElementById('date-from').value;
+  const dateTo = document.getElementById('date-to').value;
+  msg.textContent = 'Generating… this may take a minute.';
+  try {
+    const r = await fetch('/newsletter/creator/<%= feed.creator_slug %>/briefing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date_from: dateFrom || null, date_to: dateTo || null }),
+    });
+    const j = await r.json();
+    if (j.ok) { window.location.href = '/newsletter/briefing/' + j.briefingId; }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+}
+</script>
+</body>
+</html>

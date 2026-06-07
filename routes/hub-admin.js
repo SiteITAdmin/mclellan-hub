@@ -15,6 +15,7 @@ const {
 } = require('../lib/email-taxonomy');
 const { uuid } = require('../lib/id');
 const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const { ingestFeed, ingestAllFeeds } = require('../lib/rss-ingest');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -1410,6 +1411,60 @@ router.post('/admin/linkedin/:id/delete', requireHubAdmin, (req, res) => {
   db.hub().prepare('DELETE FROM linkedin_posts WHERE id = ? AND user = ?')
     .run(req.params.id, req.hubUser);
   res.redirect('/admin/linkedin');
+});
+
+// ── RSS feed management ────────────────────────────────────────────────────────
+
+router.get('/admin/rss-feeds', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const feeds = hub.prepare(`
+    SELECT f.*, COUNT(a.id) AS article_count, MAX(a.published_at) AS latest_at
+    FROM rss_feeds f LEFT JOIN rss_articles a ON a.feed_id = f.id
+    WHERE f.user = ? GROUP BY f.id ORDER BY f.name
+  `).all(req.hubUser);
+  res.render('hub-admin/rss-feeds', { user: req.hubUser, feeds, msg: req.query.msg || null });
+});
+
+router.post('/admin/rss-feeds', requireHubAdmin, async (req, res) => {
+  const { name, url, creator_slug } = req.body;
+  if (!name || !url || !creator_slug) return res.redirect('/admin/rss-feeds');
+  const slug = creator_slug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  db.hub().prepare(`
+    INSERT OR IGNORE INTO rss_feeds (id, user, name, creator_slug, url) VALUES (?, ?, ?, ?, ?)
+  `).run(uuid(), req.hubUser, name.trim(), slug, url.trim());
+  res.redirect('/admin/rss-feeds');
+});
+
+router.post('/admin/rss-feeds/:id/toggle', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const feed = hub.prepare('SELECT enabled FROM rss_feeds WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (feed) hub.prepare('UPDATE rss_feeds SET enabled = ? WHERE id = ?').run(feed.enabled ? 0 : 1, req.params.id);
+  res.redirect('/admin/rss-feeds');
+});
+
+router.post('/admin/rss-feeds/:id/fetch', requireHubAdmin, async (req, res) => {
+  const feed = db.hub().prepare('SELECT * FROM rss_feeds WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!feed) return res.redirect('/admin/rss-feeds');
+  try {
+    const result = await ingestFeed(feed, req.hubUser);
+    res.redirect('/admin/rss-feeds?msg=' + encodeURIComponent(`Fetched: ${result.ingested} new, ${result.skipped} skipped`));
+  } catch (err) {
+    res.redirect('/admin/rss-feeds?msg=' + encodeURIComponent('Error: ' + err.message));
+  }
+});
+
+router.post('/admin/rss-feeds/:id/delete', requireHubAdmin, (req, res) => {
+  db.hub().prepare('DELETE FROM rss_feeds WHERE id = ? AND user = ?').run(req.params.id, req.hubUser);
+  res.redirect('/admin/rss-feeds');
+});
+
+router.post('/admin/rss-feeds/fetch-all', requireHubAdmin, async (req, res) => {
+  try {
+    const result = await ingestAllFeeds(req.hubUser);
+    res.redirect('/admin/rss-feeds?msg=' + encodeURIComponent(`All feeds: ${result.ingested} new, ${result.skipped} skipped`));
+  } catch (err) {
+    res.redirect('/admin/rss-feeds?msg=' + encodeURIComponent('Error: ' + err.message));
+  }
 });
 
 module.exports = router;

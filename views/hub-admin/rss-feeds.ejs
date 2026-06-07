@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RSS Feeds — Admin</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 32px 16px 80px; }
+h1 { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+.sub { font-size: 13px; color: var(--text-dim); margin: 0 0 24px; }
+.msg-bar { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); padding: 0 12px 8px 0; border-bottom: 1px solid var(--border, #dddaf0); }
+td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--border, #dddaf0); vertical-align: middle; }
+.badge { border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.badge-on { background: #e8f5e9; color: #2e7d32; }
+.badge-off { background: #fce4ec; color: #c62828; }
+.btn { padding: 5px 10px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border, #dddaf0); background: transparent; color: inherit; font-family: inherit; font-weight: 600; }
+.btn-primary { background: var(--primary, #7c6af5); color: #fff; border-color: transparent; }
+.btn-danger { color: #c62828; border-color: #e57373; }
+.add-form { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 10px; padding: 20px; margin-bottom: 24px; display: none; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 8px; align-items: end; }
+@media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+.form-grid input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; background: var(--input-bg, #fff); color: inherit; width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body class="hub-page">
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+    <h1>RSS Feeds</h1>
+    <a href="/admin" style="font-size:13px;color:var(--text-dim);">← Admin</a>
+  </div>
+  <p class="sub">Manage creator RSS feeds. Articles are ingested daily at 09:30.</p>
+
+  <% if (msg) { %>
+    <div class="msg-bar"><%= msg %></div>
+  <% } %>
+
+  <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
+    <button class="btn btn-primary" onclick="toggleAdd()">+ Add feed</button>
+    <form method="POST" action="/admin/rss-feeds/fetch-all" style="display:inline;">
+      <button class="btn" type="submit">↻ Fetch all</button>
+    </form>
+    <a class="btn" href="/newsletter/creators">← Creators view</a>
+  </div>
+
+  <div class="add-form" id="add-form">
+    <strong style="font-size:14px;display:block;margin-bottom:14px;">Add feed</strong>
+    <form method="POST" action="/admin/rss-feeds">
+      <div class="form-grid">
+        <input name="name" placeholder="Creator name" required>
+        <input name="creator_slug" placeholder="Slug (e.g. nate)" required>
+        <input name="url" placeholder="RSS URL" required>
+        <button class="btn btn-primary" type="submit">Add</button>
+      </div>
+    </form>
+  </div>
+
+  <% if (feeds.length) { %>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Slug</th>
+        <th>Articles</th>
+        <th>Last fetched</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    <% for (const f of feeds) { %>
+      <tr>
+        <td><a href="/newsletter/creator/<%= f.creator_slug %>" style="color:inherit;font-weight:600;text-decoration:none;"><%= f.name %></a></td>
+        <td style="color:var(--text-dim);"><%= f.creator_slug %></td>
+        <td><%= f.article_count || 0 %></td>
+        <td style="color:var(--text-dim);">
+          <% if (f.last_fetched_at) { %>
+            <%= new Date(f.last_fetched_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %>
+          <% } else { %>
+            Never
+          <% } %>
+        </td>
+        <td><span class="badge <%= f.enabled ? 'badge-on' : 'badge-off' %>"><%= f.enabled ? 'enabled' : 'disabled' %></span></td>
+        <td style="white-space:nowrap;display:flex;gap:6px;">
+          <form method="POST" action="/admin/rss-feeds/<%= f.id %>/fetch" style="display:inline;">
+            <button class="btn" type="submit">Fetch</button>
+          </form>
+          <form method="POST" action="/admin/rss-feeds/<%= f.id %>/toggle" style="display:inline;">
+            <button class="btn" type="submit"><%= f.enabled ? 'Disable' : 'Enable' %></button>
+          </form>
+          <form method="POST" action="/admin/rss-feeds/<%= f.id %>/delete" style="display:inline;" onsubmit="return confirm('Delete feed and all its articles?')">
+            <button class="btn btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+  <% } else { %>
+    <p style="color:var(--text-dim);font-size:13px;">No feeds yet.</p>
+  <% } %>
+</div>
+<script>
+function toggleAdd() {
+  const f = document.getElementById('add-form');
+  f.style.display = f.style.display === 'block' ? 'none' : 'block';
+  if (f.style.display === 'block') f.querySelector('input').focus();
+}
+<% if (msg) { %>
+window.scrollTo(0, 0);
+<% } %>
+</script>
+</body>
+</html>

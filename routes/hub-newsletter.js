@@ -7,8 +7,9 @@ const { uuid } = require('../lib/id');
 const {
   getWeekKey, weekKeyLabel,
   weekKeyRange, briefingPeriodLabel,
-  backfillFromLabels, generateBriefing, buildBriefingPdf, sendBriefing,
+  backfillFromLabels, generateBriefing, generateCreatorBriefing, buildBriefingPdf, sendBriefing,
 } = require('../lib/newsletter-pipeline');
+const { ingestFeed } = require('../lib/rss-ingest');
 const { listUserLabels } = require('../lib/gmail');
 const { writeWikiPage } = require('../lib/vault');
 
@@ -143,6 +144,15 @@ router.post('/send', async (req, res) => {
     console.error('[newsletter] send error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Briefing detail page ──────────────────────────────────────────────────────
+
+router.get('/briefing/:id', (req, res) => {
+  const hub = db.hub();
+  const briefing = hub.prepare('SELECT * FROM nl_briefings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!briefing) return res.status(404).send('Briefing not found');
+  res.render('hub/newsletter-briefing', { user: req.hubUser, briefing, briefingPeriodLabel });
 });
 
 // ── Delete briefing ───────────────────────────────────────────────────────────
@@ -299,6 +309,74 @@ router.post('/interests/toggle-auto', (req, res) => {
   const r = hub.prepare('SELECT auto_include FROM nl_interests WHERE id = ? AND user = ?').get(id, req.hubUser);
   if (r) hub.prepare('UPDATE nl_interests SET auto_include = ? WHERE id = ?').run(r.auto_include ? 0 : 1, id);
   res.redirect('/newsletter#interests');
+});
+
+// ── Creator RSS feeds ──────────────────────────────────────────────────────────
+
+router.get('/creators', (req, res) => {
+  const hub = db.hub();
+  const feeds = hub.prepare(`
+    SELECT f.*, COUNT(a.id) AS article_count,
+      MAX(a.published_at) AS latest_article_at
+    FROM rss_feeds f
+    LEFT JOIN rss_articles a ON a.feed_id = f.id
+    WHERE f.user = ?
+    GROUP BY f.id ORDER BY f.name
+  `).all(req.hubUser);
+  res.render('hub/newsletter-creators', { user: req.hubUser, feeds });
+});
+
+router.get('/creator/:slug', (req, res) => {
+  const hub = db.hub();
+  const feed = hub.prepare(`
+    SELECT f.*, COUNT(a.id) AS article_count
+    FROM rss_feeds f LEFT JOIN rss_articles a ON a.feed_id = f.id
+    WHERE f.user = ? AND f.creator_slug = ?
+    GROUP BY f.id
+  `).get(req.hubUser, req.params.slug);
+  if (!feed) return res.status(404).send('Creator not found');
+  const articles = hub.prepare(`
+    SELECT id, title, url, published_at, word_count,
+      substr(content_markdown, 1, 300) AS excerpt
+    FROM rss_articles WHERE user = ? AND creator_slug = ?
+    ORDER BY published_at DESC LIMIT 50
+  `).all(req.hubUser, req.params.slug);
+  const briefings = hub.prepare(`
+    SELECT id, date_from, date_to, topic_count, created_at
+    FROM nl_briefings WHERE user = ? AND week_key LIKE ?
+    ORDER BY created_at DESC LIMIT 10
+  `).all(req.hubUser, `creator-${req.params.slug}-%`);
+  res.render('hub/newsletter-creator', { user: req.hubUser, feed, articles, briefings });
+});
+
+router.post('/creator/:slug/briefing', async (req, res) => {
+  const hub = db.hub();
+  const feed = hub.prepare('SELECT * FROM rss_feeds WHERE user = ? AND creator_slug = ?').get(req.hubUser, req.params.slug);
+  if (!feed) return res.status(404).json({ error: 'Creator not found' });
+  try {
+    const result = await generateCreatorBriefing({
+      user: req.hubUser,
+      creatorSlug: feed.creator_slug,
+      creatorName: feed.name,
+      dateFrom: req.body.date_from || null,
+      dateTo: req.body.date_to || null,
+    });
+    res.json({ ok: true, briefingId: result.id, articleCount: result.articleCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/creator/:slug/fetch', async (req, res) => {
+  const hub = db.hub();
+  const feed = hub.prepare('SELECT * FROM rss_feeds WHERE user = ? AND creator_slug = ?').get(req.hubUser, req.params.slug);
+  if (!feed) return res.status(404).json({ error: 'Creator not found' });
+  try {
+    const result = await ingestFeed(feed, req.hubUser);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
