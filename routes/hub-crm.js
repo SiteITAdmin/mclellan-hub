@@ -462,11 +462,15 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
   const linkedProjectIds = new Set(linkedProjects.map(p => p.id));
   const availableProjects = allProjects.filter(p => !linkedProjectIds.has(p.id));
 
+  const linkedCompanyIds = new Set(companies.map(c => c.id));
+  const allCompanies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
+  const availableCompanies = allCompanies.filter(c => !linkedCompanyIds.has(c.id));
+
   res.render('hub/crm-contact', {
     ...crmPageData(req.hubUser), contact, companies,
     meetings, upcomingMeetings, pastMeetings,
     facts, workedWith, tasks, showHistory,
-    linkedProjects, availableProjects,
+    linkedProjects, availableProjects, availableCompanies,
   });
 });
 
@@ -761,6 +765,24 @@ router.post('/api/crm/contacts/:id/projects/unlink', requireAuth, requireSameOri
   const hub = db.hub();
   hub.prepare('DELETE FROM contact_projects WHERE contact_id = ? AND project_id = ?')
     .run(req.params.id, req.body.project_id);
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/contacts/:id/companies', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.body.company_id, req.hubUser);
+  if (!contact || !company) return res.status(404).json({ error: 'Not found' });
+  hub.prepare(`
+    INSERT OR IGNORE INTO contact_companies (contact_id, company_id, role, is_primary)
+    VALUES (?, ?, ?, 0)
+  `).run(contact.id, company.id, String(req.body.role || '').trim() || null);
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/contacts/:id/companies/unlink', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  db.hub().prepare('DELETE FROM contact_companies WHERE contact_id = ? AND company_id = ?')
+    .run(req.params.id, req.body.company_id);
   res.json({ ok: true });
 });
 
