@@ -960,6 +960,21 @@ router.post('/api/tasks/:id/subtasks', requireAuth, requireSameOrigin, writeLimi
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
+router.post('/crm/projects', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).send('Name required');
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  try {
+    db.hub().prepare(
+      'INSERT INTO projects (id, user, name, slug) VALUES (lower(hex(randomblob(8))), ?, ?, ?)'
+    ).run(req.hubUser, name, slug);
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) return res.status(400).send('A project with that name already exists');
+    throw err;
+  }
+  res.redirect('/crm/project/' + slug);
+});
+
 router.get('/crm/projects', requireAuth, (req, res) => {
   const hub = db.hub();
   const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);

@@ -7,6 +7,17 @@
   </div>
 </section>
 
+<section class="section-card" id="add-project-section" style="display:none">
+  <h3 style="margin:0 0 12px">Add project</h3>
+  <form method="POST" action="/crm/projects" class="crm-note-form">
+    <input name="name" placeholder="Project name" required style="flex:1">
+    <button class="btn" type="submit">Add</button>
+  </form>
+</section>
+<div style="margin:0 0 16px">
+  <button class="btn btn-subtle" id="toggle-add-project">+ Add project</button>
+</div>
+
 <section class="crm-card-grid">
   <% for (const p of projects) { %>
     <a class="mgmt-card crm-link-card" href="/crm/project/<%= p.slug %>">
@@ -29,4 +40,14 @@
   <% } %>
 </section>
 
+<script>
+document.getElementById('toggle-add-project').addEventListener('click', () => {
+  const section = document.getElementById('add-project-section');
+  const btn = document.getElementById('toggle-add-project');
+  const open = section.style.display === 'none';
+  section.style.display = open ? '' : 'none';
+  btn.textContent = open ? '− Cancel' : '+ Add project';
+  if (open) section.querySelector('input[name=name]').focus();
+});
+</script>
 <%- include('partials/crm-foot') %>
