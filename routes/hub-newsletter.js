@@ -95,6 +95,8 @@ router.post('/topics/toggle', (req, res) => {
   const hub = db.hub();
   const t = hub.prepare('SELECT selected FROM nl_topics WHERE id = ? AND user = ?').get(id, req.hubUser);
   if (t) hub.prepare('UPDATE nl_topics SET selected = ? WHERE id = ?').run(t.selected ? 0 : 1, id);
+  const wantsHtml = req.headers['accept']?.includes('text/html');
+  if (!wantsHtml) return res.json({ ok: true });
   res.redirect(`/newsletter${week ? '?week=' + week : ''}`);
 });
 
