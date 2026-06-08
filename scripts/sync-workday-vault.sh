@@ -136,6 +136,8 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
     -e "ssh -o StrictHostKeyChecking=accept-new" \
     "$VAULT_ROOT/wiki/" \
     "${VPS_USER}@${VPS_HOST}:${REMOTE_VAULT}/wiki/"
+  ssh -o StrictHostKeyChecking=accept-new "${VPS_USER}@${VPS_HOST}" \
+    "chown -R hub:hub \"$REMOTE_VAULT/wiki\" && chmod -R u+rwX \"$REMOTE_VAULT/wiki\""
   printf '[%s] wiki push ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
   # ── 5. Rebuild workday daily index ───────────────────────────────────────

@@ -51,14 +51,25 @@ async function taskAction(id, action) {
             <% if (fact.status === 'follow_up') { %><span class="crm-type follow_up" style="margin-left:6px;">follow-up</span><% } %>
             <% if (fact.status === 'archived') { %><span style="font-size:10px;opacity:.5;margin-left:6px;">archived</span><% } %>
           </time>
-          <strong><%= fact.fact %></strong>
+          <strong id="fact-text-<%= fact.id %>"><%= fact.fact %></strong>
+          <form class="crm-fact-edit-form" id="fact-edit-<%= fact.id %>" data-fact-id="<%= fact.id %>" style="display:none;">
+            <textarea name="fact" rows="3" required><%= fact.fact %></textarea>
+            <div class="crm-fact-edit-actions">
+              <button class="btn btn-sm" type="submit">Save</button>
+              <button class="btn btn-sm btn-ghost" type="button" onclick="cancelFactEdit('<%= fact.id %>')">Cancel</button>
+              <span class="crm-muted crm-fact-edit-msg"></span>
+            </div>
+          </form>
           <span style="display:flex;justify-content:space-between;align-items:center;">
             <span><% if (fact.meeting_id) { %><a href="/crm/meeting/<%= fact.meeting_id %>"><%= fact.meeting_title %></a> · <% } %><%= fact.source !== 'dchat' ? fact.source : '' %></span>
-            <% if (fact.status !== 'archived') { %>
-              <button class="crm-fact-archive" onclick="archiveFact('<%= fact.id %>')" title="Archive this fact">Archive</button>
-            <% } else { %>
-              <button class="crm-fact-archive" onclick="unarchiveFact('<%= fact.id %>')" title="Restore fact">Restore</button>
-            <% } %>
+            <span class="crm-fact-actions">
+              <button class="crm-fact-archive" onclick="startFactEdit('<%= fact.id %>')" title="Edit this fact">Edit</button>
+              <% if (fact.status !== 'archived') { %>
+                <button class="crm-fact-archive" onclick="archiveFact('<%= fact.id %>')" title="Archive this fact">Archive</button>
+              <% } else { %>
+                <button class="crm-fact-archive" onclick="unarchiveFact('<%= fact.id %>')" title="Restore fact">Restore</button>
+              <% } %>
+            </span>
           </span>
         </div>
       <% } %>
@@ -183,7 +194,50 @@ async function taskAction(id, action) {
   </aside>
 </div>
 <script>
-// Fact archive/unarchive
+// Fact edit/archive/unarchive
+function startFactEdit(id) {
+  document.getElementById('fact-text-' + id).style.display = 'none';
+  const form = document.getElementById('fact-edit-' + id);
+  form.style.display = 'grid';
+  form.querySelector('textarea').focus();
+}
+function cancelFactEdit(id) {
+  document.getElementById('fact-edit-' + id).style.display = 'none';
+  document.getElementById('fact-text-' + id).style.display = '';
+}
+document.querySelectorAll('.crm-fact-edit-form').forEach(form => {
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const id = form.dataset.factId;
+    const fact = form.elements.fact.value.trim();
+    const msg = form.querySelector('.crm-fact-edit-msg');
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    msg.textContent = 'Saving…';
+    try {
+      const r = await fetch(`/api/crm/facts/${id}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fact }),
+      });
+      const j = await r.json();
+      if (!j.ok) {
+        msg.textContent = j.error || 'Error';
+        return;
+      }
+      document.getElementById('fact-text-' + id).textContent = fact;
+      cancelFactEdit(id);
+      if (!j.projectionSynced) {
+        alert('CRM fact saved, but its People note copy could not be updated: ' + (j.projectionWarning || 'unknown error'));
+      }
+    } catch (err) {
+      msg.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+});
+
 async function archiveFact(id) {
   const r = await fetch(`/api/crm/facts/${id}/archive`, { method: 'POST' });
   const j = await r.json();
