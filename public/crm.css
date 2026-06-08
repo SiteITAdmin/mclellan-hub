@@ -38,6 +38,11 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .crm-badge.subtle { background: rgba(80,76,97,.08); color: var(--crm-muted); }
 .crm-compact-list { list-style: none; margin: 15px 0 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
 .crm-compact-list li { display: flex; gap: 8px; align-items: flex-start; }
+.crm-search-card { padding: 14px 20px; }
+.crm-search-summary { color: var(--crm-muted); font-size: 12px; margin: 9px 0 0; }
+.crm-search-matches { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--crm-line); display: grid; gap: 6px; }
+.crm-search-matches > span { color: var(--crm-accent); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.crm-search-matches p { margin: 0; color: #403c4d; font-size: 12px; line-height: 1.45; }
 .crm-type { display: inline-flex; padding: 2px 6px; border-radius: 5px; font-size: 9px; letter-spacing: .07em; text-transform: uppercase; font-weight: 700; color: #555; background: #eee; vertical-align: 2px; }
 .crm-type.decision { background: #e3e0ff; color: #4842b7; }
 .crm-type.action { background: #fff0cf; color: #8a5b00; }
