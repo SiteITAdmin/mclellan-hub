@@ -161,8 +161,13 @@
       <option value="<%= p.slug %>">/<%= p.slug %> — <%= p.name %></option>
     <% } %>
   </select>
-  <label style="display:block;margin-top:14px;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">File (.docx, .pdf, .txt, .md, .csv)</label>
-  <input type="file" id="upload-modal-file" accept=".docx,.pdf,.txt,.md,.csv">
+  <label style="display:block;margin-top:14px;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">File</label>
+  <input type="file" id="upload-modal-file" accept=".docx,.pdf,.txt,.md,.csv,.pptx,.xlsx,.png,.jpg,.jpeg,.gif,.webp">
+  <p style="font-size:11px;color:var(--text-muted);margin:4px 0 0;">PDF, Word, PowerPoint, Excel, CSV, text, Markdown, images</p>
+  <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--text);cursor:pointer;">
+    <input type="checkbox" id="upload-modal-to-wiki" style="width:14px;height:14px;">
+    Also convert to a wiki page
+  </label>
   <div id="upload-modal-status" style="font-size:13px;color:var(--text-dim);margin-top:8px;min-height:18px;"></div>
   <div class="upload-modal-actions">
     <button type="button" id="upload-modal-cancel">Cancel</button>
@@ -235,6 +240,7 @@
     const fileInput = document.getElementById('upload-modal-file');
     const projectSel = document.getElementById('upload-project-select');
     const statusEl = document.getElementById('upload-modal-status');
+    const toWikiChk = document.getElementById('upload-modal-to-wiki');
     if (!modal || !backdrop || !cancelBtn || !submitBtn || !fileInput || !projectSel || !statusEl) return;
 
     function open(slug) {
@@ -242,12 +248,14 @@
       modal.classList.add('open');
       backdrop.classList.add('active');
       statusEl.textContent = '';
+      statusEl.innerHTML = '';
     }
 
     function close() {
       modal.classList.remove('open');
       backdrop.classList.remove('active');
       fileInput.value = '';
+      if (toWikiChk) toWikiChk.checked = false;
       submitBtn.disabled = false;
       submitBtn.textContent = 'Upload';
     }
@@ -262,18 +270,17 @@
     submitBtn.addEventListener('click', async () => {
       const file = fileInput.files && fileInput.files[0];
       const slug = projectSel.value;
-      if (!file) {
-        statusEl.textContent = 'Pick a file first.';
-        return;
-      }
+      if (!file) { statusEl.textContent = 'Pick a file first.'; return; }
 
+      const sendToWiki = toWikiChk && toWikiChk.checked;
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Uploading…';
+      submitBtn.textContent = sendToWiki ? 'Uploading + wiki…' : 'Uploading…';
       statusEl.textContent = `Uploading ${file.name} to /${slug}…`;
 
       const fd = new FormData();
       fd.append('file', file);
       fd.append('projectSlug', slug);
+      if (sendToWiki) fd.append('toWiki', '1');
 
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: fd });
@@ -285,8 +292,14 @@
           return;
         }
 
-        statusEl.textContent = `✓ Saved ${data.document.filename} to /${data.document.project}`;
-        setTimeout(() => window.location.reload(), 700);
+        let msg = `✓ Saved ${data.document.filename} to /${data.document.project}`;
+        if (data.wiki && data.wiki.slug) {
+          msg += ` · <a href="https://wiki.mclellan.scot/page/${data.wiki.slug}" target="_blank" style="color:var(--accent,#4648d4);">Wiki: ${data.wiki.title} ↗</a>`;
+        } else if (data.wiki && data.wiki.error) {
+          msg += ` · Wiki failed: ${data.wiki.error}`;
+        }
+        statusEl.innerHTML = msg;
+        setTimeout(() => window.location.reload(), data.wiki?.slug ? 2000 : 700);
       } catch (err) {
         statusEl.textContent = `✖ ${err.message}`;
         submitBtn.disabled = false;

@@ -291,8 +291,8 @@
   {
     "date": "2026-05-08",
     "codex_tokens": 36267043,
-    "claude_code_tokens": 12996167,
-    "claude_code_calls": 155,
+    "claude_code_tokens": 12892621,
+    "claude_code_calls": 149,
     "api_tokens": 125745,
     "chatgpt_conversations": 0,
     "chatgpt_messages": 0,
@@ -784,8 +784,8 @@
   {
     "date": "2026-06-06",
     "codex_tokens": 34533744,
-    "claude_code_tokens": 48488706,
-    "claude_code_calls": 481,
+    "claude_code_tokens": 48892779,
+    "claude_code_calls": 485,
     "api_tokens": 0,
     "chatgpt_conversations": 0,
     "chatgpt_messages": 0,
@@ -797,5 +797,39 @@
     "confidence": "measured",
     "driver": "Hub Development",
     "evidence": "Codex session token counters; Claude Code message usage"
+  },
+  {
+    "date": "2026-06-07",
+    "codex_tokens": 20399725,
+    "claude_code_tokens": 72597809,
+    "claude_code_calls": 748,
+    "api_tokens": 0,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "Hub Development",
+    "evidence": "Codex session token counters; Claude Code message usage"
+  },
+  {
+    "date": "2026-06-08",
+    "codex_tokens": 0,
+    "claude_code_tokens": 3204529,
+    "claude_code_calls": 53,
+    "api_tokens": 0,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "Hub Development",
+    "evidence": "Claude Code message usage"
   }
 ]

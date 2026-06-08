@@ -29,6 +29,11 @@ router.get('/lin', requireAuth, (req, res) => {
 router.post('/api/content/generate', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const topic = String(req.body?.topic || '').trim();
   if (!topic) return res.status(400).json({ error: 'Topic is required' });
+  const rawSourceUrl = String(req.body?.sourceUrl || '').trim();
+  let sourceUrl = null;
+  if (rawSourceUrl) {
+    try { sourceUrl = new URL(rawSourceUrl).href; } catch (_) { /* ignore invalid URLs */ }
+  }
   const { randomUUID } = require('crypto');
   const { runPipeline } = require('../lib/linkedin-pipeline');
   const postId = randomUUID();
@@ -37,7 +42,7 @@ router.post('/api/content/generate', requireAuth, requireSameOrigin, writeLimite
   ).run(postId, req.hubUser, topic);
   setImmediate(async () => {
     try {
-      await runPipeline(req.hubUser, topic, s => console.log('[content]', s), postId);
+      await runPipeline(req.hubUser, topic, s => console.log('[content]', s), postId, sourceUrl);
     } catch (err) {
       console.error('[content] pipeline error:', err.message);
       try { db.hub().prepare(`UPDATE linkedin_posts SET status = 'error' WHERE id = ?`).run(postId); } catch (_) {}

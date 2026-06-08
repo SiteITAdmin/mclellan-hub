@@ -151,7 +151,7 @@ function helpText() {
     '"read Daily/2026-05-13.md" reads a vault note',
     '"remember ..." appends to today\'s daily note',
     '"follow up ..." appends a follow-up to today\'s daily note',
-    '"linkedin <topic>" generates a scored LinkedIn post + image + adds to content calendar',
+    '"linkedin <topic>" generates a scored LinkedIn post + image + adds to content calendar (include a URL to anchor research to that article)',
   ].join('\n- ');
 }
 
@@ -205,13 +205,24 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
   }
 
   if (lower.startsWith('linkedin ') || lower.startsWith('content ')) {
-    const topic = text.replace(/^(linkedin|content)\s+/i, '').trim();
+    const raw = text.replace(/^(linkedin|content)\s+/i, '').trim();
+    if (!raw) return 'What topic? e.g. "linkedin Microsoft Teams new AI feature"';
+
+    // Extract any URL present in the message — treat it as the primary source
+    const urlMatch = raw.match(/https?:\/\/\S+/);
+    let sourceUrl = null;
+    let topic = raw;
+    if (urlMatch) {
+      sourceUrl = urlMatch[0].replace(/[.,;!?)]+$/, ''); // strip trailing punctuation
+      topic = raw.replace(urlMatch[0], '').replace(/\s{2,}/g, ' ').trim() || raw;
+    }
+
     if (!topic) return 'What topic? e.g. "linkedin Microsoft Teams new AI feature"';
     const { runPipeline } = require('../lib/linkedin-pipeline');
 
     setImmediate(async () => {
       try {
-        const result = await runPipeline(user, topic, s => console.log('[linkedin]', s));
+        const result = await runPipeline(user, topic, s => console.log('[linkedin]', s), null, sourceUrl);
         const sc = result.score || {};
         const overall = sc.overall_score || '?';
         const verdict = sc.recruiter_value || '';
@@ -236,7 +247,9 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
       }
     });
 
-    return `Working on a LinkedIn post about *${topic}*. I'll post the result here when ready (~30 seconds).`;
+    return sourceUrl
+      ? `Working on a LinkedIn post about *${topic}* — anchoring research to your source article. I'll post the result here when ready (~30 seconds).`
+      : `Working on a LinkedIn post about *${topic}*. I'll post the result here when ready (~30 seconds).`;
   }
 
   const result = await processCrmCommand(user, text, 'google-chat');
@@ -1088,11 +1101,16 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
     ORDER BY ts DESC LIMIT 5
   `).all(project.id);
 
+  const projectDocs = hub.prepare(
+    'SELECT id, filename, size_bytes, uploaded_at FROM documents WHERE project_id = ? ORDER BY uploaded_at DESC'
+  ).all(project.id);
+
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),
     project, tasks, contacts, directContactIds: [...directContactIds],
     availableContacts, linkedCompanies, linkedCompanyIds: [...linkedCompanyIds],
     availableCompanies, recentEmails, recentMessages, showHistory, todayIsoStr,
+    projectDocs,
   });
 });
 

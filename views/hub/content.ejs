@@ -189,6 +189,10 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         placeholder="Topic or idea — e.g. Microsoft Copilot Pages for Teams" />
       <button class="gen-btn" id="gen-btn">Generate</button>
     </div>
+    <div class="gen-row" style="margin-top:8px;">
+      <input class="gen-input" id="gen-source-url" type="url"
+        placeholder="Source URL (optional) — paste an article to anchor research to its facts" style="font-size:12px;color:var(--text-dim);" />
+    </div>
     <div class="gen-progress" id="gen-progress">
       <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:5%"></div></div>
       <div class="progress-msg" id="progress-msg">Starting…</div>
@@ -374,6 +378,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 // ── Generate ──────────────────────────────────────────────────────────────────
 const genBtn = document.getElementById('gen-btn');
 const genInput = document.getElementById('gen-topic');
+const genSourceUrl = document.getElementById('gen-source-url');
 const genProgress = document.getElementById('gen-progress');
 const progressFill = document.getElementById('progress-fill');
 const progressMsg = document.getElementById('progress-msg');
@@ -390,15 +395,18 @@ genBtn.addEventListener('click', startGenerate);
 async function startGenerate() {
   const topic = genInput.value.trim();
   if (!topic) { genInput.focus(); return; }
+  const sourceUrl = genSourceUrl.value.trim();
   genBtn.disabled = true;
   genBtn.textContent = 'Generating…';
   genProgress.classList.add('visible');
-  setProgress(5, 'Starting pipeline…');
+  setProgress(5, sourceUrl ? 'Fetching source article…' : 'Starting pipeline…');
   try {
+    const body = { topic };
+    if (sourceUrl) body.sourceUrl = sourceUrl;
     const r = await fetch('/api/content/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic }),
+      body: JSON.stringify(body),
     });
     const d = await r.json();
     if (!r.ok || !d.postId) throw new Error(d.error || 'Failed to start pipeline');

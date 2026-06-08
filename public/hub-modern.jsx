@@ -210,58 +210,128 @@ function ProjectDocs({ slug }) {
   const [docs, setDocs] = React.useState(HUB.projectDocs || []);
   const [uploading, setUploading] = React.useState(false);
   const [msg, setMsg] = React.useState('');
+  const [wikiStatus, setWikiStatus] = React.useState({}); // docId → { loading, slug, error }
+  const [dragOver, setDragOver] = React.useState(false);
+  const [toWiki, setToWiki] = React.useState(false);
   const fileRef = React.useRef(null);
 
-  async function upload(e) {
-    const file = e.target.files[0];
+  async function doUpload(file, sendToWiki) {
     if (!file) return;
     setUploading(true);
-    setMsg('Uploading…');
+    setMsg(`Uploading ${file.name}…`);
     const fd = new FormData();
     fd.append('file', file);
     fd.append('projectSlug', slug);
+    if (sendToWiki) fd.append('toWiki', '1');
     try {
       const r = await fetch('/api/upload', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
       const d = await r.json();
       if (d.ok) {
-        setDocs(prev => [{ id: d.document.id, filename: d.document.filename, size_bytes: d.document.size }, ...prev]);
-        setMsg('');
+        const newDoc = { id: d.document.id, filename: d.document.filename, size_bytes: d.document.size };
+        setDocs(prev => [newDoc, ...prev]);
+        if (d.wiki?.slug) {
+          setWikiStatus(prev => ({ ...prev, [d.document.id]: { slug: d.wiki.slug, title: d.wiki.title } }));
+          setMsg(`Saved + wiki page created: ${d.wiki.title}`);
+        } else if (d.wiki?.error) {
+          setMsg(`Saved. Wiki failed: ${d.wiki.error}`);
+        } else {
+          setMsg('');
+        }
       } else {
         setMsg(d.error || 'Upload failed');
       }
     } catch { setMsg('Upload failed'); }
     setUploading(false);
+  }
+
+  function onFileChange(e) {
+    const file = e.target.files[0];
+    doUpload(file, toWiki);
     e.target.value = '';
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) doUpload(file, toWiki);
   }
 
   async function del(id) {
     if (!confirm('Remove this document?')) return;
     const r = await fetch('/api/documents/' + id + '/delete', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
     const d = await r.json();
-    if (d.ok) setDocs(prev => prev.filter(x => x.id !== id));
+    if (d.ok) { setDocs(prev => prev.filter(x => x.id !== id)); setWikiStatus(prev => { const n = {...prev}; delete n[id]; return n; }); }
   }
+
+  async function sendToWikiNow(doc) {
+    setWikiStatus(prev => ({ ...prev, [doc.id]: { loading: true } }));
+    try {
+      const r = await fetch('/api/documents/' + doc.id + '/to-wiki', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const d = await r.json();
+      if (d.ok) setWikiStatus(prev => ({ ...prev, [doc.id]: { slug: d.slug, title: d.title } }));
+      else setWikiStatus(prev => ({ ...prev, [doc.id]: { error: d.error } }));
+    } catch { setWikiStatus(prev => ({ ...prev, [doc.id]: { error: 'Failed' } })); }
+  }
+
+  const ACCEPT = '.pdf,.txt,.md,.docx,.csv,.json,.pptx,.xlsx,.png,.jpg,.jpeg,.gif,.webp';
 
   return (
     <div className="sb-docs">
       <div className="sb-section-head">
         <span>Project docs</span>
-        <button title="Upload document" onClick={() => fileRef.current?.click()} disabled={uploading}>
-          <Icon name="plus" size={14} />
-        </button>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <button
+            title={toWiki ? 'Also adding to wiki — click to toggle off' : 'Click to also add to wiki on upload'}
+            onClick={() => setToWiki(v => !v)}
+            style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3, background: toWiki ? 'var(--accent, #4648d4)' : 'transparent', color: toWiki ? '#fff' : 'var(--text-3)', border: '1px solid currentColor', lineHeight: 1.4, cursor: 'pointer' }}
+          >wiki</button>
+          <button title="Upload document or image" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            <Icon name="plus" size={14} />
+          </button>
+        </div>
       </div>
-      <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.docx,.csv,.json" style={{ display: 'none' }} onChange={upload} />
-      {msg && <div style={{ fontSize: 11, color: 'var(--text-3)', padding: '2px 8px 4px' }}>{msg}</div>}
+      <input ref={fileRef} type="file" accept={ACCEPT} style={{ display: 'none' }} onChange={onFileChange} />
+      {msg && <div style={{ fontSize: 11, color: 'var(--text-3)', padding: '2px 8px 6px', lineHeight: 1.4 }}>{msg}</div>}
+
+      {/* Drop zone */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        style={{ margin: '0 8px 6px', borderRadius: 6, border: `1px dashed ${dragOver ? 'var(--accent, #4648d4)' : 'var(--border, #e0e0e0)'}`, background: dragOver ? 'var(--accent-faint, #f0f0ff)' : 'transparent', padding: '6px 8px', fontSize: 11, color: 'var(--text-3)', textAlign: 'center', cursor: 'pointer', transition: 'all .15s' }}
+        onClick={() => fileRef.current?.click()}
+      >
+        {uploading ? 'Uploading…' : 'Drop file or click'}
+        {toWiki && <span style={{ marginLeft: 4, color: 'var(--accent, #4648d4)' }}>+ wiki</span>}
+      </div>
+
       {docs.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--text-3)', padding: '4px 8px 8px' }}>No docs yet</div>
+        <div style={{ fontSize: 12, color: 'var(--text-3)', padding: '2px 8px 8px' }}>No docs yet</div>
       ) : (
         <div className="sb-list">
-          {docs.map(doc => (
-            <div key={doc.id} className="sb-doc-row">
-              <Icon name="file" size={13} />
-              <span className="sb-doc-name" title={doc.filename}>{doc.filename}</span>
-              <button className="sb-doc-del" title="Remove" onClick={() => del(doc.id)}>×</button>
-            </div>
-          ))}
+          {docs.map(doc => {
+            const ws = wikiStatus[doc.id];
+            return (
+              <div key={doc.id} className="sb-doc-row" style={{ flexWrap: 'wrap', gap: '2px 0' }}>
+                <Icon name="file" size={13} />
+                <span className="sb-doc-name" title={doc.filename}>{doc.filename}</span>
+                <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }}>
+                  {ws?.slug ? (
+                    <a href={`https://wiki.mclellan.scot/page/${ws.slug}`} target="_blank" rel="noreferrer"
+                      title={`Wiki: ${ws.title}`} style={{ fontSize: 10, color: 'var(--accent, #4648d4)', textDecoration: 'none' }}>wiki↗</a>
+                  ) : (
+                    <button title="Save to wiki" onClick={() => sendToWikiNow(doc)} disabled={ws?.loading}
+                      style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, background: 'transparent', color: 'var(--text-3)', border: '1px solid var(--border)', cursor: 'pointer', lineHeight: 1.4 }}>
+                      {ws?.loading ? '…' : ws?.error ? '⚠' : '→wiki'}
+                    </button>
+                  )}
+                  <button className="sb-doc-del" title="Remove" onClick={() => del(doc.id)}>×</button>
+                </div>
+                {ws?.error && <div style={{ width: '100%', fontSize: 10, color: 'var(--error, #c00)', paddingLeft: 20 }}>{ws.error}</div>}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
