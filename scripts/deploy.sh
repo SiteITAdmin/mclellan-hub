@@ -88,10 +88,12 @@ rsync -avz --progress -e "$RSYNC_RSH" \
   "$APP_DIR/data/synthadoc/mclellan-hub-knowledge/AGENTS.md" \
   "$APP_DIR/data/synthadoc/mclellan-hub-knowledge/wiki/purpose.md" \
   "$APP_DIR/data/synthadoc/mclellan-hub-knowledge/wiki/mclellan-hub-overview.md" \
+  "$APP_DIR/data/synthadoc/mclellan-hub-knowledge/wiki/personal-knowledge-management-systems.md" \
   "${VPS_USER}@${VPS_IP}:/app/data/synthadoc/mclellan-hub-knowledge/"
 "${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" \
   "mv /app/data/synthadoc/mclellan-hub-knowledge/purpose.md /app/data/synthadoc/mclellan-hub-knowledge/wiki/purpose.md &&
    mv /app/data/synthadoc/mclellan-hub-knowledge/mclellan-hub-overview.md /app/data/synthadoc/mclellan-hub-knowledge/wiki/mclellan-hub-overview.md &&
+   mv /app/data/synthadoc/mclellan-hub-knowledge/personal-knowledge-management-systems.md /app/data/synthadoc/mclellan-hub-knowledge/wiki/personal-knowledge-management-systems.md &&
    chown -R hub:hub /app/data/synthadoc/mclellan-hub-knowledge/wiki &&
    cd /app/.tools/synthadoc &&
    (git apply --reverse --check /app/patches/synthadoc-strict-ingest.patch >/dev/null 2>&1 ||
