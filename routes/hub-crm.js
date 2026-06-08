@@ -799,6 +799,13 @@ router.post('/api/crm/contacts/:id/companies/unlink', requireAuth, requireSameOr
   res.json({ ok: true });
 });
 
+router.post('/api/crm/contacts/:id/companies/role', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const role = String(req.body.role || '').trim() || null;
+  db.hub().prepare('UPDATE contact_companies SET role = ? WHERE contact_id = ? AND company_id = ?')
+    .run(role, req.params.id, req.body.company_id);
+  res.json({ ok: true });
+});
+
 router.post('/api/crm/companies/:id/projects', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
