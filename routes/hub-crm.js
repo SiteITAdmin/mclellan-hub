@@ -10,6 +10,7 @@ const {
   fetchTodayCalendarEvents,
   syncCalendarMeetings,
   parseJsonArray,
+  syncContactVaultFact,
 } = require('../lib/crm');
 const { readNote, searchNotes, writeNote } = require('../lib/obsidian-vault');
 const { uuid } = require('../lib/id');
@@ -932,6 +933,40 @@ router.post('/api/crm/facts/:id/unarchive', requireAuth, requireSameOrigin, writ
   ).run(req.params.id, req.hubUser);
   if (!result.changes) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });
+});
+
+router.post('/api/crm/facts/:id/edit', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const factText = String(req.body.fact || '').trim();
+  if (!factText) return res.status(400).json({ error: 'Fact text is required' });
+  if (factText.length > 4000) return res.status(400).json({ error: 'Fact text is too long' });
+
+  const hub = db.hub();
+  const existing = hub.prepare(`
+    SELECT f.id, f.fact, c.name AS contact_name
+    FROM crm_facts f
+    JOIN contacts c ON c.id = f.contact_id
+    WHERE f.id = ? AND f.user = ?
+  `).get(req.params.id, req.hubUser);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (existing.fact === factText) return res.json({ ok: true, projectionSynced: true });
+
+  hub.prepare(
+    'UPDATE crm_facts SET fact = ?, updated_at = unixepoch() WHERE id = ? AND user = ?'
+  ).run(factText, existing.id, req.hubUser);
+
+  try {
+    const projection = syncContactVaultFact({
+      user: req.hubUser,
+      factId: existing.id,
+      contactName: existing.contact_name,
+      oldFact: existing.fact,
+      newFact: factText,
+    });
+    res.json({ ok: true, projectionSynced: projection.synced, projectionWarning: projection.reason || null });
+  } catch (err) {
+    console.warn(`[crm] People note sync failed for fact ${existing.id}:`, err.message);
+    res.json({ ok: true, projectionSynced: false, projectionWarning: err.message });
+  }
 });
 
 router.post('/api/crm/facts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {

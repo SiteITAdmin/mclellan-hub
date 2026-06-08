@@ -119,3 +119,7 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .crm-timeline-archived { opacity: .45; }
 .crm-fact-archive { border: 0; background: transparent; color: var(--crm-muted); font-size: 11px; cursor: pointer; padding: 0 2px; white-space: nowrap; }
 .crm-fact-archive:hover { color: var(--crm-accent); }
+.crm-fact-actions { display: inline-flex; gap: 10px; }
+.crm-fact-edit-form { gap: 7px; margin: 2px 0 4px; }
+.crm-fact-edit-form textarea { font-size: 13px; line-height: 1.5; min-height: 76px; }
+.crm-fact-edit-actions { display: flex; gap: 7px; align-items: center; }
