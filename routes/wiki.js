@@ -131,6 +131,55 @@ router.get('/browse', requireAuth, (req, res) => {
   res.render('wiki/browse', { byType, wikiByCategory });
 });
 
+// ── Wiki editing helpers ───────────────────────────────────────────────────────
+
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function rebuildFile(page, { title, content, categories, tags }) {
+  const fm = {
+    title: title || page.title,
+    aliases: page.aliases || [],
+    categories: categories || page.categories || [],
+    tags: tags || page.tags || [],
+    confidence: page.confidence || 'medium',
+    status: 'active',
+    created: page.created || new Date().toISOString(),
+  };
+  const yamlLines = [
+    `title: '${fm.title.replace(/'/g, "''")}'`,
+    `aliases: [${fm.aliases.map(a => `'${a}'`).join(', ')}]`,
+    `categories:`,
+    ...fm.categories.map(c => `  - ${c}`),
+    `tags:`,
+    ...fm.tags.map(t => `  - ${t}`),
+    `confidence: ${fm.confidence}`,
+    `status: ${fm.status}`,
+    `created: '${fm.created}'`,
+  ];
+  return `---\n${yamlLines.join('\n')}\n---\n\n${content.trim()}\n`;
+}
+
+// /page/new MUST come before /page/:slug to avoid being swallowed by the param route
+router.get('/page/new', requireAuth, (req, res) => {
+  res.render('wiki/edit', { page: null });
+});
+
+router.post('/page/new', requireAuth, requireSameOrigin, express.urlencoded({ extended: false }), (req, res) => {
+  const { title, content, categories, tags } = req.body;
+  if (!title) return res.redirect('/page/new');
+  const slug = slugify(title);
+  const newPath = path.join(wikiDir(), `${slug}.md`);
+  const cats = (categories || '').split(',').map(s => s.trim()).filter(Boolean);
+  const tagList = (tags || '').split(',').map(s => s.trim()).filter(Boolean);
+  const page = { slug, title, aliases: [], categories: cats, tags: tagList, confidence: 'medium', created: new Date().toISOString() };
+  const fileContent = rebuildFile(page, { title, content, categories: cats, tags: tagList });
+  fs.mkdirSync(wikiDir(), { recursive: true });
+  fs.writeFileSync(newPath, fileContent, 'utf8');
+  res.redirect(`/page/${slug}`);
+});
+
 router.get('/page/:slug', requireAuth, (req, res) => {
   const page = parseWikiPage(req.params.slug);
   if (!page) return res.status(404).render('wiki/404', { slug: req.params.slug });
@@ -140,6 +189,41 @@ router.get('/page/:slug', requireAuth, (req, res) => {
     allPages
   ).slice(0, 6);
   res.render('wiki/page', { page, related });
+});
+
+router.get('/page/:slug/edit', requireAuth, (req, res) => {
+  const page = parseWikiPage(req.params.slug);
+  if (!page) return res.status(404).render('wiki/404', { slug: req.params.slug });
+  res.render('wiki/edit', { page });
+});
+
+router.post('/page/:slug/save', requireAuth, requireSameOrigin, express.urlencoded({ extended: false }), (req, res) => {
+  const page = parseWikiPage(req.params.slug);
+  if (!page) return res.status(404).json({ error: 'Not found' });
+  const { title, content, categories, tags } = req.body;
+  const cats = (categories || '').split(',').map(s => s.trim()).filter(Boolean);
+  const tagList = (tags || '').split(',').map(s => s.trim()).filter(Boolean);
+  const fileContent = rebuildFile(page, { title, content, categories: cats, tags: tagList });
+  fs.writeFileSync(path.join(wikiDir(), `${page.slug}.md`), fileContent, 'utf8');
+  res.redirect(`/page/${page.slug}`);
+});
+
+router.post('/page/:slug/rename', requireAuth, requireSameOrigin, express.urlencoded({ extended: false }), (req, res) => {
+  const page = parseWikiPage(req.params.slug);
+  if (!page) return res.status(404).json({ error: 'Not found' });
+  const newSlug = slugify(req.body.new_slug || '');
+  if (!newSlug) return res.redirect(`/page/${page.slug}/edit`);
+  const oldPath = path.join(wikiDir(), `${page.slug}.md`);
+  const newPath = path.join(wikiDir(), `${newSlug}.md`);
+  if (fs.existsSync(newPath)) return res.redirect(`/page/${page.slug}/edit?err=exists`);
+  fs.renameSync(oldPath, newPath);
+  res.redirect(`/page/${newSlug}`);
+});
+
+router.post('/page/:slug/delete', requireAuth, requireSameOrigin, express.urlencoded({ extended: false }), (req, res) => {
+  const filepath = path.join(wikiDir(), `${req.params.slug}.md`);
+  if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+  res.redirect('/browse');
 });
 
 router.get('/source/*', requireAuth, (req, res) => {
