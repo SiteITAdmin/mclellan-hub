@@ -402,6 +402,15 @@ Update data with:
 ./scripts/update-token-burn-data.sh
 ```
 
+Install or repair the nightly 02:00 refresh with:
+
+```bash
+./scripts/install-token-burn-refresh.sh
+```
+
+The LaunchAgent runs once when installed and writes its log to
+`data/logs/token-burn-refresh.log`.
+
 The dashboard reads deployed JSON data and normally does not require an application restart after a data-only update.
 
 ## 15. Hermes and Google Chat

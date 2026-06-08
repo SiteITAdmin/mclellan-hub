@@ -817,9 +817,9 @@
   },
   {
     "date": "2026-06-08",
-    "codex_tokens": 0,
-    "claude_code_tokens": 3204529,
-    "claude_code_calls": 53,
+    "codex_tokens": 16128211,
+    "claude_code_tokens": 47018500,
+    "claude_code_calls": 462,
     "api_tokens": 0,
     "chatgpt_conversations": 0,
     "chatgpt_messages": 0,
@@ -830,6 +830,6 @@
     "chat_tokens_high": 0,
     "confidence": "measured",
     "driver": "Hub Development",
-    "evidence": "Claude Code message usage"
+    "evidence": "Codex session token counters; Claude Code message usage"
   }
 ]
