@@ -22,6 +22,7 @@
 <%- include('_nav', { page: 'browse', q: '' }) %>
 <main class="wiki-main">
   <h1 class="wiki-page-title">Browse</h1>
+  <p class="browse-intro">A maintenance view of indexed material. For normal use, <a href="/">search the knowledge base</a>.</p>
 
   <%# ── All content by type ────────────────────────────────────────────────── %>
   <% const typeOrder = ['Wiki', 'Meetings', 'Workday', 'Journal', 'Daily Notes', 'People', 'Projects']; %>
@@ -48,24 +49,16 @@
     </section>
   <% } %>
 
-  <%# ── Wiki pages by category ─────────────────────────────────────────────── %>
-  <% if (Object.keys(wikiByCategory).length) { %>
-  <h2 style="margin-top:2.5rem">Wiki by category</h2>
-  <% for (const [cat, pages] of Object.entries(wikiByCategory).sort()) { %>
-    <section class="browse-section">
-      <h3 class="browse-cat"><%= cat %> <span class="browse-count"><%= pages.length %></span></h3>
-      <ul class="browse-list">
-        <% for (const p of pages) { %>
-          <li>
-            <a href="/page/<%= encodeURIComponent(p.slug) %>"><%= p.title %></a>
-            <% for (const t of (p.tags || []).slice(0, 3)) { %>
-              <span class="tag tag-sm"><%= t %></span>
-            <% } %>
-          </li>
-        <% } %>
-      </ul>
-    </section>
-  <% } %>
+  <% if (systemPages.length) { %>
+  <details class="system-pages">
+    <summary>System pages <span class="browse-count"><%= systemPages.length %></span></summary>
+    <p>Compiler indexes, wiki guidance and internal overview documents.</p>
+    <ul class="browse-list">
+      <% for (const p of systemPages) { %>
+        <li><a href="/page/<%= encodeURIComponent(p.slug) %>"><%= p.title %></a></li>
+      <% } %>
+    </ul>
+  </details>
   <% } %>
 </main>
 </body>

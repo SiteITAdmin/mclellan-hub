@@ -72,7 +72,15 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
 
   printf '[%s] rsync ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-  # ── 2. Apply wiki deletions made through the web app ─────────────────────
+  # ── 2. Pull web-created and web-edited wiki pages ────────────────────────
+  mkdir -p "$VAULT_ROOT/wiki"
+  rsync -az \
+    -e "ssh -o StrictHostKeyChecking=accept-new" \
+    "${VPS_USER}@${VPS_HOST}:${REMOTE_VAULT}/wiki/" \
+    "$VAULT_ROOT/wiki/"
+  printf '[%s] wiki pull ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  # ── 3. Apply wiki deletions made through the web app ─────────────────────
   WIKI_DELETE_QUEUE="$VAULT_ROOT/raw_sources/wiki-delete-queue"
   if [ -d "$WIKI_DELETE_QUEUE" ]; then
     find "$WIKI_DELETE_QUEUE" -maxdepth 1 -name '*.json' | sort | while read -r qfile; do
@@ -89,7 +97,7 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
     done
   fi
 
-  # ── 3. Daily Boox / Onyx Drive notebook ingest ───────────────────────────
+  # ── 4. Daily Boox / Onyx Drive notebook ingest ───────────────────────────
   BOOX_STAMP="$LOG_DIR/.boox-drive-last-run"
   TODAY="$(date -u '+%Y-%m-%d')"
   if [ "${BOOX_DRIVE_ENABLED:-0}" = "1" ] && [ "$(cat "$BOOX_STAMP" 2>/dev/null)" != "$TODAY" ]; then
@@ -99,7 +107,7 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
       || printf '[%s] Boox Drive ingest failed\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   fi
 
-  # ── 4. Process ingest queue ───────────────────────────────────────────────
+  # ── 5. Process ingest queue ───────────────────────────────────────────────
   QUEUE_DIR="$VAULT_ROOT/raw_sources/ingest-queue"
 
   if [ -d "$QUEUE_DIR" ] && [ -x "$SYNTHADOC_PYTHON" ]; then
@@ -148,7 +156,7 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
     printf '[%s] synthadoc python not found at %s — skipping queue\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$SYNTHADOC_PYTHON"
   fi
 
-  # ── 5. Push compiled wiki pages back to VPS ──────────────────────────────
+  # ── 6. Push compiled wiki pages back to VPS ──────────────────────────────
   rsync -az \
     -e "ssh -o StrictHostKeyChecking=accept-new" \
     "$VAULT_ROOT/wiki/" \
@@ -157,10 +165,10 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
     "chown -R hub:hub \"$REMOTE_VAULT/wiki\" && chmod -R u+rwX \"$REMOTE_VAULT/wiki\""
   printf '[%s] wiki push ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-  # ── 6. Rebuild workday daily index ───────────────────────────────────────
+  # ── 7. Rebuild workday daily index ───────────────────────────────────────
   /usr/bin/env node "$ROOT/scripts/build-workday-daily-index.js"
 
-  # ── 7. Daily topic digest (once per day) ─────────────────────────────────
+  # ── 8. Daily topic digest (once per day) ─────────────────────────────────
   DIGEST_STAMP="$LOG_DIR/.digest-last-run"
   TODAY="$(date -u '+%Y-%m-%d')"
   if [ "$(cat "$DIGEST_STAMP" 2>/dev/null)" != "$TODAY" ]; then
