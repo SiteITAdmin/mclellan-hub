@@ -7,6 +7,25 @@
   </div>
 </section>
 
+<section class="section-card crm-search-card">
+  <form method="GET" action="/crm/contacts" class="crm-note-form">
+    <input
+      type="search"
+      name="q"
+      value="<%= q %>"
+      placeholder="Search people, notes, companies, and facts..."
+      aria-label="Search people and notes"
+    >
+    <button class="btn" type="submit">Search</button>
+    <% if (q) { %><a class="btn btn-ghost" href="/crm/contacts">Clear</a><% } %>
+  </form>
+  <% if (q) { %>
+    <p class="crm-search-summary"><%= contacts.length %> <%= contacts.length === 1 ? 'person' : 'people' %> matched “<%= q %>”</p>
+  <% } else { %>
+    <p class="crm-search-summary">Search includes archived facts, contact notes, and People wiki notes.</p>
+  <% } %>
+</section>
+
 <section class="section-card">
   <form class="crm-note-form" id="crm-note-form">
     <input name="text" id="crm-note" placeholder="Add a note, e.g. Rob approved the lite licence for Jina" required>
@@ -42,15 +61,23 @@
       <% } %>
       <% if (contact.facts.length) { %>
         <ul class="crm-compact-list">
-          <% for (const fact of contact.facts.slice(0, 3)) { %>
+          <% for (const fact of contact.facts.slice(0, q ? 1 : 3)) { %>
             <li><%= fact.fact %></li>
           <% } %>
         </ul>
       <% } %>
+      <% if (q && contact.searchSnippets.length) { %>
+        <div class="crm-search-matches">
+          <span>Matched</span>
+          <% for (const snippet of contact.searchSnippets) { %><p><%= snippet %></p><% } %>
+        </div>
+      <% } %>
     </a>
   <% } %>
 </section>
-<% if (!contacts.length) { %><div class="crm-empty">No contacts yet. Use the note form above or add a person directly.</div><% } %>
+<% if (!contacts.length) { %>
+  <div class="crm-empty"><%= q ? `No people or notes matched “${q}”.` : 'No contacts yet. Use the note form above or add a person directly.' %></div>
+<% } %>
 
 <script>
 document.getElementById('toggle-add-person').addEventListener('click', () => {

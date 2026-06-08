@@ -259,7 +259,7 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
 
 // ── CRM endpoints ─────────────────────────────────────────────────────────────
 router.get('/api/crm/contacts', requireAuth, (req, res) => {
-  const contacts = listContacts(req.hubUser);
+  const contacts = listContacts(req.hubUser, req.query.q);
   res.json(contacts);
 });
 
@@ -425,8 +425,9 @@ function promoteFirstLinkedCompany(hub, contactId) {
 }
 
 router.get('/crm/contacts', requireAuth, (req, res) => {
-  const contacts = listContacts(req.hubUser);
-  res.render('hub/crm', { ...crmPageData(req.hubUser), contacts });
+  const q = String(req.query.q || '').trim();
+  const contacts = listContacts(req.hubUser, q);
+  res.render('hub/crm', { ...crmPageData(req.hubUser), contacts, q });
 });
 
 router.post('/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
