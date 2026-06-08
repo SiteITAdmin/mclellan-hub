@@ -43,10 +43,18 @@ router.post('/api/documents/:id/to-wiki', requireAuth, requireSameOrigin, writeL
 
     let generated;
     if (IMAGE_EXTS.includes(ext)) {
-      // doc.markdown is a placeholder — we need the raw bytes. Images stored in the
-      // documents table have their buffer in mimetype-gated blob column if present,
-      // but currently we only store markdown. Flag as unsupported for now.
-      return res.status(400).json({ error: 'Image wiki conversion requires re-uploading — use the upload+wiki button instead.' });
+      // Raw image bytes are saved to vault/Projects/{slug}/raw_sources/{filename} on upload.
+      const fs = require('fs');
+      const { vaultRoot } = require('../lib/obsidian-vault');
+      const project = hub.prepare('SELECT slug FROM projects WHERE id = ?').get(doc.project_id);
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      const safeName = doc.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const imagePath = path.join(vaultRoot(), 'Projects', project.slug, 'raw_sources', safeName);
+      if (!fs.existsSync(imagePath)) {
+        return res.status(404).json({ error: 'Image file not found on disk. Try re-uploading with the wiki toggle.' });
+      }
+      const buffer = fs.readFileSync(imagePath);
+      generated = await imageToWiki({ filename: doc.filename, buffer, mimetype: doc.mimetype, projectName: doc.project_name });
     } else {
       generated = await documentToWiki({
         filename: doc.filename,
