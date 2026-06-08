@@ -1,13 +1,13 @@
 # McLellan Hub Operator Manual
 
-**Version:** 1.0  
-**Current as of:** 7 June 2026  
+**Version:** 2.0
+**Current as of:** 8 June 2026
 **Repository:** `SiteITAdmin/mclellan-hub`  
 **Production host:** `178.104.235.142` (`/app`, `hub.service`)
 
 ## Purpose
 
-This is the operating manual for the complete McLellan tool set. It explains what each tool is for, where to find it, how the tools exchange information, what runs automatically, and how to deploy, back up, and recover the system.
+This is the operating manual for the complete McLellan tool set. It explains what each tool is for, where to find it, how the tools exchange information, how models and prompts are governed, what runs automatically, and how to deploy, back up, and recover the system.
 
 The Hub is a private operating environment rather than a collection of isolated apps. Chat, projects, CRM, email, meetings, tasks, the wiki, content, flights, intelligence, and the public portfolio share context through the Hub database, Google services, and the Obsidian/Synthadoc knowledge store.
 
@@ -28,7 +28,7 @@ The Hub is a private operating environment rather than a collection of isolated 
 | Tile | Route | Use it for |
 |---|---|---|
 | AI Chat | `/c` | General work, project conversations, research, document analysis |
-| Projects & Wiki | `wiki.mclellan.scot` | Search and browse durable knowledge |
+| Wiki | `wiki.mclellan.scot` | Search, browse, create, and edit durable knowledge |
 | CRM | `/crm` | People, companies, meetings, facts, decisions, and follow-ups |
 | Daily Debrief | `/debrief` | Voice-led end-of-day reflection and action capture |
 | Content | `/lin` | LinkedIn research, drafting, scoring, and assets |
@@ -104,17 +104,26 @@ AI Chat is the general work surface. It supports model selection, web research, 
 | `/tasks add title` | Creates a Google Task |
 | `/tasks done words` | Completes the first open title containing those words |
 
-### Files and exports
+### Files, project documents, and exports
 
 - Upload supported documents to a chat for extraction and analysis.
-- Save useful answers into the current project.
-- Save durable material to the wiki instead of leaving it only in a conversation.
+- A chat upload can be analysed immediately without becoming a project document.
+- A project upload becomes reusable project context and is listed in the project document panel.
+- Supported project uploads include PDF, DOCX, PPT/PPTX, XLS/XLSX, EPUB, HTML, TXT, Markdown, CSV, and common image formats. The upload limit is 10 MB.
+- Use the **wiki** toggle during a project upload to create a durable Wiki page at the same time.
+- Use **to wiki** beside an existing project document to create the Wiki page later.
+- Images use the configured Wiki vision model to produce a factual description before the Wiki page writer structures the page.
+- Save useful individual chat answers into a project, or save them directly to Wiki.
 - Export suitable responses as Word, PDF, or Google Docs.
 - Use ratings when an answer is notably good or poor; ratings help model evaluation.
 
+Deleting a project document removes the database document record. It does not automatically delete a Wiki page already generated from that document.
+
 ### Model controls
 
-Administrators can set model tiers, defaults, system-model slots, custom provider keys, and shortcuts. The model test arena compares candidate models on the same prompt. Use the lowest-cost tier that reliably completes the task; reserve stronger models for ambiguous analysis, long synthesis, and high-stakes drafting.
+Administrators can set model tiers, chat defaults, named pipeline slots, complete prompt overrides, custom provider keys, and quick-start cards. The model test arena compares candidate models on the same prompt. Use the lowest-cost tier that reliably completes the task; reserve stronger models for ambiguous analysis, long synthesis, vision, and high-stakes drafting.
+
+The model selected in AI Chat controls that conversation only. Background features such as email classification, Wiki writing, debrief extraction, and LinkedIn drafting use their own named system-model slots.
 
 ## 4. CRM: People, Companies, and Context
 
@@ -246,6 +255,22 @@ Email should create a task only for a specific required action, such as replying
 5. Review and edit it.
 6. Send it, export it to the wiki, create a PDF, or publish it.
 
+Topic selection updates immediately in the browser. The week can be selected explicitly, and date ranges can be applied when generating a briefing.
+
+### Creator RSS reading
+
+The **Creators** area is a separate source path for publications with RSS feeds:
+
+1. Add a creator name, stable slug, and feed URL.
+2. Select **Fetch now**, or wait for the daily 09:30 RSS ingestion.
+3. Open the creator page to see stored articles and word counts.
+4. Open an article in the private full-article reader, or open the combined **Reading list** before going offline.
+5. Generate a creator-specific briefing from selected stored articles.
+
+RSS articles are stored in the Hub database. They are not written automatically to the Obsidian vault or Wiki. This avoids filling durable knowledge with every article before it has been reviewed.
+
+For Substack feeds, setting `SUBSTACK_SID` allows the fetcher to send the subscriber session cookie. Whether full paid text is returned still depends on what the publication exposes through its feed. Keep this credential private and refresh it when the Substack session expires.
+
 ### Publishing
 
 Published briefings can appear through the Douglas portfolio’s RSS feed and `llms.txt`:
@@ -263,11 +288,33 @@ A newsletter reminder runs on Saturday at 09:00.
 
 ### Wiki
 
-The wiki searches and browses durable material across project pages, meetings, journals, Workday records, people notes, and selected email-derived context. It also exposes sources and orphaned-page information so disconnected knowledge can be repaired.
+The wiki searches and browses durable material across project pages, meetings, journals, Workday records, people notes, and selected email-derived context. Search combines the Wiki index with Synthadoc/BM25 retrieval when the sidecar is available. It also exposes sources, graph relationships, and orphaned-page information so disconnected knowledge can be repaired.
+
+### Creating and editing pages
+
+- Select **New page** in the Wiki to create a Markdown page with title, categories, and tags.
+- Select **Edit** on a page to change its title metadata and Markdown body.
+- Rename changes the page slug and therefore its URL.
+- Delete removes the page file immediately and cannot be undone from the UI.
+- Wiki links use `[[slug]]`; generated pages may add a Related section automatically.
+
+Renaming a slug does not rewrite every inbound `[[wikilink]]`. After a rename, search for the old slug and repair references. Before deleting a page, check related pages and backlinks.
+
+### Sending material to Wiki
+
+Wiki pages can be generated from:
+
+- A chat question and answer.
+- A project document.
+- A project image, using the vision slot first.
+- An Intelligence briefing.
+- Direct manual authoring in the Wiki editor.
+
+The configured **Wiki page writer** controls document and Q&A conversion. The **Wiki image vision** slot describes image content. Generated output is stored as a Markdown file under the Wiki area of the vault, with categories, tags, confidence, creation date, and related links.
 
 ### Synthadoc
 
-Synthadoc indexes raw sources into searchable knowledge. It runs as a sidecar on the Mac mini and supports status, list, ingest, jobs, and serve operations. The Hub can queue URL and YouTube ingestion as well as local source files.
+Synthadoc indexes raw sources into searchable knowledge. It runs as an HTTP sidecar, normally at the configured `SYNTHADOC_URL`, and supports status, list, ingest, jobs, and serve operations. The Hub submits URL, YouTube, Workday, and local-source ingestion through the API. If the sidecar is unavailable, Wiki file browsing still works but indexed search and new ingestion may be incomplete.
 
 ### Obsidian vault
 
@@ -370,22 +417,137 @@ Hermes provides a conversational route into Hub capabilities from Google Chat or
 
 ## 16. Admin and Model Operations
 
+Open `/admin` on the appropriate Hub and sign in with the authorised Google Workspace account. Admin settings are operational controls: changes can affect live chat, background processing, public portfolio features, and scheduled pipelines immediately.
+
+### Admin navigation
+
 Admin tools cover:
 
 - Projects, memory, and project documents.
-- Knowledge and CRM wiki tags.
+- Knowledge and CRM Wiki tags.
 - Email taxonomy, audits, and manual processing triggers.
 - Chat request logs and answer ratings.
 - Daily Debrief sessions.
-- Model tiers, defaults, system slots, shortcuts, and custom API keys.
+- Model catalogue, tiers, defaults, named system slots, full prompt overrides, and custom API keys.
+- Quick-start cards shown on the Chat welcome screen.
 - Model test arena.
 - LinkedIn content administration.
-- Drive imports.
+- RSS feed management.
 - MCP-style project endpoints.
+
+### Projects and memory
+
+The Projects screen controls project name, slug, context depth, CV-context status, and Wiki tags. Opening a project shows:
+
+- Stored chat messages in context order.
+- Uploaded documents and extracted Markdown.
+- Matched Wiki pages based on assigned tags.
+- Controls to remove individual memories or documents.
+
+Deleting a project can either detach its messages or delete them. Read the confirmation carefully. Project slug changes affect `/slug` commands and links.
+
+### CRM and knowledge tags
+
+Admin CRM assigns Wiki tags to contacts. Project and contact tags are matched against Wiki metadata to surface useful pages in briefing views. The unassigned-tag section highlights Wiki tags not currently connected to a project or contact.
+
+### Models: catalogue versus slots
+
+The **Current models** catalogue defines which models are available to chat and to system slots. Each record can contain:
+
+- Internal key and display label.
+- Provider model ID.
+- Tier and category.
+- Search mode: native, OpenRouter web plugin, or none.
+- Input/output cost and context length for display and comparison.
+- Optional custom provider base URL.
+- Optional API key environment-variable name or stored API key.
+- Enabled/disabled status.
+
+The chat default is the model initially selected in the ordinary Chat picker. Disabling a model removes it from active selection. Delete is available only after disabling it.
+
+### Search modes
+
+- **Native:** the model itself performs search, such as a search-native provider model.
+- **Web plugin:** OpenRouter supplies the configured web-search tool to a tool-capable model.
+- **None:** the model has no provider search; Hub-side Exa or Brave context can still be used by workflows that support it.
+
+Do not mark an ordinary model as native merely because it can reason about current events. Search mode describes an actual retrieval capability.
+
+### Tiers
+
+Tiers group models in the Chat picker and provide a default search mode for newly added models. A tier key is referenced by model records; changing or deleting a tier can leave existing models ungrouped. Prefer adding a replacement tier, moving models, and only then deleting the old tier.
+
+### Named system-model slots
+
+Pipeline slots separate background and specialist work from the interactive Chat model:
+
+| Group | Slots |
+|---|---|
+| Chat infrastructure | Recall tagger, multi-search planner, multi-search synthesiser |
+| Background processing | CRM intent parser, email classifier, regulatory synopsis, prompt improver, test synthesiser |
+| Debrief | Interviewer, extractor |
+| LinkedIn | Query planner, research synthesiser, post drafter, scorer, carousel generator, refiner/reviewer, image-prompt writer |
+| Workday | Narrative writer |
+| Public portfolio | Ask-me chat, job-description analyser |
+| Wiki | Page writer, image vision |
+| Newsletter intelligence | Topic extractor, briefing writer |
+
+Slots marked **system** are shared across users. Slots marked **user** apply only to the current Hub account. Leaving a slot unset uses its built-in fallback.
+
+When changing a slot:
+
+1. Confirm whether the scope is system-wide or per-user.
+2. Select an enabled model suited to the job and modality.
+3. Save the slot.
+4. Run a representative workflow or Test Arena prompt.
+5. Check request logs, output quality, latency, and token cost.
+
+Use inexpensive models for silent high-volume work such as recall tagging and newsletter extraction. Use a vision-capable model for Wiki image vision. Public portfolio slots can be triggered by visitors, so cost and abuse resistance matter.
+
+### Prompt editing
+
+Each supported slot has a **Prompt** control showing the complete default prompt. Saving it creates an override; **Restore default** clears the override and returns to the code-defined prompt.
+
+Supported runtime placeholders include:
+
+- `[DATE]` - current date.
+- `[NAME]` - current user's display name.
+- `[CALENDAR]` - current calendar context.
+- `[CONTEXT]` - known CRM context.
+- `[NOTE]` - raw CRM note.
+- `[CATEGORIES]` - allowed newsletter categories.
+- `[PEOPLE]` and `[PROJECTS]` - known entities for extraction.
+
+Preserve required output contracts. Several slots require strict JSON, exact keys, a completion token, or a constrained word count. Removing those instructions can break the caller even when the prose looks better.
+
+Prompt overrides live in the database, not in Git. A deployment does not erase them, and changing `lib/prompts.js` does not affect a slot that still has an override. Record important prompt changes outside the database and use Restore default before assessing a newly deployed default prompt.
+
+### Safe prompt-change procedure
+
+1. Copy the current prompt into a dated change note.
+2. Make one purposeful change at a time.
+3. Keep placeholders and output schema intact.
+4. Test normal, edge, and malformed input.
+5. Inspect the downstream UI or parser, not only raw model output.
+6. Restore the default immediately if parsing, safety, or factual quality regresses.
 
 ### Model test arena
 
 Use a representative prompt set. Compare correctness, instruction following, latency, and cost. Do not replace a default model based on one attractive answer. Record why a model changed and which workflows were tested.
+
+The Test Arena can run one or several model/search combinations, improve a test prompt through the configured prompt-improver slot, accept uploaded source material, and retain test jobs. Use the same input and search context when comparing models.
+
+### Quick-start cards
+
+The Cards screen controls the prompts displayed on the Chat welcome screen. A card can define label, description, prompt, optional model, ordering, and enabled status. Cards start a workflow; they do not permanently change the account's default model.
+
+### Email administration
+
+The Email screen manages canonical labels and classification rules, reviews AgentMail items waiting for training, and can trigger controlled fetch/classification actions. Broad taxonomy changes affect automated Gmail labeling, CRM extraction, and task creation; test them on a small set first.
+
+### RSS feed administration
+
+`/admin/rss-feeds` lists feed state, article counts, last fetch time, and errors. It can add, enable/disable, fetch, fetch all, or delete a feed. Deleting a feed also deletes its stored articles. The user-facing Creators area is the safer place for normal reading and briefing work.
 
 ## 17. Automation Schedule
 
@@ -397,6 +559,7 @@ Use a representative prompt set. Compare correctness, instruction following, lat
 | 07:00 | Configured daily schedule | RH statistics |
 | 07:30 | Europe/London | Morning CRM briefing |
 | 08:00 | Configured daily schedule | Regulatory monitor |
+| 09:30 | Europe/Dublin | Creator RSS feed ingestion |
 | 16:00 | Europe/Dublin | Daily email digest |
 | Saturday 09:00 | Configured schedule | Newsletter reminder |
 | Sunday 14:00 | Configured schedule | Weekly digest |
@@ -407,10 +570,10 @@ In addition, launchd and systemd timers may run vault synchronization, backup, o
 
 | Location | Contents | Backup treatment |
 |---|---|---|
-| Hub SQLite database | Users, projects, chat, CRM, tasks cache, settings, operational records | Production backup and offsite pull |
+| Hub SQLite database | Users, projects, chat, CRM, tasks cache, model/prompt overrides, RSS articles, settings, operational records | Production backup and offsite pull |
 | Obsidian vault | Meetings, debriefs, people, projects, Workday, raw sources | Filesystem/vault backup |
 | Google Workspace | Email, Calendar, Drive, Sheets, Tasks | Google is authoritative |
-| `data/synthadoc/` | Indexed knowledge workspace and logs | Rebuildable from sources, but retain configuration |
+| `data/synthadoc/` and Synthadoc sidecar | Indexed knowledge workspace and logs | Rebuildable from sources, but retain configuration |
 | `token-burn-dashboard/deploy-data/` | Imported reporting JSON | Versioned/deployed data |
 | GitHub repository | Application code and maintained docs | Remote source control |
 
@@ -507,16 +670,19 @@ Prefer deploying a known-good Git commit. Do not use destructive Git commands on
 
 ### Secret groups
 
-- AI: `OPENAI_*`, `OPENROUTER_API_KEY`, `GOOGLE_AI_API_KEY`
+- AI: `OPENAI_TRANSCRIPTION_API_KEY`, `OPENROUTER_API_KEY`, `GOOGLE_AI_API_KEY`
 - Search: `BRAVE_SEARCH_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY`
 - Google OAuth: `GOOGLE_OAUTH_*`, `GOOGLE_WORKSPACE_DOMAIN`
 - Mail: `GMAIL_SMTP_*`, `AGENTMAIL_*`
 - Chat/webhooks: `GOOGLE_CHAT_*`, `HERMES_WEBHOOK_SECRET`
-- Storage/indexing: `HUB_DB_PATH`, `VAULT_PATH`, `OBSIDIAN_VAULT_PATH`, `SYNTHADOC_BIN`
+- Storage/indexing: `HUB_DB_PATH`, `VAULT_PATH`, `SYNTHADOC_URL`, `SYNTHADOC_BIN`, `MARKITDOWN_BIN`
+- Subscriber reading: `SUBSTACK_SID`
 - Workday/Boox: `WORKDAY_*`, `BOOX_DRIVE_*`
 - Monitoring and delivery: `BRIEFING_*`, `EMAIL_BRIEFING_*`, `REG_*`, `CONTACT_FROM_NAME`
 
 Never print secret values into logs, chat, documentation, or issue trackers. When checking configuration, print only variable names and whether each is set.
+
+API keys stored directly through Model Admin are database secrets and require the same backup and access protection as environment credentials. Prefer an environment-variable name when the provider supports it.
 
 ### Access controls
 
@@ -562,10 +728,45 @@ Never print secret values into logs, chat, documentation, or issue trackers. Whe
 ### Knowledge missing from search
 
 1. Confirm the source file exists in the vault/raw source area.
-2. Check the vault sync log.
-3. Check Synthadoc status and jobs.
-4. Re-ingest the specific source with force only when needed.
-5. Confirm the wiki is pointed at the expected workspace.
+2. Confirm the page is visible through Wiki Browse; this distinguishes file indexing from Synthadoc search.
+3. Check the vault sync log.
+4. Check `SYNTHADOC_URL`, sidecar status, and jobs.
+5. Re-ingest the specific source with force only when needed.
+6. Confirm the Wiki and Synthadoc are pointed at the expected workspace.
+
+### Document will not convert to Wiki
+
+1. Confirm the upload completed and the project document is visible.
+2. Confirm the Wiki page-writer slot points to an enabled model.
+3. For images, confirm the Wiki image-vision slot is vision capable.
+4. For an older image, confirm its raw file exists under the project's vault `raw_sources` path; re-upload if it does not.
+5. Check OpenRouter credentials and service logs for `[to-wiki]` or vision errors.
+6. Remember that deleting a document does not delete an already-created Wiki page.
+
+### Creator feed has previews or stale articles
+
+1. Select **Fetch now** and inspect the feed's last error.
+2. Confirm the feed URL is correct and enabled.
+3. If it is Substack, confirm `SUBSTACK_SID` is current.
+4. Compare the stored word count with the source article.
+5. A feed may expose only previews even to an authenticated request; use the source link when full text is absent.
+6. RSS articles are database records, not Wiki pages, unless a separate curation workflow saves them.
+
+### Model change had no effect
+
+1. Confirm whether you changed the Chat default or the relevant named system slot.
+2. Confirm the slot's scope: system or current user.
+3. Confirm the selected model remains enabled.
+4. Check whether a custom prompt override is masking a newly deployed default.
+5. Run the workflow again and inspect request logs for the actual model key.
+
+### Prompt override breaks a workflow
+
+1. Open Admin, Models, then the affected slot.
+2. Preserve the failing prompt in a change note if it needs investigation.
+3. Select **Restore default** and save.
+4. Re-run the workflow with representative input.
+5. Check for required JSON keys, placeholders, or completion tokens removed by the override.
 
 ### Morning briefing missing
 
