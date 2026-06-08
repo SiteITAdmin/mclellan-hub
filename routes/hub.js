@@ -819,8 +819,12 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
 }, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
 
-  const { projectSlug, convId: existingConvId, model, autoAnalyse, analysisPrompt } = req.body;
+  const { projectSlug, convId: existingConvId, model, autoAnalyse, analysisPrompt, toWiki } = req.body;
   const hub = db.hub();
+
+  const { IMAGE_EXTS } = require('../lib/extract');
+  const fileExt = require('path').extname(req.file.originalname || '').toLowerCase();
+  const isImage = IMAGE_EXTS.includes(fileExt);
 
   let extracted;
   try {
@@ -853,9 +857,13 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
       const vaultBase = vaultRoot();
       const rawDir = require('path').join(vaultBase, 'Projects', project.slug, 'raw_sources');
       fs.mkdirSync(rawDir, { recursive: true });
-      const vaultFile = require('path').join(rawDir, req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_') + '.md');
+      const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+      if (isImage) {
+        // Store the raw image file alongside the MD stub
+        fs.writeFileSync(require('path').join(rawDir, safeName), req.file.buffer);
+      }
+      const vaultFile = require('path').join(rawDir, safeName + (isImage ? '.md' : '.md'));
       fs.writeFileSync(vaultFile, md, 'utf8');
-      // Ingest queue for Mac Mini synthadoc
       const queueDir = require('path').join(vaultBase, 'raw_sources', 'ingest-queue');
       fs.mkdirSync(queueDir, { recursive: true });
       fs.writeFileSync(require('path').join(queueDir, `${docId}.path`), require('path').relative(vaultBase, vaultFile), 'utf8');
@@ -863,9 +871,29 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
       console.warn('[upload] vault mirror failed:', vaultErr.message);
     }
 
+    // Optionally also send to wiki
+    let wiki = null;
+    if (toWiki === '1' || toWiki === true) {
+      try {
+        const { documentToWiki, imageToWiki, writeWikiPage } = require('../lib/wiki-engine');
+        let generated;
+        if (isImage) {
+          generated = await imageToWiki({ filename: req.file.originalname, buffer: req.file.buffer, mimetype: req.file.mimetype, projectName: project.name });
+        } else {
+          generated = await documentToWiki({ filename: req.file.originalname, markdown: extracted.markdown, projectName: project.name });
+        }
+        const { slug, title } = writeWikiPage(generated);
+        wiki = { slug, title, url: `https://wiki.mclellan.scot/page/${slug}` };
+      } catch (wikiErr) {
+        console.warn('[upload] wiki save failed:', wikiErr.message);
+        wiki = { error: wikiErr.message };
+      }
+    }
+
     return res.json({
       ok: true,
       document: { id: docId, filename: req.file.originalname, size: req.file.size, project: project.slug },
+      wiki,
     });
   }
 

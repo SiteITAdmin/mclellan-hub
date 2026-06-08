@@ -28,6 +28,41 @@ router.get('/api/documents/:id', requireAuth, (req, res) => {
   });
 });
 
+// ── Send existing document to wiki ────────────────────────────────────────────
+router.post('/api/documents/:id/to-wiki', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const hub = db.hub();
+  const doc = hub.prepare('SELECT d.*, p.name AS project_name FROM documents d LEFT JOIN projects p ON p.id = d.project_id WHERE d.id = ? AND d.user = ?')
+                 .get(req.params.id, req.hubUser);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+
+  try {
+    const { documentToWiki, imageToWiki, writeWikiPage } = require('../lib/wiki-engine');
+    const { IMAGE_EXTS } = require('../lib/extract');
+    const path = require('path');
+    const ext = path.extname(doc.filename || '').toLowerCase();
+
+    let generated;
+    if (IMAGE_EXTS.includes(ext)) {
+      // doc.markdown is a placeholder — we need the raw bytes. Images stored in the
+      // documents table have their buffer in mimetype-gated blob column if present,
+      // but currently we only store markdown. Flag as unsupported for now.
+      return res.status(400).json({ error: 'Image wiki conversion requires re-uploading — use the upload+wiki button instead.' });
+    } else {
+      generated = await documentToWiki({
+        filename: doc.filename,
+        markdown: (doc.markdown || '').replace(/^---[\s\S]*?---\n+/, '').replace(/^# .+\n+/, ''), // strip frontmatter & h1
+        projectName: doc.project_name,
+      });
+    }
+
+    const { slug, title } = writeWikiPage(generated);
+    res.json({ ok: true, slug, title, url: `https://wiki.mclellan.scot/page/${slug}` });
+  } catch (err) {
+    console.error('[to-wiki]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/documents/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const doc = hub.prepare('SELECT * FROM documents WHERE id = ? AND user = ?')
