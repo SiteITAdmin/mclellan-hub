@@ -52,6 +52,25 @@ function wikiDir() {
   return path.join(vaultRoot(), 'wiki');
 }
 
+function wikiDeleteQueueDir() {
+  return path.join(vaultRoot(), 'raw_sources', 'wiki-delete-queue');
+}
+
+function writeWikiDeleteTombstone(slug) {
+  const queueDir = wikiDeleteQueueDir();
+  fs.mkdirSync(queueDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(queueDir, `${slug}.json`),
+    `${JSON.stringify({ slug, deletedAt: new Date().toISOString() }, null, 2)}\n`,
+    'utf8'
+  );
+}
+
+function clearWikiDeleteTombstone(slug) {
+  const filepath = path.join(wikiDeleteQueueDir(), `${slug}.json`);
+  if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+}
+
 function parseFrontmatter(yaml) {
   const result = {};
   const lines  = yaml.split('\n');
@@ -176,6 +195,7 @@ router.post('/page/new', requireAuth, requireSameOrigin, express.urlencoded({ ex
   const page = { slug, title, aliases: [], categories: cats, tags: tagList, confidence: 'medium', created: new Date().toISOString() };
   const fileContent = rebuildFile(page, { title, content, categories: cats, tags: tagList });
   fs.mkdirSync(wikiDir(), { recursive: true });
+  clearWikiDeleteTombstone(slug);
   fs.writeFileSync(newPath, fileContent, 'utf8');
   res.redirect(`/page/${slug}`);
 });
@@ -204,6 +224,7 @@ router.post('/page/:slug/save', requireAuth, requireSameOrigin, express.urlencod
   const cats = (categories || '').split(',').map(s => s.trim()).filter(Boolean);
   const tagList = (tags || '').split(',').map(s => s.trim()).filter(Boolean);
   const fileContent = rebuildFile(page, { title, content, categories: cats, tags: tagList });
+  clearWikiDeleteTombstone(page.slug);
   fs.writeFileSync(path.join(wikiDir(), `${page.slug}.md`), fileContent, 'utf8');
   res.redirect(`/page/${page.slug}`);
 });
@@ -216,12 +237,17 @@ router.post('/page/:slug/rename', requireAuth, requireSameOrigin, express.urlenc
   const oldPath = path.join(wikiDir(), `${page.slug}.md`);
   const newPath = path.join(wikiDir(), `${newSlug}.md`);
   if (fs.existsSync(newPath)) return res.redirect(`/page/${page.slug}/edit?err=exists`);
+  writeWikiDeleteTombstone(page.slug);
+  clearWikiDeleteTombstone(newSlug);
   fs.renameSync(oldPath, newPath);
   res.redirect(`/page/${newSlug}`);
 });
 
 router.post('/page/:slug/delete', requireAuth, requireSameOrigin, express.urlencoded({ extended: false }), (req, res) => {
-  const filepath = path.join(wikiDir(), `${req.params.slug}.md`);
+  const { slug } = req.params;
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) return res.status(400).json({ error: 'Invalid slug' });
+  const filepath = path.join(wikiDir(), `${slug}.md`);
+  writeWikiDeleteTombstone(slug);
   if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
   res.redirect('/browse');
 });
