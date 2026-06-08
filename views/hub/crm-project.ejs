@@ -296,6 +296,11 @@ document.getElementById('project-task-form').addEventListener('submit', async e 
 
   uploadBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', async () => {
+    if (fileInput.files.length > 1) {
+      statusEl.textContent = 'Please select one file at a time.';
+      fileInput.value = '';
+      return;
+    }
     const file = fileInput.files[0];
     if (!file) return;
     const sendToWiki = toWikiChk.checked;
