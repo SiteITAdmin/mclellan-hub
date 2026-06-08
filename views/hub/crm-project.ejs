@@ -127,7 +127,7 @@ async function taskAction(id, action) {
           <button class="btn btn-sm" id="doc-upload-btn">+ Add file</button>
         </div>
       </div>
-      <input type="file" id="doc-file-input" accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg,.gif,.webp" style="display:none;">
+      <input type="file" id="doc-file-input" accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg,.gif,.webp" multiple style="display:none;">
       <p id="doc-upload-status" style="font-size:12px;color:var(--crm-muted);min-height:16px;margin:0 0 8px;"></p>
 
       <% if (!projectDocs.length) { %>
@@ -296,53 +296,63 @@ document.getElementById('project-task-form').addEventListener('submit', async e 
 
   uploadBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', async () => {
-    if (fileInput.files.length > 1) {
-      statusEl.textContent = 'Please select one file at a time.';
-      fileInput.value = '';
-      return;
-    }
-    const file = fileInput.files[0];
-    if (!file) return;
+    const files = Array.from(fileInput.files);
+    if (!files.length) return;
     const sendToWiki = toWikiChk.checked;
-    statusEl.textContent = `Uploading ${file.name}…`;
     uploadBtn.disabled = true;
 
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('projectSlug', projectSlug);
-    if (sendToWiki) fd.append('toWiki', '1');
+    const errors = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      statusEl.textContent = files.length > 1
+        ? `Uploading ${file.name} (${i + 1}/${files.length})…`
+        : `Uploading ${file.name}…`;
 
-    try {
-      const r = await fetch('/api/upload', { method: 'POST', body: fd });
-      const d = await r.json();
-      if (!r.ok || !d.ok) { statusEl.textContent = '✖ ' + (d.error || 'Upload failed'); return; }
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('projectSlug', projectSlug);
+      if (sendToWiki) fd.append('toWiki', '1');
 
-      // Insert row into list
-      if (emptyEl) emptyEl.style.display = 'none';
-      const row = document.createElement('div');
-      row.className = 'crm-action';
-      row.id = 'doc-row-' + d.document.id;
-      const kb = (d.document.size / 1024).toFixed(0);
-      row.innerHTML = `
-        <span style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.document.filename}">${d.document.filename}</span>
-        <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
-          <span style="font-size:11px;color:var(--crm-muted);">${kb} KB</span>
-          <button class="btn btn-sm btn-ghost" onclick="docToWiki('${d.document.id}',this)" title="Save to wiki">→ wiki</button>
-          <button class="btn btn-sm btn-ghost" onclick="docDelete('${d.document.id}',this)">Remove</button>
-        </div>`;
-      docList.prepend(row);
-      docCount++;
-      updateBadge();
+      try {
+        const r = await fetch('/api/upload', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (!r.ok || !d.ok) { errors.push(`${file.name}: ${d.error || 'Upload failed'}`); continue; }
 
-      if (d.wiki?.slug) {
-        statusEl.innerHTML = `✓ Saved · <a href="https://wiki.mclellan.scot/page/${d.wiki.slug}" target="_blank" style="color:var(--crm-link,#4648d4);">Wiki: ${d.wiki.title} ↗</a>`;
-      } else if (d.wiki?.error) {
-        statusEl.textContent = `✓ Saved · Wiki failed: ${d.wiki.error}`;
-      } else {
-        statusEl.textContent = `✓ Saved ${d.document.filename}`;
+        if (emptyEl) emptyEl.style.display = 'none';
+        const row = document.createElement('div');
+        row.className = 'crm-action';
+        row.id = 'doc-row-' + d.document.id;
+        const kb = (d.document.size / 1024).toFixed(0);
+        row.innerHTML = `
+          <span style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.document.filename}">${d.document.filename}</span>
+          <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
+            <span style="font-size:11px;color:var(--crm-muted);">${kb} KB</span>
+            <button class="btn btn-sm btn-ghost" onclick="docToWiki('${d.document.id}',this)" title="Save to wiki">→ wiki</button>
+            <button class="btn btn-sm btn-ghost" onclick="docDelete('${d.document.id}',this)">Remove</button>
+          </div>`;
+        docList.prepend(row);
+        docCount++;
+        updateBadge();
+
+        if (files.length === 1) {
+          if (d.wiki?.slug) {
+            statusEl.innerHTML = `✓ Saved · <a href="https://wiki.mclellan.scot/page/${d.wiki.slug}" target="_blank" style="color:var(--crm-link,#4648d4);">Wiki: ${d.wiki.title} ↗</a>`;
+          } else if (d.wiki?.error) {
+            statusEl.textContent = `✓ Saved · Wiki failed: ${d.wiki.error}`;
+          } else {
+            statusEl.textContent = `✓ Saved ${d.document.filename}`;
+          }
+        }
+      } catch (err) {
+        errors.push(`${file.name}: ${err.message}`);
       }
-    } catch (err) {
-      statusEl.textContent = '✖ ' + err.message;
+    }
+
+    if (files.length > 1) {
+      const saved = files.length - errors.length;
+      statusEl.textContent = errors.length
+        ? `✓ ${saved}/${files.length} saved · ✖ ${errors.join(', ')}`
+        : `✓ ${saved} files saved`;
     }
     uploadBtn.disabled = false;
     fileInput.value = '';
