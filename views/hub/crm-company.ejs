@@ -58,13 +58,13 @@ async function taskAction(id, action) {
     <section class="section-card">
       <h2>People</h2>
       <% for (const contact of contacts) { %>
-        <a class="crm-row-link" href="/crm/contact/<%= contact.id %>"><strong><%= contact.name %></strong><span><%= contact.role || 'Role not set' %></span></a>
+        <a class="crm-row-link" href="/crm/contact/<%= contact.id %>"><strong><%= contact.name %></strong><span><%= contact.role || 'Role not set' %><%= contact.is_primary ? ' · Shown on People card' : '' %></span></a>
       <% } %>
       <% if (!contacts.length) { %><p class="crm-muted">No contacts linked.</p><% } %>
       <form class="crm-inline-form" method="post" action="/crm/company/<%= company.id %>/contacts">
         <select name="contact_id" required><option value="">Link a contact</option><% for (const contact of availableContacts) { %><option value="<%= contact.id %>"><%= contact.name %></option><% } %></select>
         <input name="role" placeholder="Role">
-        <label class="crm-checkbox"><input type="checkbox" name="is_primary" value="1"> Primary</label>
+        <label class="crm-checkbox"><input type="checkbox" name="is_primary" value="1"> Show on People card</label>
         <button class="btn btn-sm" type="submit">Link</button>
       </form>
     </section>

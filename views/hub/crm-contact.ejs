@@ -103,18 +103,25 @@ async function taskAction(id, action) {
     <% if (companies.length || availableCompanies.length) { %>
     <section class="section-card">
       <h2>Companies</h2>
+      <p class="crm-muted crm-section-help">The company and role marked below are shown as tags on the People page.</p>
       <% for (const co of companies) { %>
         <div class="crm-action" id="co-row-<%= co.id %>">
-          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-            <a href="/crm/company/<%= co.id %>"><strong><%= co.name %></strong></a>
+          <div class="crm-company-link-details">
+            <div class="crm-company-link-title">
+              <a href="/crm/company/<%= co.id %>"><strong><%= co.name %></strong></a>
+              <% if (co.is_primary) { %><span class="crm-badge">Shown on People card</span><% } %>
+            </div>
             <span class="crm-role-display crm-muted" id="co-role-<%= co.id %>" data-company-id="<%= co.id %>" data-role="<%= co.role || '' %>" style="font-size:13px;cursor:pointer;" title="Click to edit role"><%= co.role ? ('· ' + co.role) : '+ role' %></span>
             <span class="crm-role-edit" id="co-role-edit-<%= co.id %>" style="display:none;gap:4px;align-items:center;">
               <input id="co-role-input-<%= co.id %>" style="font-size:13px;padding:2px 6px;max-width:160px;" placeholder="Role…" value="<%= co.role || '' %>">
-              <button class="btn btn-sm" data-company-id="<%= co.id %>" class="save-role-btn">Save</button>
-              <button class="btn btn-sm btn-ghost" data-company-id="<%= co.id %>" class="cancel-role-btn">✕</button>
+              <button class="btn btn-sm save-role-btn" data-company-id="<%= co.id %>">Save</button>
+              <button class="btn btn-sm btn-ghost cancel-role-btn" data-company-id="<%= co.id %>">Cancel</button>
             </span>
           </div>
-          <button class="btn btn-sm btn-ghost" onclick="unlinkCompany('<%= co.id %>')">Remove</button>
+          <div class="crm-company-link-actions">
+            <% if (!co.is_primary) { %><button class="btn btn-sm btn-ghost" onclick="makePrimaryCompany('<%= co.id %>')">Show on People card</button><% } %>
+            <button class="btn btn-sm btn-ghost" onclick="unlinkCompany('<%= co.id %>')">Remove</button>
+          </div>
         </div>
       <% } %>
       <% if (availableCompanies.length) { %>
@@ -126,6 +133,7 @@ async function taskAction(id, action) {
             <% } %>
           </select>
           <input name="role" placeholder="Role (optional)" style="max-width:140px;">
+          <label class="crm-checkbox"><input type="checkbox" name="is_primary" value="1"<%= companies.length ? '' : ' checked' %>> Show on People card</label>
           <button class="btn btn-sm" type="submit">Link</button>
         </form>
         <p class="crm-muted" id="link-company-msg" style="font-size:12px;margin-top:4px;"></p>
@@ -210,6 +218,16 @@ if (linkCompanyForm) {
 
 async function unlinkCompany(companyId) {
   const r = await fetch('/api/crm/contacts/<%= contact.id %>/companies/unlink', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company_id: companyId }),
+  });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+
+async function makePrimaryCompany(companyId) {
+  const r = await fetch('/api/crm/contacts/<%= contact.id %>/companies/primary', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ company_id: companyId }),
   });

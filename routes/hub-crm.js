@@ -401,6 +401,28 @@ function safeBack(req, fallback) {
   }
 }
 
+function setPrimaryCompany(hub, contactId, companyId) {
+  return hub.transaction(() => {
+    hub.prepare('UPDATE contact_companies SET is_primary = 0 WHERE contact_id = ?').run(contactId);
+    return hub.prepare(`
+      UPDATE contact_companies SET is_primary = 1
+      WHERE contact_id = ? AND company_id = ?
+    `).run(contactId, companyId);
+  })();
+}
+
+function promoteFirstLinkedCompany(hub, contactId) {
+  const next = hub.prepare(`
+    SELECT cc.company_id
+    FROM contact_companies cc
+    JOIN companies co ON co.id = cc.company_id
+    WHERE cc.contact_id = ?
+    ORDER BY co.name
+    LIMIT 1
+  `).get(contactId);
+  if (next) setPrimaryCompany(hub, contactId, next.company_id);
+}
+
 router.get('/crm/contacts', requireAuth, (req, res) => {
   const contacts = listContacts(req.hubUser);
   res.render('hub/crm', { ...crmPageData(req.hubUser), contacts });
@@ -562,14 +584,18 @@ router.post('/crm/company/:id/contacts', requireAuth, requireSameOrigin, writeLi
   const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
   const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.body.contact_id, req.hubUser);
   if (!company || !contact) return res.status(404).send('Company or contact not found');
-  if (req.body.is_primary) {
+  const hasPrimary = hub.prepare(
+    'SELECT 1 FROM contact_companies WHERE contact_id = ? AND is_primary = 1'
+  ).get(contact.id);
+  const makePrimary = Boolean(req.body.is_primary) || !hasPrimary;
+  if (makePrimary) {
     hub.prepare('UPDATE contact_companies SET is_primary = 0 WHERE contact_id = ?').run(contact.id);
   }
   hub.prepare(`
     INSERT INTO contact_companies (contact_id, company_id, role, is_primary)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(contact_id, company_id) DO UPDATE SET role = excluded.role, is_primary = excluded.is_primary
-  `).run(contact.id, company.id, String(req.body.role || '').trim() || null, req.body.is_primary ? 1 : 0);
+  `).run(contact.id, company.id, String(req.body.role || '').trim() || null, makePrimary ? 1 : 0);
   res.redirect(`/crm/company/${company.id}`);
 });
 
@@ -786,23 +812,59 @@ router.post('/api/crm/contacts/:id/companies', requireAuth, requireSameOrigin, w
   const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
   const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.body.company_id, req.hubUser);
   if (!contact || !company) return res.status(404).json({ error: 'Not found' });
+  const hasPrimary = hub.prepare(
+    'SELECT 1 FROM contact_companies WHERE contact_id = ? AND is_primary = 1'
+  ).get(contact.id);
+  const makePrimary = Boolean(req.body.is_primary) || !hasPrimary;
+  if (makePrimary) {
+    hub.prepare('UPDATE contact_companies SET is_primary = 0 WHERE contact_id = ?').run(contact.id);
+  }
   hub.prepare(`
-    INSERT OR IGNORE INTO contact_companies (contact_id, company_id, role, is_primary)
-    VALUES (?, ?, ?, 0)
-  `).run(contact.id, company.id, String(req.body.role || '').trim() || null);
+    INSERT INTO contact_companies (contact_id, company_id, role, is_primary)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(contact_id, company_id) DO UPDATE SET
+      role = excluded.role,
+      is_primary = excluded.is_primary
+  `).run(contact.id, company.id, String(req.body.role || '').trim() || null, makePrimary ? 1 : 0);
   res.json({ ok: true });
 });
 
 router.post('/api/crm/contacts/:id/companies/unlink', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
-  db.hub().prepare('DELETE FROM contact_companies WHERE contact_id = ? AND company_id = ?')
-    .run(req.params.id, req.body.company_id);
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!contact) return res.status(404).json({ error: 'Contact not found' });
+  const linked = hub.prepare(`
+    SELECT is_primary FROM contact_companies WHERE contact_id = ? AND company_id = ?
+  `).get(contact.id, req.body.company_id);
+  if (!linked) return res.status(404).json({ error: 'Company link not found' });
+  hub.prepare('DELETE FROM contact_companies WHERE contact_id = ? AND company_id = ?')
+    .run(contact.id, req.body.company_id);
+  if (linked.is_primary) promoteFirstLinkedCompany(hub, contact.id);
   res.json({ ok: true });
 });
 
 router.post('/api/crm/contacts/:id/companies/role', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!contact) return res.status(404).json({ error: 'Contact not found' });
   const role = String(req.body.role || '').trim() || null;
-  db.hub().prepare('UPDATE contact_companies SET role = ? WHERE contact_id = ? AND company_id = ?')
-    .run(role, req.params.id, req.body.company_id);
+  const result = hub.prepare(`
+    UPDATE contact_companies SET role = ? WHERE contact_id = ? AND company_id = ?
+  `).run(role, contact.id, req.body.company_id);
+  if (!result.changes) return res.status(404).json({ error: 'Company link not found' });
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/contacts/:id/companies/primary', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.body.company_id, req.hubUser);
+  if (!contact || !company) return res.status(404).json({ error: 'Not found' });
+  const linked = hub.prepare(`
+    SELECT 1 FROM contact_companies WHERE contact_id = ? AND company_id = ?
+  `).get(contact.id, company.id);
+  if (!linked) return res.status(404).json({ error: 'Company link not found' });
+  setPrimaryCompany(hub, contact.id, company.id);
   res.json({ ok: true });
 });
 
