@@ -12,7 +12,14 @@ const db     = require('../lib/db');
 const { vaultRoot } = require('../lib/obsidian-vault');
 const { startGoogleAuth, finishGoogleAuth } = require('../lib/google-auth');
 const { requireSameOrigin } = require('../lib/security');
-const { indexAll, buildGraph, findRelated, getOrphans, searchAll, CONTENT_SOURCES } = require('../lib/wiki-engine');
+const {
+  indexAll,
+  buildGraph,
+  findRelated,
+  getOrphans,
+  searchAll,
+  CONTENT_SOURCES,
+} = require('../lib/wiki-engine');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
@@ -110,6 +117,8 @@ function parseWikiPage(slug) {
     created:    fm.created || null,
     confidence: fm.confidence || null,
     aliases:    fm.aliases || [],
+    project:    fm.project || null,
+    filename:   fm.filename || null,
   };
 }
 
@@ -126,7 +135,10 @@ function allWikiPages() {
 // ── Routes ────────────────────────────────────────────────────────────────────
 router.get('/', requireAuth, (req, res) => {
   const q        = (req.query.q || '').trim();
-  const pages    = q ? [] : allWikiPages().slice(0, 12); // search handled client-side via API
+  const pages    = q ? [] : indexAll()
+    .filter(p => p.type === 'wiki' && !p.system)
+    .sort((a, b) => String(b.created || '').localeCompare(String(a.created || '')))
+    .slice(0, 12); // search handled client-side via API
   const allPages = indexAll();
   const counts   = {};
   for (const s of CONTENT_SOURCES) counts[s.label] = allPages.filter(p => p.type === s.type).length;
@@ -136,18 +148,12 @@ router.get('/', requireAuth, (req, res) => {
 
 router.get('/browse', requireAuth, (req, res) => {
   const allPages = indexAll();
-  // Group by content type, then by category within wiki pages
   const byType = {};
-  for (const p of allPages) {
+  for (const p of allPages.filter(p => !p.system)) {
     (byType[p.typeLabel] = byType[p.typeLabel] || []).push(p);
   }
-  // Within wiki, also provide category breakdown
-  const wikiByCategory = {};
-  for (const p of allPages.filter(p => p.type === 'wiki')) {
-    const cats = p.categories.length ? p.categories : ['Uncategorised'];
-    for (const cat of cats) (wikiByCategory[cat] = wikiByCategory[cat] || []).push(p);
-  }
-  res.render('wiki/browse', { byType, wikiByCategory });
+  const systemPages = allPages.filter(p => p.system);
+  res.render('wiki/browse', { byType, systemPages });
 });
 
 // ── Wiki editing helpers ───────────────────────────────────────────────────────
@@ -330,14 +336,14 @@ router.get('/api/search', requireAuth, async (req, res) => {
   if (!matches.length && !emailMatches.length) return res.json({ results: [], synthesis: null });
 
   // Build synthesis context — label each source by type
-  const sourceContext = matches.map(p => {
-    const label = `[${p.typeLabel}: ${p.title}]`;
+  const sourceContext = matches.map((p, index) => {
+    const label = `[S${index + 1} | ${p.typeLabel} | ${p.title}]`;
     return `${label}\n${p.content.slice(0, 600)}`;
   }).join('\n\n');
 
-  const emailContext = emailMatches.map(e => {
+  const emailContext = emailMatches.map((e, index) => {
     const d = new Date(e.received_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    return `[Email ${d} from ${e.from_name}] ${e.subject}\n${e.summary}`;
+    return `[E${index + 1} | Email | ${d} | ${e.from_name} | ${e.subject}]\n${e.summary}`;
   }).join('\n\n');
 
   const context = [sourceContext, emailContext].filter(Boolean).join('\n\n---\n\n');
@@ -345,6 +351,11 @@ router.get('/api/search', requireAuth, async (req, res) => {
   let synthesis = null;
   if (process.env.OPENROUTER_API_KEY && context) {
     try {
+      const sourceDirectory = matches.map((p, index) => (
+        `S${index + 1}: ${p.typeLabel} | ${p.title} | ${p.type === 'wiki' ? p.slug : p.relativePath}`
+      )).concat(emailMatches.map((e, index) => (
+        `E${index + 1}: Email | ${e.subject} | ${e.from_name}`
+      ))).join('\n');
       const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -354,29 +365,50 @@ router.get('/api/search', requireAuth, async (req, res) => {
         },
         body: JSON.stringify({
           model: 'deepseek/deepseek-v3.2',
-          messages: [{
-            role: 'user',
-            content: `Answer this question using the sources below. Sources are labelled by type (Wiki, Meetings, Journal, Workday, People, etc.). Draw on all of them. Use [[wikilink]] notation for named wiki topics. If a source type covers it well, say so. If the sources are thin, say what's missing.\n\nQuestion: ${q}\n\nSources:\n${context}`,
-          }],
+          messages: [
+            {
+              role: 'system',
+              content: [
+                'Answer from the supplied private knowledge-base sources only.',
+                'Return valid JSON with this exact shape:',
+                '{"headline":"short specific title","summary":"2-4 sentence direct answer","facts":[{"label":"short label","detail":"specific fact","source_ids":["S1"]}],"gaps":["specific missing information"],"assessment":"one sentence describing how complete the evidence is"}',
+                'Use 3-7 facts. Keep facts concrete and avoid repeating the summary.',
+                'A gap must be relevant to the question, not a generic wish list.',
+                'Never claim a source says something absent from its excerpt.',
+                'Do not output Markdown or text outside the JSON object.',
+              ].join('\n'),
+            },
+            {
+              role: 'user',
+              content: `Question: ${q}\n\nSource directory:\n${sourceDirectory}\n\nSource excerpts:\n${context}`,
+            },
+          ],
+          response_format: { type: 'json_object' },
           temperature: 0.2,
         }),
       });
       const data = await resp.json();
-      synthesis = data.choices?.[0]?.message?.content?.trim() || null;
+      const rawSynthesis = data.choices?.[0]?.message?.content?.trim();
+      if (rawSynthesis) synthesis = JSON.parse(rawSynthesis);
     } catch (_) {}
   }
 
+  const resultRows = matches.map((p, index) => ({
+    sourceId:  `S${index + 1}`,
+    slug:      p.type === 'wiki' ? p.slug : null,
+    url:       p.type === 'wiki' ? `/page/${encodeURIComponent(p.slug)}` : `/source/${encodeURIComponent(p.slug)}`,
+    title:     p.title,
+    type:      p.type,
+    typeLabel: p.typeLabel,
+    project:   p.project,
+    filename:  p.filename,
+    tags:      p.tags,
+    excerpt:   p.content.slice(0, 200),
+  }));
+
   res.json({
-    results: matches.map(p => ({
-      slug:     p.type === 'wiki' ? p.slug : null,
-      url:      p.type === 'wiki' ? `/page/${encodeURIComponent(p.slug)}` : `/source/${encodeURIComponent(p.slug)}`,
-      title:    p.title,
-      type:     p.type,
-      typeLabel: p.typeLabel,
-      tags:     p.tags,
-      excerpt:  p.content.slice(0, 200),
-    })),
-    emailMatches,
+    results: resultRows,
+    emailMatches: emailMatches.map((e, index) => ({ ...e, sourceId: `E${index + 1}` })),
     synthesis,
   });
 });

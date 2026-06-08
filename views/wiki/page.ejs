@@ -20,6 +20,18 @@
     <% if (page.slug) { %><a href="/page/<%= page.slug %>/edit" class="wiki-edit-btn">Edit</a><% } %>
   </div>
 
+  <% if ((page.sources && page.sources.length) || page.project || page.filename) { %>
+  <aside class="wiki-provenance">
+    <strong>Built from</strong>
+    <% if (page.project) { %><span><%= page.project %></span><% } %>
+    <% if (page.filename) { %><span><%= page.filename %></span><% } %>
+    <% for (const s of (page.sources || []).slice(0, 3)) { %>
+      <% const sourceName = (s.file || '').split('/').pop().replace(/\.md$/, ''); %>
+      <span><%= sourceName %><% if (s.ingested) { %> · <%= new Date(s.ingested).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) %><% } %></span>
+    <% } %>
+  </aside>
+  <% } %>
+
   <article class="wiki-article" id="article-body">
     <p class="wiki-loading">Loading…</p>
   </article>
@@ -41,10 +53,11 @@
 
   <% if (related.length) { %>
   <section class="wiki-related">
-    <h3>Related</h3>
+    <h3>Suggested links</h3>
+    <p class="related-note">Automatically inferred for navigation. These are not verified relationships.</p>
     <div class="wiki-cards wiki-cards-sm">
       <% for (const r of related) { %>
-        <a href="/page/<%= encodeURIComponent(r.slug) %>" class="wiki-card">
+        <a href="<%= r.type === 'wiki' ? '/page/' : '/source/' %><%= encodeURIComponent(r.slug) %>" class="wiki-card">
           <h3><%= r.title %></h3>
           <div class="wiki-card-tags"><% for (const t of r.tags.slice(0,3)) { %><span class="tag tag-sm"><%= t %></span><% } %></div>
         </a>

@@ -1,0 +1,152 @@
+diff --git a/synthadoc/agents/ingest_agent.py b/synthadoc/agents/ingest_agent.py
+index 36f4a1e..65fde1e 100644
+--- a/synthadoc/agents/ingest_agent.py
++++ b/synthadoc/agents/ingest_agent.py
+@@ -69,14 +69,20 @@ _DECISION_PROMPT = (
+     "or sources that explicitly say an existing claim is wrong or a myth.\n"
+     "Example: page says 'A-0 was the first compiler' + source says 'A-0 was a loader, not a compiler'\n"
+     "-> action='flag', target=the slug of the page whose claim is disputed\n\n"
+-    "RULE 2 — UPDATE: If the source adds new information about a subject ALREADY covered by an existing page,\n"
+-    "and there is no factual dispute, use action='update'.\n"
++    "RULE 2 — UPDATE: Use update ONLY when the source's PRIMARY SUBJECT is the same specific subject as\n"
++    "an existing page, and the new material would naturally belong as a section of that page.\n"
++    "A shared organisation, product, broad theme, keyword, or passing mention is NOT enough.\n"
++    "For example, an AI security video must not update a general page about the software workspace that\n"
++    "stored the video. When uncertain between update and create, choose create.\n"
++    "Never update system/root pages: index, overview, purpose, dashboard, mclellan-hub-overview,\n"
++    "synthadoc-integration, or tags-index.\n"
+     "-> action='update', target=slug of page to extend,\n"
+     "   update_content=new ## section(s) to append (use [[slug]] links to related pages)\n\n"
+     "RULE 3 — CREATE: ONLY if the source covers a subject not in any existing page.\n"
+     "-> action='create', new_slug=meaningful_topic_slug (e.g. 'history-of-computing', NOT 'watch' or URL path segments),\n"
++    "   new_title=clear human-readable topic title,\n"
+     "   page_content=full synthesized Markdown body (# Title + paragraphs with [[slug]] links)\n\n"
+-    'Return: {{"reasoning":"...","action":"...","target":"","new_slug":"","update_content":"","page_content":""}}\n\n'
++    'Return: {{"reasoning":"...","action":"...","target":"","new_slug":"","new_title":"","update_content":"","page_content":""}}\n\n'
+     "Existing wiki pages (top matches):\n{pages}\n\n"
+     "New source:\n{summary}\n\n"
+     "Detected entities: {entities}"
+@@ -104,6 +110,16 @@ _SLUG_BLACKLIST = frozenset({
+     "watch", "embed", "video", "index", "page", "post", "article", "content",
+ })
+ 
++_PROTECTED_UPDATE_SLUGS = frozenset({
++    "dashboard",
++    "index",
++    "mclellan-hub-overview",
++    "overview",
++    "purpose",
++    "synthadoc-integration",
++    "tags-index",
++})
++
+ # Matches any YouTube URL form and captures the 11-char video ID.
+ _YOUTUBE_ID_RE = re.compile(
+     r"(?:youtube\.com/(?:watch\?v=|shorts/|live/|embed/|v/)|youtu\.be/)([A-Za-z0-9_-]{11})"
+@@ -444,7 +460,11 @@ class IngestAgent:
+         # Pass 3: decision (cached by summary hash + candidate slugs)
+         slugs = [r.slug for r in candidates]
+         summary_hash = hashlib.sha256(summary.encode()).hexdigest()
+-        ck2 = make_cache_key("make-decision", {"text_hash": summary_hash, "slugs": slugs}, version=self._cache_version)
++        ck2 = make_cache_key(
++            "make-decision",
++            {"text_hash": summary_hash, "slugs": slugs, "policy": "strict-subject-v2"},
++            version=self._cache_version,
++        )
+         cached2 = None if bust_cache else await self._cache.get(ck2)
+         if cached2:
+             result.cache_hits += 1
+@@ -498,9 +518,27 @@ class IngestAgent:
+             return result
+         target = decisions.get("target", "")
+         new_slug = decisions.get("new_slug") or ""
++        new_title = (decisions.get("new_title") or "").strip()
+         update_content = decisions.get("update_content", "")
+         page_content = decisions.get("page_content", "")
+         title = p.stem.replace("-", " ").replace("_", " ").title()
++        heading_title = re.search(r"^#\s+(.+)$", page_content, re.MULTILINE)
++        page_title = new_title or (heading_title.group(1).strip() if heading_title else title)
++        ingested_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
++        source_ref = SourceRef(
++            file=source,
++            hash=src_hash or "",
++            size=src_size or 0,
++            ingested=ingested_at,
++        )
++
++        if action in {"update", "flag"} and target in _PROTECTED_UPDATE_SLUGS:
++            logger.warning(
++                "ingest: protected system page cannot receive action=%s; creating a dedicated page instead: %s",
++                action, target,
++            )
++            action = "create"
++            target = ""
+ 
+         if action == "flag" and target and target not in LINT_SKIP_SLUGS and self._store.page_exists(target):
+             with self._store.page_lock(target):
+@@ -513,6 +551,8 @@ class IngestAgent:
+                         f"Flagged while ingesting '{p.name}': {reasoning}" if reasoning
+                         else f"Flagged while ingesting '{p.name}'"
+                     )
++                    if not any(s.hash == source_ref.hash and s.size == source_ref.size for s in page.sources):
++                        page.sources.append(source_ref)
+                     self._store.write_page(target, page)
+                     self._search.invalidate_index()
+             result.pages_flagged.append(target)
+@@ -538,6 +578,8 @@ class IngestAgent:
+                         else:
+                             section = f"## From {p.name}\n\n{text[:1000]}"
+                         page.content = page.content.rstrip() + f"\n\n{section}"
++                        if not any(s.hash == source_ref.hash and s.size == source_ref.size for s in page.sources):
++                            page.sources.append(source_ref)
+                         staged = self._write_or_stage(target, page, policy)
+                 if staged:
+                     logger.info("ingest: staged update to candidates slug=%s source=%s", target, source[:80])
+@@ -553,8 +595,8 @@ class IngestAgent:
+                 result.skipped = True
+             else:
+                 # Reject slugs that look like wiki syntax artifacts rather than real topics
+-                raw_slug = _slugify(new_slug or title)
+-                slug = raw_slug if raw_slug not in _SLUG_BLACKLIST else _slugify(title)
++                raw_slug = _slugify(new_slug or page_title)
++                slug = raw_slug if raw_slug not in _SLUG_BLACKLIST else _slugify(page_title)
+                 # If title-based fallback is also blacklisted (e.g. URL path "watch"),
+                 # use the skill's suggested_slug or a hash-based ID rather than writing
+                 # a page with a generic, meaningless slug.
+@@ -563,6 +605,9 @@ class IngestAgent:
+                     slug = suggested if suggested and suggested not in _SLUG_BLACKLIST \
+                         else f"source-{src_hash[:12]}"
+ 
++                if self._store.page_exists(slug) and slug in _PROTECTED_UPDATE_SLUGS:
++                    slug = f"{slug}-{src_hash[:8]}"
++
+                 if self._store.page_exists(slug):
+                     # Slug already exists — never overwrite; append as update instead
+                     policy = self._staging_policy()
+@@ -575,6 +620,8 @@ class IngestAgent:
+                             else:
+                                 section = f"## From {p.name}\n\n{text[:1500]}"
+                             page.content = page.content.rstrip() + f"\n\n{section}"
++                            if not any(s.hash == source_ref.hash and s.size == source_ref.size for s in page.sources):
++                                page.sources.append(source_ref)
+                             staged = self._write_or_stage(slug, page, policy)
+                     if staged:
+                         logger.info("ingest: staged update to candidates slug=%s source=%s", slug, source[:80])
+@@ -590,15 +637,10 @@ class IngestAgent:
+                         body = f"# {title}\n\n{text[:4000]}"
+                     today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+                     new_page = WikiPage(
+-                        title=title, tags=tags,
++                        title=page_title, tags=tags,
+                         content=body,
+                         status="active", confidence="medium",
+-                        sources=[SourceRef(
+-                            file=source,
+-                            hash=src_hash or "",
+-                            size=src_size or 0,
+-                            ingested=today,
+-                        )],
++                        sources=[source_ref],
+                         created=today,
+                     )
+ 

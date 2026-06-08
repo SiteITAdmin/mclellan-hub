@@ -34,6 +34,13 @@
     <% if (!q) { %>
       <h2 class="wiki-section-head">Recently added</h2>
     <% } %>
+    <div id="synthesis-wrap" style="display:none">
+      <div class="wiki-synthesis">
+        <div class="synthesis-label">Knowledge base answer</div>
+        <div id="synthesis-body"></div>
+      </div>
+    </div>
+
     <div class="wiki-cards" id="page-cards">
       <% for (const p of pages) { %>
         <a href="/page/<%= encodeURIComponent(p.slug) %>" class="wiki-card">
@@ -46,13 +53,6 @@
           </div>
         </a>
       <% } %>
-    </div>
-
-    <div id="synthesis-wrap" style="display:none">
-      <div class="wiki-synthesis">
-        <div class="synthesis-label">Answer from your knowledge base</div>
-        <div id="synthesis-body"></div>
-      </div>
     </div>
   </div>
 </main>
@@ -85,7 +85,8 @@ document.getElementById('search-form').addEventListener('submit', async function
   }
 
   cards.innerHTML = data.results.map(p => {
-    const inner = `<h3>${escapeHtml(p.title)}</h3><p style="font-size:0.78em;color:#888;margin:0 0 4px">${escapeHtml(p.typeLabel)}</p><p>${escapeHtml(String(p.excerpt || '').replace(/\[\[([^\]]+)\]\]/g, '$1'))}…</p><div class="wiki-card-tags">${(p.tags||[]).slice(0,4).map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('')}</div>`;
+    const provenance = [p.typeLabel, p.project, p.filename].filter(Boolean).join(' · ');
+    const inner = `<div class="result-source-id">${escapeHtml(p.sourceId)}</div><h3>${escapeHtml(p.title)}</h3><p class="result-provenance">${escapeHtml(provenance)}</p><p>${escapeHtml(String(p.excerpt || '').replace(/\[\[([^\]]+)\]\]/g, '$1'))}…</p><div class="wiki-card-tags">${(p.tags||[]).slice(0,4).map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('')}</div>`;
     return p.url
       ? `<a href="${escapeHtml(p.url)}" class="wiki-card">${inner}</a>`
       : `<div class="wiki-card">${inner}</div>`;
@@ -97,7 +98,32 @@ document.getElementById('search-form').addEventListener('submit', async function
   `).join('');
 
   if (data.synthesis) {
-    document.getElementById('synthesis-body').textContent = data.synthesis;
+    const sourceMap = Object.fromEntries([
+      ...data.results.map(p => [p.sourceId, p]),
+      ...(data.emailMatches || []).map(e => [e.sourceId, { ...e, title: e.subject }]),
+    ]);
+    const sourceLinks = ids => (ids || []).map(id => {
+      const source = sourceMap[id];
+      if (!source) return `<span class="answer-source">${escapeHtml(id)}</span>`;
+      const label = `${id} · ${source.title}`;
+      return source.url
+        ? `<a class="answer-source" href="${escapeHtml(source.url)}">${escapeHtml(label)}</a>`
+        : `<span class="answer-source">${escapeHtml(label)}</span>`;
+    }).join('');
+    const facts = (data.synthesis.facts || []).map(f => `
+      <div class="answer-fact">
+        <dt>${escapeHtml(f.label)}</dt>
+        <dd>${escapeHtml(f.detail)}<div class="answer-sources">${sourceLinks(f.source_ids)}</div></dd>
+      </div>
+    `).join('');
+    const gaps = (data.synthesis.gaps || []).map(g => `<li>${escapeHtml(g)}</li>`).join('');
+    document.getElementById('synthesis-body').innerHTML = `
+      <h1>${escapeHtml(data.synthesis.headline || q)}</h1>
+      <p class="answer-summary">${escapeHtml(data.synthesis.summary || '')}</p>
+      ${facts ? `<section><h2>What the sources establish</h2><dl class="answer-facts">${facts}</dl></section>` : ''}
+      ${gaps ? `<section class="answer-gaps"><h2>Gaps in the record</h2><ul>${gaps}</ul></section>` : ''}
+      ${data.synthesis.assessment ? `<p class="answer-assessment"><strong>Evidence assessment:</strong> ${escapeHtml(data.synthesis.assessment)}</p>` : ''}
+    `;
     document.getElementById('synthesis-wrap').style.display = 'block';
   }
 });
