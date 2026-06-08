@@ -17,6 +17,7 @@
     <% for (const t of page.tags) { %><span class="tag"><%= t %></span><% } %>
     <% if (page.created) { %><span class="meta-date"><%= new Date(page.created).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) %></span><% } %>
     <% if (page.confidence) { %><span class="meta-conf conf-<%= page.confidence %>"><%= page.confidence %></span><% } %>
+    <% if (page.slug) { %><a href="/page/<%= page.slug %>/edit" class="wiki-edit-btn">Edit</a><% } %>
   </div>
 
   <article class="wiki-article" id="article-body">

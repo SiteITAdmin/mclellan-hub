@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= page ? 'Edit: ' + page.title : 'New page' %> — McLellan Wiki</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/wiki.css">
+<style>
+  .editor-wrap { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  .editor-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+  .editor-header h1 { flex: 1; font-size: 1.3rem; font-weight: 600; margin: 0; }
+  .editor-back { font-size: 0.85rem; color: var(--muted); text-decoration: none; }
+  .editor-back:hover { color: var(--text); }
+  .field-row { margin-bottom: 1.25rem; }
+  .field-row label { display: block; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.4rem; }
+  .field-row input[type="text"] {
+    width: 100%; box-sizing: border-box;
+    padding: 0.55rem 0.75rem; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--surface); color: var(--text);
+    font-family: inherit; font-size: 0.95rem;
+  }
+  .field-row input[type="text"]:focus { outline: none; border-color: var(--accent); }
+  .field-hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.3rem; }
+  .editor-textarea {
+    width: 100%; box-sizing: border-box; min-height: 520px;
+    padding: 1rem; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: 0.88rem; line-height: 1.65;
+    resize: vertical;
+  }
+  .editor-textarea:focus { outline: none; border-color: var(--accent); }
+  .editor-actions { display: flex; gap: 0.75rem; align-items: center; margin-top: 1.5rem; flex-wrap: wrap; }
+  .btn-save { background: var(--accent); color: #fff; border: none; padding: 0.6rem 1.5rem; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+  .btn-save:hover { filter: brightness(1.1); }
+  .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); padding: 0.6rem 1.2rem; border-radius: 6px; font-size: 0.9rem; cursor: pointer; text-decoration: none; }
+  .btn-secondary:hover { border-color: var(--text); }
+  .danger-zone { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+  .danger-zone h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 1rem; }
+  .rename-row { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+  .rename-row input[type="text"] {
+    flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--surface); color: var(--text);
+    font-family: inherit; font-size: 0.9rem;
+  }
+  .rename-row input:focus { outline: none; border-color: var(--accent); }
+  .btn-danger { background: transparent; color: #e55; border: 1px solid #e55; padding: 0.55rem 1.2rem; border-radius: 6px; font-size: 0.9rem; cursor: pointer; }
+  .btn-danger:hover { background: #e55; color: #fff; }
+  .err-banner { background: #fee; border: 1px solid #fcc; color: #900; padding: 0.6rem 0.9rem; border-radius: 6px; font-size: 0.88rem; margin-bottom: 1.5rem; }
+</style>
+</head>
+<body>
+<%- include('_nav', { page: '', q: '' }) %>
+<main class="editor-wrap">
+  <div class="editor-header">
+    <% if (page) { %>
+      <a href="/page/<%= page.slug %>" class="editor-back">← Back to page</a>
+      <h1>Edit: <%= page.title %></h1>
+    <% } else { %>
+      <a href="/browse" class="editor-back">← Browse</a>
+      <h1>New page</h1>
+    <% } %>
+  </div>
+
+  <% if (typeof query !== 'undefined' && query.err === 'exists') { %>
+  <div class="err-banner">A page with that slug already exists. Choose a different name.</div>
+  <% } %>
+
+  <form method="POST" action="<%= page ? '/page/' + page.slug + '/save' : '/page/new' %>">
+    <div class="field-row">
+      <label>Title</label>
+      <input type="text" name="title" value="<%= page ? page.title : '' %>" required placeholder="Page title">
+    </div>
+    <div class="field-row">
+      <label>Categories</label>
+      <input type="text" name="categories" value="<%= page ? page.categories.join(', ') : '' %>" placeholder="CV, Work History">
+      <div class="field-hint">Comma-separated</div>
+    </div>
+    <div class="field-row">
+      <label>Tags</label>
+      <input type="text" name="tags" value="<%= page ? page.tags.join(', ') : '' %>" placeholder="IT, leadership">
+      <div class="field-hint">Comma-separated</div>
+    </div>
+    <div class="field-row">
+      <label>Content (Markdown)</label>
+      <textarea class="editor-textarea" name="content" spellcheck="true"><%= page ? page.content : '' %></textarea>
+    </div>
+    <div class="editor-actions">
+      <button type="submit" class="btn-save">Save</button>
+      <% if (page) { %>
+        <a href="/page/<%= page.slug %>" class="btn-secondary">Cancel</a>
+      <% } else { %>
+        <a href="/browse" class="btn-secondary">Cancel</a>
+      <% } %>
+    </div>
+  </form>
+
+  <% if (page) { %>
+  <div class="danger-zone">
+    <h3>Rename or delete</h3>
+    <form method="POST" action="/page/<%= page.slug %>/rename" class="rename-row">
+      <input type="text" name="new_slug" placeholder="new-slug-here" pattern="[a-z0-9\-]+" title="Lowercase letters, numbers and hyphens only">
+      <button type="submit" class="btn-secondary">Rename</button>
+    </form>
+    <div class="field-hint" style="margin-bottom:1.25rem">Slug becomes the URL — use lowercase letters, numbers, hyphens. Current: <code><%= page.slug %></code></div>
+    <form method="POST" action="/page/<%= page.slug %>/delete" onsubmit="return confirm('Delete <%= page.title.replace(/'/g, "\\'") %>? This cannot be undone.')">
+      <button type="submit" class="btn-danger">Delete page</button>
+    </form>
+  </div>
+  <% } %>
+</main>
+</body>
+</html>

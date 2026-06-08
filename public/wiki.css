@@ -251,6 +251,14 @@ a:hover { text-decoration: underline; }
 .conf-medium { background: #fef9c3; color: #854d0e; }
 .conf-low    { background: #fee2e2; color: #991b1b; }
 
+.wiki-edit-btn {
+  margin-left: auto; font-size: 12px; font-weight: 600;
+  padding: 3px 10px; border-radius: 5px;
+  border: 1px solid var(--border); color: var(--text-3);
+  text-decoration: none; background: transparent;
+}
+.wiki-edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+
 .wiki-article {
   font-family: var(--serif);
   font-size: 16px;
