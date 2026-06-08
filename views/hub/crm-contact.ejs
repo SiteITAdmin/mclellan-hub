@@ -107,11 +107,11 @@ async function taskAction(id, action) {
         <div class="crm-action" id="co-row-<%= co.id %>">
           <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
             <a href="/crm/company/<%= co.id %>"><strong><%= co.name %></strong></a>
-            <span class="crm-role-display crm-muted" id="co-role-<%= co.id %>" style="font-size:13px;cursor:pointer;" onclick="editRole('<%= co.id %>','<%= (co.role||'').replace(/'/g,\"\\\\'\" ) %>')" title="Click to edit role"><%= co.role ? `· ${co.role}` : '+ role' %></span>
+            <span class="crm-role-display crm-muted" id="co-role-<%= co.id %>" data-company-id="<%= co.id %>" data-role="<%= co.role || '' %>" style="font-size:13px;cursor:pointer;" title="Click to edit role"><%= co.role ? ('· ' + co.role) : '+ role' %></span>
             <span class="crm-role-edit" id="co-role-edit-<%= co.id %>" style="display:none;gap:4px;align-items:center;">
               <input id="co-role-input-<%= co.id %>" style="font-size:13px;padding:2px 6px;max-width:160px;" placeholder="Role…" value="<%= co.role || '' %>">
-              <button class="btn btn-sm" onclick="saveRole('<%= co.id %>')">Save</button>
-              <button class="btn btn-sm btn-ghost" onclick="cancelRole('<%= co.id %>')">✕</button>
+              <button class="btn btn-sm" data-company-id="<%= co.id %>" class="save-role-btn">Save</button>
+              <button class="btn btn-sm btn-ghost" data-company-id="<%= co.id %>" class="cancel-role-btn">✕</button>
             </span>
           </div>
           <button class="btn btn-sm btn-ghost" onclick="unlinkCompany('<%= co.id %>')">Remove</button>
@@ -218,22 +218,35 @@ async function unlinkCompany(companyId) {
   else alert('Error: ' + j.error);
 }
 
-function editRole(companyId, current) {
-  document.getElementById('co-role-' + companyId).style.display = 'none';
-  const editEl = document.getElementById('co-role-edit-' + companyId);
-  editEl.style.display = 'flex';
-  const input = document.getElementById('co-role-input-' + companyId);
-  input.value = current;
-  input.focus();
-  input.onkeydown = e => { if (e.key === 'Enter') saveRole(companyId); if (e.key === 'Escape') cancelRole(companyId); };
-}
+document.querySelectorAll('.crm-role-display').forEach(el => {
+  el.addEventListener('click', () => {
+    const companyId = el.dataset.companyId;
+    el.style.display = 'none';
+    const editEl = document.getElementById('co-role-edit-' + companyId);
+    editEl.style.display = 'flex';
+    const input = document.getElementById('co-role-input-' + companyId);
+    input.focus();
+    input.onkeydown = e => {
+      if (e.key === 'Enter') doSaveRole(companyId);
+      if (e.key === 'Escape') doCancelRole(companyId);
+    };
+  });
+});
 
-function cancelRole(companyId) {
+document.querySelectorAll('.cancel-role-btn').forEach(btn => {
+  btn.addEventListener('click', () => doCancelRole(btn.dataset.companyId));
+});
+
+document.querySelectorAll('.save-role-btn').forEach(btn => {
+  btn.addEventListener('click', () => doSaveRole(btn.dataset.companyId));
+});
+
+function doCancelRole(companyId) {
   document.getElementById('co-role-edit-' + companyId).style.display = 'none';
   document.getElementById('co-role-' + companyId).style.display = '';
 }
 
-async function saveRole(companyId) {
+async function doSaveRole(companyId) {
   const role = document.getElementById('co-role-input-' + companyId).value.trim();
   const r = await fetch('/api/crm/contacts/<%= contact.id %>/companies/role', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -242,8 +255,8 @@ async function saveRole(companyId) {
   const j = await r.json();
   if (j.ok) {
     const display = document.getElementById('co-role-' + companyId);
-    display.textContent = role ? `· ${role}` : '+ role';
-    cancelRole(companyId);
+    display.textContent = role ? ('· ' + role) : '+ role';
+    doCancelRole(companyId);
   } else alert('Error: ' + j.error);
 }
 
