@@ -80,6 +80,51 @@ router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, wri
     `UPDATE linkedin_posts SET status = ? WHERE id = ? AND user = ?`
   ).run(status, req.params.id, req.hubUser);
   if (!result.changes) return res.status(404).json({ error: 'Not found' });
+
+  if (status === 'published') {
+    setImmediate(async () => {
+      try {
+        const post = db.hub().prepare(
+          `SELECT topic, content_type, research, draft, refined_draft, created_at FROM linkedin_posts WHERE id = ?`
+        ).get(req.params.id);
+        if (!post) return;
+
+        const { writeNote, vaultRoot } = require('../lib/obsidian-vault');
+        const path = require('path');
+        const slug = post.topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+        const date = new Date(post.created_at * 1000).toISOString().slice(0, 10);
+        const postText = (post.refined_draft || post.draft || '').trim();
+        const research = (post.research || '').slice(0, 3000).trim();
+        const category = post.content_type || '';
+
+        const content = [
+          `# ${post.topic}`,
+          '',
+          `**Published:** ${date}` + (category ? `  \n**Category:** ${category}` : ''),
+          '',
+          '## Post',
+          '',
+          postText,
+          ...(research ? ['', '## Research', '', research] : []),
+        ].join('\n');
+
+        writeNote({ notePath: `wiki/linkedin/${slug}.md`, content, mode: 'write' });
+
+        const synthadocUrl = process.env.SYNTHADOC_URL;
+        if (synthadocUrl) {
+          const fullPath = path.join(vaultRoot(), 'wiki', 'linkedin', `${slug}.md`);
+          await fetch(`${synthadocUrl}/jobs/ingest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: fullPath }),
+          });
+        }
+      } catch (err) {
+        console.error('[content] wiki write failed:', err.message);
+      }
+    });
+  }
+
   res.json({ ok: true });
 });
 
