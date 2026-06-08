@@ -537,7 +537,7 @@ router.get('/admin/debrief/:id', requireHubAdmin, (req, res) => {
 // ── Model management ──────────────────────────────────────────────────────────
 const { DEFAULT_MODELS, getDefaultModel } = require('../lib/router');
 const { uuid: uuidId } = require('../lib/id');
-const { getSystemModelId, setSystemModel, getSystemModelLabel } = require('../lib/settings');
+const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPromptAddition, setSystemPromptAddition } = require('../lib/settings');
 
 // System model slots — displayed as configurable cards in /admin/models.
 // scope 'system' = shared across users; scope 'user' = per-user (stored under req.hubUser).
@@ -613,7 +613,8 @@ router.get('/admin/models', requireHubAdmin, (req, res) => {
     slots: group.slots.map(slot => {
       const resolvedScope = slot.scope === 'user' ? req.hubUser : 'system';
       const current = getSystemModelLabel(slot.feature, resolvedScope);
-      return { ...slot, resolvedScope, currentKey: current?.key || null, currentLabel: current?.label || null };
+      const promptAddition = getSystemPromptAddition(slot.feature, resolvedScope);
+      return { ...slot, resolvedScope, currentKey: current?.key || null, currentLabel: current?.label || null, promptAddition: promptAddition || '' };
     }),
   }));
   res.render('hub-admin/models', { user: req.hubUser, models, tiers, defaultModel, systemGroups });
@@ -635,6 +636,14 @@ router.post('/admin/system-models/_set', requireHubAdmin, (req, res) => {
   if (!feature) return res.redirect('/admin/models');
   const resolvedScope = scope === 'system' ? 'system' : req.hubUser;
   setSystemModel(feature, resolvedScope, model_key || null);
+  res.redirect('/admin/models#sys-' + feature);
+});
+
+router.post('/admin/system-models/_set-prompt', requireHubAdmin, (req, res) => {
+  const { feature, scope, prompt } = req.body;
+  if (!feature) return res.redirect('/admin/models');
+  const resolvedScope = scope === 'system' ? 'system' : req.hubUser;
+  setSystemPromptAddition(feature, resolvedScope, prompt || null);
   res.redirect('/admin/models#sys-' + feature);
 });
 

@@ -353,7 +353,8 @@
       </div>
 
       <div class="model-card-actions">
-        <button class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Edit</button>
+        <button class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Model</button>
+        <button class="btn-sm" onclick="toggleSysPrompt('<%= slot.feature %>')" style="<%= slot.promptAddition ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '' %>">Prompt<%= slot.promptAddition ? ' ✎' : ' +' %></button>
         <% if (slot.currentKey) { %>
         <form method="POST" action="/admin/system-models/_set" style="display:inline">
           <input type="hidden" name="feature" value="<%= slot.feature %>">
@@ -380,6 +381,25 @@
           <div class="form-actions">
             <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
             <button type="button" class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="edit-panel" id="sys-prompt-<%= slot.feature %>">
+        <form method="POST" action="/admin/system-models/_set-prompt" class="model-form">
+          <input type="hidden" name="feature" value="<%= slot.feature %>">
+          <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
+          <div class="field">
+            <label>Additional instructions</label>
+            <p style="font-size:11px;color:var(--text-dim);margin:2px 0 6px;">Appended to the built-in prompt. Adds context, style rules, or persona details. Leave empty to use defaults only.</p>
+            <textarea name="prompt" rows="6" style="width:100%;font-family:var(--font-mono,monospace);font-size:12px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);resize:vertical;"><%= slot.promptAddition %></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <% if (slot.promptAddition) { %>
+            <button type="submit" class="btn-sm danger" onclick="this.form.querySelector('[name=prompt]').value=''">Clear</button>
+            <% } %>
+            <button type="button" class="btn-sm" onclick="toggleSysPrompt('<%= slot.feature %>')">Cancel</button>
           </div>
         </form>
       </div>
@@ -597,7 +617,23 @@
   // ── System model edit toggle ─────────────────────────────────────────────
   window.toggleSysEdit = function(feature) {
     const panel = document.getElementById('sys-edit-' + feature);
-    if (panel) panel.classList.toggle('open');
+    if (panel) {
+      panel.classList.toggle('open');
+      // close prompt panel if open
+      const pp = document.getElementById('sys-prompt-' + feature);
+      if (pp && panel.classList.contains('open')) pp.classList.remove('open');
+    }
+  };
+
+  // ── System prompt addition toggle ────────────────────────────────────────
+  window.toggleSysPrompt = function(feature) {
+    const panel = document.getElementById('sys-prompt-' + feature);
+    if (panel) {
+      panel.classList.toggle('open');
+      // close model panel if open
+      const mp = document.getElementById('sys-edit-' + feature);
+      if (mp && panel.classList.contains('open')) mp.classList.remove('open');
+    }
   };
 
   // ── OR catalogue picker ──────────────────────────────────────────────────

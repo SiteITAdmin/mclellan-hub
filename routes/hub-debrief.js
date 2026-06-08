@@ -7,7 +7,7 @@ const { fetchTodayCalendarEvents } = require('../lib/crm');
 const { writeNote } = require('../lib/obsidian-vault');
 const { writeMeetingNote } = require('../lib/meeting');
 const { uuid } = require('../lib/id');
-const { getSystemModelId } = require('../lib/settings');
+const { getSystemModelId, injectPromptAddition } = require('../lib/settings');
 const { createTask } = require('../lib/google-tasks');
 const {
   chatLimiter, uploadLimiter, writeLimiter,
@@ -101,7 +101,7 @@ When the interview feels naturally complete, or ${displayName} signals they want
       },
       body: JSON.stringify({
         model: getSystemModelId('debrief_interviewer', user, 'anthropic/claude-haiku-4-5'),
-        messages: [{ role: 'system', content: systemPrompt }, ...history],
+        messages: injectPromptAddition('debrief_interviewer', user, [{ role: 'system', content: systemPrompt }, ...history]),
         temperature: 0.4,
         max_tokens: 180,
       }),
@@ -230,7 +230,7 @@ ${transcript.trim()}`;
     },
     body: JSON.stringify({
       model: getSystemModelId('debrief_extractor', user, 'deepseek/deepseek-v3.2'),
-      messages: [{ role: 'user', content: prompt }],
+      messages: injectPromptAddition('debrief_extractor', user, [{ role: 'user', content: prompt }]),
       response_format: { type: 'json_object' },
       temperature: 0,
     }),
