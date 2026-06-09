@@ -66,7 +66,7 @@ git push origin main
 echo "    GitHub up to date: $(git rev-parse --short HEAD)"
 
 echo "==> Syncing code to VPS..."
-rsync -avz --progress -e "$RSYNC_RSH" \
+rsync -avz --no-perms --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r --progress -e "$RSYNC_RSH" \
   --exclude .git \
   --exclude .claude \
   --exclude .tools \
