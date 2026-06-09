@@ -1199,6 +1199,19 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
     LIMIT 10
   `).all(req.hubUser, project.slug);
 
+  // Facts timeline: all facts from contacts linked to this project
+  const allProjectContactIds = [...directContactIds];
+  const projectFacts = allProjectContactIds.length ? hub.prepare(`
+    SELECT f.id, f.fact, f.fact_type, f.source, f.created_at,
+           c.id AS contact_id, c.name AS contact_name
+    FROM crm_facts f
+    JOIN contacts c ON c.id = f.contact_id
+    WHERE f.contact_id IN (${allProjectContactIds.map(() => '?').join(',')})
+      AND f.status != 'archived'
+    ORDER BY f.created_at DESC
+    LIMIT 50
+  `).all(...allProjectContactIds) : [];
+
   // Recent messages in the project chat (for last-activity context)
   const recentMessages = hub.prepare(`
     SELECT role, content, ts FROM messages
@@ -1214,7 +1227,7 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
     ...crmPageData(req.hubUser),
     project, tasks, contacts, directContactIds: [...directContactIds],
     availableContacts, linkedCompanies, linkedCompanyIds: [...linkedCompanyIds],
-    availableCompanies, recentEmails, recentMessages, showHistory, todayIsoStr,
+    availableCompanies, recentEmails, projectFacts, recentMessages, showHistory, todayIsoStr,
     projectDocs,
   });
 });
