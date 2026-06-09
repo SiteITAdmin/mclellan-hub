@@ -174,7 +174,10 @@ async function taskAction(id, action) {
               <% if (TYPE_BADGE[item.fact_type]) { %><span class="crm-type <%= item.fact_type %>" style="margin-left:6px;"><%= TYPE_BADGE[item.fact_type] %></span><% } %>
             </time>
             <strong><%= item.fact %></strong>
-            <span><a href="/crm/contact/<%= item.contact_id %>"><%= item.contact_name %></a><% if (SOURCE_BADGE[item.source]) { %> · <span style="font-size:11px;opacity:.6;"><%= SOURCE_BADGE[item.source] %></span><% } %></span>
+            <span style="display:flex;justify-content:space-between;align-items:center;">
+              <span><a href="/crm/contact/<%= item.contact_id %>"><%= item.contact_name %></a><% if (SOURCE_BADGE[item.source]) { %> · <span style="font-size:11px;opacity:.6;"><%= SOURCE_BADGE[item.source] %></span><% } %></span>
+              <button class="crm-fact-archive" style="color:var(--crm-danger,#c0392b);opacity:.7;flex-shrink:0;" data-fact-id="<%= item.id %>" title="Mark as wrong — AI won't repeat this error">Wrong</button>
+            </span>
           </div>
           <% } else { %>
           <div class="crm-timeline-item" style="opacity:.7;">
@@ -209,6 +212,18 @@ async function taskAction(id, action) {
 </div>
 
 <script>
+// Wrong fact
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-fact-id]');
+  if (!btn) return;
+  const id = btn.dataset.factId;
+  btn.disabled = true;
+  const r = await fetch(`/api/crm/facts/${id}/wrong`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) btn.closest('.crm-timeline-item').remove();
+  else { btn.disabled = false; alert('Error: ' + j.error); }
+});
+
 // Link contact to project
 const linkContactForm = document.getElementById('link-contact-form');
 if (linkContactForm) {
