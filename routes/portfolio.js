@@ -246,6 +246,16 @@ function getExperienceBullets(user, exp) {
   return [cleanCvText(exp.description)].filter(Boolean);
 }
 
+// Slugs/title patterns that must never appear in portfolio-facing context (personal/family)
+const PERSONAL_PAGE_PATTERNS = ['alister', 'dementia', 'wicklow', 'support-plan', 'risk-register', 'care-plan', 'family-care'];
+
+function filterPortfolioPages(pages) {
+  return (pages || []).filter(p => {
+    const check = `${String(p.slug || p.id || '')} ${String(p.title || '')}`.toLowerCase();
+    return !PERSONAL_PAGE_PATTERNS.some(pattern => check.includes(pattern));
+  });
+}
+
 function shouldShowCvRole(user, exp) {
   if (user !== 'douglas') return true;
   return !String(exp.company || '').toLowerCase().includes('bank of scotland');
@@ -740,6 +750,19 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
   if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
   if (String(message).length > 6000) return res.status(400).json({ error: 'Message too long' });
 
+  // Fire Synthadoc query immediately — runs in parallel with sync DB work below
+  const synthadocUrl = process.env.SYNTHADOC_URL;
+  const synthadocPromise = synthadocUrl
+    ? Promise.race([
+        fetch(`${synthadocUrl}/context/build`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goal: message.trim(), token_budget: 2000 }),
+        }).then(r => r.ok ? r.json() : null).catch(() => null),
+        new Promise(resolve => setTimeout(() => resolve(null), 800)),
+      ])
+    : Promise.resolve(null);
+
   const pdb = db.portfolio(req.portfolioUser);
   const hubDb = db.hub();
 
@@ -826,23 +849,10 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
 - If a recruiter asks about certifications, acknowledge the gap honestly and redirect to the evidence above.
 - The candidate is direct about this and does not want it obscured.` : '';
 
-  // Enrich with Synthadoc context scoped to the visitor's question
-  let chatSynthadocContext = '';
-  const chatSynthadocUrl = process.env.SYNTHADOC_URL;
-  if (chatSynthadocUrl) {
-    try {
-      const sdRes = await fetch(`${chatSynthadocUrl}/context/build`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal: message.trim(), token_budget: 2000 }),
-      });
-      if (sdRes.ok) {
-        const sdData = await sdRes.json();
-        const excerpts = (sdData.pages || []).map(p => p.excerpt).filter(Boolean).join('\n\n');
-        if (excerpts) chatSynthadocContext = excerpts;
-      }
-    } catch (_) {}
-  }
+  const sdData = await synthadocPromise;
+  const chatSynthadocContext = sdData
+    ? filterPortfolioPages(sdData.pages).map(p => p.excerpt).filter(Boolean).join('\n\n')
+    : '';
 
   const honestyLevel = profile.honesty_level || 7;
   const customInstructions = aiInstructions.length
@@ -867,7 +877,8 @@ You are ${profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLel
 Tone: ${honestyDescriptor} (honesty level ${honestyLevel}/10).
 - Only reference information in the context below — never fabricate.
 - If the fit genuinely isn't there, say so; it's okay to recommend someone not hire you.
-- Don't oversell. Don't hedge. Be specific.${customInstructions}
+- Don't oversell. Don't hedge. Be specific.
+- This is a professional career chat for recruiters and hiring managers. Do not discuss personal matters (family members, health, personal life). If asked, say: "This chat is focused on my professional career — I'm not the right source for personal topics."${customInstructions}
 
 Your context:
 ${wrapUntrustedBlock('candidate_context', (cvContext || 'No CV context loaded yet.') + douglasHonestNotes)}${chatSynthadocContext ? `\n\nAdditional relevant context from knowledge base:\n${wrapUntrustedBlock('wiki_context', chatSynthadocContext)}` : ''}`;
@@ -917,6 +928,19 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
   if (!jd?.trim()) return res.status(400).json({ error: 'No JD provided' });
   if (String(jd).length > 20000) return res.status(400).json({ error: 'Job description too long' });
 
+  // Fire Synthadoc immediately — runs in parallel with sync DB work below
+  const jdSynthadocUrl = process.env.SYNTHADOC_URL;
+  const jdSynthadocPromise = jdSynthadocUrl
+    ? Promise.race([
+        fetch(`${jdSynthadocUrl}/context/build`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goal: jd.trim(), token_budget: 3000 }),
+        }).then(r => r.ok ? r.json() : null).catch(() => null),
+        new Promise(resolve => setTimeout(() => resolve(null), 1200)),
+      ])
+    : Promise.resolve(null);
+
   const pdb = db.portfolio(req.portfolioUser);
   const profile = pdb.prepare('SELECT * FROM profile WHERE id = 1').get() || {};
   const cleanJd = jd.trim();
@@ -941,23 +965,10 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
     'Skills:\n' + skillRows.map(s => `- ${s.name} (${s.level})`).join('\n'),
   ].filter(Boolean).join('\n\n');
 
-  // Enrich with Synthadoc context scoped to the job description
-  let synthadocContext = '';
-  const synthadocUrl = process.env.SYNTHADOC_URL;
-  if (synthadocUrl) {
-    try {
-      const sdRes = await fetch(`${synthadocUrl}/context/build`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal: cleanJd, token_budget: 3000 }),
-      });
-      if (sdRes.ok) {
-        const sdData = await sdRes.json();
-        const excerpts = (sdData.pages || []).map(p => p.excerpt).filter(Boolean).join('\n\n');
-        if (excerpts) synthadocContext = excerpts;
-      }
-    } catch (_) {}
-  }
+  const sdJdData = await jdSynthadocPromise;
+  const synthadocContext = sdJdData
+    ? filterPortfolioPages(sdJdData.pages).map(p => p.excerpt).filter(Boolean).join('\n\n')
+    : '';
 
   const jdFullName = profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
   const jdFirstName = jdFullName.split(' ')[0];
