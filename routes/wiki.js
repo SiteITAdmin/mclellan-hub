@@ -20,6 +20,7 @@ const {
   loadManualLinks,
   addManualLink,
   removeManualLink,
+  removeLinkCompletely,
   findRelated,
   getOrphans,
   searchAll,
@@ -298,20 +299,68 @@ router.post('/page/:slug/delete', requireAuth, requireSameOrigin, express.urlenc
 
 // Raw markdown editor for non-wiki source pages.
 // Must be declared before /source/* so /edit and /save are not swallowed.
+const GROUP_ORDER = ['People', 'Projects', 'Wiki', 'Notes', 'Meetings', 'Daily Notes', 'Journal', 'Workday'];
+
+function linkedSetFor(slug, graph) {
+  return new Set([
+    ...(graph.outbound.get(slug) || []),
+    ...(graph.inbound.get(slug)  || []),
+  ]);
+}
+
 router.get('/source/*/edit', requireAuth, (req, res) => {
-  const slug = req.params[0];
-  const page = indexAll().find(p => p.slug === slug && p.type !== 'wiki');
+  const slug     = req.params[0];
+  const allPages = indexAll();
+  const page     = allPages.find(p => p.slug === slug && p.type !== 'wiki');
   if (!page) return res.status(404).render('wiki/404', { slug });
-  res.render('wiki/source-edit', { page });
+  const graph  = buildGraph(allPages);
+  const linked = linkedSetFor(slug, graph);
+  const byLabel = {};
+  for (const p of allPages) {
+    if (p.slug === slug || p.system) continue;
+    (byLabel[p.typeLabel] = byLabel[p.typeLabel] || []).push({
+      slug: p.slug, title: p.title, linked: linked.has(p.slug),
+    });
+  }
+  const groups = GROUP_ORDER
+    .filter(label => byLabel[label])
+    .concat(Object.keys(byLabel).filter(l => !GROUP_ORDER.includes(l)))
+    .map(label => ({
+      label,
+      items: byLabel[label].sort((a, b) => a.title.localeCompare(b.title)),
+    }));
+  res.render('wiki/source-edit', { page, groups });
 });
 
 router.post('/source/*/save', requireAuth, requireSameOrigin, express.urlencoded({ extended: false, limit: '2mb' }), (req, res) => {
   const slug = req.params[0];
-  const page = indexAll().find(p => p.slug === slug && p.type !== 'wiki');
+  let allPages = indexAll();
+  const page = allPages.find(p => p.slug === slug && p.type !== 'wiki');
   if (!page) return res.status(404).json({ error: 'Not found' });
-  const content = String(req.body.content || '');
-  if (!content.trim()) return res.redirect(`/source/${slug.split('/').map(encodeURIComponent).join('/')}/edit`);
-  fs.writeFileSync(page.fullPath, content.endsWith('\n') ? content : content + '\n', 'utf8');
+
+  // 1. Save raw content first (links are applied to the fresh file afterwards)
+  if (typeof req.body.content === 'string') {
+    const content = req.body.content;
+    fs.writeFileSync(page.fullPath, content === '' || content.endsWith('\n') ? content : content + '\n', 'utf8');
+  }
+
+  // 2. Apply the tick-list diff: tick → link, untick → fully sever
+  if (req.body.links_present) {
+    const desired = new Set([].concat(req.body.links || []));
+    allPages = indexAll();
+    const graph   = buildGraph(allPages);
+    const current = linkedSetFor(slug, graph);
+    const valid   = new Set(allPages.map(p => p.slug));
+    for (const t of desired) {
+      if (!current.has(t) && valid.has(t) && t !== slug) {
+        try { addManualLink({ from: slug, to: t, relation: 'related' }); } catch (_) {}
+      }
+    }
+    for (const t of current) {
+      if (!desired.has(t)) removeLinkCompletely(slug, t);
+    }
+  }
+
   res.redirect(`/source/${slug.split('/').map(encodeURIComponent).join('/')}`);
 });
 
@@ -531,7 +580,7 @@ router.post('/api/graph/link', requireAuth, requireSameOrigin, express.json(), (
 router.post('/api/graph/unlink', requireAuth, requireSameOrigin, express.json(), (req, res) => {
   const { from, to } = req.body || {};
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
-  removeManualLink({ from, to });
+  removeLinkCompletely(from, to); // store entry + wikilinks in both files
   res.json({ ok: true });
 });
 

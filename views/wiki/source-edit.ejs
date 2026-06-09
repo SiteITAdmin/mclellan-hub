@@ -4,28 +4,106 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Edit source: <%= page.title %> — McLellan Wiki</title>
+<title>Edit: <%= page.title %> — McLellan Wiki</title>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/wiki.css">
 <style>
   .editor-wrap { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
-  .editor-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+  .editor-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
   .editor-header h1 { flex: 1; font-size: 1.3rem; font-weight: 600; margin: 0; }
   .editor-back { font-size: .85rem; color: var(--text-3); text-decoration: none; }
   .editor-back:hover { color: var(--text); }
-  .source-warning {
-    background: #fff8e8; border: 1px solid #f0dfb8; color: #84621a;
-    border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 16px;
+
+  .links-editor {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 20px;
   }
+  .links-editor > h2 { font-size: 15px; font-weight: 700; margin: 0 0 4px; }
+  .links-hint { font-size: 12px; color: var(--text-3); margin-bottom: 12px; }
+  .links-filter {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: var(--font);
+    background: var(--bg-soft);
+    margin-bottom: 12px;
+  }
+  .links-filter:focus { outline: none; border-color: var(--accent); background: #fff; }
+
+  .link-group { border-top: 1px solid var(--line); }
+  .link-group summary {
+    cursor: pointer;
+    padding: 10px 2px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--text-2);
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .link-group summary::before { content: '▸'; color: var(--text-3); transition: transform .15s; }
+  .link-group[open] summary::before { transform: rotate(90deg); }
+  .group-count {
+    background: var(--bg-soft);
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .group-count.has-links { background: var(--accent-2); color: var(--accent); }
+  .link-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 2px 14px;
+    padding: 2px 2px 12px;
+  }
+  .link-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-2);
+    padding: 4px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .link-item:hover { background: var(--bg-soft); }
+  .link-item input { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+  .link-item.is-linked { color: var(--text); font-weight: 600; }
+  .link-item.filter-hidden { display: none; }
+
+  .raw-section {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 20px;
+  }
+  .raw-section summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-2); user-select: none; }
+  .raw-hint { font-size: 12px; color: var(--text-3); margin: 8px 0 10px; }
   .editor-textarea {
-    width: 100%; box-sizing: border-box; min-height: 560px;
+    width: 100%; box-sizing: border-box; min-height: 380px;
     padding: 1rem; border: 1px solid var(--line); border-radius: 6px;
-    background: var(--bg-card); color: var(--text);
+    background: var(--bg-soft); color: var(--text);
     font-family: 'IBM Plex Mono', monospace; font-size: .88rem; line-height: 1.65;
     resize: vertical;
   }
-  .editor-textarea:focus { outline: none; border-color: var(--accent); }
-  .editor-actions { display: flex; gap: .75rem; align-items: center; margin-top: 1.25rem; }
+  .editor-textarea:focus { outline: none; border-color: var(--accent); background: #fff; }
+
+  .editor-actions { display: flex; gap: .75rem; align-items: center; }
   .btn-save { background: var(--accent); color: #fff; border: none; padding: .6rem 1.5rem; border-radius: 6px; font-size: .9rem; font-weight: 600; cursor: pointer; }
   .btn-save:hover { filter: brightness(1.1); }
   .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--line); padding: .6rem 1.2rem; border-radius: 6px; font-size: .9rem; cursor: pointer; text-decoration: none; }
@@ -38,19 +116,65 @@
 <main class="editor-wrap">
   <div class="editor-header">
     <a href="<%= sourceUrl %>" class="editor-back">← Back to page</a>
-    <h1>Edit source: <%= page.title %></h1>
+    <h1>Edit: <%= page.title %></h1>
   </div>
-  <div class="source-warning">
-    This is a <strong><%= page.typeLabel %></strong> source file (<code><%= page.relativePath %></code>),
-    edited raw — frontmatter included. Some source files are refreshed by sync jobs and may be overwritten.
-  </div>
+
   <form method="POST" action="<%= sourceUrl %>/save">
-    <textarea class="editor-textarea" name="content" spellcheck="true"><%= page.raw %></textarea>
+    <input type="hidden" name="links_present" value="1">
+
+    <section class="links-editor">
+      <h2>Linked pages</h2>
+      <p class="links-hint">
+        Tick to link, untick to remove. Saving writes [[wikilinks]] into the pages involved,
+        so links live in the notes themselves and show in the graph.
+      </p>
+      <input type="search" class="links-filter" id="links-filter" placeholder="Filter pages…" autocomplete="off">
+      <% for (const g of groups) { %>
+        <% const linkedCount = g.items.filter(i => i.linked).length; %>
+        <details class="link-group" <%= linkedCount ? 'open' : '' %>>
+          <summary>
+            <%= g.label %>
+            <span class="group-count <%= linkedCount ? 'has-links' : '' %>"><%= linkedCount %> linked · <%= g.items.length %></span>
+          </summary>
+          <div class="link-items">
+            <% for (const it of g.items) { %>
+              <label class="link-item <%= it.linked ? 'is-linked' : '' %>" data-title="<%= it.title.toLowerCase() %>">
+                <input type="checkbox" name="links" value="<%= it.slug %>" <%= it.linked ? 'checked' : '' %>>
+                <%= it.title %>
+              </label>
+            <% } %>
+          </div>
+        </details>
+      <% } %>
+    </section>
+
+    <details class="raw-section">
+      <summary>Page text (raw Markdown — advanced)</summary>
+      <p class="raw-hint">
+        The full text of <code><%= page.relativePath %></code>, frontmatter included.
+        <%= page.raw.trim() === '' ? 'This page is currently empty — add notes here if you like.' : '' %>
+        Some source files are refreshed by sync jobs and may be overwritten.
+      </p>
+      <textarea class="editor-textarea" name="content" spellcheck="true"><%= page.raw %></textarea>
+    </details>
+
     <div class="editor-actions">
       <button type="submit" class="btn-save">Save</button>
       <a href="<%= sourceUrl %>" class="btn-secondary">Cancel</a>
     </div>
   </form>
 </main>
+
+<script>
+  document.getElementById('links-filter').addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    document.querySelectorAll('.link-item').forEach(item => {
+      item.classList.toggle('filter-hidden', !!q && !item.dataset.title.includes(q));
+    });
+    document.querySelectorAll('.link-group').forEach(group => {
+      if (q) group.open = !!group.querySelector('.link-item:not(.filter-hidden)');
+    });
+  });
+</script>
 </body>
 </html>
