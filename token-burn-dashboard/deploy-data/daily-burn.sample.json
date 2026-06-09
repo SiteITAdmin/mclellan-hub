@@ -817,7 +817,7 @@
   },
   {
     "date": "2026-06-08",
-    "codex_tokens": 16128211,
+    "codex_tokens": 31662621,
     "claude_code_tokens": 47018500,
     "claude_code_calls": 462,
     "api_tokens": 0,

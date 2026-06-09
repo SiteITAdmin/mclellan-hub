@@ -38,6 +38,7 @@
   <h3 style="margin:0 0 12px">Add person</h3>
   <form method="POST" action="/crm/contacts" class="crm-note-form">
     <input name="name" placeholder="Full name" required style="flex:2">
+    <input name="email" type="email" placeholder="Email address" style="flex:2">
     <input name="notes" placeholder="Notes (optional)" style="flex:3">
     <button class="btn" type="submit">Add</button>
   </form>
@@ -59,6 +60,7 @@
           <% if (contact.company_role) { %><span class="crm-badge subtle"><%= contact.company_role %></span><% } %>
         </div>
       <% } %>
+      <% if (contact.email) { %><div class="crm-muted"><%= contact.email %></div><% } %>
       <% if (contact.facts.length) { %>
         <ul class="crm-compact-list">
           <% for (const fact of contact.facts.slice(0, q ? 1 : 3)) { %>

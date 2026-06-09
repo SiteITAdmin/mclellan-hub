@@ -159,19 +159,7 @@
 </head>
 <body class="admin-page">
 
-<header class="admin-header">
-  <h1>Models — <%= user %></h1>
-  <nav style="display:flex;gap:12px;align-items:center;">
-    <a href="/admin">Projects</a>
-    <a href="/admin/crm">CRM</a>
-    <a href="/admin/models" style="font-weight:600">Models</a>
-    <a href="/admin/shortcuts">Cards</a>
-    <a href="/admin/test">Test</a>
-    <a href="/admin/linkedin">Content</a>
-    <a href="/admin/chatlogs">Chat logs</a>
-    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
-  </nav>
-</header>
+<%- include('partials/admin-header', { title: `Models & prompts — ${user}` }) %>
 
 <section class="admin-section">
   <h2>How this works</h2>
@@ -207,6 +195,8 @@
           <span class="badge badge-search-native">native search</span>
         <% } else if (m.search === 'web-plugin') { %>
           <span class="badge badge-search-plugin">web plugin</span>
+        <% } else if (m.search === 'orchestrated') { %>
+          <span class="badge badge-tier">multi-search workflow</span>
         <% } else { %>
           <span class="badge badge-search-none">no search</span>
         <% } %>
@@ -275,6 +265,7 @@
               <select name="search">
                 <option value="web-plugin" <%= m.search === 'web-plugin' ? 'selected' : '' %>>Web plugin (add-on via OR)</option>
                 <option value="native" <%= m.search === 'native' ? 'selected' : '' %>>Native (built-in search)</option>
+                <option value="orchestrated" <%= m.search === 'orchestrated' ? 'selected' : '' %>>Orchestrated multi-search</option>
                 <option value="none" <%= m.search === 'none' ? 'selected' : '' %>>None</option>
               </select>
             </div>
@@ -328,7 +319,7 @@
   <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">
     Models used by background and automated features. Changes apply immediately — no restart needed.
     Per-user slots show settings for <strong><%= user %></strong> only; other accounts have separate settings.
-    Leave a slot unset to use its built-in fallback model.
+    <strong>Use fallback</strong> removes a saved model choice and returns that slot to its built-in fallback model. It does not disable or delete the feature.
   </p>
 
   <% for (const group of systemGroups) { %>
@@ -360,7 +351,7 @@
           <input type="hidden" name="feature" value="<%= slot.feature %>">
           <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
           <input type="hidden" name="model_key" value="">
-          <button class="btn-sm danger" type="submit">Unset</button>
+          <button class="btn-sm danger" type="submit" title="Remove this model override and use the built-in fallback">Use fallback</button>
         </form>
         <% } %>
       </div>
@@ -392,7 +383,7 @@
           <div class="field">
             <label>Prompt<% if (slot.promptOverride) { %> <span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">edited</span><% } else { %> <span style="font-size:10px;color:var(--text-dim);margin-left:4px;">(showing default)</span><% } %></label>
             <% if (!slot.promptDefault && !slot.promptOverride) { %>
-            <p style="font-size:11px;color:var(--text-dim);margin:4px 0;">No prompt defined for this slot.</p>
+            <p style="font-size:11px;color:var(--text-dim);margin:4px 0;">This feature does not expose a separate prompt.</p>
             <% } else { %>
             <p style="font-size:11px;color:var(--text-dim);margin:2px 0 6px;">Edit the full prompt below. Dynamic placeholders like [DATE], [NAME], [CALENDAR] are filled at runtime. Save to override; Clear to restore the default.</p>
             <textarea name="prompt" rows="16" style="width:100%;font-family:var(--font-mono,monospace);font-size:11px;line-height:1.5;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);resize:vertical;"><%= slot.promptOverride || slot.promptDefault %></textarea>
@@ -534,6 +525,7 @@
           <label>Endpoint</label>
           <select id="f-endpoint" name="endpoint" required>
             <option value="openrouter">openrouter</option>
+            <option value="multi-search">multi-search (orchestrated workflow)</option>
             <option value="custom-openai">custom-openai (OpenAI-compatible)</option>
             <option value="google-ai">google-ai (image)</option>
           </select>
@@ -557,6 +549,7 @@
           <select id="f-search" name="search">
             <option value="web-plugin">Web plugin (add-on via OR)</option>
             <option value="native">Native (built-in search)</option>
+            <option value="orchestrated">Orchestrated multi-search</option>
             <option value="none">None</option>
           </select>
           <div class="hint">Auto-detected from model ID when browsing catalogue.</div>

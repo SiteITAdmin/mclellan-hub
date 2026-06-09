@@ -289,6 +289,10 @@ router.get('/orphans', requireAuth, (req, res) => {
   res.render('wiki/orphans', { orphans, sinks, sources, suggestions, wikiCount });
 });
 
+router.get('/graph', requireAuth, (req, res) => {
+  res.render('wiki/graph');
+});
+
 router.get('/ingest', requireAuth, (req, res) => {
   const queueDir = path.join(vaultRoot(), 'raw_sources', 'ingest-queue');
   const queued   = fs.existsSync(queueDir)
@@ -417,7 +421,14 @@ router.get('/api/search', requireAuth, async (req, res) => {
 router.get('/api/graph', requireAuth, (req, res) => {
   const pages = indexAll();
   const graph = buildGraph(pages);
-  const nodes = pages.map(p => ({ id: p.slug, label: p.title, type: p.type }));
+  const nodes = pages.map(p => ({
+    id:        p.slug,
+    label:     p.title,
+    type:      p.type,
+    typeLabel: p.typeLabel,
+    tags:      p.tags || [],
+    system:    !!p.system,
+  }));
   const edges = [];
   for (const [from, targets] of graph.outbound) {
     for (const to of targets) edges.push({ from, to });

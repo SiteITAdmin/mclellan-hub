@@ -1,0 +1,29 @@
+<%- include('../../hub/partials/top-nav') %>
+<header class="admin-header">
+  <h1><%- title %></h1>
+  <nav class="admin-nav" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <a href="/admin">Projects</a>
+    <a href="/admin/crm">CRM</a>
+    <a href="/admin/email-taxonomy">Email</a>
+    <a href="/admin/models">Models &amp; prompts</a>
+    <a href="/admin/shortcuts">Cards</a>
+    <a href="/admin/test">Test</a>
+    <a href="/admin/linkedin">Content</a>
+    <a href="/admin/newsletter">Newsletter</a>
+    <a href="/admin/chatlogs">Chat logs</a>
+    <a href="/admin/debrief">Debrief logs</a>
+    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+  </nav>
+</header>
+<script>
+  (() => {
+    const path = window.location.pathname;
+    let best = null;
+    for (const link of document.querySelectorAll('.admin-nav a')) {
+      const href = link.getAttribute('href');
+      const matches = href === '/admin' ? path === '/admin' : path === href || path.startsWith(href + '/');
+      if (matches && (!best || href.length > best.getAttribute('href').length)) best = link;
+    }
+    if (best) best.style.fontWeight = '700';
+  })();
+</script>

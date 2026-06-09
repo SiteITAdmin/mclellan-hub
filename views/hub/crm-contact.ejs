@@ -12,6 +12,7 @@ async function taskAction(id, action) {
   <div>
     <p class="crm-eyebrow">Contact</p>
     <h1><%= contact.name %></h1>
+    <% if (contact.email) { %><p><a href="mailto:<%= contact.email %>"><%= contact.email %></a></p><% } %>
     <% if (companies.length) { %>
       <p>
         <% for (const company of companies) { %>
@@ -185,6 +186,9 @@ async function taskAction(id, action) {
         </label>
         <label class="wide">Aliases <span style="font-size:11px;opacity:.6;">comma-separated</span>
           <input name="aliases" value="<%= (() => { try { return JSON.parse(contact.aliases || '[]').join(', '); } catch { return ''; } })() %>">
+        </label>
+        <label class="wide">Email address
+          <input name="email" type="email" value="<%= contact.email || '' %>" placeholder="name@example.com">
         </label>
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn" type="submit">Save</button>
@@ -383,6 +387,8 @@ document.getElementById('contact-edit-form').addEventListener('submit', async e 
       msg.textContent = 'Saved.';
       document.title = data.name + ' — McLellan Hub CRM';
       document.querySelector('.crm-hero h1').textContent = data.name;
+      const warning = j.profileSynced === false ? ` Wiki profile warning: ${j.profileWarning || 'not synchronized'}` : '';
+      msg.textContent = 'Saved.' + warning;
       setTimeout(() => { msg.textContent = ''; }, 2500);
     } else { msg.textContent = j.error || 'Error'; }
   } catch (err) { msg.textContent = err.message; }

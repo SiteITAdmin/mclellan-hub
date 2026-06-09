@@ -4,7 +4,8 @@ const db = require('../lib/db');
 const { briefingPeriodLabel } = require('../lib/newsletter-pipeline');
 const { routeMessage } = require('../lib/router');
 const { uuid } = require('../lib/id');
-const { getSystemModelKey } = require('../lib/settings');
+const { getSystemModelKey, getSystemPrompt } = require('../lib/settings');
+const { PROMPTS } = require('../lib/prompts');
 const PDFDocument = require('pdfkit');
 const {
   AI_ASSISTED_APP_BUILDS_INTRO,
@@ -872,7 +873,9 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
 
   const systemPrompt = `${PORTFOLIO_CHAT_GUARD}
 
-You are ${profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan')}, speaking in first person to a recruiter or hiring manager about your professional work and career.
+${getSystemPrompt('portfolio_chat', req.portfolioUser, PROMPTS.portfolio_chat)}
+
+You are ${profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan')}.
 
 Tone: ${honestyDescriptor} (honesty level ${honestyLevel}/10).
 - Only reference information in the context below — never fabricate.
@@ -975,23 +978,16 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
 
   const messages = [{
     role: 'system',
-    content: JD_ANALYSER_GUARD,
+    content: `${JD_ANALYSER_GUARD}\n\n${getSystemPrompt('jd_analyser', req.portfolioUser, PROMPTS.jd_analyser)}`,
   }, {
     role: 'user',
-    content: `You are helping a recruiter or hiring manager decide whether to contact this candidate about a role. Be direct, commercially useful, and evidence-led. If the fit is weak or partial, say so clearly. Do not frame the answer as advice to the candidate about whether they should apply.
-
-CV Context:
+    content: `CV Context:
 ${wrapUntrustedBlock('candidate_context', cvContext || 'No CV data available.')}
 ${synthadocContext ? `\nSupporting evidence from candidate knowledge base:\n${wrapUntrustedBlock('wiki_context', synthadocContext)}\n` : ''}
 Job Description:
 ${wrapUntrustedBlock('job_description', cleanJd)}
 
-Provide:
-1. Contact recommendation (Strong outreach / Worth a conversation / Probably not a fit) with one sentence reason
-2. The strongest matching capabilities or experiences
-3. Any gaps, risks, or missing evidence a recruiter should note
-4. The most promising angle for outreach if they do contact the candidate
-5. A short recruiter verdict on whether ${jdFirstName} is worth approaching for this role now`,
+Candidate name: ${jdFullName}. Address the final verdict using ${jdFirstName}'s name.`,
   }];
 
   res.setHeader('Content-Type', 'text/event-stream');
