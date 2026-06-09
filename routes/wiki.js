@@ -21,6 +21,7 @@ const {
   addManualLink,
   removeManualLink,
   removeLinkCompletely,
+  syncProjectNotes,
   findRelated,
   getOrphans,
   searchAll,
@@ -299,7 +300,19 @@ router.post('/page/:slug/delete', requireAuth, requireSameOrigin, express.urlenc
 
 // Raw markdown editor for non-wiki source pages.
 // Must be declared before /source/* so /edit and /save are not swallowed.
-const GROUP_ORDER = ['People', 'Projects', 'Wiki', 'Notes', 'Meetings', 'Daily Notes', 'Journal', 'Workday'];
+const GROUP_ORDER = ['People', 'Projects', 'Project files', 'Wiki', 'Notes', 'Meetings', 'Daily Notes', 'Journal', 'Workday'];
+
+// Keep vault project notes aligned with CRM projects (idempotent, never overwrites)
+function ensureProjectNotes() {
+  try {
+    const projects = db.hub()
+      .prepare('SELECT name, slug FROM projects WHERE user = ?')
+      .all(WIKI_USER);
+    return syncProjectNotes(projects);
+  } catch (_) {
+    return [];
+  }
+}
 
 function linkedSetFor(slug, graph) {
   return new Set([
@@ -310,6 +323,7 @@ function linkedSetFor(slug, graph) {
 
 router.get('/source/*/edit', requireAuth, (req, res) => {
   const slug     = req.params[0];
+  ensureProjectNotes();
   const allPages = indexAll();
   const page     = allPages.find(p => p.slug === slug && p.type !== 'wiki');
   if (!page) return res.status(404).render('wiki/404', { slug });
@@ -528,6 +542,7 @@ router.get('/api/search', requireAuth, async (req, res) => {
 
 // ── API: Graph data ───────────────────────────────────────────────────────────
 router.get('/api/graph', requireAuth, (req, res) => {
+  ensureProjectNotes();
   const pages = indexAll();
   const graph = buildGraph(pages);
   const nodes = pages.map(p => ({
