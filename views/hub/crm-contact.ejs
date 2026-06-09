@@ -69,6 +69,7 @@ async function taskAction(id, action) {
               <% } else { %>
                 <button class="crm-fact-archive" onclick="unarchiveFact('<%= fact.id %>')" title="Restore fact">Restore</button>
               <% } %>
+              <button class="crm-fact-archive" style="color:var(--crm-danger,#c0392b);opacity:.7;" onclick="wrongFact('<%= fact.id %>')" title="Mark as wrong — AI won't repeat this error">Wrong</button>
             </span>
           </span>
         </div>
@@ -246,6 +247,12 @@ async function archiveFact(id) {
 }
 async function unarchiveFact(id) {
   const r = await fetch(`/api/crm/facts/${id}/unarchive`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+async function wrongFact(id) {
+  const r = await fetch(`/api/crm/facts/${id}/wrong`, { method: 'POST' });
   const j = await r.json();
   if (j.ok) location.reload();
   else alert('Error: ' + j.error);

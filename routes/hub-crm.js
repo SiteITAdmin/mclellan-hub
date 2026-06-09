@@ -472,7 +472,7 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
     JOIN contacts c ON c.id = f.contact_id
     LEFT JOIN meetings m ON m.id = f.meeting_id
     LEFT JOIN companies co ON co.id = f.company_id
-    WHERE f.user = ? ${showHistory ? '' : "AND f.status != 'archived'"}
+    WHERE f.user = ? AND f.status != 'wrong' ${showHistory ? '' : "AND f.status != 'archived'"}
     ORDER BY f.created_at DESC
   `).all(req.hubUser);
   const facts = allFacts.filter(f => f.contact_id === contact.id || parseJsonArray(f.linked_contacts).includes(contact.id));
@@ -929,6 +929,22 @@ router.post('/api/crm/facts/:id/archive', requireAuth, requireSameOrigin, writeL
 });
 
 router.post('/api/crm/facts/:id/unarchive', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const result = db.hub().prepare(
+    "UPDATE crm_facts SET status = 'active', updated_at = unixepoch() WHERE id = ? AND user = ?"
+  ).run(req.params.id, req.hubUser);
+  if (!result.changes) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/facts/:id/wrong', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const result = db.hub().prepare(
+    "UPDATE crm_facts SET status = 'wrong', updated_at = unixepoch() WHERE id = ? AND user = ?"
+  ).run(req.params.id, req.hubUser);
+  if (!result.changes) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/facts/:id/unwrong', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const result = db.hub().prepare(
     "UPDATE crm_facts SET status = 'active', updated_at = unixepoch() WHERE id = ? AND user = ?"
   ).run(req.params.id, req.hubUser);
