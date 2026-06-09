@@ -17,7 +17,11 @@
     <% for (const t of page.tags) { %><span class="tag"><%= t %></span><% } %>
     <% if (page.created) { %><span class="meta-date"><%= new Date(page.created).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) %></span><% } %>
     <% if (page.confidence) { %><span class="meta-conf conf-<%= page.confidence %>"><%= page.confidence %></span><% } %>
-    <% if (page.slug && (!page.type || page.type === 'wiki')) { %><a href="/page/<%= encodeURIComponent(page.slug) %>/edit" class="wiki-edit-btn">Edit</a><% } %>
+    <% if (page.slug && (!page.type || page.type === 'wiki')) { %>
+      <a href="/page/<%= encodeURIComponent(page.slug) %>/edit" class="wiki-edit-btn">Edit</a>
+    <% } else if (page.slug) { %>
+      <a href="/source/<%= page.slug.split('/').map(encodeURIComponent).join('/') %>/edit" class="wiki-edit-btn">Edit</a>
+    <% } %>
   </div>
 
   <% if ((page.sources && page.sources.length) || page.project || page.filename) { %>
@@ -51,16 +55,39 @@
   </section>
   <% } %>
 
+  <% const manual = locals.manualLinks || []; %>
+  <% if (manual.length) { %>
+  <section class="wiki-related wiki-confirmed">
+    <h3>Confirmed links</h3>
+    <p class="related-note">Verified by you. These are highlighted in the graph.</p>
+    <div class="wiki-cards wiki-cards-sm">
+      <% for (const m of manual) { %>
+        <div class="wiki-card confirmed-card">
+          <a href="<%= m.type === 'wiki' || !m.type ? '/page/' + encodeURIComponent(m.slug) : '/source/' + m.slug.split('/').map(encodeURIComponent).join('/') %>"><h3><%= m.title %></h3></a>
+          <div class="related-actions">
+            <span class="tag tag-sm"><%= m.relation === 'same' ? 'same person / thing' : 'related' %></span>
+            <button class="link-act link-act-danger" data-link-action="unlink" data-slug="<%= m.slug %>">Unlink</button>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  </section>
+  <% } %>
+
   <% if (related.length) { %>
   <section class="wiki-related">
     <h3>Suggested links</h3>
-    <p class="related-note">Automatically inferred for navigation. These are not verified relationships.</p>
+    <p class="related-note">Automatically inferred. Confirm to make a link permanent — it writes a [[wikilink]] into both pages.</p>
     <div class="wiki-cards wiki-cards-sm">
       <% for (const r of related) { %>
-        <a href="<%= r.type === 'wiki' ? '/page/' : '/source/' %><%= encodeURIComponent(r.slug) %>" class="wiki-card">
-          <h3><%= r.title %></h3>
+        <div class="wiki-card">
+          <a href="<%= r.type === 'wiki' ? '/page/' + encodeURIComponent(r.slug) : '/source/' + r.slug.split('/').map(encodeURIComponent).join('/') %>"><h3><%= r.title %></h3></a>
           <div class="wiki-card-tags"><% for (const t of r.tags.slice(0,3)) { %><span class="tag tag-sm"><%= t %></span><% } %></div>
-        </a>
+          <div class="related-actions">
+            <button class="link-act" data-link-action="related" data-slug="<%= r.slug %>">Confirm link</button>
+            <button class="link-act" data-link-action="same" data-slug="<%= r.slug %>">Same person / thing</button>
+          </div>
+        </div>
       <% } %>
     </div>
   </section>
@@ -87,6 +114,35 @@
   });
   document.getElementById('article-body').innerHTML = marked.parse(escapeHtml(linked));
   document.getElementById('article-body').querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+
+  // Confirm / remove manual links from the suggested + confirmed cards
+  const PAGE_SLUG = <%- JSON.stringify(page.slug || '') %>;
+  document.querySelectorAll('.link-act').forEach(btn => {
+    btn.addEventListener('click', async ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const action = btn.dataset.linkAction;
+      const other  = btn.dataset.slug;
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {
+        const url  = action === 'unlink' ? '/api/graph/unlink' : '/api/graph/link';
+        const body = action === 'unlink'
+          ? { from: PAGE_SLUG, to: other }
+          : { from: PAGE_SLUG, to: other, relation: action };
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'HTTP ' + r.status);
+        window.location.reload();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Failed — retry';
+      }
+    });
+  });
 </script>
 </body>
 </html>

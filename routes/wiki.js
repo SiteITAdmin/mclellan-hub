@@ -137,6 +137,22 @@ function allWikiPages() {
     .sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 }
 
+// Manual links involving this page, with partner page details for rendering
+function manualLinksFor(slug, allPages) {
+  return loadManualLinks()
+    .filter(l => l.from === slug || l.to === slug)
+    .map(l => {
+      const other = l.from === slug ? l.to : l.from;
+      const p = allPages.find(x => x.slug === other);
+      return {
+        slug:     other,
+        title:    p ? p.title : other,
+        type:     p ? p.type : null,
+        relation: l.relation || 'related',
+      };
+    });
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 router.get('/', requireAuth, (req, res) => {
   const q        = (req.query.q || '').trim();
@@ -230,11 +246,13 @@ router.get('/page/:slug', requireAuth, (req, res) => {
     return res.status(404).render('wiki/404', { slug: req.params.slug });
   }
   const allPages = indexAll();
-  const related  = findRelated(
+  const manualLinks = manualLinksFor(page.slug, allPages);
+  const confirmed   = new Set(manualLinks.map(m => m.slug));
+  const related     = findRelated(
     { ...page, type: 'wiki', aliases: page.aliases || [] },
     allPages
-  ).slice(0, 6);
-  res.render('wiki/page', { page, related });
+  ).filter(r => !confirmed.has(r.slug)).slice(0, 6);
+  res.render('wiki/page', { page, related, manualLinks });
 });
 
 router.get('/page/:slug/edit', requireAuth, (req, res) => {
@@ -278,12 +296,33 @@ router.post('/page/:slug/delete', requireAuth, requireSameOrigin, express.urlenc
   res.redirect('/browse');
 });
 
+// Raw markdown editor for non-wiki source pages.
+// Must be declared before /source/* so /edit and /save are not swallowed.
+router.get('/source/*/edit', requireAuth, (req, res) => {
+  const slug = req.params[0];
+  const page = indexAll().find(p => p.slug === slug && p.type !== 'wiki');
+  if (!page) return res.status(404).render('wiki/404', { slug });
+  res.render('wiki/source-edit', { page });
+});
+
+router.post('/source/*/save', requireAuth, requireSameOrigin, express.urlencoded({ extended: false, limit: '2mb' }), (req, res) => {
+  const slug = req.params[0];
+  const page = indexAll().find(p => p.slug === slug && p.type !== 'wiki');
+  if (!page) return res.status(404).json({ error: 'Not found' });
+  const content = String(req.body.content || '');
+  if (!content.trim()) return res.redirect(`/source/${slug.split('/').map(encodeURIComponent).join('/')}/edit`);
+  fs.writeFileSync(page.fullPath, content.endsWith('\n') ? content : content + '\n', 'utf8');
+  res.redirect(`/source/${slug.split('/').map(encodeURIComponent).join('/')}`);
+});
+
 router.get('/source/*', requireAuth, (req, res) => {
   const slug = req.params[0];
   const allPages = indexAll();
   const page = allPages.find(p => p.slug === slug && p.type !== 'wiki');
   if (!page) return res.status(404).render('wiki/404', { slug });
-  const related = findRelated(page, allPages).slice(0, 6);
+  const manualLinks = manualLinksFor(page.slug, allPages);
+  const confirmed   = new Set(manualLinks.map(m => m.slug));
+  const related     = findRelated(page, allPages).filter(r => !confirmed.has(r.slug)).slice(0, 6);
   res.render('wiki/page', {
     page: {
       ...page,
@@ -293,6 +332,7 @@ router.get('/source/*', requireAuth, (req, res) => {
       confidence: null,
     },
     related,
+    manualLinks,
   });
 });
 
