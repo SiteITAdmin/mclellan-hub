@@ -318,6 +318,24 @@ a:hover { text-decoration: underline; }
 .wiki-article strong { font-weight: 700; }
 
 .wiki-sources, .wiki-related { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); }
+.related-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+.link-act {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-soft);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+}
+.link-act:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-2); }
+.link-act:disabled { opacity: .5; cursor: default; }
+.link-act-danger:hover { border-color: #c0392b; color: #c0392b; background: #fdecea; }
+.confirmed-card { border-color: var(--accent); box-shadow: 0 1px 6px rgba(91,79,207,.12); }
+.wiki-card a { color: var(--text); text-decoration: none; }
+.wiki-card a:hover h3 { color: var(--accent); }
 .wiki-sources h3, .wiki-related h3 { font-size: 13px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
 .related-note { color: var(--text-3); font-size: 12px; margin: -6px 0 14px; }
 .wiki-sources ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }

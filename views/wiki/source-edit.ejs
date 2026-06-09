@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edit source: <%= page.title %> — McLellan Wiki</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/wiki.css">
+<style>
+  .editor-wrap { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  .editor-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+  .editor-header h1 { flex: 1; font-size: 1.3rem; font-weight: 600; margin: 0; }
+  .editor-back { font-size: .85rem; color: var(--text-3); text-decoration: none; }
+  .editor-back:hover { color: var(--text); }
+  .source-warning {
+    background: #fff8e8; border: 1px solid #f0dfb8; color: #84621a;
+    border-radius: 8px; padding: 10px 14px; font-size: 12px; margin-bottom: 16px;
+  }
+  .editor-textarea {
+    width: 100%; box-sizing: border-box; min-height: 560px;
+    padding: 1rem; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg-card); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: .88rem; line-height: 1.65;
+    resize: vertical;
+  }
+  .editor-textarea:focus { outline: none; border-color: var(--accent); }
+  .editor-actions { display: flex; gap: .75rem; align-items: center; margin-top: 1.25rem; }
+  .btn-save { background: var(--accent); color: #fff; border: none; padding: .6rem 1.5rem; border-radius: 6px; font-size: .9rem; font-weight: 600; cursor: pointer; }
+  .btn-save:hover { filter: brightness(1.1); }
+  .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--line); padding: .6rem 1.2rem; border-radius: 6px; font-size: .9rem; cursor: pointer; text-decoration: none; }
+  .btn-secondary:hover { border-color: var(--text); }
+</style>
+</head>
+<body>
+<%- include('_nav', { page: '', q: '' }) %>
+<% const sourceUrl = '/source/' + page.slug.split('/').map(encodeURIComponent).join('/'); %>
+<main class="editor-wrap">
+  <div class="editor-header">
+    <a href="<%= sourceUrl %>" class="editor-back">← Back to page</a>
+    <h1>Edit source: <%= page.title %></h1>
+  </div>
+  <div class="source-warning">
+    This is a <strong><%= page.typeLabel %></strong> source file (<code><%= page.relativePath %></code>),
+    edited raw — frontmatter included. Some source files are refreshed by sync jobs and may be overwritten.
+  </div>
+  <form method="POST" action="<%= sourceUrl %>/save">
+    <textarea class="editor-textarea" name="content" spellcheck="true"><%= page.raw %></textarea>
+    <div class="editor-actions">
+      <button type="submit" class="btn-save">Save</button>
+      <a href="<%= sourceUrl %>" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+</main>
+</body>
+</html>

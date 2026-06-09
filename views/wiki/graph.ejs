@@ -173,11 +173,14 @@
     <label class="graph-filter">
       <input type="checkbox" id="opt-labels"> Always show labels
     </label>
+    <label class="graph-filter">
+      <input type="checkbox" id="opt-linkmode"> Link mode — click selects
+    </label>
     <div class="graph-stats" id="graph-stats"></div>
   </div>
 
   <div class="graph-tooltip" id="graph-tooltip"></div>
-  <div class="graph-hint">scroll to zoom · drag to pan · click to open · shift-click two nodes to link them</div>
+  <div class="graph-hint">scroll to zoom · drag to pan · click to open · shift-click (or Link mode) two nodes to link them</div>
 
   <div class="link-panel" id="link-panel" style="display:none">
     <h2>Force a link</h2>
@@ -255,6 +258,7 @@
   const enabledTypes = new Set(typesPresent);
   let connectedOnly = false;
   let alwaysLabels  = false;
+  let linkMode      = false;
   let searchTerm    = '';
   let transform     = d3.zoomIdentity;
   let hovered       = null;
@@ -462,7 +466,7 @@
     if (ev.defaultPrevented) return; // a drag happened
     const rect = canvas.getBoundingClientRect();
     const n = findNode(ev.clientX - rect.left, ev.clientY - rect.top);
-    if (ev.shiftKey) { // shift-click selects nodes for manual linking
+    if (ev.shiftKey || linkMode) { // select nodes for manual linking
       if (!n || n.type === 'missing') return;
       const i = selected.indexOf(n);
       if (i >= 0) selected.splice(i, 1);
@@ -509,6 +513,10 @@
   document.getElementById('opt-labels').addEventListener('change', ev => {
     alwaysLabels = ev.target.checked;
     draw();
+  });
+  document.getElementById('opt-linkmode').addEventListener('change', ev => {
+    linkMode = ev.target.checked;
+    if (!linkMode) { selected = []; updateLinkPanel(); draw(); }
   });
   document.getElementById('graph-search').addEventListener('input', ev => {
     searchTerm = ev.target.value.trim().toLowerCase();
