@@ -17,6 +17,9 @@ const {
   buildGraph,
   buildLinkResolver,
   normalizeLinkKey,
+  loadManualLinks,
+  addManualLink,
+  removeManualLink,
   findRelated,
   getOrphans,
   searchAll,
@@ -446,9 +449,16 @@ router.get('/api/graph', requireAuth, (req, res) => {
     tags:      p.tags || [],
     system:    !!p.system,
   }));
+  const manualByPair = new Map();
+  for (const m of loadManualLinks()) {
+    manualByPair.set([m.from, m.to].sort().join('\n'), m.relation || 'related');
+  }
   const edges = [];
   for (const [from, targets] of graph.outbound) {
-    for (const to of targets) edges.push({ from, to });
+    for (const to of targets) {
+      const relation = manualByPair.get([from, to].sort().join('\n'));
+      edges.push(relation ? { from, to, manual: true, relation } : { from, to });
+    }
   }
   // Phantom nodes for wikilinks that resolve to no indexed page
   const slugSet  = new Set(pages.map(p => p.slug));
@@ -465,6 +475,24 @@ router.get('/api/graph', requireAuth, (req, res) => {
     }
   }
   res.json({ nodes: [...nodes, ...missing.values()], edges });
+});
+
+// ── API: Force / remove a manual link between two pages ──────────────────────
+router.post('/api/graph/link', requireAuth, requireSameOrigin, express.json(), (req, res) => {
+  const { from, to, relation } = req.body || {};
+  if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+  try {
+    res.json({ ok: true, link: addManualLink({ from, to, relation }) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/api/graph/unlink', requireAuth, requireSameOrigin, express.json(), (req, res) => {
+  const { from, to } = req.body || {};
+  if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+  removeManualLink({ from, to });
+  res.json({ ok: true });
 });
 
 module.exports = router;
