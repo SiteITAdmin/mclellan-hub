@@ -66,7 +66,7 @@ async function taskAction(id, action) {
             <strong><%= c.name %></strong>
             <% if (c.project_role) { %><span class="crm-muted"> · <%= c.project_role %></span><% } %>
             <% if (c.company_name) { %><span class="crm-muted"> · <%= c.company_name %></span><% } %>
-            <% if (!directContactIds.includes(c.id)) { %><span class="crm-badge subtle" style="margin-left:6px;">via tasks</span><% } %>
+            <% if (!directContactIds.includes(c.id)) { %><span class="crm-badge subtle" style="margin-left:6px;">auto</span><% } %>
           </a>
           <% if (directContactIds.includes(c.id)) { %>
             <button class="btn btn-sm btn-ghost" onclick="unlinkContact('<%= c.id %>')">Remove</button>
@@ -149,31 +149,47 @@ async function taskAction(id, action) {
 
   </div>
 
-  <!-- ── Right: Recent activity ────────────────────────────────────────── -->
+  <!-- ── Right: Timeline + activity ──────────────────────────────────── -->
   <div class="crm-stack">
 
-    <% if (recentEmails.length) { %>
     <section class="section-card">
-      <h2>Recent emails</h2>
+      <h2>Timeline</h2>
+      <% if (!projectFacts.length && !recentEmails.length) { %>
+        <p class="crm-muted">No activity yet. Link people to this project to see their facts here.</p>
+      <% } %>
       <div class="crm-timeline">
-        <% for (const e of recentEmails) { %>
+        <%
+          const SOURCE_BADGE = { agentmail: 'email', gmail: 'email', dchat: 'chat', manual: 'note' };
+          const TYPE_BADGE = { action: 'action', decision: 'decision' };
+          // Merge facts + emails into one sorted list
+          const timelineItems = [
+            ...projectFacts.map(f => ({ _kind: 'fact', ts: f.created_at, ...f })),
+            ...recentEmails.map(e => ({ _kind: 'email', ts: e.received_at, ...e })),
+          ].sort((a, b) => b.ts - a.ts).slice(0, 60);
+        %>
+        <% for (const item of timelineItems) { %>
+          <% if (item._kind === 'fact') { %>
           <div class="crm-timeline-item">
-            <time><%= new Date(e.received_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></time>
-            <strong><%= e.subject %></strong>
-            <span>
-              <%= e.from_name || e.from_email %>
-              <% if (e.contact_name) { %> · <a href="/crm/contact/<%= e.contact_id %>"><%= e.contact_name %></a><% } %>
-            </span>
-            <% if (e.summary) { %><p style="font-size:12px;color:var(--crm-muted);margin:2px 0 0;"><%= e.summary %></p><% } %>
+            <time><%= new Date(item.ts * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %>
+              <% if (TYPE_BADGE[item.fact_type]) { %><span class="crm-type <%= item.fact_type %>" style="margin-left:6px;"><%= TYPE_BADGE[item.fact_type] %></span><% } %>
+            </time>
+            <strong><%= item.fact %></strong>
+            <span><a href="/crm/contact/<%= item.contact_id %>"><%= item.contact_name %></a><% if (SOURCE_BADGE[item.source]) { %> · <span style="font-size:11px;opacity:.6;"><%= SOURCE_BADGE[item.source] %></span><% } %></span>
           </div>
+          <% } else { %>
+          <div class="crm-timeline-item" style="opacity:.7;">
+            <time><%= new Date(item.ts * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></time>
+            <strong style="font-weight:400;"><%= item.subject %></strong>
+            <span style="font-size:12px;"><%= item.from_name || item.from_email %><% if (item.summary) { %> — <%= item.summary.slice(0,120) %><% } %></span>
+          </div>
+          <% } %>
         <% } %>
       </div>
     </section>
-    <% } %>
 
     <% if (recentMessages.length) { %>
     <section class="section-card">
-      <h2>Recent chat activity</h2>
+      <h2>Recent chat</h2>
       <div class="crm-timeline">
         <% for (const m of recentMessages) { %>
           <div class="crm-timeline-item">
@@ -186,12 +202,6 @@ async function taskAction(id, action) {
         <% } %>
       </div>
       <a class="btn btn-sm" href="/c/<%= project.slug %>" style="margin-top:12px;display:inline-block;">Open chat →</a>
-    </section>
-    <% } %>
-
-    <% if (!recentEmails.length && !recentMessages.length) { %>
-    <section class="section-card">
-      <p class="crm-muted">No email or chat activity yet for this project.</p>
     </section>
     <% } %>
 
