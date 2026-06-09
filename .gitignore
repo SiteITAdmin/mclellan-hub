@@ -16,3 +16,4 @@ config/mclellan-hub-*.json
 *.rtf
 *.csv
 .rsyncignore
+.fuse_hidden*
