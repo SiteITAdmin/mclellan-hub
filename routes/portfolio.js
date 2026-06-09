@@ -826,6 +826,24 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
 - If a recruiter asks about certifications, acknowledge the gap honestly and redirect to the evidence above.
 - The candidate is direct about this and does not want it obscured.` : '';
 
+  // Enrich with Synthadoc context scoped to the visitor's question
+  let chatSynthadocContext = '';
+  const chatSynthadocUrl = process.env.SYNTHADOC_URL;
+  if (chatSynthadocUrl) {
+    try {
+      const sdRes = await fetch(`${chatSynthadocUrl}/context/build`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: message.trim(), token_budget: 2000 }),
+      });
+      if (sdRes.ok) {
+        const sdData = await sdRes.json();
+        const excerpts = (sdData.pages || []).map(p => p.excerpt).filter(Boolean).join('\n\n');
+        if (excerpts) chatSynthadocContext = excerpts;
+      }
+    } catch (_) {}
+  }
+
   const honestyLevel = profile.honesty_level || 7;
   const customInstructions = aiInstructions.length
     ? '\n\nSpecific instructions from the candidate:\n' + aiInstructions.map(i => `- ${i.text}`).join('\n')
@@ -852,7 +870,7 @@ Tone: ${honestyDescriptor} (honesty level ${honestyLevel}/10).
 - Don't oversell. Don't hedge. Be specific.${customInstructions}
 
 Your context:
-${wrapUntrustedBlock('candidate_context', (cvContext || 'No CV context loaded yet.') + douglasHonestNotes)}`;
+${wrapUntrustedBlock('candidate_context', (cvContext || 'No CV context loaded yet.') + douglasHonestNotes)}${chatSynthadocContext ? `\n\nAdditional relevant context from knowledge base:\n${wrapUntrustedBlock('wiki_context', chatSynthadocContext)}` : ''}`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -923,6 +941,24 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
     'Skills:\n' + skillRows.map(s => `- ${s.name} (${s.level})`).join('\n'),
   ].filter(Boolean).join('\n\n');
 
+  // Enrich with Synthadoc context scoped to the job description
+  let synthadocContext = '';
+  const synthadocUrl = process.env.SYNTHADOC_URL;
+  if (synthadocUrl) {
+    try {
+      const sdRes = await fetch(`${synthadocUrl}/context/build`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: cleanJd, token_budget: 3000 }),
+      });
+      if (sdRes.ok) {
+        const sdData = await sdRes.json();
+        const excerpts = (sdData.pages || []).map(p => p.excerpt).filter(Boolean).join('\n\n');
+        if (excerpts) synthadocContext = excerpts;
+      }
+    } catch (_) {}
+  }
+
   const jdFullName = profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
   const jdFirstName = jdFullName.split(' ')[0];
 
@@ -935,7 +971,7 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
 
 CV Context:
 ${wrapUntrustedBlock('candidate_context', cvContext || 'No CV data available.')}
-
+${synthadocContext ? `\nSupporting evidence from candidate knowledge base:\n${wrapUntrustedBlock('wiki_context', synthadocContext)}\n` : ''}
 Job Description:
 ${wrapUntrustedBlock('job_description', cleanJd)}
 
