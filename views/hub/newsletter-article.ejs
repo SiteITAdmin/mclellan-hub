@@ -40,6 +40,7 @@ body { background: var(--bg-page, #f4f3fb); font-family: Georgia, 'Times New Rom
 </style>
 </head>
 <body>
+<%- include('partials/top-nav') %>
 <div class="reader-wrap">
   <nav class="reader-nav">
     <a href="/newsletter/creator/<%= feed.creator_slug %>">← <%= feed.name %></a>

@@ -67,18 +67,7 @@
 </head>
 <body class="admin-page">
 
-<header class="admin-header">
-  <h1>Debrief logs — <%= user %></h1>
-  <nav style="display:flex;gap:12px;align-items:center;">
-    <a href="/admin">Projects</a>
-    <a href="/admin/crm">CRM</a>
-    <a href="/admin/models">Models</a>
-    <a href="/admin/shortcuts">Cards</a>
-    <a href="/admin/chatlogs">Chat logs</a>
-    <a href="/admin/debrief" style="font-weight:600">Debrief logs</a>
-    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
-  </nav>
-</header>
+<%- include('partials/admin-header', { title: `Debrief logs — ${user}` }) %>
 
 <section class="admin-section">
 

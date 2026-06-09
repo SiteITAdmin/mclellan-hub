@@ -14,6 +14,7 @@ const MODELS = (HUB.availableModels || [])
       .map(m => ({
         key: m.key,
         label: m.label,
+        endpoint: m.endpoint || null,
         tier: m.tier,
         search: m.search || 'none',
         category: m.category || null,
@@ -389,6 +390,10 @@ function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
           <SbItem icon="chat" label="Chats" expanded={expanded} active={!activeSlug} onClick={() => window.location.href = '/c'} />
           <SbItem icon="people" label="People" expanded={expanded} onClick={() => window.location.href = '/crm'} />
           <SbItem icon="sparkle" label="Content" expanded={expanded} onClick={() => window.location.href = '/lin'} />
+          <SbItem icon="edit" label="Tasks" expanded={expanded} onClick={() => window.location.href = '/crm/tasks'} />
+          <SbItem icon="mic" label="Debrief" expanded={expanded} onClick={() => window.location.href = '/debrief'} />
+          <SbItem icon="file" label="Intelligence" expanded={expanded} onClick={() => window.location.href = '/newsletter'} />
+          <SbItem icon="settings" label="Admin" expanded={expanded} onClick={() => window.location.href = '/admin'} />
         </nav>
 
         {expanded && projects.length > 0 && (
@@ -469,6 +474,7 @@ const SbItem = ({ icon, label, expanded, active, onClick }) => (
 const SEARCH_BADGE = {
   native:     { label: 'native search', cls: 'hb-mc-native' },
   'web-plugin': { label: 'Brave Search',  cls: 'hb-mc-plugin' },
+  orchestrated: { label: 'multi-search', cls: 'hb-mc-orchestrated' },
   none:       { label: null,            cls: null },
 };
 
@@ -532,42 +538,57 @@ function ModelPicker({ model, onSelect, onClose }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
-  return (
-    <div className="hb-model-pop hb-model-cards-pop" ref={ref}>
-      <div className="hb-mc-search-row">
-        <input
-          className="hb-mc-search"
-          type="search"
-          placeholder="Filter models…"
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          autoFocus
-        />
-      </div>
-      <div className="hb-mc-scroll">
-        {Object.entries(groups).map(([grp, models]) => (
-          <div key={grp} className="hb-mc-group">
-            <div className="hb-mc-group-label">{grp}</div>
-            <div className="hb-mc-grid">
-              {models.map(m => (
-                <ModelCard
-                  key={m.key}
-                  m={m}
-                  active={model?.key === m.key}
-                  onClick={() => { onSelect(m); onClose(); }}
-                />
-              ))}
+  const picker = (
+    <>
+      <button className="hb-model-scrim" onClick={onClose} aria-label="Close model picker" />
+      <div className="hb-model-pop hb-model-cards-pop" ref={ref} role="dialog" aria-label="Choose model">
+        <div className="hb-model-sheet-head">
+          <strong>Choose model</strong>
+          <button type="button" onClick={onClose} aria-label="Close model picker">
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+        <div className="hb-mc-search-row">
+          <input
+            className="hb-mc-search"
+            type="search"
+            placeholder="Filter models…"
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+          />
+        </div>
+        <div className="hb-mc-scroll">
+          {Object.entries(groups).map(([grp, models]) => (
+            <div key={grp} className="hb-mc-group">
+              <div className="hb-mc-group-label">{grp}</div>
+              <div className="hb-mc-grid">
+                {models.map(m => (
+                  <ModelCard
+                    key={m.key}
+                    m={m}
+                    active={model?.key === m.key}
+                    onClick={() => { onSelect(m); onClose(); }}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-        {Object.keys(groups).length === 0 && (
-          <div style={{ padding: '20px', color: 'var(--text-3)', fontSize: 13, textAlign: 'center' }}>No models match</div>
-        )}
+          ))}
+          {Object.keys(groups).length === 0 && (
+            <div style={{ padding: '20px', color: 'var(--text-3)', fontSize: 13, textAlign: 'center' }}>No models match</div>
+          )}
+        </div>
+        <a className="hb-model-foot" href="/admin/models">
+          <Icon name="settings" size={13} /> Manage models
+        </a>
       </div>
-      <a className="hb-model-foot" href="/admin/models">
-        <Icon name="settings" size={13} /> Manage models
-      </a>
-    </div>
+    </>
+  );
+
+  // Keep the fixed mobile sheet outside the sticky, backdrop-filtered header.
+  // iOS Safari otherwise treats that header as the sheet's containing block.
+  return ReactDOM.createPortal(
+    picker,
+    document.querySelector('.hub-shell') || document.body
   );
 }
 
@@ -814,6 +835,10 @@ function findModel(predicate) {
 }
 
 function buildShortcuts() {
+  const multiSearchModel =
+    findModel(m => m.endpoint === 'multi-search') ||
+    findModel(m => m.key === 'multi-search');
+
   // Use admin-configured shortcuts if available
   const configured = (HUB.shortcuts || [])
     .map(s => {
@@ -830,7 +855,19 @@ function buildShortcuts() {
     })
     .filter(Boolean);
 
-  if (configured.length > 0) return configured;
+  if (configured.length > 0) {
+    if (multiSearchModel && !configured.some(s => s.model?.key === multiSearchModel.key)) {
+      configured.unshift({
+        kicker: 'Deep research',
+        icon: '⌖',
+        label: 'Multi-search',
+        desc: 'Plans several searches, gathers sources, then synthesises a cited report',
+        model: multiSearchModel,
+        searchOverride: null,
+      });
+    }
+    return configured;
+  }
 
   // Fallback: auto-derive from available models
   const freeModel =
@@ -841,6 +878,7 @@ function buildShortcuts() {
     MODELS[0]?.options[0];
 
   const researchModel =
+    multiSearchModel ||
     findModel(m => m.key === 'gemini-25-pro') ||
     findModel(m => m.key === 'claude-sonnet') ||
     findModel(m => m.key === 'deepseek-v3') ||
@@ -852,7 +890,7 @@ function buildShortcuts() {
 
   return [
     { kicker: 'Free',     label: 'Free model',    desc: freeModel     ? freeModel.label : 'Fast, no cost',          icon: '◎', model: freeModel,     searchOverride: null },
-    { kicker: 'Research', label: 'Live research', desc: researchModel ? researchModel.label + ' + web' : 'Web search enabled', icon: '⌖', model: researchModel, searchOverride: null },
+    { kicker: 'Research', label: multiSearchModel ? 'Multi-search' : 'Live research', desc: multiSearchModel ? 'Plans several searches, gathers sources, then synthesises a cited report' : (researchModel ? researchModel.label + ' + web' : 'Web search enabled'), icon: '⌖', model: researchModel, searchOverride: null },
     { kicker: 'Sonar',    label: 'Sonar search',  desc: sonarModel    ? sonarModel.label : 'Perplexity deep search', icon: '◉', model: sonarModel,    searchOverride: null },
   ].filter(s => s.model);
 }
@@ -1332,15 +1370,21 @@ function ChatApp() {
 
   const [pendingSearchOverride, setPendingSearchOverride] = React.useState(null);
 
+  const focusComposerOnWideScreen = () => {
+    if (!window.matchMedia('(max-width: 820px)').matches) {
+      setTimeout(() => composerRef.current?.focus(), 50);
+    }
+  };
+
   const selectModel = (m) => {
     if (m) setModel(m);
-    setTimeout(() => composerRef.current?.focus(), 50);
+    focusComposerOnWideScreen();
   };
 
   const selectShortcut = (m, searchOverride) => {
     if (m) setModel(m);
     if (searchOverride) setPendingSearchOverride(searchOverride);
-    setTimeout(() => composerRef.current?.focus(), 50);
+    focusComposerOnWideScreen();
   };
 
   const send = async (text, opts = {}) => {

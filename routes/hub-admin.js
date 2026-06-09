@@ -565,7 +565,8 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'linkedin_drafter',    scope: 'user', label: 'Post drafter',           note: 'Writes the initial teaser post.', fallback: 'deepseek/deepseek-v4-flash' },
     { feature: 'linkedin_scorer',     scope: 'user', label: 'Post scorer',            note: 'Evaluates and scores the draft against the rubric.', fallback: 'anthropic/claude-sonnet-4-6' },
     { feature: 'linkedin_carousel',   scope: 'user', label: 'Carousel generator',     note: 'Generates carousel slide content from research.', fallback: 'deepseek/deepseek-v4-flash' },
-    { feature: 'linkedin_refiner',    scope: 'user', label: 'Draft refiner / reviewer', note: 'Refines the teaser post and reviews carousel slides.', fallback: 'mistralai/mistral-medium-3' },
+    { feature: 'linkedin_refiner',    scope: 'user', label: 'Draft refiner',           note: 'Makes targeted improvements to the teaser post.', fallback: 'mistralai/mistral-medium-3' },
+    { feature: 'linkedin_carousel_reviewer', scope: 'user', label: 'Carousel reviewer', note: 'Reviews generated carousel JSON against the content rubric.', fallback: 'mistralai/mistral-medium-3' },
     { feature: 'linkedin_image',      scope: 'user', label: 'Image prompt writer',    note: 'Writes the prompt used for image generation.', fallback: 'deepseek/deepseek-chat' },
   ]},
   { id: 'workday', label: 'Workday', slots: [
@@ -906,7 +907,7 @@ router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
       body: JSON.stringify({
         model: getSystemModelId('prompt_improver', 'system', IMPROVE_PROMPT_FALLBACK),
         messages: [
-          { role: 'system', content: IMPROVE_META_PROMPT },
+          { role: 'system', content: getSystemPrompt('prompt_improver', 'system', PROMPTS.prompt_improver) },
           { role: 'user', content: question },
         ],
         stream: false,
@@ -959,7 +960,7 @@ async function runComboInternal(question, model, search) {
       body: JSON.stringify({
         model: getSystemModelId('admin_synthesiser', 'system', 'google/gemini-2.5-flash-lite'),
         messages: [
-          { role: 'system', content: 'Synthesise the search results below to answer the question. Be accurate and concise.' },
+          { role: 'system', content: getSystemPrompt('admin_synthesiser', 'system', PROMPTS.admin_synthesiser) },
           { role: 'user', content: `${combinedContext}\n\n---\n\n${question}` },
         ],
         stream: false,

@@ -1,0 +1,52 @@
+<style>
+  .hub-global-nav {
+    position: sticky; top: 0; z-index: 100;
+    min-height: 58px; padding: 8px max(16px, calc((100vw - 1180px) / 2));
+    display: flex; align-items: center; gap: 18px;
+    background: rgba(255,255,255,.94); border-bottom: 1px solid rgba(73,69,101,.14);
+    backdrop-filter: blur(14px); font-family: Inter, Geist, system-ui, sans-serif;
+  }
+  .hub-global-brand { color: #171526 !important; text-decoration: none !important; font-weight: 750; white-space: nowrap; }
+  .hub-global-links { display: flex; align-items: center; gap: 3px; overflow-x: auto; scrollbar-width: none; }
+  .hub-global-links::-webkit-scrollbar { display: none; }
+  .hub-global-links a {
+    color: #666275 !important; text-decoration: none !important; padding: 7px 9px;
+    border-radius: 8px; font-size: 13px; font-weight: 500; white-space: nowrap;
+  }
+  .hub-global-links a:hover, .hub-global-links a.active { color: #5653e8 !important; background: rgba(86,83,232,.09); }
+  body.hub-page.hub-global-page { flex-direction: column; }
+  @media (max-width: 700px) {
+    .hub-global-nav { align-items: flex-start; flex-direction: column; gap: 5px; padding: 9px 12px; }
+    .hub-global-links { width: 100%; }
+    .hub-global-links a { padding: 6px 8px; font-size: 12px; }
+  }
+</style>
+<header class="hub-global-nav">
+  <a class="hub-global-brand" href="/">McLellan Hub</a>
+  <nav class="hub-global-links" aria-label="Main navigation">
+    <a href="/">Home</a>
+    <a href="/c">Chat</a>
+    <a href="/crm/contacts">CRM</a>
+    <a href="/crm/tasks">Tasks</a>
+    <a href="/debrief">Debrief</a>
+    <a href="/lin">Content</a>
+    <a href="/newsletter">Intelligence</a>
+    <a href="/flights">Flights</a>
+    <a href="/token-burn">Usage</a>
+    <a href="/admin">Admin</a>
+  </nav>
+</header>
+<script>
+  (() => {
+    document.body.classList.add('hub-global-page');
+    const path = window.location.pathname;
+    const links = document.querySelectorAll('.hub-global-links a');
+    let best = null;
+    for (const link of links) {
+      const href = link.getAttribute('href');
+      const matches = href === '/' ? path === '/' : path === href || path.startsWith(href + '/');
+      if (matches && (!best || href.length > best.getAttribute('href').length)) best = link;
+    }
+    if (best) best.classList.add('active');
+  })();
+</script>

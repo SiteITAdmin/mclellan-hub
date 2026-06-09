@@ -11,6 +11,7 @@ const {
   syncCalendarMeetings,
   parseJsonArray,
   syncContactVaultFact,
+  syncContactVaultProfile,
 } = require('../lib/crm');
 const { readNote, searchNotes, writeNote } = require('../lib/obsidian-vault');
 const { uuid } = require('../lib/id');
@@ -435,9 +436,11 @@ router.post('/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req,
   if (!name) return res.status(400).send('Name required');
   const hub = db.hub();
   const id = uuid();
-  hub.prepare('INSERT INTO contacts (id, user, name, notes) VALUES (?, ?, ?, ?)').run(
-    id, req.hubUser, name, String(req.body.notes || '').trim()
+  const email = String(req.body.email || '').trim().toLowerCase() || null;
+  hub.prepare('INSERT INTO contacts (id, user, name, email, notes) VALUES (?, ?, ?, ?, ?)').run(
+    id, req.hubUser, name, email, String(req.body.notes || '').trim()
   );
+  syncContactVaultProfile(req.hubUser, id);
   res.redirect('/crm/contact/' + id);
 });
 
@@ -598,13 +601,15 @@ router.post('/crm/company/:id/contacts', requireAuth, requireSameOrigin, writeLi
     VALUES (?, ?, ?, ?)
     ON CONFLICT(contact_id, company_id) DO UPDATE SET role = excluded.role, is_primary = excluded.is_primary
   `).run(contact.id, company.id, String(req.body.role || '').trim() || null, makePrimary ? 1 : 0);
+  syncContactVaultProfile(req.hubUser, contact.id);
   res.redirect(`/crm/company/${company.id}`);
 });
 
 router.post('/crm/company/:id', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
   const name = String(req.body.name || '').trim();
   if (!name) return res.status(400).send('Company name required');
-  const result = db.hub().prepare(`
+  const result = hub.prepare(`
     UPDATE companies SET name = ?, type = ?, website = ?, notes = ?
     WHERE id = ? AND user = ?
   `).run(
@@ -613,6 +618,11 @@ router.post('/crm/company/:id', requireAuth, requireSameOrigin, writeLimiter, (r
     req.params.id, req.hubUser
   );
   if (!result.changes) return res.status(404).send('Company not found');
+  for (const contact of hub.prepare(
+    'SELECT contact_id AS id FROM contact_companies WHERE company_id = ?'
+  ).all(req.params.id)) {
+    syncContactVaultProfile(req.hubUser, contact.id);
+  }
   res.redirect(`/crm/company/${req.params.id}`);
 });
 
@@ -620,12 +630,16 @@ router.post('/crm/company/:id/delete', requireAuth, requireSameOrigin, writeLimi
   const hub = db.hub();
   const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
   if (!company) return res.status(404).send('Company not found');
+  const contactIds = hub.prepare(
+    'SELECT contact_id AS id FROM contact_companies WHERE company_id = ?'
+  ).all(company.id);
   hub.transaction(() => {
     hub.prepare('DELETE FROM contact_companies WHERE company_id = ?').run(company.id);
     hub.prepare('UPDATE meetings SET company_id = NULL WHERE company_id = ? AND user = ?').run(company.id, req.hubUser);
     hub.prepare('UPDATE crm_facts SET company_id = NULL WHERE company_id = ? AND user = ?').run(company.id, req.hubUser);
     hub.prepare('DELETE FROM companies WHERE id = ?').run(company.id);
   })();
+  for (const contact of contactIds) syncContactVaultProfile(req.hubUser, contact.id);
   res.redirect('/crm/companies');
 });
 
@@ -799,6 +813,7 @@ router.post('/api/crm/contacts/:id/projects', requireAuth, requireSameOrigin, wr
   hub.prepare(`
     INSERT OR IGNORE INTO contact_projects (contact_id, project_id, role) VALUES (?, ?, ?)
   `).run(contact.id, project.id, String(req.body.role || '').trim() || null);
+  syncContactVaultProfile(req.hubUser, contact.id);
   res.json({ ok: true });
 });
 
@@ -806,6 +821,7 @@ router.post('/api/crm/contacts/:id/projects/unlink', requireAuth, requireSameOri
   const hub = db.hub();
   hub.prepare('DELETE FROM contact_projects WHERE contact_id = ? AND project_id = ?')
     .run(req.params.id, req.body.project_id);
+  syncContactVaultProfile(req.hubUser, req.params.id);
   res.json({ ok: true });
 });
 
@@ -828,6 +844,7 @@ router.post('/api/crm/contacts/:id/companies', requireAuth, requireSameOrigin, w
       role = excluded.role,
       is_primary = excluded.is_primary
   `).run(contact.id, company.id, String(req.body.role || '').trim() || null, makePrimary ? 1 : 0);
+  syncContactVaultProfile(req.hubUser, contact.id);
   res.json({ ok: true });
 });
 
@@ -842,6 +859,7 @@ router.post('/api/crm/contacts/:id/companies/unlink', requireAuth, requireSameOr
   hub.prepare('DELETE FROM contact_companies WHERE contact_id = ? AND company_id = ?')
     .run(contact.id, req.body.company_id);
   if (linked.is_primary) promoteFirstLinkedCompany(hub, contact.id);
+  syncContactVaultProfile(req.hubUser, contact.id);
   res.json({ ok: true });
 });
 
@@ -854,6 +872,7 @@ router.post('/api/crm/contacts/:id/companies/role', requireAuth, requireSameOrig
     UPDATE contact_companies SET role = ? WHERE contact_id = ? AND company_id = ?
   `).run(role, contact.id, req.body.company_id);
   if (!result.changes) return res.status(404).json({ error: 'Company link not found' });
+  syncContactVaultProfile(req.hubUser, contact.id);
   res.json({ ok: true });
 });
 
@@ -867,6 +886,7 @@ router.post('/api/crm/contacts/:id/companies/primary', requireAuth, requireSameO
   `).get(contact.id, company.id);
   if (!linked) return res.status(404).json({ error: 'Company link not found' });
   setPrimaryCompany(hub, contact.id, company.id);
+  syncContactVaultProfile(req.hubUser, contact.id);
   res.json({ ok: true });
 });
 
@@ -895,9 +915,15 @@ router.post('/api/crm/contacts/:id/edit', requireAuth, requireSameOrigin, writeL
   const name = String(req.body.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Name required' });
   const aliases = String(req.body.aliases || '').split(',').map(a => a.trim()).filter(Boolean);
-  hub.prepare('UPDATE contacts SET name = ?, aliases = ? WHERE id = ?')
-    .run(name, JSON.stringify(aliases), contact.id);
-  res.json({ ok: true });
+  const email = String(req.body.email || '').trim().toLowerCase() || null;
+  hub.prepare('UPDATE contacts SET name = ?, email = ?, aliases = ? WHERE id = ?')
+    .run(name, email, JSON.stringify(aliases), contact.id);
+  const profileSync = syncContactVaultProfile(req.hubUser, contact.id);
+  res.json({
+    ok: true,
+    profileSynced: profileSync.synced,
+    profileWarning: profileSync.synced ? null : profileSync.reason,
+  });
 });
 
 router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {

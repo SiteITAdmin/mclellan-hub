@@ -12,8 +12,9 @@
 <link rel="stylesheet" href="/crm.css?v=20260607">
 </head>
 <body class="crm-body">
+<%- include('top-nav') %>
 <header class="crm-topbar">
-  <a class="crm-brand" href="/">McLellan Hub</a>
+  <span class="crm-brand">CRM</span>
   <nav>
     <% for (const item of nav) { %>
       <a href="<%= item.href %>" class="<%= item.href.includes(active) ? 'active' : '' %>"><%= item.label %></a>
