@@ -15,6 +15,8 @@ const { requireSameOrigin } = require('../lib/security');
 const {
   indexAll,
   buildGraph,
+  buildLinkResolver,
+  normalizeLinkKey,
   findRelated,
   getOrphans,
   searchAll,
@@ -208,7 +210,22 @@ router.post('/page/new', requireAuth, requireSameOrigin, express.urlencoded({ ex
 
 router.get('/page/:slug', requireAuth, (req, res) => {
   const page = parseWikiPage(req.params.slug);
-  if (!page) return res.status(404).render('wiki/404', { slug: req.params.slug });
+  if (!page) {
+    // Not a wiki page — try to resolve to any indexed page (people, meetings,
+    // daily notes, …) by slug, basename, title, or alias, and redirect there.
+    const allPages   = indexAll();
+    const resolver   = buildLinkResolver(allPages);
+    const targetSlug = resolver.get(normalizeLinkKey(req.params.slug));
+    const target     = targetSlug && targetSlug !== req.params.slug
+      ? allPages.find(p => p.slug === targetSlug)
+      : null;
+    if (target) {
+      return res.redirect(target.type === 'wiki'
+        ? `/page/${encodeURIComponent(target.slug)}`
+        : `/source/${target.slug.split('/').map(encodeURIComponent).join('/')}`);
+    }
+    return res.status(404).render('wiki/404', { slug: req.params.slug });
+  }
   const allPages = indexAll();
   const related  = findRelated(
     { ...page, type: 'wiki', aliases: page.aliases || [] },
@@ -433,7 +450,21 @@ router.get('/api/graph', requireAuth, (req, res) => {
   for (const [from, targets] of graph.outbound) {
     for (const to of targets) edges.push({ from, to });
   }
-  res.json({ nodes, edges });
+  // Phantom nodes for wikilinks that resolve to no indexed page
+  const slugSet  = new Set(pages.map(p => p.slug));
+  const resolver = buildLinkResolver(pages);
+  const missing  = new Map();
+  for (const p of pages) {
+    for (const link of p.wikilinks) {
+      if (slugSet.has(link) || resolver.get(link)) continue;
+      const id = `missing:${link}`;
+      if (!missing.has(id)) {
+        missing.set(id, { id, label: link, type: 'missing', typeLabel: 'Missing', tags: [], system: false });
+      }
+      edges.push({ from: p.slug, to: id });
+    }
+  }
+  res.json({ nodes: [...nodes, ...missing.values()], edges });
 });
 
 module.exports = router;
