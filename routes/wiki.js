@@ -352,8 +352,8 @@ router.post('/source/*/save', requireAuth, requireSameOrigin, express.urlencoded
   const page = allPages.find(p => p.slug === slug && p.type !== 'wiki');
   if (!page) return res.status(404).json({ error: 'Not found' });
 
-  // 1. Save raw content first (links are applied to the fresh file afterwards)
-  if (typeof req.body.content === 'string') {
+  // 1. Save raw content (writable pages only)
+  if (page.writable && typeof req.body.content === 'string') {
     const content = req.body.content;
     fs.writeFileSync(page.fullPath, content === '' || content.endsWith('\n') ? content : content + '\n', 'utf8');
   }
