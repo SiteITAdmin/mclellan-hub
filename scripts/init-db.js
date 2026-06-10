@@ -2,6 +2,7 @@ require('dotenv').config();
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const { syncDouglasVerifiedEmployment } = require('../lib/verifiedEmployment');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -142,6 +143,7 @@ function initPortfolioDb(name) {
 
     CREATE INDEX IF NOT EXISTS idx_portfolio_session ON portfolio_messages(session_id);
   `);
+  if (name === 'douglas') syncDouglasVerifiedEmployment(db);
   db.close();
 }
 

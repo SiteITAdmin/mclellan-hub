@@ -12,6 +12,7 @@ const {
   AI_ASSISTED_APP_BUILDS_PROJECTS,
   getAiAssistedBuildsText,
 } = require('../lib/aiBuilds');
+const { VERIFIED_DOUGLAS_EMPLOYMENT } = require('../lib/verifiedEmployment');
 const {
   buildPromptInjectionGuard,
   createRateLimiter,
@@ -135,36 +136,7 @@ function getDouglasProfileSummary(profile, cv) {
 }
 
 function getDouglasExperiences() {
-  return [
-    {
-      role: 'M365 Administrator',
-      company: 'Beacon Hospital',
-      start_date: 'Mar 2026',
-      end_date: null,
-      description: "Supporting the hospital's transition to Microsoft 365, with a focus on secure administration, user support, and the practical rollout of SharePoint, Teams, OneDrive and Entra ID.",
-    },
-    {
-      role: 'IT Manager',
-      company: 'Cricket Ireland',
-      start_date: 'Apr 2024',
-      end_date: 'Mar 2026',
-      description: 'Led a co-managed IT operating model with an MSP across endpoints, identity, collaboration and connectivity. Modernised Microsoft 365 tenant governance, delivered DMARC enforcement and tighter enterprise app permissions, built Power Apps and Power Automate solutions, and supported event-critical technology including live scoring and broadcast connectivity.',
-    },
-    {
-      role: 'IT Systems Administrator',
-      company: 'Cricket Ireland',
-      start_date: 'May 2023',
-      end_date: 'May 2024',
-      description: 'Supported co-managed IT operations across end-user devices, identity, file services and collaboration tools. Planned and delivered migration of priority workloads from AWS to Microsoft 365.',
-    },
-    {
-      role: 'ICT Manager / Community Development Co-ordinator',
-      company: 'Liffey Partnership',
-      start_date: 'Mar 2020',
-      end_date: 'Apr 2023',
-      description: 'Led ICT operations across five Dublin sites. Drove the organisation-wide move to SharePoint and OneDrive, retiring on-premises Windows Server 2012. Implemented a VoIP/softphone solution and enabled secure remote working at the onset of COVID-19.',
-    },
-  ];
+  return VERIFIED_DOUGLAS_EMPLOYMENT.map(item => ({ ...item }));
 }
 
 function getPortfolioExperiences(pdb, user) {
@@ -841,6 +813,8 @@ You are ${profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLel
 
 Tone: ${honestyDescriptor} (honesty level ${honestyLevel}/10).
 - Only reference information in the context below — never fabricate.
+- Company names, role titles, and employment dates in the Experience section are immutable verified facts. Never alter, infer, merge, extend, or add to them.
+- Projects, clients, vendors, technologies, publications, and job descriptions are not employers or employment roles.
 - If the fit genuinely isn't there, say so; it's okay to recommend someone not hire you.
 - Don't oversell. Don't hedge. Be specific.
 - This is a professional career chat for recruiters and hiring managers. Do not discuss personal matters (family members, health, personal life). If asked, say: "This chat is focused on my professional career — I'm not the right source for personal topics."${customInstructions}
@@ -917,7 +891,9 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
 
   const messages = [{
     role: 'system',
-    content: `${JD_ANALYSER_GUARD}\n\n${getSystemPrompt('jd_analyser', req.portfolioUser, PROMPTS.jd_analyser)}`,
+    content: `${JD_ANALYSER_GUARD}\n\n${getSystemPrompt('jd_analyser', req.portfolioUser, PROMPTS.jd_analyser)}
+
+Company names, role titles, and employment dates in the CV Experience section are immutable verified facts. Never alter them or treat a project, client, vendor, technology, publication, or job description as employment.`,
   }, {
     role: 'user',
     content: `CV Context:

@@ -412,6 +412,9 @@ router.post('/admin/cv/:section/delete', requireAdmin, (req, res) => {
 
 // ── Experiences ───────────────────────────────────────────────────────────────
 router.post('/admin/experiences', requireAdmin, (req, res) => {
+  if (req.portfolioUser === 'douglas') {
+    return res.status(409).send('Douglas employment records are code-reviewed and cannot be added in the admin.');
+  }
   const { company, role, start_date, end_date, description, is_cv_context, display_order } = req.body;
   const pdb = db.portfolio(req.portfolioUser);
   pdb.prepare(
@@ -423,6 +426,14 @@ router.post('/admin/experiences', requireAdmin, (req, res) => {
 router.post('/admin/experiences/:id', requireAdmin, (req, res) => {
   const { company, role, start_date, end_date, description, is_cv_context, display_order } = req.body;
   const pdb = db.portfolio(req.portfolioUser);
+  if (req.portfolioUser === 'douglas') {
+    const experience = pdb.prepare('SELECT id FROM experiences WHERE id = ?').get(req.params.id);
+    if (!experience) return res.status(404).send('Experience not found');
+    pdb.prepare(
+      'UPDATE experiences SET description=?, is_cv_context=?, display_order=? WHERE id=?'
+    ).run(description || null, is_cv_context ? 1 : 0, parseInt(display_order, 10) || 0, req.params.id);
+    return res.redirect('/admin#experience');
+  }
   pdb.prepare(
     'UPDATE experiences SET company=?, role=?, start_date=?, end_date=?, description=?, is_cv_context=?, display_order=? WHERE id=?'
   ).run(company, role, start_date, end_date, description, is_cv_context ? 1 : 0, display_order || 0, req.params.id);
@@ -430,6 +441,9 @@ router.post('/admin/experiences/:id', requireAdmin, (req, res) => {
 });
 
 router.post('/admin/experiences/:id/delete', requireAdmin, (req, res) => {
+  if (req.portfolioUser === 'douglas') {
+    return res.status(409).send('Douglas verified employment records cannot be deleted.');
+  }
   db.portfolio(req.portfolioUser).prepare('DELETE FROM experiences WHERE id = ?').run(req.params.id);
   res.redirect('/admin');
 });
