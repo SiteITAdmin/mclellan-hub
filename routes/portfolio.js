@@ -137,34 +137,42 @@ function getDouglasProfileSummary(profile, cv) {
 function getDouglasExperiences() {
   return [
     {
-      role: 'Microsoft 365 Systems Administrator',
-      company: 'Beacon Hospital Private Clinic',
-      start_date: 'Mar 2025',
+      role: 'M365 Administrator',
+      company: 'Beacon Hospital',
+      start_date: 'Mar 2026',
       end_date: null,
-      description: "Administering Microsoft 365 for Beacon Hospital during the hospital's M365 migration: SharePoint, Teams, OneDrive, and Entra ID in a healthcare environment where data handling and reliability are non-negotiable. Enhancing helpdesk staff capabilities through Entra role-based administration, enabling the support team to self-serve identity tasks that previously required escalation.",
+      description: "Supporting the hospital's transition to Microsoft 365, with a focus on secure administration, user support, and the practical rollout of SharePoint, Teams, OneDrive and Entra ID.",
     },
     {
       role: 'IT Manager',
       company: 'Cricket Ireland',
-      start_date: 'Jan 2021',
-      end_date: 'Feb 2025',
-      description: "Sole IT administrator for a national sporting organisation for four years - approximately 50 staff, 40-50 players, and 25 match officials across the Entra ID tenant. Inherited a live M365 environment with no MFA, no DMARC, no Conditional Access, and no Intune, and brought it to a secure, documented, handover-ready state. Responsible for the full M365 tenant, business systems, match-day technology at 6-8 international fixtures per season (including temporary venues such as the 7,500-capacity stadium at Malahide Castle), and all vendor relationships - without a team.",
+      start_date: 'Apr 2024',
+      end_date: 'Mar 2026',
+      description: 'Led a co-managed IT operating model with an MSP across endpoints, identity, collaboration and connectivity. Modernised Microsoft 365 tenant governance, delivered DMARC enforcement and tighter enterprise app permissions, built Power Apps and Power Automate solutions, and supported event-critical technology including live scoring and broadcast connectivity.',
     },
     {
       role: 'IT Systems Administrator',
       company: 'Cricket Ireland',
-      start_date: 'Sep 2019',
-      end_date: 'Dec 2020',
-      description: "Co-managed IT operations across a transition period: devices, identity, file services, collaboration tools, and user support. Planned and delivered migration of priority workloads from AWS-hosted operational storage into Microsoft 365.",
+      start_date: 'May 2023',
+      end_date: 'May 2024',
+      description: 'Supported co-managed IT operations across end-user devices, identity, file services and collaboration tools. Planned and delivered migration of priority workloads from AWS to Microsoft 365.',
     },
     {
-      role: 'ICT Manager',
-      company: 'Liffey College of Further Education',
-      start_date: '2015',
-      end_date: '2019',
-      description: "Led ICT across five Dublin community sites: infrastructure, user support, vendor management, and business system delivery. Migrated from Windows Server 2012 file services to SharePoint and OneDrive, implemented VoIP during COVID-19, and supported system change across HR, finance, telephony, and collaboration tools.",
+      role: 'ICT Manager / Community Development Co-ordinator',
+      company: 'Liffey Partnership',
+      start_date: 'Mar 2020',
+      end_date: 'Apr 2023',
+      description: 'Led ICT operations across five Dublin sites. Drove the organisation-wide move to SharePoint and OneDrive, retiring on-premises Windows Server 2012. Implemented a VoIP/softphone solution and enabled secure remote working at the onset of COVID-19.',
     },
   ];
+}
+
+function getPortfolioExperiences(pdb, user) {
+  const rows = pdb.prepare(
+    'SELECT role, company, start_date, end_date, description FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC'
+  ).all();
+  const experiences = user === 'douglas' && !rows.length ? getDouglasExperiences() : rows;
+  return experiences.filter(exp => shouldShowCvRole(user, exp));
 }
 
 function getCoreStrengths(user, skills, candidates) {
@@ -245,16 +253,6 @@ function getExperienceBullets(user, exp) {
     ];
   }
   return [cleanCvText(exp.description)].filter(Boolean);
-}
-
-// Slugs/title patterns that must never appear in portfolio-facing context (personal/family)
-const PERSONAL_PAGE_PATTERNS = ['alister', 'dementia', 'wicklow', 'support-plan', 'risk-register', 'care-plan', 'family-care'];
-
-function filterPortfolioPages(pages) {
-  return (pages || []).filter(p => {
-    const check = `${String(p.slug || p.id || '')} ${String(p.title || '')}`.toLowerCase();
-    return !PERSONAL_PAGE_PATTERNS.some(pattern => check.includes(pattern));
-  });
 }
 
 function shouldShowCvRole(user, exp) {
@@ -607,9 +605,7 @@ router.get('/', (req, res) => {
   if (req.portfolioUser === 'douglas' && !profile.phone_public) {
     profile.phone_public = '+353 (0) 896003148';
   }
-  const experiences = req.portfolioUser === 'douglas'
-    ? getDouglasExperiences()
-    : pdb.prepare('SELECT * FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC').all();
+  const experiences = getPortfolioExperiences(pdb, req.portfolioUser);
   const skills = pdb.prepare(
     'SELECT * FROM skills ORDER BY level, display_order'
   ).all();
@@ -703,9 +699,7 @@ router.get('/executive-summary', (req, res) => {
   if (req.portfolioUser === 'douglas' && !profile.phone_public) {
     profile.phone_public = '+353 (0) 896003148';
   }
-  const experiences = req.portfolioUser === 'douglas'
-    ? getDouglasExperiences()
-    : pdb.prepare('SELECT role, company, start_date, end_date, description FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC').all();
+  const experiences = getPortfolioExperiences(pdb, req.portfolioUser);
   const skills = pdb.prepare('SELECT * FROM skills ORDER BY level, display_order').all();
   const candidates = pdb.prepare(`
     SELECT * FROM skill_candidates
@@ -751,27 +745,11 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
   if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
   if (String(message).length > 6000) return res.status(400).json({ error: 'Message too long' });
 
-  // Fire Synthadoc query immediately — runs in parallel with sync DB work below
-  const synthadocUrl = process.env.SYNTHADOC_URL;
-  const synthadocPromise = synthadocUrl
-    ? Promise.race([
-        fetch(`${synthadocUrl}/context/build`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ goal: message.trim(), token_budget: 2000 }),
-        }).then(r => r.ok ? r.json() : null).catch(() => null),
-        new Promise(resolve => setTimeout(() => resolve(null), 800)),
-      ])
-    : Promise.resolve(null);
-
   const pdb = db.portfolio(req.portfolioUser);
-  const hubDb = db.hub();
 
   const profile = pdb.prepare('SELECT * FROM profile WHERE id = 1').get() || {};
   const cvRows = pdb.prepare('SELECT section, content FROM cv_context').all();
-  const expRows = pdb.prepare(
-    'SELECT role, company, start_date, end_date, description FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC'
-  ).all();
+  const expRows = getPortfolioExperiences(pdb, req.portfolioUser);
   const skillRows = pdb.prepare(
     'SELECT name, level, category, self_rating, evidence, honest_notes, years_experience, last_used FROM skills ORDER BY level, display_order'
   ).all();
@@ -784,13 +762,6 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
      WHERE user = ? AND status = 'chat_only'
   ORDER BY occurrences DESC, last_seen_at DESC
   `).all(req.portfolioUser);
-  const hubCvMessages = hubDb.prepare(`
-    SELECT m.content FROM messages m
-    JOIN projects p ON m.project_id = p.id
-    WHERE p.user = ? AND p.is_cv_context = 1 AND m.role = 'assistant'
-    ORDER BY m.ts DESC LIMIT 20
-  `).all(req.portfolioUser);
-
   const profileBlock = profile.full_name ? `## Profile
 - Name: ${profile.full_name || ''}
 - Email: ${profile.email || '(not shared unless asked)'}
@@ -817,14 +788,11 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
 - Handling ambiguity: ${profile.ambiguity_handling || ''}
 - Handling failure: ${profile.failure_handling || ''}` : '';
 
-  const expFallback = (req.portfolioUser === 'douglas' && !expRows.length)
-    ? getDouglasExperiences()
-    : expRows;
   const cvContext = [
     profileBlock,
     cvRows.length ? '## CV copy\n' + cvRows.map(r => `**${r.section}:** ${r.content}`).join('\n') : '',
     getAiBuildsCvBlock(cvRows, req.portfolioUser),
-    expFallback.length ? '## Experience\n' + expFallback.map(e => `- **${e.role}**, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n') : '',
+    expRows.length ? '## Experience\n' + expRows.map(e => `- **${e.role}**, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n') : '',
     skillRows.length ? '## Skills\n' + skillRows.map(s => {
       const bits = [`${s.name} (${s.level}`];
       if (s.self_rating) bits.push(`rated ${s.self_rating}/5`);
@@ -841,7 +809,6 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
     chatOnlyCandidates.length ? '## Emerging topics from CV context\n' + chatOnlyCandidates.map(c =>
       `- ${c.term}${c.evidence ? ` — evidence: ${String(c.evidence).split('\n')[0]}` : ''}`
     ).join('\n') : '',
-    hubCvMessages.length ? '## Additional notes\n' + hubCvMessages.map(m => m.content).join('\n\n') : '',
   ].filter(Boolean).join('\n\n');
 
   const douglasHonestNotes = req.portfolioUser === 'douglas' ? `\n## Honest notes (always use these when relevant)
@@ -849,11 +816,6 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
 - Proof available: four-year sole-admin tenure at Cricket Ireland (checkable), GitHub repositories for three shipped tools, Beacon Hospital current role.
 - If a recruiter asks about certifications, acknowledge the gap honestly and redirect to the evidence above.
 - The candidate is direct about this and does not want it obscured.` : '';
-
-  const sdData = await synthadocPromise;
-  const chatSynthadocContext = sdData
-    ? filterPortfolioPages(sdData.pages).map(p => p.excerpt).filter(Boolean).join('\n\n')
-    : '';
 
   const honestyLevel = profile.honesty_level || 7;
   const customInstructions = aiInstructions.length
@@ -884,7 +846,7 @@ Tone: ${honestyDescriptor} (honesty level ${honestyLevel}/10).
 - This is a professional career chat for recruiters and hiring managers. Do not discuss personal matters (family members, health, personal life). If asked, say: "This chat is focused on my professional career — I'm not the right source for personal topics."${customInstructions}
 
 Your context:
-${wrapUntrustedBlock('candidate_context', (cvContext || 'No CV context loaded yet.') + douglasHonestNotes)}${chatSynthadocContext ? `\n\nAdditional relevant context from knowledge base:\n${wrapUntrustedBlock('wiki_context', chatSynthadocContext)}` : ''}`;
+${wrapUntrustedBlock('candidate_context', (cvContext || 'No CV context loaded yet.') + douglasHonestNotes)}`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -931,19 +893,6 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
   if (!jd?.trim()) return res.status(400).json({ error: 'No JD provided' });
   if (String(jd).length > 20000) return res.status(400).json({ error: 'Job description too long' });
 
-  // Fire Synthadoc immediately — runs in parallel with sync DB work below
-  const jdSynthadocUrl = process.env.SYNTHADOC_URL;
-  const jdSynthadocPromise = jdSynthadocUrl
-    ? Promise.race([
-        fetch(`${jdSynthadocUrl}/context/build`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ goal: jd.trim(), token_budget: 3000 }),
-        }).then(r => r.ok ? r.json() : null).catch(() => null),
-        new Promise(resolve => setTimeout(() => resolve(null), 1200)),
-      ])
-    : Promise.resolve(null);
-
   const pdb = db.portfolio(req.portfolioUser);
   const profile = pdb.prepare('SELECT * FROM profile WHERE id = 1').get() || {};
   const cleanJd = jd.trim();
@@ -952,26 +901,16 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
     'INSERT INTO jd_submissions (id, job_description) VALUES (?, ?)'
   ).run(submissionId, cleanJd);
   const cvRows = pdb.prepare('SELECT section, content FROM cv_context').all();
-  const expRows = pdb.prepare(
-    'SELECT role, company, start_date, end_date, description FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC'
-  ).all();
+  const expRows = getPortfolioExperiences(pdb, req.portfolioUser);
   const skillRows = pdb.prepare(
     'SELECT name, level, category FROM skills ORDER BY level, display_order'
   ).all();
-  const jdExpRows = (req.portfolioUser === 'douglas' && !expRows.length)
-    ? getDouglasExperiences()
-    : expRows;
   const cvContext = [
     cvRows.map(r => `**${r.section}:** ${r.content}`).join('\n'),
     getAiBuildsCvBlock(cvRows, req.portfolioUser),
-    'Experience:\n' + jdExpRows.map(e => `- ${e.role}, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n'),
+    'Experience:\n' + expRows.map(e => `- ${e.role}, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n'),
     'Skills:\n' + skillRows.map(s => `- ${s.name} (${s.level})`).join('\n'),
   ].filter(Boolean).join('\n\n');
-
-  const sdJdData = await jdSynthadocPromise;
-  const synthadocContext = sdJdData
-    ? filterPortfolioPages(sdJdData.pages).map(p => p.excerpt).filter(Boolean).join('\n\n')
-    : '';
 
   const jdFullName = profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
   const jdFirstName = jdFullName.split(' ')[0];
@@ -983,7 +922,7 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
     role: 'user',
     content: `CV Context:
 ${wrapUntrustedBlock('candidate_context', cvContext || 'No CV data available.')}
-${synthadocContext ? `\nSupporting evidence from candidate knowledge base:\n${wrapUntrustedBlock('wiki_context', synthadocContext)}\n` : ''}
+
 Job Description:
 ${wrapUntrustedBlock('job_description', cleanJd)}
 
