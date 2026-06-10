@@ -21,6 +21,7 @@ const {
   addManualLink,
   removeManualLink,
   removeLinkCompletely,
+  syncPeopleNotes,
   syncProjectNotes,
   findRelated,
   getOrphans,
@@ -314,6 +315,18 @@ function ensureProjectNotes() {
   }
 }
 
+// Keep vault People notes aligned with CRM contacts (idempotent — only creates missing files)
+function ensurePeopleNotes() {
+  try {
+    const contacts = db.hub()
+      .prepare('SELECT id, user, name FROM contacts WHERE user = ?')
+      .all(WIKI_USER);
+    return syncPeopleNotes(contacts);
+  } catch (_) {
+    return [];
+  }
+}
+
 function linkedSetFor(slug, graph) {
   return new Set([
     ...(graph.outbound.get(slug) || []),
@@ -324,6 +337,7 @@ function linkedSetFor(slug, graph) {
 router.get('/source/*/edit', requireAuth, (req, res) => {
   const slug     = req.params[0];
   ensureProjectNotes();
+  ensurePeopleNotes();
   const allPages = indexAll();
   const page     = allPages.find(p => p.slug === slug && p.type !== 'wiki');
   if (!page) return res.status(404).render('wiki/404', { slug });
@@ -543,6 +557,7 @@ router.get('/api/search', requireAuth, async (req, res) => {
 // ── API: Graph data ───────────────────────────────────────────────────────────
 router.get('/api/graph', requireAuth, (req, res) => {
   ensureProjectNotes();
+  ensurePeopleNotes();
   const pages = indexAll();
   const graph = buildGraph(pages);
   const nodes = pages.map(p => ({
