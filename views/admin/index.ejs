@@ -137,6 +137,9 @@
 <!-- ══════ EXPERIENCE ══════ -->
 <section class="admin-section tab-panel" id="experience">
   <h2>Experience</h2>
+  <% if (user === 'douglas') { %>
+    <p>Company, role title, and employment dates are verified reference facts and are locked in code. Descriptions, CV visibility, and display order remain editable.</p>
+  <% } %>
   <table class="admin-table">
     <thead><tr><th>Role</th><th>Company</th><th>Dates</th><th>CV</th><th></th></tr></thead>
     <tbody>
@@ -150,12 +153,12 @@
           <summary>Edit</summary>
           <form method="POST" action="/admin/experiences/<%= e.id %>">
             <div class="two-col">
-              <div class="field"><label>Company</label><input name="company" value="<%= e.company || '' %>" required></div>
-              <div class="field"><label>Role</label><input name="role" value="<%= e.role || '' %>" required></div>
+              <div class="field"><label>Company</label><input name="company" value="<%= e.company || '' %>" required <%= user === 'douglas' ? 'readonly' : '' %>></div>
+              <div class="field"><label>Role</label><input name="role" value="<%= e.role || '' %>" required <%= user === 'douglas' ? 'readonly' : '' %>></div>
             </div>
             <div class="three-col">
-              <div class="field"><label>Start date</label><input name="start_date" value="<%= e.start_date || '' %>"></div>
-              <div class="field"><label>End date</label><input name="end_date" value="<%= e.end_date || '' %>"></div>
+              <div class="field"><label>Start date</label><input name="start_date" value="<%= e.start_date || '' %>" <%= user === 'douglas' ? 'readonly' : '' %>></div>
+              <div class="field"><label>End date</label><input name="end_date" value="<%= e.end_date || '' %>" <%= user === 'douglas' ? 'readonly' : '' %>></div>
               <div class="field"><label>Display order</label><input name="display_order" type="number" value="<%= e.display_order || 0 %>"></div>
             </div>
             <div class="field"><label>Description</label><textarea name="description" rows="5"><%= e.description || '' %></textarea></div>
@@ -165,27 +168,31 @@
             <button type="submit" class="save-btn">Save experience</button>
           </form>
         </details>
-        <form method="POST" action="/admin/experiences/<%= e.id %>/delete" style="display:inline">
-          <button type="submit" onclick="return confirm('Delete?')">Delete</button>
-        </form>
+        <% if (user !== 'douglas') { %>
+          <form method="POST" action="/admin/experiences/<%= e.id %>/delete" style="display:inline">
+            <button type="submit" onclick="return confirm('Delete?')">Delete</button>
+          </form>
+        <% } %>
       </td>
     </tr>
     <% } %>
     </tbody>
   </table>
-  <details class="add-form">
-    <summary>Add experience</summary>
-    <form method="POST" action="/admin/experiences">
-      <input name="company" placeholder="Company" required>
-      <input name="role" placeholder="Role" required>
-      <input name="start_date" placeholder="Start (e.g. Jan 2020)">
-      <input name="end_date" placeholder="End (blank = Present)">
-      <textarea name="description" placeholder="Description" rows="4"></textarea>
-      <label><input type="checkbox" name="is_cv_context" value="1" checked> Include in CV context</label>
-      <input name="display_order" type="number" placeholder="Order" value="0">
-      <button type="submit">Add</button>
-    </form>
-  </details>
+  <% if (user !== 'douglas') { %>
+    <details class="add-form">
+      <summary>Add experience</summary>
+      <form method="POST" action="/admin/experiences">
+        <input name="company" placeholder="Company" required>
+        <input name="role" placeholder="Role" required>
+        <input name="start_date" placeholder="Start (e.g. Jan 2020)">
+        <input name="end_date" placeholder="End (blank = Present)">
+        <textarea name="description" placeholder="Description" rows="4"></textarea>
+        <label><input type="checkbox" name="is_cv_context" value="1" checked> Include in CV context</label>
+        <input name="display_order" type="number" placeholder="Order" value="0">
+        <button type="submit">Add</button>
+      </form>
+    </details>
+  <% } %>
 </section>
 
 <!-- ══════ SKILLS ══════ -->

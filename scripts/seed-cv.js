@@ -5,6 +5,10 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const { uuid } = require('../lib/id');
 const { getAiAssistedBuildsText } = require('../lib/aiBuilds');
+const {
+  VERIFIED_DOUGLAS_EMPLOYMENT,
+  syncDouglasVerifiedEmployment,
+} = require('../lib/verifiedEmployment');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 
@@ -100,88 +104,7 @@ const CV = {
       linkedin_url: 'https://www.linkedin.com/in/douglasmclellan',
       ai_assisted_app_builds: getAiAssistedBuildsText(),
     },
-    experiences: [
-      {
-        company: 'Beacon Hospital',
-        role: 'M365 Administrator',
-        start_date: 'Mar 2026',
-        end_date: null,
-        description: 'Supporting the hospital\'s transition to Microsoft 365, with a focus on secure administration, user support, and the practical rollout of SharePoint, Teams, OneDrive and Entra ID.',
-        order: 10,
-      },
-      {
-        company: 'Cricket Ireland',
-        role: 'IT Manager',
-        start_date: 'Apr 2024',
-        end_date: 'Mar 2026',
-        description: 'Led a co-managed IT operating model with an MSP across endpoints, identity, collaboration and connectivity. Modernised Microsoft 365 tenant governance, delivered DMARC enforcement and tighter enterprise app permissions, built Power Apps and Power Automate solutions, and supported event-critical technology including live scoring and broadcast connectivity.',
-        order: 20,
-      },
-      {
-        company: 'Cricket Ireland',
-        role: 'IT Systems Administrator',
-        start_date: 'May 2023',
-        end_date: 'May 2024',
-        description: 'Supported co-managed IT operations across end-user devices, identity, file services and collaboration tools. Planned and delivered migration of priority workloads from AWS to Microsoft 365.',
-        order: 30,
-      },
-      {
-        company: 'Liffey Partnership',
-        role: 'ICT Manager / Community Development Co-ordinator',
-        start_date: 'Mar 2020',
-        end_date: 'Apr 2023',
-        description: 'Led ICT operations across five Dublin sites. Drove the org-wide move to SharePoint and OneDrive, retiring on-prem Windows Server 2012. Implemented a VoIP/softphone solution and enabled secure remote working at the onset of COVID-19.',
-        order: 40,
-      },
-      {
-        company: 'Liffey Partnership',
-        role: 'Community Development Co-ordinator',
-        start_date: 'Mar 2017',
-        end_date: 'Mar 2020',
-        description: 'Led a community development team delivering multi-stream programmes spanning social inclusion, health promotion and restorative practice.',
-        order: 50,
-      },
-      {
-        company: 'Inclusion Scotland',
-        role: 'Project Officer — Routes to Inclusion',
-        start_date: 'Oct 2015',
-        end_date: 'Oct 2016',
-        description: 'Researched the impact of health and social care integration on disabled people, and evaluated the accessibility implications of new technologies (Scottish Government-funded).',
-        order: 60,
-      },
-      {
-        company: 'Humanist Society Scotland',
-        role: 'Senior Manager',
-        start_date: '2013',
-        end_date: '2015',
-        description: 'Brought structure and operational maturity to a growing organisation — replacing Excel-based membership with CiviCRM and implementing Google Workspace for a distributed team.',
-        order: 70,
-      },
-      {
-        company: 'ICAS',
-        role: 'Head / Trust Secretary — ICAS Foundation',
-        start_date: 'Aug 2012',
-        end_date: 'Dec 2013',
-        description: 'Established the ICAS Foundation from inception, building partnerships with Scottish universities, schools and professional bodies to support progression to higher education.',
-        order: 80,
-      },
-      {
-        company: 'Age Scotland',
-        role: 'Community Development Officer',
-        start_date: 'Nov 2002',
-        end_date: 'Aug 2012',
-        description: 'Supported service development across local member groups in East Central Scotland. Contributed to an organisation-wide Raiser\'s Edge CRM implementation.',
-        order: 90,
-      },
-      {
-        company: 'Bank of Scotland',
-        role: 'Corporate Banking Analyst',
-        start_date: 'Feb 1999',
-        end_date: 'Oct 2003',
-        description: 'Business Continuity team: assessing staffing and ICT requirements for mission-critical operations during disruptions, and supporting operational testing of reserve locations.',
-        order: 100,
-      },
-    ],
+    experiences: VERIFIED_DOUGLAS_EMPLOYMENT,
     skills: [
       { name: 'Microsoft 365 Administration', level: 'strong', order: 10 },
       { name: 'Identity & Access (Entra ID)', level: 'strong', order: 20 },
@@ -219,13 +142,16 @@ function seed(userKey) {
     upsertCv.run(uuid(), section, String(content));
   }
 
-  // Replace experiences
-  db.prepare('DELETE FROM experiences').run();
-  const insExp = db.prepare(
-    'INSERT INTO experiences (id, company, role, start_date, end_date, description, is_cv_context, display_order) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'
-  );
-  for (const e of data.experiences) {
-    insExp.run(uuid(), e.company, e.role, e.start_date, e.end_date, e.description, e.order);
+  if (userKey === 'douglas') {
+    syncDouglasVerifiedEmployment(db);
+  } else {
+    db.prepare('DELETE FROM experiences').run();
+    const insExp = db.prepare(
+      'INSERT INTO experiences (id, company, role, start_date, end_date, description, is_cv_context, display_order) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'
+    );
+    for (const e of data.experiences) {
+      insExp.run(uuid(), e.company, e.role, e.start_date, e.end_date, e.description, e.order);
+    }
   }
 
   // Replace skills
