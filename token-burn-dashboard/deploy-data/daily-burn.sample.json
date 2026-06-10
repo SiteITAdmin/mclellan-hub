@@ -831,5 +831,39 @@
     "confidence": "measured",
     "driver": "Hub Development",
     "evidence": "Codex session token counters; Claude Code message usage"
+  },
+  {
+    "date": "2026-06-09",
+    "codex_tokens": 17749130,
+    "claude_code_tokens": 20727468,
+    "claude_code_calls": 226,
+    "api_tokens": 26303,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "Hub Development",
+    "evidence": "Codex session token counters; Claude Code message usage; Synthadoc audit logs"
+  },
+  {
+    "date": "2026-06-10",
+    "codex_tokens": 0,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
+    "api_tokens": 1970,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "hub ingestion",
+    "evidence": "Synthadoc audit logs"
   }
 ]
