@@ -396,9 +396,9 @@ async function aerodataboxLookup(flightNumber, flightDate, direction) {
 
   return {
     scheduled_dep: localHHMM(f.departure?.scheduledTime),
-    actual_dep:    localHHMM(f.departure?.actualTime || f.departure?.runway?.actualTime),
+    actual_dep:    localHHMM(f.departure?.revisedTime || f.departure?.runwayTime),
     scheduled_arr: localHHMM(f.arrival?.scheduledTime),
-    actual_arr:    localHHMM(f.arrival?.actualTime || f.arrival?.runway?.actualTime),
+    actual_arr:    localHHMM(f.arrival?.revisedTime || f.arrival?.runwayTime),
     status,
     airline: f.airline?.name || '',
     dep_iata: f.departure?.airport?.iata || fromIata || '',
