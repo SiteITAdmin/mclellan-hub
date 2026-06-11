@@ -1483,4 +1483,23 @@ router.post('/admin/rss-feeds/fetch-all', requireHubAdmin, async (req, res) => {
   }
 });
 
+// ── Mycelium connectivity ─────────────────────────────────────────────────────
+
+router.get('/admin/connectivity', requireHubAdmin, (req, res) => {
+  const { buildConnectivityReport } = require('../lib/mycelium');
+  const hub = db.hub();
+  const items = buildConnectivityReport(req.hubUser, hub);
+  res.render('hub-admin/connectivity', { user: req.hubUser, items });
+});
+
+router.post('/admin/mycelium/run', requireHubAdmin, async (req, res) => {
+  const { runMycelium } = require('../lib/mycelium');
+  try {
+    const result = await runMycelium(req.hubUser);
+    res.json({ ok: true, report: result.report, results: result.results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

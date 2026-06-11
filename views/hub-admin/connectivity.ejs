@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connectivity — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+.page-header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid var(--border); }
+.page-header h1 { font-size:16px; font-weight:600; margin:0; }
+.page-header nav { display:flex; gap:16px; align-items:center; font-size:13px; }
+.page-header nav a { color:var(--text-dim); text-decoration:none; }
+.page-header nav a:hover { color:var(--text); }
+.wrap { padding:24px; max-width:760px; }
+.section-head { font-size:13px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin:24px 0 10px; }
+.item { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-radius:8px; margin-bottom:8px; background:var(--surface-2, rgba(255,255,255,0.03)); border:1px solid var(--border); }
+.item.warning { border-left:3px solid #e06c6c; }
+.item.info    { border-left:3px solid #7c6af5; }
+.item-count { font-size:22px; font-weight:700; min-width:40px; color:var(--text); line-height:1; }
+.item.warning .item-count { color:#e06c6c; }
+.item.info    .item-count { color:#7c6af5; }
+.item-body { flex:1; }
+.item-label { font-size:13px; font-weight:600; color:var(--text); }
+.item-examples { font-size:12px; color:var(--text-dim); margin-top:4px; }
+.run-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:var(--accent, #7c6af5); color:#fff; border:none; border-radius:6px; font-size:13px; cursor:pointer; }
+.run-btn:disabled { opacity:.5; cursor:default; }
+.run-log { margin-top:16px; padding:14px; background:var(--surface-2); border-radius:8px; border:1px solid var(--border); font-size:12px; font-family:monospace; white-space:pre-wrap; display:none; }
+.empty { padding:32px 0; text-align:center; color:var(--text-dim); font-size:14px; }
+</style>
+</head>
+<body>
+
+<%- include('partials/admin-header', { title: `Connectivity — ${user}` }) %>
+
+<div class="wrap">
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px;">
+    Orphaned nodes and underconnected data across the hub. Mycelium runs at 00:00, 06:00, 12:00, 18:00 (Dublin time) to grow paths between them automatically.
+  </p>
+
+  <button class="run-btn" id="run-btn" onclick="runMycelium()">Run mycelium now</button>
+  <pre class="run-log" id="run-log"></pre>
+
+  <div class="section-head">Current orphans</div>
+
+  <% if (items.length === 0) { %>
+    <div class="empty">All nodes are connected — nothing orphaned right now.</div>
+  <% } else { %>
+    <% items.forEach(item => { %>
+      <div class="item <%= item.type %>">
+        <div class="item-count"><%= item.count %></div>
+        <div class="item-body">
+          <div class="item-label"><%= item.label %></div>
+          <% if (item.examples && item.examples.length) { %>
+            <div class="item-examples"><%= item.examples.join(', ') %><%= item.count > item.examples.length ? ` + ${item.count - item.examples.length} more` : '' %></div>
+          <% } %>
+        </div>
+      </div>
+    <% }) %>
+  <% } %>
+</div>
+
+<script>
+async function runMycelium() {
+  const btn = document.getElementById('run-btn');
+  const log = document.getElementById('run-log');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  log.style.display = 'none';
+  try {
+    const r = await fetch('/admin/mycelium/run', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const data = await r.json();
+    if (data.error) { log.textContent = 'Error: ' + data.error; }
+    else if (data.report && data.report.length) { log.textContent = data.report.join('\n'); }
+    else { log.textContent = 'No new connections needed.'; }
+    log.style.display = 'block';
+    setTimeout(() => location.reload(), 1500);
+  } catch (err) {
+    log.textContent = 'Request failed: ' + err.message;
+    log.style.display = 'block';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Run mycelium now';
+}
+</script>
+</body>
+</html>
