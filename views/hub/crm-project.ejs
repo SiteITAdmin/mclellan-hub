@@ -140,6 +140,7 @@ async function taskAction(id, action) {
           <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
             <span style="font-size:11px;color:var(--crm-muted);"><%= (doc.size_bytes/1024).toFixed(0) %> KB</span>
             <button class="btn btn-sm btn-ghost" onclick="docToWiki('<%= doc.id %>',this)" title="Save to wiki">→ wiki</button>
+            <button class="btn btn-sm btn-ghost" onclick="docExtractTasks('<%= doc.id %>',this)" title="Extract tasks into Google Tasks">→ tasks</button>
             <button class="btn btn-sm btn-ghost" onclick="docDelete('<%= doc.id %>',this)">Remove</button>
           </div>
         </div>
@@ -393,6 +394,23 @@ document.getElementById('project-task-form').addEventListener('submit', async e 
         btn.outerHTML = `<a href="https://wiki.mclellan.scot/page/${d.slug}" target="_blank" class="btn btn-sm" style="font-size:11px;">wiki ↗</a>`;
       } else {
         btn.textContent = '⚠ ' + (d.error || 'Failed');
+        btn.disabled = false;
+      }
+    } catch (err) { btn.textContent = '⚠ error'; btn.disabled = false; }
+  };
+
+  window.docExtractTasks = async function(id, btn) {
+    btn.textContent = '…';
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/documents/' + id + '/extract-tasks', { method: 'POST' });
+      const d = await r.json();
+      if (d.ok) {
+        btn.textContent = d.created > 0 ? `✓ ${d.created} tasks` : 'no tasks';
+        btn.title = d.created + ' created, ' + d.skipped + ' already existed';
+      } else {
+        btn.textContent = '⚠ error';
+        btn.title = d.error || 'Failed';
         btn.disabled = false;
       }
     } catch (err) { btn.textContent = '⚠ error'; btn.disabled = false; }

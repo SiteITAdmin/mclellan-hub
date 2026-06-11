@@ -71,6 +71,102 @@ router.post('/api/documents/:id/to-wiki', requireAuth, requireSameOrigin, writeL
   }
 });
 
+// ── Extract tasks from a document and push to Google Tasks ───────────────────
+router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const hub = db.hub();
+  const doc = hub.prepare(`
+    SELECT d.*, p.name AS project_name, p.slug AS project_slug
+    FROM documents d LEFT JOIN projects p ON p.id = d.project_id
+    WHERE d.id = ? AND d.user = ?
+  `).get(req.params.id, req.hubUser);
+  if (!doc) return res.status(404).json({ error: 'Not found' });
+
+  const markdown = (doc.markdown || '').replace(/^---[\s\S]*?---\n+/, '').replace(/^# .+\n+/, '');
+  if (!markdown.trim()) return res.status(400).json({ error: 'Document has no content' });
+
+  const fetch = require('node-fetch');
+  const { logUsageFromResponse } = require('../lib/openrouter-usage');
+  const { createTask } = require('../lib/google-tasks');
+  const { getSystemModelId } = require('../lib/settings');
+
+  const modelId = getSystemModelId('task_extractor', 'system', 'google/gemini-2.5-pro-preview');
+  const started = Date.now();
+
+  const prompt = `Extract actionable tasks from this document. Return only JSON.
+
+Document: ${doc.filename}${doc.project_name ? ` (project: ${doc.project_name})` : ''}
+
+${markdown.slice(0, 8000)}
+
+Return:
+{
+  "tasks": [
+    {
+      "title": "short imperative task title",
+      "notes": "phase, priority, or context — one line",
+      "source_ref": "task ID or row number if present, otherwise null"
+    }
+  ]
+}
+
+Rules:
+- Only extract tasks that are Open or not yet completed — skip Done/Closed/Completed rows.
+- title should be imperative: "Review Application Portfolio", not "Application Portfolio Review".
+- Keep notes to one line: include phase and priority if available.
+- If no clear tasks exist, return { "tasks": [] }.`;
+
+  let extracted;
+  try {
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://dchat.mclellan.scot',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+      }),
+    });
+    if (!resp.ok) throw new Error(`OpenRouter ${resp.status}`);
+    const data = await resp.json();
+    logUsageFromResponse({
+      user: req.hubUser, feature: 'doc-task-extractor', modelKey: 'task_extractor',
+      fallbackModelId: modelId, data, durationMs: Date.now() - started,
+    });
+    extracted = JSON.parse(data.choices[0].message.content);
+  } catch (err) {
+    console.error('[extract-tasks] LLM error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+
+  const tasks = (extracted.tasks || []).filter(t => t?.title?.trim());
+  if (!tasks.length) return res.json({ ok: true, created: 0, skipped: 0, message: 'No open tasks found in document' });
+
+  let created = 0;
+  let skipped = 0;
+  for (const t of tasks) {
+    const sourceRef = t.source_ref ? String(t.source_ref).slice(0, 60) : null;
+    const sourceId = `doc:${doc.id}:${sourceRef || t.title.slice(0, 60)}`;
+    const result = await createTask(req.hubUser, {
+      title: t.title,
+      notes: [t.notes, `Source: ${doc.filename}`].filter(Boolean).join(' · '),
+      source: 'document',
+      sourceId,
+      projectSlug: doc.project_slug || null,
+    }).catch(err => { console.warn('[extract-tasks] task create failed:', err.message); return null; });
+    if (result === null) skipped++;
+    else if (result) created++;
+    else skipped++; // duplicate
+  }
+
+  console.log(`[extract-tasks] ${doc.filename}: ${created} created, ${skipped} skipped`);
+  res.json({ ok: true, created, skipped, total: tasks.length });
+});
+
 router.post('/api/documents/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const doc = hub.prepare('SELECT * FROM documents WHERE id = ? AND user = ?')
