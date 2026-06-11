@@ -891,6 +891,17 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
       }
     }
 
+    // Fire-and-forget: extract tasks and link contacts from this doc immediately
+    if (!isImage) {
+      const { autoExtractDocumentTasks, connectDocumentsToContacts } = require('../lib/mycelium');
+      const hub2 = db.hub();
+      setImmediate(() => {
+        autoExtractDocumentTasks(req.hubUser, hub2, [])
+          .catch(err => console.warn('[upload] mycelium task extract:', err.message));
+        try { connectDocumentsToContacts(req.hubUser, hub2, []); } catch {}
+      });
+    }
+
     return res.json({
       ok: true,
       document: { id: docId, filename: req.file.originalname, size: req.file.size, project: project.slug },
