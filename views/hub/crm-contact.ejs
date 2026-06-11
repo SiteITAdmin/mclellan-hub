@@ -195,6 +195,17 @@ async function taskAction(id, action) {
           <span class="crm-muted" id="contact-edit-msg" style="font-size:12px;"></span>
         </div>
       </form>
+
+      <section class="crm-section" style="margin-top:24px;">
+        <h3 class="crm-section-title">Merge into another contact</h3>
+        <p class="crm-muted" style="font-size:13px;margin-bottom:8px;">Move all facts, meetings, and links from this contact into a different one, then delete this record. Use when two contacts represent the same person.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="merge-search" type="text" placeholder="Search contacts…" style="flex:1;min-width:160px;">
+          <button class="btn btn-ghost" id="merge-btn" disabled>Merge into selected</button>
+        </div>
+        <div id="merge-results" style="margin-top:6px;font-size:13px;"></div>
+        <span class="crm-muted" id="merge-msg" style="font-size:12px;"></span>
+      </section>
     </section>
   </aside>
 </div>
@@ -406,6 +417,64 @@ document.getElementById('contact-task-form').addEventListener('submit', async e 
     if (j.ok) { msg.textContent = 'Added!'; e.target.reset(); setTimeout(() => location.reload(), 800); }
     else msg.textContent = j.error || 'Error';
   } catch (err) { msg.textContent = err.message; }
+});
+
+// Contact merge
+let mergeTargetId = null;
+const mergeSearch = document.getElementById('merge-search');
+const mergeResults = document.getElementById('merge-results');
+const mergeBtn = document.getElementById('merge-btn');
+const mergeMsg = document.getElementById('merge-msg');
+const CURRENT_ID = '<%= contact.id %>';
+
+let mergeDebounce;
+mergeSearch.addEventListener('input', () => {
+  clearTimeout(mergeDebounce);
+  mergeTargetId = null;
+  mergeBtn.disabled = true;
+  const q = mergeSearch.value.trim();
+  if (q.length < 2) { mergeResults.innerHTML = ''; return; }
+  mergeDebounce = setTimeout(async () => {
+    const resp = await fetch(`/api/crm/contacts?q=${encodeURIComponent(q)}`);
+    const contacts = await resp.json();
+    const filtered = contacts.filter(c => c.id !== CURRENT_ID).slice(0, 6);
+    if (!filtered.length) { mergeResults.innerHTML = '<span class="crm-muted">No matches</span>'; return; }
+    mergeResults.innerHTML = filtered.map(c =>
+      `<div style="padding:4px 0;cursor:pointer;border-bottom:1px solid var(--border)" data-id="${c.id}" data-name="${c.name.replace(/"/g,'&quot;')}">
+        ${c.name}${c.email ? ` <span class="crm-muted">(${c.email})</span>` : ''}
+      </div>`
+    ).join('');
+    mergeResults.querySelectorAll('[data-id]').forEach(el => {
+      el.addEventListener('click', () => {
+        mergeTargetId = el.dataset.id;
+        mergeSearch.value = el.dataset.name;
+        mergeResults.innerHTML = `<span style="color:var(--accent)">Selected: ${el.dataset.name}</span>`;
+        mergeBtn.disabled = false;
+      });
+    });
+  }, 300);
+});
+
+mergeBtn.addEventListener('click', async () => {
+  if (!mergeTargetId) return;
+  if (!confirm(`Merge "<%= contact.name %>" into the selected contact? This cannot be undone.`)) return;
+  mergeBtn.disabled = true;
+  mergeMsg.textContent = 'Merging…';
+  try {
+    const r = await fetch(`/api/crm/contacts/<%= contact.id %>/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetId: mergeTargetId }),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      mergeMsg.textContent = `Merged into ${j.into}. Redirecting…`;
+      setTimeout(() => { window.location.href = `/crm/contact/${mergeTargetId}`; }, 1000);
+    } else {
+      mergeMsg.textContent = j.error || 'Error';
+      mergeBtn.disabled = false;
+    }
+  } catch (err) { mergeMsg.textContent = err.message; mergeBtn.disabled = false; }
 });
 </script>
 <%- include('partials/crm-foot') %>
