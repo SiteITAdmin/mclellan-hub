@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job queue — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+.wrap { padding: 24px; max-width: 900px; }
+.section-head { font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase;
+  letter-spacing: .04em; margin: 24px 0 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--border);
+  color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:hover td { background: var(--surface-2, rgba(255,255,255,.03)); }
+.s-pending  { color: #7c6af5; font-weight: 600; }
+.s-running  { color: #c97a2a; font-weight: 600; }
+.s-done     { color: #4caf85; }
+.s-failed   { color: #e06c6c; font-weight: 600; }
+.dim { color: var(--text-dim); }
+.mono { font-family: var(--font-mono, monospace); }
+.cancel-btn { font-size: 11px; color: #e06c6c; background: none; border: none; cursor: pointer;
+  padding: 2px 6px; border-radius: 4px; }
+.cancel-btn:hover { background: rgba(224,108,108,.15); }
+.empty { color: var(--text-dim); padding: 20px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<%- include('partials/admin-header', { title: `Job queue — ${user}` }) %>
+<div class="wrap">
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">
+    All polling is driven by this queue. Each job re-enqueues itself when done.
+    Refreshes every 60 seconds.
+  </p>
+
+  <div class="section-head">Pending / running (<%= pending.length %>)</div>
+  <% if (!pending.length) { %>
+    <div class="empty">No pending jobs — something may be wrong, check the logs.</div>
+  <% } else { %>
+  <table>
+    <tr>
+      <th>Type</th><th>Run at</th><th>In</th><th>Status</th><th>Source</th><th></th>
+    </tr>
+    <% pending.forEach(j => {
+      const runAt = new Date(j.run_at * 1000);
+      const secsUntil = j.run_at - Math.floor(Date.now()/1000);
+      const inStr = secsUntil <= 0 ? 'now'
+        : secsUntil < 60 ? secsUntil + 's'
+        : secsUntil < 3600 ? Math.round(secsUntil/60) + 'm'
+        : (secsUntil/3600).toFixed(1) + 'h';
+      let payload = {};
+      try { payload = JSON.parse(j.payload || '{}'); } catch {}
+    %>
+    <tr>
+      <td class="mono"><%= j.type %></td>
+      <td class="dim mono"><%= runAt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Dublin'}) %> <%= runAt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',timeZone:'Europe/Dublin'}) %></td>
+      <td style="color:<%= secsUntil<=0?'#4caf85':'var(--text)' %>"><%= inStr %></td>
+      <td class="s-<%= j.status %>"><%= j.status %></td>
+      <td class="dim"><%= j.source || '' %><% if (payload.flightNumber) { %> · <%= payload.flightNumber %> #<%= payload.attempts||0 %><% } %></td>
+      <td>
+        <% if (j.status === 'pending') { %>
+        <form method="POST" action="/admin/jobs/<%= j.id %>/cancel" style="display:inline">
+          <button class="cancel-btn" type="submit" onclick="return confirm('Cancel this job?')">cancel</button>
+        </form>
+        <% } %>
+      </td>
+    </tr>
+    <% }) %>
+  </table>
+  <% } %>
+
+  <div class="section-head">Recent completed / failed</div>
+  <% if (!recent.length) { %>
+    <div class="empty">No completed jobs yet.</div>
+  <% } else { %>
+  <table>
+    <tr>
+      <th>Type</th><th>Ran at</th><th>Status</th><th>Source</th><th>Error</th>
+    </tr>
+    <% recent.forEach(j => {
+      const ranAt = j.ran_at ? new Date(j.ran_at * 1000) : null;
+      let payload = {};
+      try { payload = JSON.parse(j.payload || '{}'); } catch {}
+    %>
+    <tr>
+      <td class="mono"><%= j.type %></td>
+      <td class="dim mono"><%= ranAt ? ranAt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Dublin'}) + ' ' + ranAt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',timeZone:'Europe/Dublin'}) : '—' %></td>
+      <td class="s-<%= j.status %>"><%= j.status %></td>
+      <td class="dim"><%= j.source || '' %><% if (payload.flightNumber) { %> · <%= payload.flightNumber %><% } %></td>
+      <td class="dim" style="color:#e06c6c;max-width:300px;white-space:normal"><%= j.error || '' %></td>
+    </tr>
+    <% }) %>
+  </table>
+  <% } %>
+</div>
+<script>setTimeout(() => location.reload(), 60000);</script>
+</body>
+</html>

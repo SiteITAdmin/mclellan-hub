@@ -1483,6 +1483,26 @@ router.post('/admin/rss-feeds/fetch-all', requireHubAdmin, async (req, res) => {
   }
 });
 
+// ── Job queue admin ───────────────────────────────────────────────────────────
+
+router.get('/admin/jobs', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const pending = hub.prepare(
+    "SELECT * FROM system_jobs WHERE status IN ('pending','running') ORDER BY run_at ASC"
+  ).all();
+  const recent = hub.prepare(
+    "SELECT * FROM system_jobs WHERE status IN ('done','failed') ORDER BY ran_at DESC LIMIT 40"
+  ).all();
+  res.render('hub-admin/jobs', { user: req.hubUser, pending, recent });
+});
+
+router.post('/admin/jobs/:id/cancel', requireHubAdmin, (req, res) => {
+  db.hub().prepare(
+    "UPDATE system_jobs SET status = 'failed', error = 'cancelled by admin', ran_at = ? WHERE id = ? AND status = 'pending'"
+  ).run(Math.floor(Date.now() / 1000), req.params.id);
+  res.redirect('/admin/jobs');
+});
+
 // ── Mycelium connectivity ─────────────────────────────────────────────────────
 
 router.get('/admin/connectivity', requireHubAdmin, (req, res) => {

@@ -199,14 +199,12 @@ router.post('/api/flights', requireAuth, requireSameOrigin, writeLimiter, (req, 
     (tracker_url || '').trim(),
   );
 
-  // If this is a future/scheduled flight, immediately create any tasks due
+  // If scheduled, immediately create tasks and start live tracking
   if ((status || 'completed') === 'scheduled') {
-    const { connectFlightsToTasks } = require('../lib/mycelium');
-    const hub2 = db.hub();
-    setImmediate(() => {
-      connectFlightsToTasks(user, hub2, [])
-        .catch(err => console.warn('[flights] mycelium trigger:', err.message));
-    });
+    const { scheduleJob, scheduleFlightRefresh } = require('../lib/job-queue');
+    scheduleJob('mycelium_flights', { user }, null, 'flight-add');
+    const newFlight = db.hub().prepare('SELECT * FROM flights WHERE id = ?').get(id);
+    if (newFlight) scheduleFlightRefresh(newFlight);
   }
 
   res.json({ ok: true, id });
