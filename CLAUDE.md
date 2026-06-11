@@ -6,22 +6,28 @@ A personal AI workspace for Douglas McLellan. It connects email, calendar, conta
 
 Douglas has ADHD. The system should surface everything it can automatically, without requiring Douglas to trigger it manually. When in doubt, do the work.
 
-## The most important rule
+## The most important rules
 
-**Adding something is not the same as it working.**
+**Rule 1: Naming something is not building it.**
 
-When you add an API integration, an API key, a new column, a new job, or a new connection between modules — you must verify that real data is flowing through it before calling it done. Not just that the code runs without errors. That the actual output is correct.
+The flight tracker was built, given an API key, and declared complete. It was not a tracker — it was a flight log with a manual backfill button. Live tracking (booking → departure → arrival with real times) was the obvious core purpose implied by the name. It was never built. When Douglas asked how tracking worked, the honest answer was "it doesn't." Instead, live tracking was suggested as if it were a new idea, when it was the missing piece that should have been there from day one.
+
+Before naming a module and calling it done, ask: **does it actually do the thing the name says?** If a module is called a tracker, it must track. If it is called a processor, it must process. If the core capability isn't there, say so — don't declare completion and wait for Douglas to discover the gap by asking a direct question.
+
+**Rule 2: Adding something is not the same as it working.**
+
+When you add an API key, a new job, a column, or a connection between modules — verify real data is flowing through it. Not just that the code runs. That the output is correct.
 
 Examples of this going wrong:
-- The AeroDataBox API key was set and the flight refresh job was running. But `actualTime` was the wrong field name — it should have been `revisedTime`. Every flight looked tracked. No actual times were ever stored. This was silent for months.
-- The `shouldExtract` flag for agentmail trusted senders was wrong, so emails from work domains never extracted contact facts. The processor ran successfully. Nothing useful happened.
+- The AeroDataBox API key was configured. The field name `actualTime` was wrong — it should have been `revisedTime`. Every flight appeared tracked. No actual times were ever stored. Silent until Douglas looked at the UI and noticed the gap.
+- The `shouldExtract` flag for agentmail trusted senders was wrong. The processor ran successfully every 15 minutes. Nothing useful happened.
 
 Before marking any integration complete, answer: **what does working actually look like, and have I seen it?**
 
 ## Rules for adding new features
 
-**1. State the purpose before writing code.**
-One sentence: what does this feature do, and what does "working correctly" look like? If you can't write that sentence, don't write the code yet.
+**1. Define the core capability before writing code.**
+One sentence: what does this feature actually do, end to end, when working? If the name implies a capability (tracker, processor, monitor), that capability must be present on day one. If it isn't, name it accurately or be explicit about what's missing.
 
 **2. Verify the full path, not just the node.**
 If you add a job that polls an API and stores data, check the DB actually has the data after it runs. If you add a connection between two modules, check that a real input produces a real output end-to-end. Don't stop at "the code looks right."
