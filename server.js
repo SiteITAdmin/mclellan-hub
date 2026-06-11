@@ -17,6 +17,7 @@ const { sendWeeklyDigest } = require('./lib/weekly-digest');
 const { sendRhStats } = require('./lib/rh-stats');
 const { sendWeeklyReminder } = require('./lib/newsletter-pipeline');
 const { ingestAllFeeds } = require('./lib/rss-ingest');
+const { sendSystemReport } = require('./lib/system-report');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -220,4 +221,14 @@ setInterval(() => {
   const now = nowIn('Europe/Dublin');
   if (now.getHours() !== REG_MONITOR_HOUR || now.getMinutes() !== REG_MONITOR_MINUTE) return;
   runRegulatoryMonitor().catch(err => console.error('[reg-monitor] error:', err));
+}, 60 * 1000);
+
+// ── Daily system report (21:00 Europe/Dublin) ─────────────────────────────────
+const SYSTEM_REPORT_HOUR   = parseInt(process.env.SYSTEM_REPORT_HOUR   || '21');
+const SYSTEM_REPORT_MINUTE = parseInt(process.env.SYSTEM_REPORT_MINUTE || '0');
+
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getHours() !== SYSTEM_REPORT_HOUR || now.getMinutes() !== SYSTEM_REPORT_MINUTE) return;
+  sendSystemReport().catch(err => console.error('[system-report] error:', err));
 }, 60 * 1000);

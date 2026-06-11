@@ -264,6 +264,99 @@ router.get('/api/crm/contacts', requireAuth, (req, res) => {
   res.json(contacts);
 });
 
+router.post('/api/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name required' });
+  const hub = db.hub();
+  const existing = hub.prepare('SELECT id FROM contacts WHERE user = ? AND name = ?').get(req.hubUser, name);
+  if (existing) return res.status(409).json({ error: 'Contact already exists', id: existing.id });
+  const id = uuid();
+  const email = String(req.body.email || '').trim().toLowerCase() || null;
+  const notes = String(req.body.notes || '').trim() || null;
+  hub.prepare('INSERT INTO contacts (id, user, name, email, notes) VALUES (?, ?, ?, ?, ?)').run(
+    id, req.hubUser, name, email, notes
+  );
+  syncContactVaultProfile(req.hubUser, id);
+  res.json({ ok: true, id, name });
+});
+
+router.post('/api/crm/contacts/:id/merge', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const source = hub.prepare('SELECT * FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!source) return res.status(404).json({ error: 'Source contact not found' });
+  const targetId = String(req.body.targetId || '').trim();
+  if (!targetId) return res.status(400).json({ error: 'targetId required' });
+  if (targetId === source.id) return res.status(400).json({ error: 'Cannot merge a contact into itself' });
+  const target = hub.prepare('SELECT * FROM contacts WHERE id = ? AND user = ?').get(targetId, req.hubUser);
+  if (!target) return res.status(404).json({ error: 'Target contact not found' });
+
+  hub.transaction(() => {
+    // Move facts owned by source → target (skip exact-duplicate facts)
+    const sourceFacts = hub.prepare('SELECT id, fact FROM crm_facts WHERE contact_id = ? AND user = ?').all(source.id, req.hubUser);
+    const targetFactTexts = new Set(
+      hub.prepare('SELECT fact FROM crm_facts WHERE contact_id = ? AND user = ?').all(targetId, req.hubUser).map(f => f.fact)
+    );
+    const moveFact = hub.prepare('UPDATE crm_facts SET contact_id = ? WHERE id = ?');
+    const deleteFact = hub.prepare('DELETE FROM crm_facts WHERE id = ?');
+    for (const f of sourceFacts) {
+      if (targetFactTexts.has(f.fact)) deleteFact.run(f.id);
+      else moveFact.run(targetId, f.id);
+    }
+
+    // Rewrite linked_contacts in any fact that references source
+    const linkedFacts = hub.prepare(
+      "SELECT id, linked_contacts FROM crm_facts WHERE user = ? AND linked_contacts LIKE ?"
+    ).all(req.hubUser, `%"${source.id}"%`);
+    const updateLinks = hub.prepare('UPDATE crm_facts SET linked_contacts = ? WHERE id = ?');
+    for (const fact of linkedFacts) {
+      const ids = parseJsonArray(fact.linked_contacts).map(id => id === source.id ? targetId : id);
+      const deduped = [...new Set(ids)];
+      updateLinks.run(JSON.stringify(deduped), fact.id);
+    }
+
+    // Move meeting attendances (skip duplicates)
+    const sourceMeetings = hub.prepare('SELECT meeting_id FROM meeting_attendees WHERE contact_id = ?').all(source.id);
+    const targetMeetingIds = new Set(
+      hub.prepare('SELECT meeting_id FROM meeting_attendees WHERE contact_id = ?').all(targetId).map(r => r.meeting_id)
+    );
+    const moveAttendee = hub.prepare('UPDATE meeting_attendees SET contact_id = ? WHERE contact_id = ? AND meeting_id = ?');
+    const deleteAttendee = hub.prepare('DELETE FROM meeting_attendees WHERE contact_id = ? AND meeting_id = ?');
+    for (const { meeting_id } of sourceMeetings) {
+      if (targetMeetingIds.has(meeting_id)) deleteAttendee.run(source.id, meeting_id);
+      else moveAttendee.run(targetId, source.id, meeting_id);
+    }
+
+    // Move project links (skip duplicates)
+    const sourceProjects = hub.prepare('SELECT project_id FROM contact_projects WHERE contact_id = ?').all(source.id);
+    const targetProjectIds = new Set(
+      hub.prepare('SELECT project_id FROM contact_projects WHERE contact_id = ?').all(targetId).map(r => r.project_id)
+    );
+    const deleteProj = hub.prepare('DELETE FROM contact_projects WHERE contact_id = ? AND project_id = ?');
+    const moveProj = hub.prepare('UPDATE contact_projects SET contact_id = ? WHERE contact_id = ? AND project_id = ?');
+    for (const { project_id } of sourceProjects) {
+      if (targetProjectIds.has(project_id)) deleteProj.run(source.id, project_id);
+      else moveProj.run(targetId, source.id, project_id);
+    }
+
+    // Move company links (skip duplicates)
+    const sourceCompanies = hub.prepare('SELECT company_id FROM contact_companies WHERE contact_id = ?').all(source.id);
+    const targetCompanyIds = new Set(
+      hub.prepare('SELECT company_id FROM contact_companies WHERE contact_id = ?').all(targetId).map(r => r.company_id)
+    );
+    const deleteCo = hub.prepare('DELETE FROM contact_companies WHERE contact_id = ? AND company_id = ?');
+    const moveCo = hub.prepare('UPDATE contact_companies SET contact_id = ? WHERE contact_id = ? AND company_id = ?');
+    for (const { company_id } of sourceCompanies) {
+      if (targetCompanyIds.has(company_id)) deleteCo.run(source.id, company_id);
+      else moveCo.run(targetId, source.id, company_id);
+    }
+
+    // Delete source contact
+    hub.prepare('DELETE FROM contacts WHERE id = ?').run(source.id);
+  })();
+
+  res.json({ ok: true, merged: source.name, into: target.name, targetId });
+});
+
 router.get('/api/crm/briefing', requireAuth, async (req, res) => {
   try {
     const events = await fetchTodayCalendarEvents(req.hubUser);
