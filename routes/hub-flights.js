@@ -198,6 +198,17 @@ router.post('/api/flights', requireAuth, requireSameOrigin, writeLimiter, (req, 
     (notes || '').trim(),
     (tracker_url || '').trim(),
   );
+
+  // If this is a future/scheduled flight, immediately create any tasks due
+  if ((status || 'completed') === 'scheduled') {
+    const { connectFlightsToTasks } = require('../lib/mycelium');
+    const hub2 = db.hub();
+    setImmediate(() => {
+      connectFlightsToTasks(user, hub2, [])
+        .catch(err => console.warn('[flights] mycelium trigger:', err.message));
+    });
+  }
+
   res.json({ ok: true, id });
 });
 
