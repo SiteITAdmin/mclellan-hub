@@ -232,3 +232,16 @@ setInterval(() => {
   if (now.getHours() !== SYSTEM_REPORT_HOUR || now.getMinutes() !== SYSTEM_REPORT_MINUTE) return;
   sendSystemReport().catch(err => console.error('[system-report] error:', err));
 }, 60 * 1000);
+
+// ── Mycelium cross-node connector (every 6 hours) ─────────────────────────────
+const { runMycelium } = require('./lib/mycelium');
+let lastMyceliumHour = -1;
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  const h = now.getHours();
+  // Run at 06:00, 12:00, 18:00, 00:00
+  if (h % 6 !== 0 || now.getMinutes() !== 0) return;
+  if (h === lastMyceliumHour) return;
+  lastMyceliumHour = h;
+  runMycelium('douglas').catch(err => console.error('[mycelium] error:', err));
+}, 60 * 1000);
