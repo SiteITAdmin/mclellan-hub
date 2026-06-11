@@ -250,3 +250,91 @@ setInterval(() => {
 setTimeout(() => {
   runMycelium('douglas').catch(err => console.error('[mycelium] startup error:', err));
 }, 15 * 1000);
+
+// ── Live flight status refresh (every 30 min, only if AERODATABOX_KEY set) ───
+// Polls today's + tomorrow's scheduled flights and updates actual dep/arr times.
+if (process.env.AERODATABOX_KEY) {
+  async function refreshActiveFlights() {
+    const db = require('./lib/db');
+    const hub = db.hub();
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+    const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+
+    const flights = hub.prepare(`
+      SELECT id, user, flight_number, flight_date, direction FROM flights
+      WHERE status = 'scheduled' AND flight_date BETWEEN ? AND ?
+        AND flight_number != ''
+    `).all(today, tomorrow);
+
+    if (!flights.length) return;
+    console.log(`[flights] refreshing ${flights.length} active flight(s)`);
+
+    // aerodataboxLookup is not exported — call the bulk-lookup logic inline
+    const fetch = require('node-fetch');
+    for (const f of flights) {
+      await new Promise(r => setTimeout(r, 500)); // rate limit
+      try {
+        const key = process.env.AERODATABOX_KEY;
+        const resp = await fetch(
+          `https://aerodatabox.p.rapidapi.com/flights/number/${f.flight_number}/${f.flight_date}?withAircraftImage=false&withLocation=false`,
+          { headers: { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': 'aerodatabox.p.rapidapi.com' } }
+        );
+        if (!resp.ok) continue;
+        const json = await resp.json();
+        const records = Array.isArray(json) ? json : (json.items || []);
+        if (!records.length) continue;
+
+        const [fromIata, toIata] = (f.direction || '').split('-');
+        let rec = null;
+        if (fromIata && toIata) {
+          rec = records.find(r => r.departure?.airport?.iata === fromIata && r.arrival?.airport?.iata === toIata)
+             || records.find(r => r.departure?.airport?.iata === fromIata)
+             || records[0];
+        } else { rec = records[0]; }
+        if (!rec) continue;
+
+        function hhmm(t) {
+          const s = t?.local || t?.utc || ''; const p = s.split(' ');
+          return p[1] ? p[1].slice(0, 5) : '';
+        }
+        const rawStatus = (rec.status || '').toLowerCase();
+        const status = rawStatus.includes('landed') || rawStatus.includes('arrived') ? 'completed'
+          : rawStatus.includes('cancel') ? 'cancelled'
+          : rawStatus.includes('diverted') ? 'diverted'
+          : 'scheduled';
+
+        const actualDep = hhmm(rec.departure?.actualTime || rec.departure?.runway?.actualTime);
+        const actualArr = hhmm(rec.arrival?.actualTime || rec.arrival?.runway?.actualTime);
+        const scheduledDep = hhmm(rec.departure?.scheduledTime);
+        const scheduledArr = hhmm(rec.arrival?.scheduledTime);
+
+        hub.prepare(`
+          UPDATE flights SET
+            status        = ?,
+            actual_dep    = CASE WHEN actual_dep    = '' AND ? != '' THEN ? ELSE actual_dep    END,
+            actual_arr    = CASE WHEN actual_arr    = '' AND ? != '' THEN ? ELSE actual_arr    END,
+            scheduled_dep = CASE WHEN scheduled_dep = '' AND ? != '' THEN ? ELSE scheduled_dep END,
+            scheduled_arr = CASE WHEN scheduled_arr = '' AND ? != '' THEN ? ELSE scheduled_arr END
+          WHERE id = ?
+        `).run(
+          status,
+          actualDep, actualDep,
+          actualArr, actualArr,
+          scheduledDep, scheduledDep,
+          scheduledArr, scheduledArr,
+          f.id
+        );
+
+        if (actualDep) console.log(`[flights] ${f.flight_number} ${f.flight_date}: departed ${actualDep}, status=${status}`);
+        if (actualArr) console.log(`[flights] ${f.flight_number} ${f.flight_date}: arrived ${actualArr}`);
+      } catch (err) {
+        console.warn(`[flights] refresh error for ${f.flight_number}:`, err.message);
+      }
+    }
+  }
+
+  // Run every 30 minutes
+  setInterval(refreshActiveFlights, 30 * 60 * 1000);
+  // Also run shortly after startup
+  setTimeout(refreshActiveFlights, 30 * 1000);
+}
