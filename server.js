@@ -233,7 +233,7 @@ setInterval(() => {
   sendSystemReport().catch(err => console.error('[system-report] error:', err));
 }, 60 * 1000);
 
-// ── Mycelium cross-node connector (every 6 hours) ─────────────────────────────
+// ── Mycelium cross-node connector (on boot + every 6 hours) ──────────────────
 const { runMycelium } = require('./lib/mycelium');
 let lastMyceliumHour = -1;
 setInterval(() => {
@@ -245,3 +245,8 @@ setInterval(() => {
   lastMyceliumHour = h;
   runMycelium('douglas').catch(err => console.error('[mycelium] error:', err));
 }, 60 * 1000);
+
+// Run once on startup so a fresh deploy doesn't wait up to 6h for first pass
+setTimeout(() => {
+  runMycelium('douglas').catch(err => console.error('[mycelium] startup error:', err));
+}, 15 * 1000);
