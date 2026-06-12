@@ -34,6 +34,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <a href="/newsletter" style="font-size:13px;color:var(--text-dim);">← Intelligence</a>
   </div>
   <p class="nl-sub">RSS feeds from creators — full articles ingested to the wiki, briefings on demand.</p>
+  <% if (msg) { %><p class="msg"><%= msg %></p><% } %>
 
   <div style="margin-bottom:16px;display:flex;gap:8px;">
     <button class="btn btn-subtle" id="toggle-add">+ Add feed</button>

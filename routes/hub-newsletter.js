@@ -358,7 +358,11 @@ router.get('/creators', (req, res) => {
     WHERE f.user = ?
     GROUP BY f.id ORDER BY f.name
   `).all(req.hubUser);
-  res.render('hub/newsletter-creators', { user: req.hubUser, feeds });
+  res.render('hub/newsletter-creators', {
+    user: req.hubUser,
+    feeds,
+    msg: req.query.msg || null,
+  });
 });
 
 router.get('/creator/:slug', (req, res) => {
