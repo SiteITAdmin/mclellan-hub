@@ -84,7 +84,7 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
   const markdown = (doc.markdown || '').replace(/^---[\s\S]*?---\n+/, '').replace(/^# .+\n+/, '');
   if (!markdown.trim()) return res.status(400).json({ error: 'Document has no content' });
 
-  const fetch = require('node-fetch');
+  const fetch = require('../lib/fetch');
   const { logUsageFromResponse } = require('../lib/openrouter-usage');
   const { createTask } = require('../lib/google-tasks');
   const { getSystemModelId } = require('../lib/settings');

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const fetch = require('node-fetch');
+const fetch = require('../lib/fetch');
 const { OAuth2Client } = require('google-auth-library');
 const db = require('../lib/db');
 const {

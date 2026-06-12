@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const fetch = require('node-fetch');
+const fetch = require('../lib/fetch');
 const db = require('../lib/db');
 const { routeMessage, tagConversation } = require('../lib/router');
 const { exportDocx, exportPdf, exportGoogleDoc } = require('../lib/exports');

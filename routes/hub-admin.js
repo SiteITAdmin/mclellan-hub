@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const fetch = require('node-fetch');
+const fetch = require('../lib/fetch');
 const users = require('../config/users');
 const db = require('../lib/db');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
@@ -1445,10 +1445,11 @@ router.post('/admin/rss-feeds', requireHubAdmin, async (req, res) => {
   const { name, url, creator_slug } = req.body;
   if (!name || !url || !creator_slug) return res.redirect('/admin/rss-feeds');
   const slug = creator_slug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  db.hub().prepare(`
+  const result = db.hub().prepare(`
     INSERT OR IGNORE INTO rss_feeds (id, user, name, creator_slug, url) VALUES (?, ?, ?, ?, ?)
   `).run(uuid(), req.hubUser, name.trim(), slug, url.trim());
-  res.redirect('/admin/rss-feeds');
+  const msg = result.changes ? 'Feed added' : 'That feed URL is already subscribed';
+  res.redirect('/admin/rss-feeds?msg=' + encodeURIComponent(msg));
 });
 
 router.post('/admin/rss-feeds/:id/toggle', requireHubAdmin, (req, res) => {

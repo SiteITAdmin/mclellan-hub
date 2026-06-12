@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const fetch = require('node-fetch');
+const fetch = require('../lib/fetch');
 const db = require('../lib/db');
 const { fetchTodayCalendarEvents } = require('../lib/crm');
 const { writeNote } = require('../lib/obsidian-vault');
