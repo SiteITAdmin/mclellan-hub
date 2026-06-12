@@ -17,6 +17,7 @@
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <% if (!task.deleted_at && task.status === 'needsAction') { %>
       <button class="btn" onclick="taskAction('<%= task.id %>', 'complete')">Mark done</button>
+      <button class="btn" style="opacity:.6;" onclick="remindMe()" title="Set an escalating Google Chat reminder for this task">🔔 Remind me</button>
       <button class="btn" style="opacity:.6;" onclick="taskAction('<%= task.id %>', 'delete')">Delete</button>
     <% } else if (task.deleted_at) { %>
       <button class="btn" onclick="taskAction('<%= task.id %>', 'restore')">Restore</button>
@@ -168,6 +169,19 @@ document.getElementById('task-edit-form').addEventListener('submit', async e => 
 });
 
 // Top-level task actions (complete / delete / restore)
+async function remindMe() {
+  const when = prompt('Remind you when? (YYYY-MM-DDTHH:MM, e.g. <%= new Date(Date.now() + 86400000).toLocaleDateString("sv-SE", { timeZone: "Europe/Dublin" }) %>T09:00)');
+  if (!when) return;
+  const r = await fetch('/api/reminders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: 'task', target_id: '<%= task.id %>', title: <%- JSON.stringify(task.title) %>, remind_at: when }),
+  });
+  const j = await r.json();
+  if (j.ok) alert(`Reminder #${j.reminder.short_code} set — it will ping Google Chat and escalate until you reply.`);
+  else alert(j.error || 'Error');
+}
+
 async function taskAction(id, action) {
   const r = await fetch(`/api/tasks/${id}/${action}`, { method: 'POST' });
   const j = await r.json();

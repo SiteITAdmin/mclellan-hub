@@ -4,7 +4,8 @@
     <% if (t.notes) { %><span class="crm-task-notes"><%= t.notes.split('\n')[0].slice(0, 120) %></span><% } %>
     <div class="crm-task-meta">
       <% if (t.due) { %>
-        <span class="crm-badge"><%= new Date(t.due).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></span>
+        <% const isOverdue = t.status === 'needsAction' && !t.deleted_at && String(t.due).slice(0, 10) < new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }); %>
+        <span class="crm-badge" <%- isOverdue ? 'style="background:rgba(192,57,43,.12);color:var(--crm-danger,#c0392b);font-weight:600;" title="Overdue — escalating reminder active"' : '' %>><%= isOverdue ? '🔔 overdue · ' : '' %><%= new Date(t.due).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></span>
       <% } %>
       <% if (t.contact_name) { %>
         <a class="crm-badge" href="/crm/contact/<%= t.contact_id %>"><%= t.contact_name %></a>

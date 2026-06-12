@@ -1,0 +1,97 @@
+<%- include('partials/crm-head', { title: 'Reminders', active: 'reminders' }) %>
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Escalating nudges</p>
+    <h1>Reminders</h1>
+    <p>Reminders ping Google Chat and escalate (4 pings max) until you reply done, snooze, or ok — or act here.</p>
+  </div>
+</section>
+
+<section class="section-card" style="margin-bottom:24px;">
+  <h2>Add reminder</h2>
+  <form class="crm-form-grid" id="reminder-add-form">
+    <label class="wide">Remind me to<input name="title" required placeholder="What should I chase you about?"></label>
+    <label>When<input name="remind_at" type="datetime-local" required></label>
+    <button class="btn" type="submit">Set reminder</button>
+    <p class="crm-muted" id="reminder-form-msg"></p>
+  </form>
+</section>
+
+<% const statusLabel = { scheduled: 'scheduled', snoozed: 'snoozed', acked: 'acknowledged', stale: 'stale — in morning briefing' }; %>
+<section class="section-card">
+  <h2>Open (<%= open.length %>)</h2>
+  <% if (!open.length) { %><p class="crm-muted">No open reminders.</p><% } %>
+  <% for (const r of open) { %>
+    <div class="crm-task-row">
+      <div class="crm-task-main">
+        <span class="crm-task-title">#<%= r.short_code %> <%= r.title %></span>
+        <div class="crm-task-meta">
+          <% if (r.next_fire_at) { %>
+            <span class="crm-badge"><%= new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Dublin' }) %></span>
+          <% } %>
+          <span class="crm-badge subtle"><%= statusLabel[r.status] || r.status %></span>
+          <% if (r.escalation_level > 0) { %><span class="crm-badge subtle">pinged <%= r.escalation_level %>×</span><% } %>
+          <span class="crm-badge subtle"><%= r.kind %><%= r.recur ? ' · recurring' : '' %></span>
+        </div>
+      </div>
+      <div class="crm-task-actions">
+        <button class="btn btn-sm" onclick="reminderAction('<%= r.id %>', 'done')">Done</button>
+        <button class="btn btn-sm btn-ghost" onclick="reminderSnooze('<%= r.id %>')">Snooze</button>
+        <% if (['scheduled','snoozed'].includes(r.status)) { %>
+          <button class="btn btn-sm btn-ghost" onclick="reminderAction('<%= r.id %>', 'ack')" title="Stop pinging, keep in briefing">Ok</button>
+        <% } %>
+        <button class="btn btn-sm btn-ghost" onclick="reminderAction('<%= r.id %>', 'cancel')">Cancel</button>
+      </div>
+    </div>
+  <% } %>
+</section>
+
+<% if (resolved.length) { %>
+<section class="section-card" style="margin-top:16px;">
+  <h2>Recently resolved</h2>
+  <% for (const r of resolved) { %>
+    <div class="crm-task-row task-done">
+      <div class="crm-task-main">
+        <span class="crm-task-title"><%= r.title %></span>
+        <div class="crm-task-meta">
+          <span class="crm-badge subtle"><%= r.status %></span>
+          <span class="crm-badge subtle"><%= new Date(r.updated_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %></span>
+        </div>
+      </div>
+    </div>
+  <% } %>
+</section>
+<% } %>
+
+<script>
+document.getElementById('reminder-add-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('reminder-form-msg');
+  const data = Object.fromEntries(new FormData(e.target));
+  msg.textContent = 'Setting…';
+  try {
+    const r = await fetch('/api/reminders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = 'Set!'; setTimeout(() => location.reload(), 600); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+});
+
+async function reminderAction(id, action, body) {
+  const r = await fetch(`/api/reminders/${id}/${action}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+  });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert(j.message || j.error || 'Error');
+}
+
+function reminderSnooze(id) {
+  const duration = prompt('Snooze for how long? (e.g. 30m, 2h, 1d, tomorrow)', '2h');
+  if (duration === null) return;
+  reminderAction(id, 'snooze', { duration });
+}
+</script>
+<%- include('partials/crm-foot') %>
