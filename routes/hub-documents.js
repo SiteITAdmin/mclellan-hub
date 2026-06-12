@@ -84,6 +84,10 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
   const markdown = (doc.markdown || '').replace(/^---[\s\S]*?---\n+/, '').replace(/^# .+\n+/, '');
   if (!markdown.trim()) return res.status(400).json({ error: 'Document has no content' });
 
+  const { extractionPrompt, isGeneratedDocument } = require('../lib/document-tasks');
+  if (isGeneratedDocument(doc)) {
+    return res.status(400).json({ error: 'Generated project-memory documents are not task sources' });
+  }
   const fetch = require('../lib/fetch');
   const { logUsageFromResponse } = require('../lib/openrouter-usage');
   const { createTask } = require('../lib/google-tasks');
@@ -92,28 +96,7 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
   const modelId = getSystemModelId('task_extractor', 'system', 'google/gemini-2.5-pro-preview');
   const started = Date.now();
 
-  const prompt = `Extract actionable tasks from this document. Return only JSON.
-
-Document: ${doc.filename}${doc.project_name ? ` (project: ${doc.project_name})` : ''}
-
-${markdown.slice(0, 8000)}
-
-Return:
-{
-  "tasks": [
-    {
-      "title": "short imperative task title",
-      "notes": "phase, priority, or context — one line",
-      "source_ref": "task ID or row number if present, otherwise null"
-    }
-  ]
-}
-
-Rules:
-- Only extract tasks that are Open or not yet completed — skip Done/Closed/Completed rows.
-- title should be imperative: "Review Application Portfolio", not "Application Portfolio Review".
-- Keep notes to one line: include phase and priority if available.
-- If no clear tasks exist, return { "tasks": [] }.`;
+  const prompt = extractionPrompt(doc, markdown);
 
   let extracted;
   try {
