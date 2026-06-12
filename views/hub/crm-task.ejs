@@ -12,14 +12,18 @@
     </p>
     <h1><%= task.title %></h1>
     <% if (task.status === 'completed') { %><span class="crm-badge" style="background:#d1fae5;color:#065f46;">Completed</span><% } %>
+    <% if (task.status === 'wrong') { %><span class="crm-badge" style="background:#fee2e2;color:#991b1b;">Wrong · learned</span><% } %>
     <% if (task.deleted_at) { %><span class="crm-badge" style="background:#fee2e2;color:#991b1b;">Deleted</span><% } %>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <% if (!task.deleted_at && task.status === 'needsAction') { %>
       <button class="btn" onclick="taskAction('<%= task.id %>', 'complete')">Mark done</button>
       <button class="btn" style="opacity:.6;" onclick="remindMe()" title="Set an escalating Google Chat reminder for this task">🔔 Remind me</button>
+      <% if (['document','email','agentmail'].includes(task.source)) { %>
+        <button class="btn" style="color:var(--crm-danger,#c0392b);background:transparent;border:1px solid currentColor;" onclick="markTaskWrong('<%= task.id %>')">Wrong — teach extractor</button>
+      <% } %>
       <button class="btn" style="opacity:.6;" onclick="taskAction('<%= task.id %>', 'delete')">Delete</button>
-    <% } else if (task.deleted_at) { %>
+    <% } else if (task.deleted_at && task.status !== 'wrong') { %>
       <button class="btn" onclick="taskAction('<%= task.id %>', 'restore')">Restore</button>
     <% } %>
   </div>

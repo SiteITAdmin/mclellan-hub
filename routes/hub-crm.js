@@ -20,7 +20,7 @@ const {
 } = require('./hub-shared');
 const {
   createTask, createSubtask, updateTask,
-  syncTasks, completeTask, deleteTask, restoreTask,
+  syncTasks, completeTask, deleteTask, deleteTaskEverywhere, restoreTask,
   getTask, getCachedTasks,
 } = require('../lib/google-tasks');
 
@@ -1217,6 +1217,29 @@ router.post('/api/tasks/:id/delete', requireAuth, requireSameOrigin, writeLimite
   const ok = deleteTask(req.hubUser, req.params.id);
   if (!ok) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });
+});
+
+router.post('/api/tasks/:id/wrong', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { learnFromWrongTask } = require('../lib/task-learning');
+    const learned = await learnFromWrongTask(
+      req.hubUser,
+      req.params.id,
+      String(req.body?.reason || '').trim(),
+    );
+    const deleted = await deleteTaskEverywhere(req.hubUser, req.params.id, { status: 'wrong' });
+    res.json({
+      ok: true,
+      lesson: learned.lesson.rule,
+      evidenceCount: learned.lesson.evidence_count,
+      usedFallback: learned.usedFallback,
+      remoteDeleted: deleted.remoteDeleted,
+      remoteWarning: deleted.remoteError,
+    });
+  } catch (err) {
+    console.error('[tasks] wrong-learning error:', err);
+    res.status(err.message === 'Task not found' ? 404 : 500).json({ error: err.message });
+  }
 });
 
 router.post('/api/tasks/:id/restore', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
