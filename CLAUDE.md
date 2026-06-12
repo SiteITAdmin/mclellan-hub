@@ -24,6 +24,10 @@ Examples of this going wrong:
 
 Before marking any integration complete, answer: **what does working actually look like, and have I seen it?**
 
+**Rule 3: Test with fake data at build time, not real data weeks later.**
+
+Every feature must be exercised with a synthetic test before it is called done — a fake Ryanair booking email, a fake document upload, a fake flight record, a direct API call with the actual response inspected. This is the only way to know the full path works at the moment it is built, not two weeks later when Douglas notices something is missing. The test does not need to be automated or kept. It just needs to happen before the session ends. Log what was tested and what the result was in the commit message or in a comment to Douglas.
+
 ## Rules for adding new features
 
 **1. Define the core capability before writing code.**
@@ -56,6 +60,10 @@ Each module has a defined purpose and a definition of healthy. Read it before ad
 - Do not substitute a safer or simpler version of what was asked. Flag risk in one sentence, then build what was asked.
 - Do not add comments explaining what the code does — only comments explaining why something non-obvious is done.
 - Do not write code that looks like it works without verifying it does.
+
+**Rule 4: Diagnose the instance, not just the process.**
+
+When Douglas reports that something didn't happen — tasks not created, times not populated, data missing — fix the actual missing data first, then fix the process that caused it. "The 24-hour window excluded your document" is a diagnosis. It is not a fix. The document still has no tasks. Check the DB, run the backfill, and confirm the data is there before declaring the problem resolved. A fix that only prevents the issue next time has not helped Douglas today.
 
 ## Before ending any session
 
