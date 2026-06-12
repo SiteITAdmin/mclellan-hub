@@ -1,3 +1,26 @@
 </main>
+<script>
+async function markTaskWrong(id) {
+  const reason = prompt('Why is this task wrong? Optional, but a short explanation improves the lesson.');
+  if (reason === null) return;
+  const confirmed = confirm('Mark this task wrong, teach the extraction system, and remove it from Google Tasks?');
+  if (!confirmed) return;
+  try {
+    const response = await fetch(`/api/tasks/${id}/wrong`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    const result = await response.json();
+    if (!result.ok) throw new Error(result.error || 'Learning failed');
+    const warning = result.remoteWarning ? `\nGoogle Tasks warning: ${result.remoteWarning}` : '';
+    const fallback = result.usedFallback ? '\nA safe fallback lesson was used because model analysis was unavailable.' : '';
+    alert(`Learned rule:\n${result.lesson}\n\nEvidence count: ${result.evidenceCount}${fallback}${warning}`);
+    window.location.reload();
+  } catch (err) {
+    alert('Could not learn from this task: ' + err.message);
+  }
+}
+</script>
 </body>
 </html>

@@ -85,6 +85,7 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
   if (!markdown.trim()) return res.status(400).json({ error: 'Document has no content' });
 
   const { extractionPrompt, isGeneratedDocument } = require('../lib/document-tasks');
+  const { formatLearnedTaskRules } = require('../lib/task-learning');
   if (isGeneratedDocument(doc)) {
     return res.status(400).json({ error: 'Generated project-memory documents are not task sources' });
   }
@@ -96,7 +97,11 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
   const modelId = getSystemModelId('task_extractor', 'system', 'google/gemini-2.5-pro-preview');
   const started = Date.now();
 
-  const prompt = extractionPrompt(doc, markdown);
+  const prompt = extractionPrompt(
+    doc,
+    markdown,
+    formatLearnedTaskRules(req.hubUser, 'document'),
+  );
 
   let extracted;
   try {

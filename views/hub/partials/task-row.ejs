@@ -22,7 +22,12 @@
   <div class="crm-task-actions">
     <% if (!t.deleted_at && t.status === 'needsAction') { %>
       <button class="btn btn-sm" onclick="taskAction('<%= t.id %>', 'complete')">Done</button>
+      <% if (['document','email','agentmail'].includes(t.source)) { %>
+        <button class="btn btn-sm btn-ghost" style="color:var(--crm-danger,#c0392b);" onclick="markTaskWrong('<%= t.id %>')">Wrong</button>
+      <% } %>
       <button class="btn btn-sm btn-ghost" onclick="taskAction('<%= t.id %>', 'delete')">Delete</button>
+    <% } else if (t.deleted_at && t.status === 'wrong') { %>
+      <span class="crm-badge" style="background:#fee2e2;color:#991b1b;">Wrong · learned</span>
     <% } else if (t.deleted_at) { %>
       <button class="btn btn-sm btn-ghost" onclick="taskAction('<%= t.id %>', 'restore')">Restore</button>
     <% } %>
