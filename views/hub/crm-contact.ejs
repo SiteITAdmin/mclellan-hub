@@ -20,6 +20,10 @@ async function taskAction(id, action) {
         <% } %>
       </p>
     <% } else { %><p>No company linked yet.</p><% } %>
+    <% if (contact.last_contacted_at) { %>
+      <% const daysSince = Math.floor((Date.now() / 1000 - contact.last_contacted_at) / 86400); %>
+      <p class="crm-muted" style="font-size:13px;">Last contacted: <%= daysSince === 0 ? 'today' : daysSince === 1 ? 'yesterday' : `${daysSince} days ago` %><%= contact.keep_warm_days ? ` · keep-warm every ${contact.keep_warm_days}d` : '' %></p>
+    <% } %>
   </div>
 </section>
 
@@ -49,12 +53,23 @@ async function taskAction(id, action) {
       <% for (const fact of facts) { %>
         <div class="crm-timeline-item<%= fact.status === 'archived' ? ' crm-timeline-archived' : '' %>">
           <time><%= new Date(fact.created_at * 1000).toLocaleDateString('en-GB') %>
-            <% if (fact.status === 'follow_up') { %><span class="crm-type follow_up" style="margin-left:6px;">follow-up</span><% } %>
+            <% if (fact.status === 'follow_up') { %>
+              <span class="crm-type follow_up" style="margin-left:6px;">follow-up</span>
+              <% if (fact.due_date) { %>
+                <% const overdue = fact.due_date <= new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }); %>
+                <span style="margin-left:6px;font-size:11px;<%= overdue ? 'color:var(--crm-danger,#c0392b);font-weight:600;' : 'opacity:.6;' %>"><%= overdue ? '⚠ overdue ' : 'due ' %><%= fact.due_date %></span>
+              <% } %>
+            <% } %>
             <% if (fact.status === 'archived') { %><span style="font-size:10px;opacity:.5;margin-left:6px;">archived</span><% } %>
           </time>
           <strong id="fact-text-<%= fact.id %>"><%= fact.fact %></strong>
           <form class="crm-fact-edit-form" id="fact-edit-<%= fact.id %>" data-fact-id="<%= fact.id %>" style="display:none;">
             <textarea name="fact" rows="3" required><%= fact.fact %></textarea>
+            <% if (fact.status === 'follow_up') { %>
+              <label style="font-size:12px;opacity:.7;display:flex;gap:6px;align-items:center;margin-top:4px;">Due
+                <input type="date" name="due_date" value="<%= fact.due_date || '' %>" style="font-size:12px;padding:2px 6px;">
+              </label>
+            <% } %>
             <div class="crm-fact-edit-actions">
               <button class="btn btn-sm" type="submit">Save</button>
               <button class="btn btn-sm btn-ghost" type="button" onclick="cancelFactEdit('<%= fact.id %>')">Cancel</button>
@@ -190,6 +205,17 @@ async function taskAction(id, action) {
         <label class="wide">Email address
           <input name="email" type="email" value="<%= contact.email || '' %>" placeholder="name@example.com">
         </label>
+        <label>Birthday
+          <input name="birthday" type="date" value="<%= contact.birthday && contact.birthday.length === 10 ? contact.birthday : '' %>">
+        </label>
+        <label>Keep in touch
+          <select name="keep_warm_days">
+            <option value="">Off</option>
+            <option value="30" <%= contact.keep_warm_days === 30 ? 'selected' : '' %>>Every 30 days</option>
+            <option value="60" <%= contact.keep_warm_days === 60 ? 'selected' : '' %>>Every 60 days</option>
+            <option value="90" <%= contact.keep_warm_days === 90 ? 'selected' : '' %>>Every 90 days</option>
+          </select>
+        </label>
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn" type="submit">Save</button>
           <span class="crm-muted" id="contact-edit-msg" style="font-size:12px;"></span>
@@ -231,10 +257,12 @@ document.querySelectorAll('.crm-fact-edit-form').forEach(form => {
     btn.disabled = true;
     msg.textContent = 'Saving…';
     try {
+      const body = { fact };
+      if (form.elements.due_date) body.due_date = form.elements.due_date.value;
       const r = await fetch(`/api/crm/facts/${id}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fact }),
+        body: JSON.stringify(body),
       });
       const j = await r.json();
       if (!j.ok) {

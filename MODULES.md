@@ -138,6 +138,42 @@ If what you're adding changes the purpose, update this file first.
 
 ---
 
+## Reminders
+**Purpose:** Escalate things that need Douglas's attention via Google Chat until he responds. A reminder fires at its set time, then again at +30min, +3h, +24h (4 pings max, never during 22:00–07:30 Dublin), then goes stale and lives in the morning briefing. Replies to the hermes bot ("done 3", "snooze 3 2h", "ok 3") resolve, defer, or silence it — "done" also completes the underlying task or closes the CRM follow-up.
+
+**Sources of reminders:**
+- "remind me to X at Y" via hermes chat or any CRM input (LLM-parsed)
+- Overdue Google Tasks (auto, one reminder per task, via the 15-min sweep)
+- CRM follow-ups past their `due_date` (auto)
+- Contact birthdays (auto, morning of, one per contact per year)
+- Content cadence checks (LinkedIn posting gap, thin newsletter weeks) — these consult real pipeline state and skip silently when healthy; one ping per occurrence, no escalation
+- Manual via `/crm/reminders` or the "Remind me" button on a task
+
+**Healthy looks like:**
+- `reminder_sweep` always has a pending job
+- No reminder sits past its fire time with no pending `reminder_fire` job
+- A reminder whose task/fact was completed elsewhere gets cancelled by the next sweep — escalation never outlives the work
+
+**Owns:** `reminders` table, delivery via hermes space (`_hermes_space` in crm_context, captured from inbound bot messages) with webhook fallback.
+
+**Visible at:** `/crm/reminders`
+
+---
+
+## Suggestions
+**Purpose:** A daily LLM pass (07:00 Dublin) that looks across calendar, CRM notes, flights, price alerts, RSS, and newsletter topics and *suggests* — never acts. Flagship: travel booking timing (unbooked travel windows × Skyscanner price history). Also: LinkedIn post topics from converging signals.
+
+**Interaction:** Max 2 new suggestions pushed to Google Chat per run; all open ones appear in the morning briefing. Replies: "accept 2" (creates a task), "dismiss 2", "why 2" (shows the stored evidence). Suggestions expire after 14 days.
+
+**Owns:** `suggestions` and `travel_price_points` tables. Skyscanner price-alert emails are LLM-extracted into price points by the email processor before generic skip rules.
+
+**Healthy looks like:**
+- `suggestion_run` always has a pending job
+- Re-runs never duplicate (dedup keys)
+- Every suggestion's evidence is inspectable via "why N"
+
+---
+
 ## System Report
 **Purpose:** Email Douglas at 21:00 every day with a plain-text summary of what the system did and whether it's healthy.
 

@@ -125,24 +125,7 @@ async function verifyGoogleChatRequest(req) {
   }
 }
 
-async function postToGoogleChatSpace(spaceName, text) {
-  if (!spaceName) return;
-  try {
-    const fs = require('fs');
-    const saPath = require('path').join(__dirname, '..', 'config', 'google-service-account.json');
-    if (!fs.existsSync(saPath)) { console.warn('[google-chat] no service account for async post'); return; }
-    const { google } = require('googleapis');
-    const auth = new google.auth.GoogleAuth({
-      credentials: JSON.parse(fs.readFileSync(saPath, 'utf8')),
-      scopes: ['https://www.googleapis.com/auth/chat.bot'],
-    });
-    const chat = google.chat({ version: 'v1', auth });
-    await chat.spaces.messages.create({ parent: spaceName, requestBody: { text } });
-    console.log('[google-chat] async post sent to', spaceName);
-  } catch (err) {
-    console.error('[google-chat] async post failed:', err.message);
-  }
-}
+const { postToGoogleChatSpace } = require('../lib/google-chat');
 
 function helpText() {
   return [
@@ -154,6 +137,9 @@ function helpText() {
     '"remember ..." appends to today\'s daily note',
     '"follow up ..." appends a follow-up to today\'s daily note',
     '"linkedin <topic>" generates a scored LinkedIn post + image + adds to content calendar (include a URL to anchor research to that article)',
+    '"remind me to X at/in Y" sets an escalating reminder',
+    '"reminders" lists open reminders; reply "done 3", "snooze 3 2h", or "ok 3"',
+    '"suggestions" lists AI suggestions; reply "accept 2", "dismiss 2", or "why 2"',
   ].join('\n- ');
 }
 
@@ -162,6 +148,49 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
   const lower = text.toLowerCase();
 
   if (lower === 'help') return helpText();
+
+  // Reminder commands — regex-first so acks are instant and cost no tokens
+  if (lower === 'reminders') {
+    const { listOpenReminders } = require('../lib/reminders');
+    const open = listOpenReminders(user);
+    if (!open.length) return 'No open reminders. Say "remind me to X at Y" to set one.';
+    const lines = open.map(r => {
+      const when = r.next_fire_at
+        ? new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' })
+        : r.status;
+      return `#${r.short_code} ${r.title} — ${when}`;
+    });
+    return `*Open reminders:*\n${lines.join('\n')}\n\nReply: done <n> · snooze <n> 2h · ok <n>`;
+  }
+
+  if (lower === 'suggestions') {
+    const { listOpenSuggestions } = require('../lib/suggestion-engine');
+    const open = listOpenSuggestions(user);
+    if (!open.length) return 'No open suggestions. The daily run looks at travel and content signals each morning.';
+    return `*Open suggestions:*\n${open.map(s => `#${s.short_code} [${s.domain}] ${s.title}`).join('\n')}\n\nReply: accept <n> · dismiss <n> · why <n>`;
+  }
+
+  const suggestionCmd = lower.match(/^(accept|dismiss|why)\s+(\d+)$/);
+  if (suggestionCmd) {
+    const { acceptSuggestion, dismissSuggestion, whySuggestion } = require('../lib/suggestion-engine');
+    const [, verb, code] = suggestionCmd;
+    const result = verb === 'accept' ? await acceptSuggestion(user, code)
+      : verb === 'dismiss' ? dismissSuggestion(user, code)
+      : whySuggestion(user, code);
+    return result.message;
+  }
+
+  const reminderCmd = lower.match(/^(done|did|ok|ack|snooze|cancel)\s+(\d+)\s*(.*)$/);
+  if (reminderCmd) {
+    const { doneReminder, ackReminder, snoozeReminder, cancelReminder } = require('../lib/reminders');
+    const [, verb, code, rest] = reminderCmd;
+    let result;
+    if (verb === 'done' || verb === 'did') result = await doneReminder(user, code);
+    else if (verb === 'snooze') result = snoozeReminder(user, code, rest);
+    else if (verb === 'cancel') result = cancelReminder(user, code);
+    else result = ackReminder(user, code);
+    return result.message;
+  }
 
   if (lower === 'briefing' || lower === 'brief') {
     const events = await fetchTodayCalendarEvents(user);
@@ -389,7 +418,15 @@ router.post('/api/google-chat/hermes', writeLimiter, async (req, res) => {
       return res.json({});
     }
 
-    const spaceName = event.space?.name || '';
+    const spaceName = event.space?.name || message.space?.name || '';
+    // Remember where Douglas talks to hermes so reminders can post into a
+    // space where replies actually reach this endpoint (webhooks are one-way)
+    if (spaceName) {
+      db.hub().prepare(`
+        INSERT INTO crm_context (id, user, key, value) VALUES (?, ?, '_hermes_space', ?)
+        ON CONFLICT(user, key) DO UPDATE SET value = excluded.value
+      `).run(uuid(), user, spaceName);
+    }
     const text = cleanGoogleChatText(message.argumentText || message.text || '');
     const reply = await handleGoogleChatCommand(user, text, { spaceName });
     console.log(`[google-chat] handled ${type || 'event'} addon=${isGoogleWorkspaceAddOnRequest(req)} text_chars=${text.length} reply_chars=${String(reply || '').length}`);
@@ -482,6 +519,7 @@ function crmPageData(user) {
       { href: '/crm/companies', label: 'Companies' },
       { href: '/crm/meetings', label: 'Meetings' },
       { href: '/crm/tasks', label: 'Tasks' },
+      { href: '/crm/reminders', label: 'Reminders' },
       { href: '/crm/projects', label: 'Projects' },
     ],
   };
@@ -1009,8 +1047,10 @@ router.post('/api/crm/contacts/:id/edit', requireAuth, requireSameOrigin, writeL
   if (!name) return res.status(400).json({ error: 'Name required' });
   const aliases = String(req.body.aliases || '').split(',').map(a => a.trim()).filter(Boolean);
   const email = String(req.body.email || '').trim().toLowerCase() || null;
-  hub.prepare('UPDATE contacts SET name = ?, email = ?, aliases = ? WHERE id = ?')
-    .run(name, email, JSON.stringify(aliases), contact.id);
+  const birthday = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.birthday || '')) ? req.body.birthday : null;
+  const keepWarm = [30, 60, 90].includes(parseInt(req.body.keep_warm_days, 10)) ? parseInt(req.body.keep_warm_days, 10) : null;
+  hub.prepare('UPDATE contacts SET name = ?, email = ?, aliases = ?, birthday = ?, keep_warm_days = ? WHERE id = ?')
+    .run(name, email, JSON.stringify(aliases), birthday, keepWarm, contact.id);
   const profileSync = syncContactVaultProfile(req.hubUser, contact.id);
   res.json({
     ok: true,
@@ -1078,12 +1118,22 @@ router.post('/api/crm/facts/:id/edit', requireAuth, requireSameOrigin, writeLimi
 
   const hub = db.hub();
   const existing = hub.prepare(`
-    SELECT f.id, f.fact, c.name AS contact_name
+    SELECT f.id, f.fact, f.status, f.due_date, c.name AS contact_name
     FROM crm_facts f
     JOIN contacts c ON c.id = f.contact_id
     WHERE f.id = ? AND f.user = ?
   `).get(req.params.id, req.hubUser);
   if (!existing) return res.status(404).json({ error: 'Not found' });
+
+  if (existing.status === 'follow_up' && 'due_date' in req.body) {
+    const dueDate = String(req.body.due_date || '').trim();
+    if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      return res.status(400).json({ error: 'due_date must be YYYY-MM-DD' });
+    }
+    hub.prepare('UPDATE crm_facts SET due_date = ?, updated_at = unixepoch() WHERE id = ? AND user = ?')
+       .run(dueDate || null, existing.id, req.hubUser);
+  }
+
   if (existing.fact === factText) return res.json({ ok: true, projectionSynced: true });
 
   hub.prepare(
@@ -1231,6 +1281,50 @@ router.post('/api/tasks/:id/subtasks', requireAuth, requireSameOrigin, writeLimi
     console.error('[tasks] subtask create error', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Reminders ─────────────────────────────────────────────────────────────────
+
+router.get('/crm/reminders', requireAuth, (req, res) => {
+  const { listOpenReminders } = require('../lib/reminders');
+  const hub = db.hub();
+  const open = listOpenReminders(req.hubUser);
+  const resolved = hub.prepare(`
+    SELECT * FROM reminders
+    WHERE user = ? AND status IN ('done','cancelled') AND updated_at > unixepoch() - 7 * 86400
+    ORDER BY updated_at DESC LIMIT 20
+  `).all(req.hubUser);
+  res.render('hub/crm-reminders', { ...crmPageData(req.hubUser), open, resolved });
+});
+
+router.post('/api/reminders', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const title = String(req.body.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'title required' });
+  const { createReminder, dublinIsoToEpoch, epochAtNextDublin } = require('../lib/reminders');
+  let remindAt = dublinIsoToEpoch(String(req.body.remind_at || '').trim());
+  if (!remindAt || remindAt < Math.floor(Date.now() / 1000) - 60) remindAt = epochAtNextDublin(9, 0);
+  const reminder = createReminder(req.hubUser, {
+    kind: req.body.kind === 'task' ? 'task' : 'adhoc',
+    targetId: req.body.target_id || null,
+    title,
+    remindAt,
+    source: 'hub-ui',
+  });
+  if (!reminder) return res.status(500).json({ error: 'Could not create reminder' });
+  res.json({ ok: true, reminder });
+});
+
+router.post('/api/reminders/:id/:action(done|snooze|cancel|ack)', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const reminders = require('../lib/reminders');
+  const row = db.hub().prepare('SELECT * FROM reminders WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (['done', 'cancelled'].includes(row.status)) return res.status(400).json({ error: 'Already resolved' });
+  let result;
+  if (req.params.action === 'done') result = await reminders.doneReminder(req.hubUser, row.short_code);
+  else if (req.params.action === 'snooze') result = reminders.snoozeReminder(req.hubUser, row.short_code, String(req.body.duration || ''));
+  else if (req.params.action === 'cancel') result = reminders.cancelReminder(req.hubUser, row.short_code);
+  else result = reminders.ackReminder(req.hubUser, row.short_code);
+  res.json(result);
 });
 
 // ── Projects ──────────────────────────────────────────────────────────────────
