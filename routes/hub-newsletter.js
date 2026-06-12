@@ -342,10 +342,10 @@ router.post('/creators/add', (req, res) => {
   const { name, url, creator_slug } = req.body;
   if (!name || !url || !creator_slug) return res.redirect('/newsletter/creators');
   const slug = creator_slug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  db.hub().prepare(`
+  const result = db.hub().prepare(`
     INSERT OR IGNORE INTO rss_feeds (id, user, name, creator_slug, url) VALUES (?, ?, ?, ?, ?)
   `).run(uuid(), req.hubUser, name.trim(), slug, url.trim());
-  res.redirect('/newsletter/creators');
+  res.redirect('/newsletter/creators' + (result.changes ? '' : '?msg=' + encodeURIComponent('That feed URL is already subscribed')));
 });
 
 router.get('/creators', (req, res) => {

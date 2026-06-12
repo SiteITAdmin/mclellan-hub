@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "init-db": "node scripts/init-db.js"
+    "init-db": "node scripts/init-db.js",
+    "test": "node --test test/*.test.js && node test/reminders-synthetic.js && node test/nudges-synthetic.js && node test/content-reminders-synthetic.js",
+    "test:integration": "node test/suggestions-synthetic.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
@@ -20,7 +22,6 @@
     "mammoth": "^1.7.2",
     "marked": "^12.0.0",
     "multer": "^1.4.5-lts.1",
-    "node-fetch": "^2.7.0",
     "nodemailer": "^6.10.1",
     "pdfjs-dist": "^5.4.296",
     "pdfkit": "^0.15.0",
