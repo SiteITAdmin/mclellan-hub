@@ -96,12 +96,12 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <a href="/newsletter/creators" style="font-size:13px;color:var(--text-dim);">Creators ↗</a>
   </div>
   <p class="nl-heading">Intelligence briefing</p>
-  <p class="nl-sub">Topics extracted from your newsletters. Select what matters, generate a briefing, send it.</p>
+  <p class="nl-sub">Build focused briefings from approved external newsletters, publications, and RSS sources.</p>
 
   <!-- ── Topics ─────────────────────────────────────────────────────────────── -->
   <div class="section-card">
     <p class="section-title">Topics — <%= weekLabel %></p>
-    <p class="section-desc">Topics extracted from newsletters as they arrive. Select what to include in your briefing, then generate.</p>
+    <p class="section-desc">Substantial items extracted from approved external sources. These remain searchable even when they are not used in a particular briefing.</p>
 
     <div class="week-bar">
       <form method="GET" action="/newsletter" style="display:flex;align-items:center;gap:8px">
@@ -152,7 +152,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
             </button>
             <div class="topic-body">
               <div class="topic-headline"><%= t.headline %></div>
-              <div class="topic-meta"><%= t.from_name %> · <%= new Date(t.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+              <div class="topic-meta"><%= t.from_name %> · <%= t.item_type %> · <%= new Date((t.published_at || t.created_at) * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
               <% if (t.summary) { %><div class="topic-summary"><%= t.summary %></div><% } %>
             </div>
           </div>
@@ -166,15 +166,19 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <!-- ── Generate & Send ───────────────────────────────────────────────────── -->
   <div class="section-card">
     <p class="section-title">Generate briefing</p>
-    <p class="section-desc">Choose a format and date range. The briefing uses selected topics received within that range.</p>
+    <p class="section-desc">Describe what you want to read. The system finds relevant items across external sources, then writes using their full extracted text.</p>
     <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
       <div class="field" style="min-width:200px">
         <label>Format</label>
         <select id="gen-format">
           <% for (const f of formats) { %>
-          <option value="<%= f.id %>" <%= f.is_default ? 'selected' : '' %>><%= f.name %></option>
+          <option value="<%= f.id %>" data-focus="<%= f.focus_query || '' %>" <%= f.is_default ? 'selected' : '' %>><%= f.name %></option>
           <% } %>
         </select>
+      </div>
+      <div class="field" style="flex:1 1 360px">
+        <label>Briefing focus or question</label>
+        <textarea id="gen-focus" rows="3" style="min-height:74px" placeholder="e.g. What happened with Claude and Anthropic this week, including government, security and market coverage?"></textarea>
       </div>
       <div class="field" style="min-width:150px">
         <label>From</label>
@@ -184,9 +188,11 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         <label>To</label>
         <input id="gen-date-to" type="date" value="<%= defaultDateTo %>" required>
       </div>
+      <button class="btn" id="preview-btn" onclick="previewBriefing()">Preview sources</button>
       <button class="btn btn-primary" id="generate-btn" onclick="generateBriefing()">Generate</button>
       <span id="gen-status" style="font-size:13px;color:var(--text-dim)"></span>
     </div>
+    <div id="match-preview" style="display:none;margin:12px 0 18px"></div>
 
     <div id="preview-wrap" style="display:none">
       <div class="preview-area">
@@ -230,7 +236,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <div class="backfill-row">
       <div class="field">
         <label>Gmail labels (comma-separated)</label>
-        <input id="bf-labels" type="text" placeholder="e.g. AI news, Newsletters">
+        <input id="bf-labels" type="text" value="Resources/Newsletters, Resources/Research" placeholder="Resources/Newsletters, Resources/Research">
       </div>
       <div class="field" style="flex:0 0 80px">
         <label>Days back</label>
@@ -246,10 +252,26 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <div id="backfill-status"></div>
   </div>
 
+  <div class="section-card" id="sources">
+    <p class="section-title">Approved external sources</p>
+    <p class="section-desc">Only these registered senders and enabled RSS feeds can enter Intelligence. Messages filed under Resources/Newsletters or Resources/Research register their sender automatically.</p>
+    <div class="mgmt-grid">
+      <% for (const source of sources) { %>
+      <div class="mgmt-card">
+        <div class="mgmt-card-name"><%= source.name %></div>
+        <div class="mgmt-card-meta"><%= source.source_kind.toUpperCase() %> · <%= source.match_value %> · <%= source.document_count %> documents</div>
+      </div>
+      <% } %>
+      <% if (!sources.length) { %>
+      <div class="empty-state">No approved sources yet. Import the Resources/Newsletters label or fetch an enabled RSS feed.</div>
+      <% } %>
+    </div>
+  </div>
+
   <!-- ── Briefing formats ──────────────────────────────────────────────────── -->
   <div class="section-card" id="formats">
     <p class="section-title">Briefing formats</p>
-    <p class="section-desc">Define how each briefing is written. Instructions are the LLM system prompt. Target words and max tokens override the automatic scaling. Model overrides the system default.</p>
+    <p class="section-desc">Define the default retrieval focus, reading length, writing instructions, and model. The focus finds evidence; the instructions control presentation.</p>
 
     <div class="mgmt-grid">
       <% for (const f of formats) { %>
@@ -257,6 +279,9 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         <div class="mgmt-card-name"><%= f.name %> <% if (f.is_default) { %><span class="badge badge-default">default</span><% } %></div>
         <div class="mgmt-card-meta" style="margin-bottom:6px"><%= f.instructions.slice(0, 72) %>…</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <% if (f.focus_query) { %><span class="badge badge-on"><%= f.focus_query.slice(0, 46) %></span><% } %>
+          <span class="badge badge-off"><%= f.reading_minutes || 20 %> min</span>
+          <span class="badge badge-off">up to <%= f.retrieval_limit || 40 %> items</span>
           <% if (f.target_words) { %><span class="badge badge-off"><%= f.target_words %> words</span><% } %>
           <% if (f.max_tokens) { %><span class="badge badge-off"><%= f.max_tokens %> tokens</span><% } %>
           <% if (f.model_id) { %><span class="badge badge-default"><%= f.model_id.split('/')[1] || f.model_id %></span><% } %>
@@ -278,10 +303,22 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
               <input name="name" value="<%= f.name %>" required>
             </div>
             <div class="field">
+              <label>Default focus / retrieval query</label>
+              <textarea name="focus_query" rows="3" placeholder="What should this format find?"><%= f.focus_query || '' %></textarea>
+            </div>
+            <div class="field">
               <label>Instructions (system prompt)</label>
               <textarea name="instructions" rows="8"><%= f.instructions %></textarea>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field">
+                <label>Reading minutes</label>
+                <input name="reading_minutes" type="number" min="5" max="90" value="<%= f.reading_minutes || 20 %>">
+              </div>
+              <div class="field">
+                <label>Maximum matched items</label>
+                <input name="retrieval_limit" type="number" min="5" max="100" value="<%= f.retrieval_limit || 40 %>">
+              </div>
               <div class="field">
                 <label>Target words <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = auto)</span></label>
                 <input name="target_words" type="number" min="50" max="5000" value="<%= f.target_words || '' %>" placeholder="auto">
@@ -322,10 +359,22 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
           <input name="name" placeholder="Quick brief" required>
         </div>
         <div class="field">
+          <label>Default focus / retrieval query</label>
+          <textarea name="focus_query" rows="3" placeholder="e.g. Prompts and practical AI workflows published this week"></textarea>
+        </div>
+        <div class="field">
           <label>Instructions</label>
           <textarea name="instructions" rows="6" placeholder="Write a concise intelligence briefing…" required></textarea>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field">
+            <label>Reading minutes</label>
+            <input name="reading_minutes" type="number" min="5" max="90" value="20">
+          </div>
+          <div class="field">
+            <label>Maximum matched items</label>
+            <input name="retrieval_limit" type="number" min="5" max="100" value="40">
+          </div>
           <div class="field">
             <label>Target words <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = auto)</span></label>
             <input name="target_words" type="number" min="50" max="5000" placeholder="auto">
@@ -357,31 +406,14 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
   <!-- ── Interests / categories ────────────────────────────────────────────── -->
   <div class="section-card" id="interests">
-    <p class="section-title">Interests & categories</p>
-    <p class="section-desc">The extractor tags each topic against these categories. Each can be linked to a Gmail label — use Sync to import your labels automatically.</p>
-
-    <div style="margin-bottom:14px">
-      <button class="btn-sm" onclick="syncLabels()">Sync from Gmail labels</button>
-      <span id="sync-status" style="font-size:12px;color:var(--text-dim);margin-left:10px"></span>
-    </div>
+    <p class="section-title">Thematic categories</p>
+    <p class="section-desc">These are optional navigation labels for external items. They do not control which sources are admitted or which items match a briefing request.</p>
 
     <div class="mgmt-grid">
       <% for (const i of interests) { %>
       <div class="mgmt-card">
         <div class="mgmt-card-name"><%= i.name %></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
-          <% if (i.gmail_label) { %><span class="badge badge-off">Gmail: <%= i.gmail_label %></span><% } %>
-          <% const modeLabel = {full:'full',minimal:'minimal',skip:'skip'}[i.mode]; if (modeLabel) { %><span class="badge <%= i.mode==='skip'?'badge-off':i.mode==='full'?'badge-default':'badge-on' %>"><%= modeLabel %></span><% } %>
-          <% if (i.body_limit) { %><span class="badge badge-off"><%= (i.body_limit/1000).toFixed(0) %>k chars</span><% } %>
-          <% if (i.extract_max_tokens) { %><span class="badge badge-off"><%= i.extract_max_tokens %> tok</span><% } %>
-        </div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
-          <form method="POST" action="/newsletter/interests/toggle-auto" style="display:inline">
-            <input type="hidden" name="id" value="<%= i.id %>">
-            <button class="btn-sm" type="submit">
-              <span class="badge <%= i.auto_include ? 'badge-on' : 'badge-off' %>"><%= i.auto_include ? 'auto-include' : 'manual' %></span>
-            </button>
-          </form>
           <button class="btn-sm" onclick="toggleEdit('int-<%= i.id %>')">Edit</button>
           <form method="POST" action="/newsletter/interests/delete" style="display:inline">
             <input type="hidden" name="id" value="<%= i.id %>">
@@ -394,33 +426,6 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
             <div class="field">
               <label>Category name</label>
               <input name="name" value="<%= i.name %>" required>
-            </div>
-            <div class="field">
-              <label>Linked Gmail label <span style="font-weight:400;text-transform:none;letter-spacing:0">(exact name)</span></label>
-              <input name="gmail_label" value="<%= i.gmail_label || '' %>" placeholder="e.g. AI news">
-            </div>
-            <div class="field">
-              <label>Extraction mode</label>
-              <select name="mode">
-                <option value="selective" <%= (i.mode||'selective')==='selective'?'selected':'' %>>Selective — extract distinct topics, filter noise</option>
-                <option value="full" <%= i.mode==='full'?'selected':'' %>>Full — capture everything verbatim (good for work briefings)</option>
-                <option value="minimal" <%= i.mode==='minimal'?'selected':'' %>>Minimal — 1–2 headlines only</option>
-                <option value="skip" <%= i.mode==='skip'?'selected':'' %>>Skip — don't extract from this source</option>
-              </select>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div class="field">
-                <label>Body limit <span style="font-weight:400;text-transform:none;letter-spacing:0">chars (blank = 20 000)</span></label>
-                <input name="body_limit" type="number" min="500" max="100000" value="<%= i.body_limit || '' %>" placeholder="20000">
-              </div>
-              <div class="field">
-                <label>Max extract tokens <span style="font-weight:400;text-transform:none;letter-spacing:0">(blank = 4 000)</span></label>
-                <input name="extract_max_tokens" type="number" min="200" value="<%= i.extract_max_tokens || '' %>" placeholder="4000">
-              </div>
-            </div>
-            <div class="field">
-              <label>Custom extraction prompt <span style="font-weight:400;text-transform:none;letter-spacing:0">(overrides mode default)</span></label>
-              <textarea name="extraction_prompt" rows="6" placeholder="Leave blank to use the mode default. Write a full prompt to control exactly how this source is processed."><%= i.extraction_prompt || '' %></textarea>
             </div>
             <div class="form-actions">
               <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
@@ -438,23 +443,6 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         <div class="field">
           <label>Category name</label>
           <input name="name" placeholder="e.g. Regulation & Compliance" required>
-        </div>
-        <div class="field">
-          <label>Linked Gmail label <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
-          <input name="gmail_label" placeholder="e.g. Healthcare news">
-        </div>
-        <div class="field">
-          <label>Extraction mode</label>
-          <select name="mode">
-            <option value="selective">Selective — extract distinct topics, filter noise</option>
-            <option value="full">Full — capture everything verbatim</option>
-            <option value="minimal">Minimal — 1–2 headlines only</option>
-            <option value="skip">Skip — don't extract from this source</option>
-          </select>
-        </div>
-        <div class="field" style="flex-direction:row;align-items:center;gap:6px">
-          <input type="checkbox" name="auto_include" id="new-auto" checked>
-          <label for="new-auto" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:normal">Auto-include topics from this category</label>
         </div>
         <div>
           <button type="submit" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">Add</button>
@@ -526,6 +514,58 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     throw new Error('Generation is still running. Reload later to find it under Recent briefings.');
   }
 
+  const formatSelect = document.getElementById('gen-format');
+  const focusInput = document.getElementById('gen-focus');
+  function applyFormatFocus(force = false) {
+    const option = formatSelect?.selectedOptions?.[0];
+    if (option && (force || !focusInput.value.trim())) focusInput.value = option.dataset.focus || '';
+  }
+  formatSelect?.addEventListener('change', () => applyFormatFocus(true));
+  applyFormatFocus(false);
+
+  window.previewBriefing = async function() {
+    const status = document.getElementById('gen-status');
+    const preview = document.getElementById('match-preview');
+    const button = document.getElementById('preview-btn');
+    button.disabled = true;
+    status.textContent = 'Finding relevant external items…';
+    try {
+      const response = await fetch('/newsletter/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          week: '<%= weekKey %>',
+          format_id: formatSelect?.value || '',
+          focus: focusInput?.value || '',
+          date_from: document.getElementById('gen-date-from')?.value || '',
+          date_to: document.getElementById('gen-date-to')?.value || '',
+        }).toString(),
+      });
+      const data = await readApiResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Preview failed');
+      status.textContent = `Found ${data.count} relevant items for “${data.focus}”.`;
+      preview.innerHTML = data.items.length
+        ? `<div class="mgmt-grid">${data.items.map(item => `
+            <div class="mgmt-card">
+              <div class="mgmt-card-name">${escapeHtml(item.title)}</div>
+              <div class="mgmt-card-meta">${escapeHtml(item.source || '')} · ${escapeHtml(item.itemType || '')}</div>
+              <div class="topic-summary">${escapeHtml(item.reason || item.summary || '')}</div>
+            </div>`).join('')}</div>`
+        : '<div class="empty-state">No matching external items found.</div>';
+      preview.style.display = 'block';
+    } catch (err) {
+      status.textContent = '⚠ ' + err.message;
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[char]);
+  }
+
   window.generateBriefing = async function() {
     const formatId = document.getElementById('gen-format')?.value;
     const dateFrom = document.getElementById('gen-date-from')?.value;
@@ -549,6 +589,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         body: new URLSearchParams({
           week: '<%= weekKey %>',
           format_id: formatId || '',
+          focus: focusInput?.value || '',
           date_from: dateFrom,
           date_to: dateTo,
         }).toString(),
