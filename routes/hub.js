@@ -24,7 +24,7 @@ const {
   upload, audioUpload, chatLimiter, uploadLimiter, writeLimiter,
   requireAuth, requireSameOrigin,
 } = require('./hub-shared');
-const { getWeekKey } = require('../lib/newsletter-pipeline');
+const { getWeekKey, weekKeyRange } = require('../lib/newsletter-pipeline');
 const newsletterRouter = require('./hub-newsletter');
 router.use('/newsletter', requireAuth, newsletterRouter);
 
@@ -224,9 +224,13 @@ router.get('/', requireAuth, async (req, res) => {
   const tokenBurn = buildTokenBurnSummary(user);
 
   const nlWeekKey = getWeekKey();
+  const nlRange = weekKeyRange(nlWeekKey);
+  const nlFromTs = Date.parse(`${nlRange.dateFrom}T00:00:00Z`) / 1000;
+  const nlToTs = Date.parse(`${nlRange.dateTo}T23:59:59Z`) / 1000;
   const nlRow = hub.prepare(`
-    SELECT COUNT(*) as total, SUM(selected) as selected FROM nl_topics WHERE user = ? AND week_key = ?
-  `).get(user, nlWeekKey);
+    SELECT COUNT(*) as total, SUM(selected) as selected
+    FROM intel_items WHERE user = ? AND published_at BETWEEN ? AND ?
+  `).get(user, nlFromTs, nlToTs);
   const nlThisWeek = { total: nlRow?.total || 0, selected: nlRow?.selected || 0, weekKey: nlWeekKey };
 
   res.render('hub/home', { user, projects, recentConvs, today, calendarEvents, recentMeeting, tokenBurn, formatTokens, nlThisWeek });

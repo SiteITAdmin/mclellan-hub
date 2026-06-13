@@ -13,6 +13,7 @@ const { uuid } = require('./../lib/id');
 const USER = 'douglas';
 let failures = 0;
 const fakeTopicIds = [];
+const fakeDocumentIds = [];
 
 function check(label, fn) {
   try { fn(); console.log(`  ✅ ${label}`); }
@@ -21,7 +22,8 @@ function check(label, fn) {
 
 function cleanup() {
   hub.prepare("DELETE FROM reminders WHERE kind = 'content' AND user = ?").run(USER);
-  for (const id of fakeTopicIds) hub.prepare('DELETE FROM nl_topics WHERE id = ?').run(id);
+  for (const id of fakeTopicIds) hub.prepare('DELETE FROM intel_items WHERE id = ?').run(id);
+  for (const id of fakeDocumentIds) hub.prepare('DELETE FROM intel_documents WHERE id = ?').run(id);
   hub.prepare("DELETE FROM system_jobs WHERE type = 'reminder_fire' AND json_extract(payload, '$.reminderId') NOT IN (SELECT id FROM reminders)").run();
 }
 
@@ -74,18 +76,33 @@ function cleanup() {
     const ys = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     return `${d.getUTCFullYear()}-W${String(Math.ceil(((d - ys) / 86400000 + 1) / 7)).padStart(2, '0')}`;
   })();
-  const existing = hub.prepare('SELECT COUNT(*) AS n FROM nl_topics WHERE user = ? AND week_key = ? AND selected = 1').get(USER, week).n;
+  const range = require('../lib/newsletter-pipeline').weekKeyRange(week);
+  const fromTs = Date.parse(`${range.dateFrom}T00:00:00Z`) / 1000;
+  const toTs = Date.parse(`${range.dateTo}T23:59:59Z`) / 1000;
+  const existing = hub.prepare('SELECT COUNT(*) AS n FROM intel_items WHERE user = ? AND published_at BETWEEN ? AND ? AND selected = 1').get(USER, fromTs, toTs).n;
   const needed = Math.max(0, 3 - existing);
   for (let i = 0; i < needed; i++) {
+    const documentId = uuid();
+    hub.prepare(`
+      INSERT INTO intel_documents
+        (id, user, external_id, source_kind, title, published_at, content_text)
+      VALUES (?, ?, ?, 'test', ?, ?, ?)
+    `).run(documentId, USER, `synthtest-${documentId}`, `synthtest document ${i}`, fromTs + i, 'test');
+    fakeDocumentIds.push(documentId);
     const id = uuid();
-    hub.prepare("INSERT INTO nl_topics (id, user, headline, week_key, selected) VALUES (?, ?, ?, ?, 1)")
-      .run(id, USER, `synthtest topic ${i}`, week);
+    hub.prepare(`
+      INSERT INTO intel_items
+        (id, user, document_id, title, content_text, published_at, selected)
+      VALUES (?, ?, ?, ?, 'test', ?, 1)
+    `).run(id, USER, documentId, `synthtest topic ${i}`, fromTs + i);
     fakeTopicIds.push(id);
   }
   check('healthy week (≥3 topics) → skip', () =>
     assert.strictEqual(content.evaluateCheck(nlRem).skip, true));
-  for (const id of fakeTopicIds) hub.prepare('DELETE FROM nl_topics WHERE id = ?').run(id);
+  for (const id of fakeTopicIds) hub.prepare('DELETE FROM intel_items WHERE id = ?').run(id);
+  for (const id of fakeDocumentIds) hub.prepare('DELETE FROM intel_documents WHERE id = ?').run(id);
   fakeTopicIds.length = 0;
+  fakeDocumentIds.length = 0;
   if (existing < 3) {
     check('thin week → nudge message with count', () => {
       const r = content.evaluateCheck(nlRem);

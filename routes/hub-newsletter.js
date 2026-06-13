@@ -7,7 +7,7 @@ const { uuid } = require('../lib/id');
 const {
   getWeekKey, weekKeyLabel,
   weekKeyRange, briefingPeriodLabel,
-  backfillFromLabels, generateBriefing, generateCreatorBriefing, buildBriefingPdf, sendBriefing,
+  backfillFromLabels, previewBriefing, generateBriefing, generateCreatorBriefing, buildBriefingPdf, sendBriefing,
 } = require('../lib/newsletter-pipeline');
 const { ingestFeed } = require('../lib/rss-ingest');
 const { listUserLabels } = require('../lib/gmail');
@@ -45,18 +45,27 @@ router.get('/', (req, res) => {
   const defaultRange = weekKeyRange(requestedWeek) || weekKeyRange(getWeekKey());
   const weekKey = weekKeyRange(requestedWeek) ? requestedWeek : getWeekKey();
 
-  // Available weeks (last 8)
-  const weeks = hub.prepare(`
-    SELECT week_key, COUNT(*) as total, SUM(selected) as selected
-    FROM nl_topics WHERE user = ?
-    GROUP BY week_key ORDER BY week_key DESC LIMIT 8
+  const recentItems = hub.prepare(`
+    SELECT i.id, i.title AS headline, i.summary, i.category, i.item_type,
+           i.selected, i.published_at, i.created_at, d.sender_name AS from_name,
+           d.title AS email_subject
+    FROM intel_items i JOIN intel_documents d ON d.id = i.document_id
+    WHERE i.user = ?
+    ORDER BY i.published_at DESC
+    LIMIT 2000
   `).all(user);
-
-  // Topics for selected week, grouped
-  const topics = hub.prepare(`
-    SELECT * FROM nl_topics WHERE user = ? AND week_key = ?
-    ORDER BY category, created_at DESC
-  `).all(user, weekKey);
+  const weekMap = new Map();
+  for (const item of recentItems) {
+    const key = getWeekKey(new Date((item.published_at || item.created_at) * 1000));
+    const row = weekMap.get(key) || { week_key: key, total: 0, selected: 0 };
+    row.total++;
+    row.selected += item.selected ? 1 : 0;
+    weekMap.set(key, row);
+  }
+  const weeks = [...weekMap.values()].sort((a, b) => b.week_key.localeCompare(a.week_key)).slice(0, 8);
+  const topics = recentItems.filter(item =>
+    getWeekKey(new Date((item.published_at || item.created_at) * 1000)) === weekKey
+  );
 
   const grouped = {};
   for (const t of topics) {
@@ -66,7 +75,13 @@ router.get('/', (req, res) => {
 
   // Formats and interests for management sections
   const formats = hub.prepare('SELECT * FROM nl_formats WHERE user = ? ORDER BY is_default DESC, name').all(user);
-  const interests = hub.prepare('SELECT * FROM nl_interests WHERE user = ? ORDER BY display_order').all(user);
+  const interests = hub.prepare('SELECT * FROM nl_interests WHERE user = ? AND gmail_label IS NULL ORDER BY display_order').all(user);
+  const sources = hub.prepare(`
+    SELECT s.*, COUNT(d.id) AS document_count
+    FROM intel_sources s LEFT JOIN intel_documents d ON d.source_id = s.id
+    WHERE s.user = ?
+    GROUP BY s.id ORDER BY s.name
+  `).all(user);
   const models = hub.prepare('SELECT key, label, model_id FROM model_config WHERE enabled = 1 ORDER BY display_order, label').all();
 
   // Recent briefings
@@ -81,7 +96,7 @@ router.get('/', (req, res) => {
     defaultDateFrom: defaultRange.dateFrom,
     defaultDateTo: defaultRange.dateTo,
     briefingPeriodLabel,
-    weeks, grouped, formats, interests, briefings, models,
+    weeks, grouped, formats, interests, sources, briefings, models,
     totalTopics: topics.length,
     selectedTopics: topics.filter(t => t.selected).length,
   });
@@ -93,8 +108,8 @@ router.post('/topics/toggle', (req, res) => {
   const { id, week } = req.body;
   if (!id) return res.redirect('/newsletter');
   const hub = db.hub();
-  const t = hub.prepare('SELECT selected FROM nl_topics WHERE id = ? AND user = ?').get(id, req.hubUser);
-  if (t) hub.prepare('UPDATE nl_topics SET selected = ? WHERE id = ?').run(t.selected ? 0 : 1, id);
+  const t = hub.prepare('SELECT selected FROM intel_items WHERE id = ? AND user = ?').get(id, req.hubUser);
+  if (t) hub.prepare('UPDATE intel_items SET selected = ? WHERE id = ?').run(t.selected ? 0 : 1, id);
   const wantsHtml = req.headers['accept']?.includes('text/html');
   if (!wantsHtml) return res.json({ ok: true });
   res.redirect(`/newsletter${week ? '?week=' + week : ''}`);
@@ -103,8 +118,13 @@ router.post('/topics/toggle', (req, res) => {
 router.post('/topics/toggle-week', (req, res) => {
   const { week, value } = req.body;
   if (!week) return res.redirect('/newsletter');
-  db.hub().prepare('UPDATE nl_topics SET selected = ? WHERE user = ? AND week_key = ?')
-    .run(value === '1' ? 1 : 0, req.hubUser, week);
+  const range = weekKeyRange(week);
+  if (range) {
+    const fromTs = Date.parse(`${range.dateFrom}T00:00:00Z`) / 1000;
+    const toTs = Date.parse(`${range.dateTo}T23:59:59Z`) / 1000;
+    db.hub().prepare('UPDATE intel_items SET selected = ? WHERE user = ? AND published_at BETWEEN ? AND ?')
+      .run(value === '1' ? 1 : 0, req.hubUser, fromTs, toTs);
+  }
   res.redirect(`/newsletter?week=${week}`);
 });
 
@@ -140,7 +160,7 @@ router.post('/backfill', async (req, res) => {
 // ── Generate briefing ─────────────────────────────────────────────────────────
 
 router.post('/generate', async (req, res) => {
-  const { week, format_id, date_from, date_to } = req.body;
+  const { week, format_id, focus, date_from, date_to } = req.body;
   const weekKey = week || getWeekKey();
   const user = req.hubUser;
   const jobId = uuid();
@@ -156,6 +176,7 @@ router.post('/generate', async (req, res) => {
         user,
         weekKey,
         formatId: format_id || null,
+        focus: focus || '',
         dateFrom: date_from,
         dateTo: date_to,
       });
@@ -173,6 +194,37 @@ router.post('/generate', async (req, res) => {
       `).run(err.message, jobId);
     }
   });
+});
+
+router.post('/preview', async (req, res) => {
+  try {
+    const result = await previewBriefing({
+      user: req.hubUser,
+      weekKey: req.body.week || getWeekKey(),
+      formatId: req.body.format_id || null,
+      focus: req.body.focus || '',
+      dateFrom: req.body.date_from,
+      dateTo: req.body.date_to,
+    });
+    res.json({
+      ok: true,
+      focus: result.focus,
+      count: result.items.length,
+      items: result.items.map(item => ({
+        id: item.id,
+        title: item.title,
+        summary: item.summary,
+        itemType: item.item_type,
+        category: item.category,
+        source: item.sender_name || item.sender_email,
+        publication: item.document_title,
+        reason: item.relevance_reason || null,
+        url: item.resolved_url || null,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/generate/:jobId', (req, res) => {
@@ -286,24 +338,26 @@ router.get('/briefing/:id/pdf', async (req, res) => {
 // ── Formats CRUD ──────────────────────────────────────────────────────────────
 
 router.post('/formats', (req, res) => {
-  const { name, instructions, is_default, target_words, max_tokens, model_id } = req.body;
+  const { name, focus_query, instructions, is_default, target_words, max_tokens, model_id, retrieval_limit, reading_minutes } = req.body;
   if (!name || !instructions) return res.redirect('/newsletter#formats');
   const hub = db.hub();
   if (is_default) hub.prepare('UPDATE nl_formats SET is_default = 0 WHERE user = ?').run(req.hubUser);
-  hub.prepare('INSERT INTO nl_formats (id, user, name, instructions, is_default, target_words, max_tokens, model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(uuid(), req.hubUser, name.trim(), instructions.trim(), is_default ? 1 : 0,
-      parseInt(target_words) || null, parseInt(max_tokens) || null, model_id || null);
+  hub.prepare('INSERT INTO nl_formats (id, user, name, focus_query, instructions, is_default, target_words, max_tokens, model_id, retrieval_limit, reading_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(uuid(), req.hubUser, name.trim(), focus_query?.trim() || null, instructions.trim(), is_default ? 1 : 0,
+      parseInt(target_words) || null, parseInt(max_tokens) || null, model_id || null,
+      parseInt(retrieval_limit) || 40, parseInt(reading_minutes) || 20);
   res.redirect('/newsletter#formats');
 });
 
 router.post('/formats/update', (req, res) => {
-  const { id, name, instructions, is_default, target_words, max_tokens, model_id } = req.body;
+  const { id, name, focus_query, instructions, is_default, target_words, max_tokens, model_id, retrieval_limit, reading_minutes } = req.body;
   if (!id) return res.redirect('/newsletter#formats');
   const hub = db.hub();
   if (is_default) hub.prepare('UPDATE nl_formats SET is_default = 0 WHERE user = ?').run(req.hubUser);
-  hub.prepare('UPDATE nl_formats SET name = ?, instructions = ?, is_default = ?, target_words = ?, max_tokens = ?, model_id = ? WHERE id = ? AND user = ?')
-    .run(name?.trim(), instructions?.trim(), is_default ? 1 : 0,
+  hub.prepare('UPDATE nl_formats SET name = ?, focus_query = ?, instructions = ?, is_default = ?, target_words = ?, max_tokens = ?, model_id = ?, retrieval_limit = ?, reading_minutes = ? WHERE id = ? AND user = ?')
+    .run(name?.trim(), focus_query?.trim() || null, instructions?.trim(), is_default ? 1 : 0,
       parseInt(target_words) || null, parseInt(max_tokens) || null, model_id || null,
+      parseInt(retrieval_limit) || 40, parseInt(reading_minutes) || 20,
       id, req.hubUser);
   res.redirect('/newsletter#formats');
 });
