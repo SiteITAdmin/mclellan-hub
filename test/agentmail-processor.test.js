@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
   actionTaskKey,
   agentmailFactLinks,
+  isForcedWorkSender,
   normalizeActionTasks,
 } = require('../lib/agentmail-processor');
 
@@ -35,4 +36,10 @@ test('AgentMail action keys are stable for task deduplication', () => {
 
 test('AgentMail co-occurrence does not link unrelated contact facts', () => {
   assert.equal(agentmailFactLinks(), '[]');
+});
+
+test('Beacon emails from Douglas are always treated as work', () => {
+  assert.equal(isForcedWorkSender('douglas.mclellan@beaconhospital.ie'), true);
+  assert.equal(isForcedWorkSender(' Douglas.McLellan@BeaconHospital.ie '), true);
+  assert.equal(isForcedWorkSender('newsletter@beaconhospital.ie'), false);
 });
