@@ -184,7 +184,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         <label>To</label>
         <input id="gen-date-to" type="date" value="<%= defaultDateTo %>" required>
       </div>
-      <button class="btn btn-primary" onclick="generateBriefing()">Generate</button>
+      <button class="btn btn-primary" id="generate-btn" onclick="generateBriefing()">Generate</button>
       <span id="gen-status" style="font-size:13px;color:var(--text-dim)"></span>
     </div>
 
@@ -503,11 +503,35 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
   let currentBriefingId = null;
 
+  async function readApiResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) return response.json();
+    const text = await response.text();
+    throw new Error(response.status === 504
+      ? 'Generation timed out at the web server. Please try again.'
+      : `Server error (${response.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+
+  async function waitForBriefing(jobId, status) {
+    const deadline = Date.now() + 15 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const response = await fetch(`/newsletter/generate/${encodeURIComponent(jobId)}`);
+      const data = await readApiResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to check generation status');
+      if (data.status === 'failed') throw new Error(data.error || 'Generation failed');
+      if (data.status === 'complete') return data;
+      status.textContent = 'Generating… longer articles can take several minutes.';
+    }
+    throw new Error('Generation is still running. Reload later to find it under Recent briefings.');
+  }
+
   window.generateBriefing = async function() {
     const formatId = document.getElementById('gen-format')?.value;
     const dateFrom = document.getElementById('gen-date-from')?.value;
     const dateTo = document.getElementById('gen-date-to')?.value;
     const status = document.getElementById('gen-status');
+    const button = document.getElementById('generate-btn');
     if (!dateFrom || !dateTo) {
       status.textContent = '⚠ Choose both From and To dates.';
       return;
@@ -517,6 +541,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       return;
     }
     status.textContent = 'Generating…';
+    button.disabled = true;
     try {
       const r = await fetch('/newsletter/generate', {
         method: 'POST',
@@ -528,8 +553,9 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
           date_to: dateTo,
         }).toString(),
       });
-      const data = await r.json();
-      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); return; }
+      const queued = await readApiResponse(r);
+      if (!r.ok) { status.textContent = '⚠ ' + (queued.error || 'Failed'); return; }
+      const data = queued.jobId ? await waitForBriefing(queued.jobId, status) : queued;
 
       currentBriefingId = data.id;
       status.textContent = `✓ Generated — ${data.topicCount} topics · ${data.periodLabel}`;
@@ -540,6 +566,8 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       frame.srcdoc = data.html;
     } catch (err) {
       status.textContent = '⚠ ' + err.message;
+    } finally {
+      button.disabled = false;
     }
   };
 

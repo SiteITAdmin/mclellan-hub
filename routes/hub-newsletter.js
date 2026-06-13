@@ -142,19 +142,65 @@ router.post('/backfill', async (req, res) => {
 router.post('/generate', async (req, res) => {
   const { week, format_id, date_from, date_to } = req.body;
   const weekKey = week || getWeekKey();
-  try {
-    const result = await generateBriefing({
-      user: req.hubUser,
-      weekKey,
-      formatId: format_id || null,
-      dateFrom: date_from,
-      dateTo: date_to,
-    });
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    console.error('[newsletter] generate error:', err);
-    res.status(500).json({ error: err.message });
-  }
+  const user = req.hubUser;
+  const jobId = uuid();
+  const hub = db.hub();
+
+  hub.prepare('INSERT INTO nl_generation_jobs (id, user) VALUES (?, ?)').run(jobId, user);
+  res.status(202).json({ ok: true, jobId });
+
+  setImmediate(async () => {
+    hub.prepare("UPDATE nl_generation_jobs SET status = 'running', updated_at = unixepoch() WHERE id = ?").run(jobId);
+    try {
+      const result = await generateBriefing({
+        user,
+        weekKey,
+        formatId: format_id || null,
+        dateFrom: date_from,
+        dateTo: date_to,
+      });
+      hub.prepare(`
+        UPDATE nl_generation_jobs
+        SET status = 'complete', briefing_id = ?, updated_at = unixepoch()
+        WHERE id = ?
+      `).run(result.id, jobId);
+    } catch (err) {
+      console.error('[newsletter] generate error:', err);
+      hub.prepare(`
+        UPDATE nl_generation_jobs
+        SET status = 'failed', error = ?, updated_at = unixepoch()
+        WHERE id = ?
+      `).run(err.message, jobId);
+    }
+  });
+});
+
+router.get('/generate/:jobId', (req, res) => {
+  const hub = db.hub();
+  const job = hub.prepare(`
+    SELECT status, briefing_id, error, created_at, updated_at
+    FROM nl_generation_jobs
+    WHERE id = ? AND user = ?
+  `).get(req.params.jobId, req.hubUser);
+
+  if (!job) return res.status(404).json({ error: 'Generation job not found' });
+  if (job.status !== 'complete') return res.json({ ok: true, status: job.status, error: job.error });
+
+  const briefing = hub.prepare(`
+    SELECT id, topic_count, html_content, date_from, date_to
+    FROM nl_briefings
+    WHERE id = ? AND user = ?
+  `).get(job.briefing_id, req.hubUser);
+  if (!briefing) return res.status(500).json({ error: 'Generated briefing could not be loaded' });
+
+  res.json({
+    ok: true,
+    status: 'complete',
+    id: briefing.id,
+    topicCount: briefing.topic_count,
+    periodLabel: briefingPeriodLabel(briefing),
+    html: briefing.html_content,
+  });
 });
 
 // ── Send briefing ─────────────────────────────────────────────────────────────
