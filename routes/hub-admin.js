@@ -740,14 +740,21 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
   const m = hub.prepare('SELECT key, model_id, api_key FROM model_config WHERE key = ?').get(key);
   if (!m) return res.status(404).json({ ok: false, error: 'Model not found' });
 
-  const DSML_RE = /\u{FF5C}{2}DSML\u{FF5C}{2}|<\u{FF5C}{2}DSML/u;
+  // Internal tool-call syntax leaking as text — model never actually surfaced search results to user
+  // Covers: DeepSeek DSML, Kimi <|tool_calls_section_begin|>, and similar delimiter formats
+  const TOOL_LEAK_RE = /\u{FF5C}{2}DSML\u{FF5C}{2}|<\u{FF5C}{2}DSML|\<\|tool_calls_section_begin\|>/u;
+
   const testedAt = new Date().toISOString();
+  const log = (...args) => console.log(`[brave-test] ${m.key} |`, ...args);
 
   const fail = (reason, preview) => {
+    log(`FAIL — ${reason}`);
     hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
-      .run(testedAt, (preview || reason).slice(0, 800), key);
+      .run(testedAt, (preview || reason).slice(0, 1200), key);
     return res.json({ ok: false, error: reason, testedAt, preview: preview || reason });
   };
+
+  log(`starting test for model_id=${m.model_id}`);
 
   // ── Step 1: pull ground-truth headlines directly from Brave API ──────────────
   let groundTruth = '';
@@ -763,8 +770,11 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
       .filter(r => r.url.includes('bbc.com/news') && !r.url.includes('newspaper-headlines'))
       .slice(0, 5);
     groundTruth = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}`).join('\n');
+    log(`Brave API: ${results.length} ground-truth results`);
+    results.forEach((r, i) => log(`  GT${i + 1}: ${r.title}`));
   } catch (e) {
     groundTruth = `(Brave API unavailable: ${e.message})`;
+    log(`Brave API error: ${e.message}`);
   }
 
   // ── Step 2: ask the model to write a newsreader script using its web plugin ──
@@ -772,6 +782,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
 
   try {
     const apiKey = m.api_key || process.env.OPENROUTER_API_KEY;
+    log(`calling OpenRouter stream=false`);
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -790,20 +801,43 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
     });
 
     const rawText = await r.text();
+    log(`OpenRouter HTTP ${r.status}, raw response length=${rawText.length}`);
+
     let data;
-    try { data = JSON.parse(rawText); }
-    catch (_) { return fail('Truncated response — model may have streamed despite stream:false', `Truncated/unparseable response:\n${rawText.slice(0, 600)}`); }
+    try {
+      data = JSON.parse(rawText);
+    } catch (_) {
+      log(`JSON parse failed — raw: ${rawText.slice(0, 300)}`);
+      return fail('Truncated response — model may have streamed despite stream:false', `Truncated/unparseable response:\n${rawText.slice(0, 600)}`);
+    }
 
-    if (!r.ok) return fail(data.error?.message || `HTTP ${r.status}`);
+    if (!r.ok) {
+      const errMsg = data.error?.message || `HTTP ${r.status}`;
+      log(`OpenRouter error: ${errMsg}`);
+      return fail(errMsg);
+    }
 
-    const msg     = data.choices?.[0]?.message || {};
-    const content = msg.content || '';
+    const msg        = data.choices?.[0]?.message || {};
+    const content    = msg.content || '';
+    const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
+    const annotations  = msg.annotations || [];
+    const citations    = annotations.filter(a => a.type === 'url_citation' && a.url_citation?.url);
 
-    if (DSML_RE.test(content)) return fail('Model leaked internal DSML tool syntax — does not support OpenAI tool calling', `DSML leak:\n\n${content.slice(0, 600)}`);
+    log(`finish_reason=${finishReason} content_length=${content.length} annotations=${annotations.length} citations=${citations.length}`);
+    log(`content preview: ${content.slice(0, 200).replace(/\n/g, ' ')}`);
+    if (citations.length) citations.forEach((c, i) => log(`  cite${i + 1}: ${c.url_citation?.url}`));
 
-    const annotations = msg.annotations || [];
-    const citations   = annotations.filter(a => a.type === 'url_citation' && a.url_citation?.url);
-    const passed      = citations.length > 0;
+    if (TOOL_LEAK_RE.test(content)) {
+      const leakType = content.includes('<|tool_calls_section_begin|>') ? 'Kimi <|tool_calls_section_begin|>' : 'DSML';
+      log(`TOOL LEAK detected (${leakType}) — citations present but output is raw tool syntax`);
+      return fail(
+        `Model leaked internal ${leakType} tool syntax — raw tool call in output, not a usable response`,
+        `Tool call leak (${leakType}):\n\n${content.slice(0, 600)}\n\n── CITATIONS (present but output unusable) ──\n${citations.map(c => `• ${c.url_citation?.title || c.url_citation?.url}`).join('\n') || 'none'}`
+      );
+    }
+
+    const passed = citations.length > 0;
+    log(`result: ${passed ? 'PASS' : 'FAIL'} (${citations.length} citations)`);
 
     const sourceList = citations.length
       ? citations.map(a => `• ${a.url_citation.title || a.url_citation.url}`).join('\n')
@@ -825,6 +859,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
     return res.json({ ok: passed, citations: citations.length, testedAt, preview });
 
   } catch (err) {
+    log(`exception: ${err.message}`);
     return fail(err.message);
   }
 });
