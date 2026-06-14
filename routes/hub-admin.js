@@ -733,6 +733,46 @@ router.post('/admin/models/_delete', requireHubAdmin, (req, res) => {
   res.redirect('/admin/models');
 });
 
+// ── Brave web-plugin test ─────────────────────────────────────────────────────
+router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
+  const { key } = req.body;
+  const hub = db.hub();
+  const m = hub.prepare('SELECT key, model_id, api_key FROM model_config WHERE key = ?').get(key);
+  if (!m) return res.status(404).json({ ok: false, error: 'Model not found' });
+
+  try {
+    const apiKey = m.api_key || process.env.OPENROUTER_API_KEY;
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://mclellan.scot',
+        'X-Title': 'McLellan Hub Brave test',
+      },
+      body: JSON.stringify({
+        model: m.model_id,
+        messages: [{ role: 'user', content: 'What are the top 3 headlines on bbc.com/news right now? Visit the page.' }],
+        tools: [WEB_SEARCH_TOOL],
+        tool_choice: 'auto',
+        stream: false,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      hub.prepare('UPDATE model_config SET brave_tested = -1 WHERE key = ?').run(key);
+      return res.json({ ok: false, error: data.error?.message || `HTTP ${r.status}` });
+    }
+    const content = data.choices?.[0]?.message?.content || '';
+    const passed = content.length > 80;
+    hub.prepare('UPDATE model_config SET brave_tested = ? WHERE key = ?').run(passed ? 1 : -1, key);
+    return res.json({ ok: passed, chars: content.length, preview: content.slice(0, 200) });
+  } catch (err) {
+    hub.prepare('UPDATE model_config SET brave_tested = -1 WHERE key = ?').run(key);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── Tier management ───────────────────────────────────────────────────────────
 router.post('/admin/tiers', requireHubAdmin, (req, res) => {
   const { key, label, search_default, display_order } = req.body;
@@ -1222,6 +1262,7 @@ router.get('/admin/openrouter-models', requireHubAdmin, async (req, res) => {
         inputPer1M:  m.pricing?.prompt      ? (parseFloat(m.pricing.prompt)      * 1_000_000).toFixed(4) : null,
         outputPer1M: m.pricing?.completion  ? (parseFloat(m.pricing.completion)  * 1_000_000).toFixed(4) : null,
         supportsTools: Array.isArray(m.supported_parameters) && m.supported_parameters.includes('tools'),
+        nativeSearch:  Array.isArray(m.supported_parameters) && m.supported_parameters.includes('web_search_options'),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     res.json(models);

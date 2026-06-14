@@ -103,7 +103,7 @@ function listModelsForUser(user) {
   const tierLabels = Object.fromEntries(tiers.map(t => [t.key, t.label]));
 
   const rows = db.hub().prepare(
-    `SELECT key, label, endpoint, tier, search, category, cost_input, cost_output, context_length FROM model_config
+    `SELECT key, label, endpoint, tier, search, category, cost_input, cost_output, context_length, brave_tested FROM model_config
       WHERE enabled = 1 AND (user IS NULL OR user = ?)
       ORDER BY display_order, key`
   ).all(user);
@@ -116,6 +116,7 @@ function listModelsForUser(user) {
       endpoint: r.endpoint,
       tier: t,
       search: r.search || 'none',
+      brave_tested: r.brave_tested || 0,
       category: r.category || null,
       costInput: r.cost_input || null,
       costOutput: r.cost_output || null,
