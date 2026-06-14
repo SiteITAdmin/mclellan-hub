@@ -740,8 +740,35 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
   const m = hub.prepare('SELECT key, model_id, api_key FROM model_config WHERE key = ?').get(key);
   if (!m) return res.status(404).json({ ok: false, error: 'Model not found' });
 
-  // DSML is DeepSeek's internal tool-call format leaking as raw text — model never actually searched
   const DSML_RE = /\u{FF5C}{2}DSML\u{FF5C}{2}|<\u{FF5C}{2}DSML/u;
+  const testedAt = new Date().toISOString();
+
+  const fail = (reason, preview) => {
+    hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
+      .run(testedAt, (preview || reason).slice(0, 800), key);
+    return res.json({ ok: false, error: reason, testedAt, preview: preview || reason });
+  };
+
+  // ── Step 1: pull ground-truth headlines directly from Brave API ──────────────
+  let groundTruth = '';
+  try {
+    const braveKey = process.env.BRAVE_SEARCH_API_KEY;
+    if (!braveKey) throw new Error('BRAVE_SEARCH_API_KEY not set');
+    const br = await fetch(
+      'https://api.search.brave.com/res/v1/web/search?q=bbc.com%2Fnews+top+stories+today&count=8&freshness=pd',
+      { headers: { 'Accept': 'application/json', 'X-Subscription-Token': braveKey } }
+    );
+    const bd = await br.json();
+    const results = (bd.web?.results || [])
+      .filter(r => r.url.includes('bbc.com/news') && !r.url.includes('newspaper-headlines'))
+      .slice(0, 5);
+    groundTruth = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}`).join('\n');
+  } catch (e) {
+    groundTruth = `(Brave API unavailable: ${e.message})`;
+  }
+
+  // ── Step 2: ask the model to write a newsreader script using its web plugin ──
+  const prompt = `You are a BBC radio newsreader. Search bbc.com/news right now for the current top stories and write a 20-second headline bulletin — the kind read at the top of the hour on BBC Radio 4. Cover 3 stories. Be specific: include real names, places, and details from what you find. Start with "Here are today's headlines."`;
 
   try {
     const apiKey = m.api_key || process.env.OPENROUTER_API_KEY;
@@ -755,68 +782,50 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
       },
       body: JSON.stringify({
         model: m.model_id,
-        messages: [{ role: 'user', content: 'What are the top 3 headlines on bbc.com/news right now? Visit the page.' }],
+        messages: [{ role: 'user', content: prompt }],
         tools: [WEB_SEARCH_TOOL],
         tool_choice: 'auto',
         stream: false,
       }),
     });
 
-    // Some models return streaming data despite stream:false — guard against truncated JSON
     const rawText = await r.text();
     let data;
-    try {
-      data = JSON.parse(rawText);
-    } catch (_) {
-      const testedAt = new Date().toISOString();
-      const preview = `Truncated/unparseable response:\n${rawText.slice(0, 600)}`;
-      hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
-        .run(testedAt, preview, key);
-      return res.json({ ok: false, error: 'Truncated response — model may have streamed despite stream:false', testedAt, preview });
-    }
+    try { data = JSON.parse(rawText); }
+    catch (_) { return fail('Truncated response — model may have streamed despite stream:false', `Truncated/unparseable response:\n${rawText.slice(0, 600)}`); }
 
-    if (!r.ok) {
-      const testedAt = new Date().toISOString();
-      const errMsg = data.error?.message || `HTTP ${r.status}`;
-      hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
-        .run(testedAt, errMsg, key);
-      return res.json({ ok: false, error: errMsg, testedAt, preview: errMsg });
-    }
+    if (!r.ok) return fail(data.error?.message || `HTTP ${r.status}`);
 
     const msg     = data.choices?.[0]?.message || {};
     const content = msg.content || '';
-    const testedAt = new Date().toISOString();
 
-    if (DSML_RE.test(content)) {
-      const preview = `Model leaked internal DSML tool-call syntax instead of searching:\n\n${content.slice(0, 600)}`;
-      hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
-        .run(testedAt, preview, key);
-      return res.json({ ok: false, error: 'Model output raw DSML tool syntax — does not support OpenAI tool calling', testedAt, preview });
-    }
+    if (DSML_RE.test(content)) return fail('Model leaked internal DSML tool syntax — does not support OpenAI tool calling', `DSML leak:\n\n${content.slice(0, 600)}`);
 
-    // Real pass requires actual url_citation annotations — same signal the router uses for braveSources
     const annotations = msg.annotations || [];
-    const citations = annotations.filter(a => a.type === 'url_citation' && a.url_citation?.url);
-    const passed = citations.length > 0;
+    const citations   = annotations.filter(a => a.type === 'url_citation' && a.url_citation?.url);
+    const passed      = citations.length > 0;
 
-    let preview;
-    if (passed) {
-      const sourceList = citations.map(a => `• ${a.url_citation.title || a.url_citation.url}\n  ${a.url_citation.url}`).join('\n');
-      preview = `${content}\n\n— ${citations.length} source(s) returned:\n${sourceList}`;
-    } else if (content.length > 80) {
-      preview = `Model responded with text but no web citations — it did not use Brave search:\n\n${content.slice(0, 600)}`;
-    } else {
-      preview = content || 'Empty response from model.';
-    }
+    const sourceList = citations.length
+      ? citations.map(a => `• ${a.url_citation.title || a.url_citation.url}`).join('\n')
+      : 'No web citations returned.';
+
+    const preview = [
+      '── BRAVE API (ground truth) ──────────────────',
+      groundTruth || '(no results)',
+      '',
+      '── MODEL OUTPUT ──────────────────────────────',
+      content || '(empty)',
+      '',
+      '── CITATIONS ─────────────────────────────────',
+      sourceList,
+    ].join('\n');
 
     hub.prepare('UPDATE model_config SET brave_tested = ?, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
-      .run(passed ? 1 : -1, testedAt, preview.slice(0, 800), key);
-    return res.json({ ok: passed, citations: citations.length, chars: content.length, testedAt, preview });
+      .run(passed ? 1 : -1, testedAt, preview.slice(0, 1200), key);
+    return res.json({ ok: passed, citations: citations.length, testedAt, preview });
+
   } catch (err) {
-    const testedAt = new Date().toISOString();
-    hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
-      .run(testedAt, err.message, key);
-    return res.status(500).json({ ok: false, error: err.message, testedAt, preview: err.message });
+    return fail(err.message);
   }
 });
 
