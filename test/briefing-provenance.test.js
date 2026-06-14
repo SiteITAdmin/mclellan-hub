@@ -32,6 +32,7 @@ test('briefing provenance groups extraction models and direct RSS sources', () =
   assert.equal(provenance.extraction_models[0].item_count, 2);
   assert.equal(provenance.extraction_models[0].source_count, 1);
   assert.equal(provenance.direct_ingestion.item_count, 1);
+  assert.equal(provenance.writer.label, 'Claude Sonnet 4.6');
 
   const text = briefingProvenanceText({ provenance_json: JSON.stringify(provenance) });
   assert.match(text, /Briefing written by/);
