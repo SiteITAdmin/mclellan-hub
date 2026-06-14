@@ -57,6 +57,13 @@
   .badge-search-none    { background: rgba(0,0,0,0.06);       color: #666; }
   .badge-off    { background: rgba(186,26,26,0.1);   color: #ba1a1a; }
   .badge-default { background: rgba(40,167,69,0.12); color: #1a7a35; }
+  .badge-brave-ok   { background: rgba(22,163,74,0.12); color: #15803d; }
+  .badge-brave-fail { background: rgba(186,26,26,0.10); color: #ba1a1a; }
+  .badge-brave-none { background: rgba(0,0,0,0.05); color: #888; }
+
+  /* Brave test button + result */
+  .brave-test-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .brave-test-result { font-size: 11px; color: var(--text-dim,#767586); max-width: 260px; }
 
   .model-card-cost {
     font-size: 11px; color: var(--text-dim, #767586);
@@ -195,6 +202,13 @@
           <span class="badge badge-search-native">native search</span>
         <% } else if (m.search === 'web-plugin') { %>
           <span class="badge badge-search-plugin">web plugin</span>
+          <% if (m.brave_tested === 1) { %>
+            <span class="badge badge-brave-ok" id="brave-badge-<%= m.key.replace(/\W/g,'_') %>">Brave ✓</span>
+          <% } else if (m.brave_tested === -1) { %>
+            <span class="badge badge-brave-fail" id="brave-badge-<%= m.key.replace(/\W/g,'_') %>">Brave ✗</span>
+          <% } else { %>
+            <span class="badge badge-brave-none" id="brave-badge-<%= m.key.replace(/\W/g,'_') %>">Brave untested</span>
+          <% } %>
         <% } else if (m.search === 'orchestrated') { %>
           <span class="badge badge-tier">multi-search workflow</span>
         <% } else { %>
@@ -216,6 +230,12 @@
           <input type="hidden" name="key" value="<%= m.key %>">
           <button class="btn-sm" type="submit"><%= m.enabled ? 'Disable' : 'Enable' %></button>
         </form>
+        <% if (m.search === 'web-plugin') { %>
+        <div class="brave-test-wrap">
+          <button class="btn-sm" onclick="testBrave('<%= m.key %>', '<%= m.key.replace(/\W/g,'_') %>', this)">Test Brave</button>
+          <span class="brave-test-result" id="brave-result-<%= m.key.replace(/\W/g,'_') %>"></span>
+        </div>
+        <% } %>
         <% if (m.key !== defaultModel) { %>
         <form method="POST" action="/admin/models/_set-default" style="display:inline">
           <input type="hidden" name="key" value="<%= m.key %>">
@@ -778,6 +798,34 @@
     }
   });
 })();
+
+window.testBrave = async function(key, safeKey, btn) {
+  const resultEl = document.getElementById('brave-result-' + safeKey);
+  const badgeEl  = document.getElementById('brave-badge-'  + safeKey);
+  btn.disabled = true;
+  btn.textContent = 'Testing…';
+  if (resultEl) resultEl.textContent = '';
+  try {
+    const r = await fetch('/admin/models/_test-brave', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      if (badgeEl) { badgeEl.className = 'badge badge-brave-ok'; badgeEl.textContent = 'Brave ✓'; }
+      if (resultEl) resultEl.textContent = '✓ ' + d.chars + ' chars — ' + d.preview;
+    } else {
+      if (badgeEl) { badgeEl.className = 'badge badge-brave-fail'; badgeEl.textContent = 'Brave ✗'; }
+      if (resultEl) resultEl.textContent = '✗ ' + (d.error || 'No response');
+    }
+  } catch (err) {
+    if (resultEl) resultEl.textContent = '✗ ' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Test Brave';
+  }
+};
 </script>
 </body>
 </html>
