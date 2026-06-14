@@ -466,7 +466,8 @@ router.get('/feed.xml', (req, res) => {
   const items = [
     ...briefings.map(b => ({
       title: `Intelligence Briefing — ${briefingPeriodLabel(b)}`,
-      link: `https://douglas.mclellan.scot/briefing/${b.id}`,
+      link: 'https://douglas.mclellan.scot/llms.txt',
+      guid: `urn:mclellan:briefing:${b.id}`,
       description: (b.text_content || '').slice(0, 500).replace(/[#*`]/g, '').trim() + '…',
       pubDate: toRfc822(b.published_at),
       category: 'Intelligence Briefing',
@@ -475,6 +476,7 @@ router.get('/feed.xml', (req, res) => {
     ...linkedinPosts.map(p => ({
       title: escXml(p.topic),
       link: `https://douglas.mclellan.scot/`,
+      guid: `urn:mclellan:linkedin:${p.id}`,
       description: ((p.refined_draft || p.draft || '').slice(0, 500).replace(/[#*`]/g, '').trim()) + '…',
       pubDate: toRfc822(p.created_at),
       category: 'LinkedIn',
@@ -497,7 +499,7 @@ ${items.map(item => `    <item>
       <description>${escXml(item.description)}</description>
       <pubDate>${item.pubDate}</pubDate>
       <category>${escXml(item.category)}</category>
-      <guid isPermaLink="false">${escXml(item.link)}-${item.ts}</guid>
+      <guid isPermaLink="false">${escXml(item.guid)}</guid>
     </item>`).join('\n')}
   </channel>
 </rss>`;
