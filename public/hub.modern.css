@@ -978,6 +978,31 @@ body {
 }
 .cmp-switch.is-on { background: var(--accent); }
 .cmp-switch.is-on span { transform: translateX(14px); background: white; }
+.cmp-switch:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Section headers inside the more panel */
+.cmp-section-head {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 6px 10px 2px;
+}
+.cmp-section-head--mt { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 10px; }
+
+/* Label + sublabel stacking inside a cmp-row */
+.cmp-row-label-stack { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cmp-row-label-stack label { font-size: 13px; color: var(--text); }
+.cmp-sublabel { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Search status button — opener, not cycler */
+.comp-search-status.is-native {
+  color: var(--text-3);
+  opacity: 0.7;
+  cursor: default;
+}
+.comp-search-status.is-native:hover { background: none; color: var(--text-3); }
 
 .comp-footnote {
   text-align: center;

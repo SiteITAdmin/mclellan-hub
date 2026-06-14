@@ -934,32 +934,45 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
   const [opts, setOpts] = React.useState({
     sensitive: false,
     research: false,
-    search: 'openrouter',
+    webSearch: true,
+    exaSearch: false,
     depth: 'medium',
   });
 
-  // Apply shortcut search override when set from welcome screen
+  // Apply shortcut search override when set from welcome screen (legacy string values)
   React.useEffect(() => {
     if (!searchOverride) return;
-    setOpts(o => ({ ...o, search: searchOverride }));
+    if (searchOverride === 'exa')        setOpts(o => ({ ...o, webSearch: false, exaSearch: true }));
+    else if (searchOverride === 'off')   setOpts(o => ({ ...o, webSearch: false, exaSearch: false }));
+    else                                 setOpts(o => ({ ...o, webSearch: true,  exaSearch: false }));
     clearSearchOverride?.();
   }, [searchOverride]);
 
   const isPerplexityModel = key => /sonar|perplexity/i.test(key || '');
 
-  // Auto-adjust search provider when model changes
+  // Auto-adjust search when model changes
   const prevModelKey = React.useRef(model?.key);
   React.useEffect(() => {
     if (model?.key === prevModelKey.current) return;
     prevModelKey.current = model?.key;
     setOpts(o => {
       if (o.sensitive) return o;
-      if (isPerplexityModel(model?.key)) return { ...o, search: 'off' };
-      if (model?.search === 'native') return { ...o, search: 'exa' };
-      if (o.search === 'exa') return { ...o, search: 'openrouter' };
+      // Native/Perplexity handle search internally — no external search needed
+      if (isPerplexityModel(model?.key) || model?.search === 'native') return { ...o, webSearch: false, exaSearch: false };
+      // Non-web-plugin models can't use Brave — default to Exa if web was on
+      if (model?.search !== 'web-plugin' && o.webSearch) return { ...o, webSearch: false, exaSearch: true };
       return o;
     });
   }, [model?.key]);
+
+  // Derived search state
+  const modelSupportsWeb = model?.search === 'web-plugin';
+  const isNativeModel    = model?.search === 'native' || isPerplexityModel(model?.key);
+  const webActive  = !opts.sensitive && !isNativeModel && opts.webSearch  && modelSupportsWeb;
+  const exaActive  = !opts.sensitive && !isNativeModel && opts.exaSearch;
+  const anySearchOn = webActive || exaActive || (isNativeModel && !opts.sensitive);
+  const searchStatusLabel = isNativeModel ? 'Native' : opts.sensitive ? 'Search off'
+    : [webActive && 'Brave', exaActive && 'Semantic'].filter(Boolean).join(' · ') || 'Search off';
 
   const internalRef = React.useRef(null);
   const textRef = externalRef || internalRef;
@@ -1179,25 +1192,17 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
           </button>
 
           <button
-            className={'comp-btn comp-toggle ' + (opts.search !== 'off' ? 'is-on' : '')}
-            disabled={isPerplexityModel(model?.key)}
-            onClick={() => setOpts(o => {
-              const isNative = model?.search === 'native';
-              // Native models handle their own search — skip web-plugin entirely
-              const next = isNative
-                ? (o.search === 'off' ? 'exa' : 'off')
-                : (o.search === 'off' ? 'openrouter' : o.search === 'openrouter' ? 'exa' : 'off');
-              return { ...o, search: next };
-            })}
-            title={isPerplexityModel(model?.key) ? 'Sonar/Perplexity searches internally — no external search needed' : opts.search === 'exa' ? 'Search: Semantic Search' : opts.search === 'openrouter' ? 'Search: Brave Search' : 'Search: Off'}
+            className={'comp-btn comp-toggle comp-search-status ' + (anySearchOn ? (isNativeModel ? 'is-native' : 'is-on') : '')}
+            onClick={() => setMore(m => !m)}
+            title={isNativeModel ? 'This model searches internally — no external search needed' : 'Open search settings'}
           >
             <Icon name="search" size={15} />
-            <span>{opts.search === 'exa' ? 'Semantic' : opts.search === 'openrouter' ? 'Brave' : 'Search'}</span>
+            <span>{searchStatusLabel}</span>
           </button>
 
           <button
             className={'comp-btn comp-toggle ' + (opts.sensitive ? 'is-warn' : '')}
-            onClick={() => setOpts(o => ({ ...o, sensitive: !o.sensitive, search: !o.sensitive ? 'off' : o.search }))}
+            onClick={() => setOpts(o => ({ ...o, sensitive: !o.sensitive }))}
             title="Sensitive mode — disables web search"
           >
             <Icon name="shield" size={15} /> <span>Sensitive</span>
@@ -1235,6 +1240,36 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
 
         {more && (
           <div className="comp-more-panel" onMouseLeave={() => setMore(false)}>
+            <div className="cmp-section-head">Search sources</div>
+            <div className="cmp-row">
+              <div className="cmp-row-label-stack">
+                <label>Web search</label>
+                <span className="cmp-sublabel">
+                  {isNativeModel ? 'handled internally by this model'
+                    : modelSupportsWeb ? 'Brave / OpenRouter plugin'
+                    : 'not available for this model'}
+                </span>
+              </div>
+              <button
+                className={'cmp-switch ' + (webActive ? 'is-on' : '')}
+                disabled={!modelSupportsWeb || opts.sensitive || isNativeModel}
+                onClick={() => setOpts(o => ({ ...o, webSearch: !o.webSearch }))}
+              ><span /></button>
+            </div>
+            <div className="cmp-row">
+              <div className="cmp-row-label-stack">
+                <label>Semantic search</label>
+                <span className="cmp-sublabel">
+                  {isNativeModel ? 'handled internally by this model' : 'Exa neural search'}
+                </span>
+              </div>
+              <button
+                className={'cmp-switch ' + (exaActive ? 'is-on' : '')}
+                disabled={opts.sensitive || isNativeModel}
+                onClick={() => setOpts(o => ({ ...o, exaSearch: !o.exaSearch }))}
+              ><span /></button>
+            </div>
+            <div className="cmp-section-head cmp-section-head--mt">Output</div>
             <div className="cmp-row">
               <label>Search depth</label>
               <div className="cmp-seg">
@@ -1460,7 +1495,13 @@ function ChatApp() {
           convId: window.CONV_ID || undefined,
           projectSlug: window.PROJECT_SLUG || undefined,
           noSearch: opts.sensitive || false,
-          searchProvider: opts.sensitive ? 'off' : (opts.search === 'off' ? 'off' : opts.search === 'exa' ? 'exa' : 'openrouter'),
+          searchProvider: (() => {
+            if (opts.sensitive || isNativeModel) return 'off';
+            if (webActive && exaActive) return 'exa'; // Exa is injected context; more reliable than web plugin alone
+            if (webActive)  return 'openrouter';
+            if (exaActive)  return 'exa';
+            return 'off';
+          })(),
           searchDepth: opts.depth || 'medium',
           researchMode: opts.research || false,
         }),
