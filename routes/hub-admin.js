@@ -783,7 +783,8 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
       return res.json({ ok: false, error: errMsg, testedAt, preview: errMsg });
     }
 
-    const content = data.choices?.[0]?.message?.content || '';
+    const msg     = data.choices?.[0]?.message || {};
+    const content = msg.content || '';
     const testedAt = new Date().toISOString();
 
     if (DSML_RE.test(content)) {
@@ -793,11 +794,24 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
       return res.json({ ok: false, error: 'Model output raw DSML tool syntax — does not support OpenAI tool calling', testedAt, preview });
     }
 
-    const passed = content.length > 80;
+    // Real pass requires actual url_citation annotations — same signal the router uses for braveSources
+    const annotations = msg.annotations || [];
+    const citations = annotations.filter(a => a.type === 'url_citation' && a.url_citation?.url);
+    const passed = citations.length > 0;
+
+    let preview;
+    if (passed) {
+      const sourceList = citations.map(a => `• ${a.url_citation.title || a.url_citation.url}\n  ${a.url_citation.url}`).join('\n');
+      preview = `${content}\n\n— ${citations.length} source(s) returned:\n${sourceList}`;
+    } else if (content.length > 80) {
+      preview = `Model responded with text but no web citations — it did not use Brave search:\n\n${content.slice(0, 600)}`;
+    } else {
+      preview = content || 'Empty response from model.';
+    }
+
     hub.prepare('UPDATE model_config SET brave_tested = ?, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
-      .run(passed ? 1 : -1, testedAt, content.slice(0, 800), key);
-    const preview = passed ? content : (content || 'Empty response from model.');
-    return res.json({ ok: passed, chars: content.length, testedAt, preview });
+      .run(passed ? 1 : -1, testedAt, preview.slice(0, 800), key);
+    return res.json({ ok: passed, citations: citations.length, chars: content.length, testedAt, preview });
   } catch (err) {
     const testedAt = new Date().toISOString();
     hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
