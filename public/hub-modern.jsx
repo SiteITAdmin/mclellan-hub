@@ -1427,6 +1427,10 @@ function ChatApp() {
   };
 
   const send = async (text, opts = {}) => {
+    const isNativeModel    = model?.search === 'native' || /sonar|perplexity/i.test(model?.key || '');
+    const modelSupportsWeb = model?.search === 'web-plugin';
+    const webActive        = !opts.sensitive && !isNativeModel && opts.webSearch && modelSupportsWeb;
+    const exaActive        = !opts.sensitive && !isNativeModel && opts.exaSearch;
     const requestStartSec = Math.floor(Date.now() / 1000);
 
     // Optimistically add user message
