@@ -209,9 +209,9 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <div class="mgmt-grid">
       <% for (const b of briefings) { %>
       <div class="mgmt-card">
-        <div class="mgmt-card-name"><%= briefingPeriodLabel(b) %></div>
+        <div class="mgmt-card-name"><%= briefingTitle(b) %></div>
         <div class="mgmt-card-meta">
-          <%= b.topic_count %> topics · <%= b.format_name || 'unknown format' %>
+          <%= b.topic_count %> topics
           <% if (b.sent_at) { %> · Sent <%= new Date(b.sent_at * 1000).toLocaleDateString('en-GB') %><% } %>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">

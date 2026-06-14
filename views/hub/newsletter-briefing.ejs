@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Briefing — McLellan Hub</title>
+<title><%= briefingTitle(briefing) %> — McLellan Hub</title>
 <link rel="stylesheet" href="/hub.css">
 <style>
 body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
@@ -23,12 +23,11 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 <%- include('partials/top-nav') %>
 <div class="wrap">
   <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-    <h1 class="heading">Intelligence Briefing</h1>
+    <h1 class="heading"><%= briefingTitle(briefing) %></h1>
     <a href="/newsletter" style="font-size:13px;color:var(--text-dim);">← Newsletter</a>
   </div>
   <p class="sub">
-    <%= briefingPeriodLabel(briefing) %>
-    · <%= briefing.topic_count || 0 %> topics
+    <%= briefing.topic_count || 0 %> topics
     · <%= new Date(briefing.created_at * 1000).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) %>
   </p>
 
