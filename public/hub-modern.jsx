@@ -584,12 +584,16 @@ function ModelPicker({ model, onSelect, onClose }) {
     </>
   );
 
-  // Keep the fixed mobile sheet outside the sticky, backdrop-filtered header.
-  // iOS Safari otherwise treats that header as the sheet's containing block.
-  return ReactDOM.createPortal(
-    picker,
-    document.querySelector('.hub-shell') || document.body
-  );
+  // On mobile, portal outside the sticky backdrop-filtered header so iOS Safari
+  // doesn't treat it as the containing block. On desktop, render inline so
+  // position:absolute resolves correctly against .hb-model { position:relative }.
+  if (window.matchMedia('(max-width: 820px)').matches) {
+    return ReactDOM.createPortal(
+      picker,
+      document.querySelector('.hub-shell') || document.body
+    );
+  }
+  return picker;
 }
 
 // ── Header ─────────────────────────────────────────────────────────────────
