@@ -742,7 +742,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
 
   // Internal tool-call syntax leaking as text — model never actually surfaced search results to user
   // Covers: DeepSeek DSML, Kimi <|tool_calls_section_begin|>, and similar delimiter formats
-  const TOOL_LEAK_RE = /\u{FF5C}{2}DSML\u{FF5C}{2}|<\u{FF5C}{2}DSML|\<\|tool_calls_section_begin\|>/u;
+  const TOOL_LEAK_RE = /\u{FF5C}{2}DSML\u{FF5C}{2}|<\u{FF5C}{2}DSML|<[|]tool_calls_section_begin[|]>/u;
 
   const testedAt = new Date().toISOString();
   const log = (...args) => console.log(`[brave-test] ${m.key} |`, ...args);
