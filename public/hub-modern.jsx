@@ -938,17 +938,16 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
   const [opts, setOpts] = React.useState({
     sensitive: false,
     research: false,
-    webSearch: true,
     exaSearch: false,
+    exaDays: 14,
     depth: 'medium',
   });
 
-  // Apply shortcut search override when set from welcome screen (legacy string values)
+  // Apply shortcut search override when set from welcome screen
   React.useEffect(() => {
     if (!searchOverride) return;
-    if (searchOverride === 'exa')        setOpts(o => ({ ...o, webSearch: false, exaSearch: true }));
-    else if (searchOverride === 'off')   setOpts(o => ({ ...o, webSearch: false, exaSearch: false }));
-    else                                 setOpts(o => ({ ...o, webSearch: true,  exaSearch: false }));
+    if (searchOverride === 'exa') setOpts(o => ({ ...o, exaSearch: true }));
+    else if (searchOverride === 'off') setOpts(o => ({ ...o, exaSearch: false }));
     clearSearchOverride?.();
   }, [searchOverride]);
 
@@ -961,22 +960,17 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
     prevModelKey.current = model?.key;
     setOpts(o => {
       if (o.sensitive) return o;
-      // Native/Perplexity handle search internally — no external search needed
-      if (isPerplexityModel(model?.key) || model?.search === 'native') return { ...o, webSearch: false, exaSearch: false };
-      // Non-web-plugin models can't use Brave — default to Exa if web was on
-      if (model?.search !== 'web-plugin' && o.webSearch) return { ...o, webSearch: false, exaSearch: true };
+      // Native/Perplexity search internally — Exa adds no value on top
+      if (isPerplexityModel(model?.key) || model?.search === 'native') return { ...o, exaSearch: false };
       return o;
     });
   }, [model?.key]);
 
   // Derived search state
-  const modelSupportsWeb = model?.search === 'web-plugin';
-  const isNativeModel    = model?.search === 'native' || isPerplexityModel(model?.key);
-  const webActive  = !opts.sensitive && !isNativeModel && opts.webSearch  && modelSupportsWeb;
-  const exaActive  = !opts.sensitive && !isNativeModel && opts.exaSearch;
-  const anySearchOn = webActive || exaActive || (isNativeModel && !opts.sensitive);
-  const searchStatusLabel = isNativeModel ? 'Native' : opts.sensitive ? 'Search off'
-    : [webActive && 'Brave', exaActive && 'Semantic'].filter(Boolean).join(' · ') || 'Search off';
+  const isNativeModel   = model?.search === 'native' || isPerplexityModel(model?.key);
+  const braveActive     = !opts.sensitive && !isNativeModel && model?.search === 'web-plugin';
+  const exaActive       = !opts.sensitive && !isNativeModel && opts.exaSearch;
+  const anySearchOn     = braveActive || exaActive || (isNativeModel && !opts.sensitive);
 
   const internalRef = React.useRef(null);
   const textRef = externalRef || internalRef;
@@ -1196,15 +1190,6 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
           </button>
 
           <button
-            className={'comp-btn comp-toggle comp-search-status ' + (anySearchOn ? (isNativeModel ? 'is-native' : 'is-on') : '')}
-            onClick={() => setMore(m => !m)}
-            title={isNativeModel ? 'This model searches internally — no external search needed' : 'Open search settings'}
-          >
-            <Icon name="search" size={15} />
-            <span>{searchStatusLabel}</span>
-          </button>
-
-          <button
             className={'comp-btn comp-toggle ' + (opts.sensitive ? 'is-warn' : '')}
             onClick={() => setOpts(o => ({ ...o, sensitive: !o.sensitive }))}
             title="Sensitive mode — disables web search"
@@ -1244,27 +1229,13 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
 
         {more && (
           <div className="comp-more-panel" onMouseLeave={() => setMore(false)}>
-            <div className="cmp-section-head">Search sources</div>
+            <div className="cmp-section-head">Search</div>
             <div className="cmp-row">
               <div className="cmp-row-label-stack">
-                <label>Web search</label>
+                <label>Exa semantic search</label>
                 <span className="cmp-sublabel">
-                  {isNativeModel ? 'handled internally by this model'
-                    : modelSupportsWeb ? 'Brave / OpenRouter plugin'
-                    : 'not available for this model'}
-                </span>
-              </div>
-              <button
-                className={'cmp-switch ' + (webActive ? 'is-on' : '')}
-                disabled={!modelSupportsWeb || opts.sensitive || isNativeModel}
-                onClick={() => setOpts(o => ({ ...o, webSearch: !o.webSearch }))}
-              ><span /></button>
-            </div>
-            <div className="cmp-row">
-              <div className="cmp-row-label-stack">
-                <label>Semantic search</label>
-                <span className="cmp-sublabel">
-                  {isNativeModel ? 'handled internally by this model' : 'Exa neural search'}
+                  {isNativeModel ? 'this model searches internally'
+                    : 'neural search · results injected as context'}
                 </span>
               </div>
               <button
@@ -1273,6 +1244,26 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
                 onClick={() => setOpts(o => ({ ...o, exaSearch: !o.exaSearch }))}
               ><span /></button>
             </div>
+            {opts.exaSearch && !isNativeModel && (
+              <div className="cmp-row cmp-row--sub">
+                <label>Lookback</label>
+                <div className="cmp-days-wrap">
+                  <input
+                    className="cmp-days-input"
+                    type="number"
+                    min="1"
+                    max="365"
+                    placeholder="∞"
+                    value={opts.exaDays > 0 ? opts.exaDays : ''}
+                    onChange={e => {
+                      const v = e.target.value === '' ? 0 : Math.max(1, parseInt(e.target.value, 10) || 0);
+                      setOpts(o => ({ ...o, exaDays: v }));
+                    }}
+                  />
+                  <span className="cmp-days-unit">days{opts.exaDays === 0 ? ' (all time)' : ''}</span>
+                </div>
+              </div>
+            )}
             <div className="cmp-section-head cmp-section-head--mt">Output</div>
             <div className="cmp-row">
               <label>Search depth</label>
@@ -1427,10 +1418,9 @@ function ChatApp() {
   };
 
   const send = async (text, opts = {}) => {
-    const isNativeModel    = model?.search === 'native' || /sonar|perplexity/i.test(model?.key || '');
-    const modelSupportsWeb = model?.search === 'web-plugin';
-    const webActive        = !opts.sensitive && !isNativeModel && opts.webSearch && modelSupportsWeb;
-    const exaActive        = !opts.sensitive && !isNativeModel && opts.exaSearch;
+    const isNativeModel = model?.search === 'native' || /sonar|perplexity/i.test(model?.key || '');
+    const braveActive   = !opts.sensitive && !isNativeModel && model?.search === 'web-plugin';
+    const exaActive     = !opts.sensitive && !isNativeModel && opts.exaSearch;
     const requestStartSec = Math.floor(Date.now() / 1000);
 
     // Optimistically add user message
@@ -1505,13 +1495,13 @@ function ChatApp() {
           noSearch: opts.sensitive || false,
           searchProvider: (() => {
             if (opts.sensitive || isNativeModel) return 'off';
-            if (webActive && exaActive) return 'exa'; // Exa is injected context; more reliable than web plugin alone
-            if (webActive)  return 'openrouter';
-            if (exaActive)  return 'exa';
+            if (exaActive)   return 'exa';
+            if (braveActive) return 'openrouter';
             return 'off';
           })(),
           searchDepth: opts.depth || 'medium',
           researchMode: opts.research || false,
+          exaDays: opts.exaDays > 0 ? opts.exaDays : 0,
         }),
       });
 
