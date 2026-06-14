@@ -17,6 +17,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .btn-primary { background: var(--primary, #7c6af5); color: #fff; border-color: transparent; }
 .btn-danger { color: #c62828; border-color: #e57373; }
 .status { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+.provenance { margin: 0 0 20px; padding: 12px 14px; border-left: 3px solid var(--primary, #7c6af5); background: var(--bg, #faf9fb); color: var(--text-dim); font-size: 12px; line-height: 1.55; }
 </style>
 </head>
 <body class="hub-page">
@@ -30,6 +31,9 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <%= briefing.topic_count || 0 %> topics
     · <%= new Date(briefing.created_at * 1000).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) %>
   </p>
+  <% if (briefingProvenanceText(briefing)) { %>
+  <div class="provenance"><strong>Production provenance:</strong> <%= briefingProvenanceText(briefing) %></div>
+  <% } %>
 
   <div class="action-row">
     <a class="btn btn-primary" href="/newsletter/briefing/<%= briefing.id %>/pdf" download>Download PDF</a>

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../lib/db');
-const { briefingPeriodLabel } = require('../lib/newsletter-pipeline');
+const { briefingPeriodLabel, briefingProvenanceText } = require('../lib/newsletter-pipeline');
 const { routeMessage } = require('../lib/router');
 const { uuid } = require('../lib/id');
 const { getSystemModelKey, getSystemPrompt } = require('../lib/settings');
@@ -448,7 +448,7 @@ router.get('/feed.xml', (req, res) => {
   const briefings = hub.prepare(`
     SELECT b.id, b.week_key, b.date_from, b.date_to,
            COALESCE(b.format_name, f.name) AS format_name,
-           b.text_content, b.topic_count, b.created_at, b.published_at
+           b.text_content, b.topic_count, b.provenance_json, b.created_at, b.published_at
     FROM nl_briefings b
     LEFT JOIN nl_formats f ON f.id = b.format_id
     WHERE b.user = 'douglas' AND b.published_at IS NOT NULL
@@ -472,7 +472,10 @@ router.get('/feed.xml', (req, res) => {
       title: `${b.format_name || 'Intelligence Briefing'} — ${briefingPeriodLabel(b)}`,
       link: 'https://douglas.mclellan.scot/llms.txt',
       guid: `urn:mclellan:briefing:${b.id}`,
-      description: (b.text_content || '').slice(0, 500).replace(/[#*`]/g, '').trim() + '…',
+      description: [
+        briefingProvenanceText(b),
+        (b.text_content || '').slice(0, 500).replace(/[#*`]/g, '').trim() + '…',
+      ].filter(Boolean).join(' '),
       pubDate: toRfc822(b.published_at),
       category: 'Intelligence Briefing',
       ts: b.published_at,
@@ -521,7 +524,7 @@ router.get('/llms.txt', (req, res) => {
   const briefings = hub.prepare(`
     SELECT b.week_key, b.date_from, b.date_to,
            COALESCE(b.format_name, f.name) AS format_name,
-           b.text_content, b.topic_count, b.published_at
+           b.text_content, b.topic_count, b.provenance_json, b.published_at
     FROM nl_briefings b
     LEFT JOIN nl_formats f ON f.id = b.format_id
     WHERE b.user = 'douglas' AND b.published_at IS NOT NULL
@@ -556,6 +559,11 @@ router.get('/llms.txt', (req, res) => {
     const date = new Date(b.published_at * 1000).toISOString().slice(0, 10);
     lines.push(`### ${b.format_name || 'Intelligence Briefing'} — ${briefingPeriodLabel(b)} (${date})`);
     lines.push('');
+    const provenance = briefingProvenanceText(b);
+    if (provenance) {
+      lines.push(`> ${provenance}`);
+      lines.push('');
+    }
     lines.push((b.text_content || '').replace(/^#{1,6} /gm, '#### ').trim());
     lines.push('');
   }

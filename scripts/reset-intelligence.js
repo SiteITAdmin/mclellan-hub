@@ -67,8 +67,9 @@ function restoreRssCorpus(hub) {
     hub.prepare(`
       INSERT INTO intel_items
         (id, user, document_id, title, summary, content_text, item_type,
-         category, entities_json, themes_json, source_url, published_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'article', 'Other', '[]', '[]', ?, ?)
+         category, entities_json, themes_json, source_url, published_at,
+         extraction_method, extracted_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'article', 'Other', '[]', '[]', ?, ?, 'direct_rss', unixepoch())
     `).run(
       uuid(), user, document.id, article.title,
       String(article.content_markdown || '').slice(0, 500).replace(/\s+/g, ' '),

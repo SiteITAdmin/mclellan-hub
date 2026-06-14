@@ -7,6 +7,7 @@ const { uuid } = require('../lib/id');
 const {
   getWeekKey, weekKeyLabel,
   weekKeyRange, briefingPeriodLabel, briefingFormatName, briefingTitle, briefingPdfFilename,
+  briefingProvenanceText,
   backfillFromLabels, previewBriefing, generateBriefing, generateCreatorBriefing, buildBriefingPdf, sendBriefing,
 } = require('../lib/newsletter-pipeline');
 const { ingestFeed } = require('../lib/rss-ingest');
@@ -97,7 +98,7 @@ router.get('/', (req, res) => {
     defaultDateTo: defaultRange.dateTo,
     briefingPeriodLabel,
     weeks, grouped, formats, interests, sources, briefings, models,
-    briefingFormatName, briefingTitle,
+    briefingFormatName, briefingTitle, briefingProvenanceText,
     totalTopics: topics.length,
     selectedTopics: topics.filter(t => t.selected).length,
   });
@@ -221,6 +222,8 @@ router.post('/preview', async (req, res) => {
         publication: item.document_title,
         reason: item.relevance_reason || null,
         url: item.resolved_url || null,
+        extractionModel: item.extraction_model_label || item.extraction_model_id || null,
+        extractionMethod: item.extraction_method || null,
       })),
     });
   } catch (err) {
@@ -281,7 +284,7 @@ router.get('/briefing/:id', (req, res) => {
   `).get(req.params.id, req.hubUser);
   if (!briefing) return res.status(404).send('Briefing not found');
   res.render('hub/newsletter-briefing', {
-    user: req.hubUser, briefing, briefingPeriodLabel, briefingTitle,
+    user: req.hubUser, briefing, briefingPeriodLabel, briefingTitle, briefingProvenanceText,
   });
 });
 

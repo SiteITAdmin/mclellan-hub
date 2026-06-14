@@ -214,6 +214,9 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
           <%= b.topic_count %> topics
           <% if (b.sent_at) { %> · Sent <%= new Date(b.sent_at * 1000).toLocaleDateString('en-GB') %><% } %>
         </div>
+        <% if (briefingProvenanceText(b)) { %>
+        <div class="topic-summary"><%= briefingProvenanceText(b) %></div>
+        <% } %>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
           <% if (!b.sent_at) { %>
           <button class="btn-sm" onclick="resendBriefing('<%= b.id %>')">Send</button>
@@ -548,7 +551,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         ? `<div class="mgmt-grid">${data.items.map(item => `
             <div class="mgmt-card">
               <div class="mgmt-card-name">${escapeHtml(item.title)}</div>
-              <div class="mgmt-card-meta">${escapeHtml(item.source || '')} · ${escapeHtml(item.itemType || '')}</div>
+              <div class="mgmt-card-meta">${escapeHtml(item.source || '')} · ${escapeHtml(item.itemType || '')}${item.extractionModel ? ` · Extracted by ${escapeHtml(item.extractionModel)}` : item.extractionMethod === 'direct_rss' ? ' · Direct RSS' : ''}</div>
               <div class="topic-summary">${escapeHtml(item.reason || item.summary || '')}</div>
             </div>`).join('')}</div>`
         : '<div class="empty-state">No matching external items found.</div>';
