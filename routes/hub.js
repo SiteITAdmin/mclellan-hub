@@ -379,7 +379,7 @@ router.get('/p/:slug', requireAuth, (req, res) => {
 
 // ── Send message ──────────────────────────────────────────────────────────────
 router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (req, res) => {
-  const { content, model, convId: existingConvId, projectSlug, noSearch, searchProvider, searchDepth, researchMode } = req.body;
+  const { content, model, convId: existingConvId, projectSlug, noSearch, searchProvider, searchDepth, researchMode, exaDays } = req.body;
   if (!content?.trim()) return res.status(400).json({ error: 'Empty message' });
   if (String(content).length > 12000) return res.status(400).json({ error: 'Message too long' });
 
@@ -690,6 +690,7 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
       noSearch: !!noSearch,
       searchProvider: searchProvider || 'openrouter',
       searchDepth: searchDepth || 'medium',
+      exaDays: exaDays != null ? Number(exaDays) : 14,
       onChunk: (chunk) => safeWrite(`data: ${JSON.stringify({ chunk })}\n\n`),
     });
 
