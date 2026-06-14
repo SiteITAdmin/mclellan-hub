@@ -6,7 +6,7 @@ const db = require('../lib/db');
 const { uuid } = require('../lib/id');
 const {
   getWeekKey, weekKeyLabel,
-  weekKeyRange, briefingPeriodLabel,
+  weekKeyRange, briefingPeriodLabel, briefingFormatName, briefingTitle, briefingPdfFilename,
   backfillFromLabels, previewBriefing, generateBriefing, generateCreatorBriefing, buildBriefingPdf, sendBriefing,
 } = require('../lib/newsletter-pipeline');
 const { ingestFeed } = require('../lib/rss-ingest');
@@ -86,7 +86,7 @@ router.get('/', (req, res) => {
 
   // Recent briefings
   const briefings = hub.prepare(`
-    SELECT b.*, f.name as format_name FROM nl_briefings b
+    SELECT b.*, COALESCE(b.format_name, f.name) AS resolved_format_name FROM nl_briefings b
     LEFT JOIN nl_formats f ON f.id = b.format_id
     WHERE b.user = ? ORDER BY b.created_at DESC LIMIT 5
   `).all(user);
@@ -97,6 +97,7 @@ router.get('/', (req, res) => {
     defaultDateTo: defaultRange.dateTo,
     briefingPeriodLabel,
     weeks, grouped, formats, interests, sources, briefings, models,
+    briefingFormatName, briefingTitle,
     totalTopics: topics.length,
     selectedTopics: topics.filter(t => t.selected).length,
   });
@@ -273,9 +274,15 @@ router.post('/send', async (req, res) => {
 
 router.get('/briefing/:id', (req, res) => {
   const hub = db.hub();
-  const briefing = hub.prepare('SELECT * FROM nl_briefings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  const briefing = hub.prepare(`
+    SELECT b.*, f.name AS linked_format_name
+    FROM nl_briefings b LEFT JOIN nl_formats f ON f.id = b.format_id
+    WHERE b.id = ? AND b.user = ?
+  `).get(req.params.id, req.hubUser);
   if (!briefing) return res.status(404).send('Briefing not found');
-  res.render('hub/newsletter-briefing', { user: req.hubUser, briefing, briefingPeriodLabel });
+  res.render('hub/newsletter-briefing', {
+    user: req.hubUser, briefing, briefingPeriodLabel, briefingTitle,
+  });
 });
 
 // ── Delete briefing ───────────────────────────────────────────────────────────
@@ -290,7 +297,11 @@ router.post('/briefing/:id/delete', (req, res) => {
 
 router.post('/briefing/:id/wiki', (req, res) => {
   const hub = db.hub();
-  const b = hub.prepare('SELECT * FROM nl_briefings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  const b = hub.prepare(`
+    SELECT b.*, f.name AS linked_format_name
+    FROM nl_briefings b LEFT JOIN nl_formats f ON f.id = b.format_id
+    WHERE b.id = ? AND b.user = ?
+  `).get(req.params.id, req.hubUser);
   if (!b) return res.status(404).json({ error: 'Briefing not found' });
 
   const periodLabel = briefingPeriodLabel(b);
@@ -298,7 +309,7 @@ router.post('/briefing/:id/wiki', (req, res) => {
     ? `briefing-${b.date_from}-to-${b.date_to}`
     : `briefing-${b.week_key.toLowerCase()}`;
   const dateStr = new Date(b.created_at * 1000).toISOString().slice(0, 10);
-  const frontmatter = `title: "Intelligence Briefing — ${periodLabel}"\ndate: ${dateStr}\ntags: [briefing, intelligence]\nsource: hub-newsletter`;
+  const frontmatter = `title: "${briefingTitle(b).replace(/"/g, '\\"')}"\ndate: ${dateStr}\ntags: [briefing, intelligence]\nsource: hub-newsletter`;
 
   writeWikiPage(slug, frontmatter, b.text_content || '');
   hub.prepare('UPDATE nl_briefings SET wiki_slug = ? WHERE id = ?').run(slug, b.id);
@@ -325,9 +336,15 @@ router.post('/briefing/:id/unpublish', (req, res) => {
 
 router.get('/briefing/:id/pdf', async (req, res) => {
   try {
+    const briefing = db.hub().prepare(`
+      SELECT b.*, f.name AS linked_format_name
+      FROM nl_briefings b LEFT JOIN nl_formats f ON f.id = b.format_id
+      WHERE b.id = ? AND b.user = ?
+    `).get(req.params.id, req.hubUser);
+    if (!briefing) return res.status(404).send('Briefing not found');
     const pdf = await buildBriefingPdf(req.params.id, req.hubUser);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="intelligence-briefing.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${briefingPdfFilename(briefing)}"`);
     res.send(pdf);
   } catch (err) {
     console.error('[newsletter] pdf error:', err);

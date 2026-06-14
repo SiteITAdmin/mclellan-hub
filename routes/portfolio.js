@@ -446,8 +446,12 @@ router.get('/feed.xml', (req, res) => {
   const hub = db.hub();
 
   const briefings = hub.prepare(`
-    SELECT id, week_key, date_from, date_to, text_content, topic_count, created_at, published_at
-    FROM nl_briefings WHERE user = 'douglas' AND published_at IS NOT NULL
+    SELECT b.id, b.week_key, b.date_from, b.date_to,
+           COALESCE(b.format_name, f.name) AS format_name,
+           b.text_content, b.topic_count, b.created_at, b.published_at
+    FROM nl_briefings b
+    LEFT JOIN nl_formats f ON f.id = b.format_id
+    WHERE b.user = 'douglas' AND b.published_at IS NOT NULL
     ORDER BY published_at DESC LIMIT 20
   `).all();
 
@@ -465,7 +469,7 @@ router.get('/feed.xml', (req, res) => {
 
   const items = [
     ...briefings.map(b => ({
-      title: `Intelligence Briefing — ${briefingPeriodLabel(b)}`,
+      title: `${b.format_name || 'Intelligence Briefing'} — ${briefingPeriodLabel(b)}`,
       link: 'https://douglas.mclellan.scot/llms.txt',
       guid: `urn:mclellan:briefing:${b.id}`,
       description: (b.text_content || '').slice(0, 500).replace(/[#*`]/g, '').trim() + '…',
@@ -515,8 +519,12 @@ router.get('/llms.txt', (req, res) => {
   const hub = db.hub();
 
   const briefings = hub.prepare(`
-    SELECT week_key, date_from, date_to, text_content, topic_count, published_at
-    FROM nl_briefings WHERE user = 'douglas' AND published_at IS NOT NULL
+    SELECT b.week_key, b.date_from, b.date_to,
+           COALESCE(b.format_name, f.name) AS format_name,
+           b.text_content, b.topic_count, b.published_at
+    FROM nl_briefings b
+    LEFT JOIN nl_formats f ON f.id = b.format_id
+    WHERE b.user = 'douglas' AND b.published_at IS NOT NULL
     ORDER BY published_at DESC LIMIT 10
   `).all();
 
@@ -546,7 +554,7 @@ router.get('/llms.txt', (req, res) => {
 
   for (const b of briefings) {
     const date = new Date(b.published_at * 1000).toISOString().slice(0, 10);
-    lines.push(`### Intelligence Briefing — ${briefingPeriodLabel(b)} (${date})`);
+    lines.push(`### ${b.format_name || 'Intelligence Briefing'} — ${briefingPeriodLabel(b)} (${date})`);
     lines.push('');
     lines.push((b.text_content || '').replace(/^#{1,6} /gm, '#### ').trim());
     lines.push('');

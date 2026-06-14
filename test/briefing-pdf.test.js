@@ -6,11 +6,13 @@ const { buildBriefingPdfHtml } = require('../lib/newsletter-pipeline');
 test('briefing PDF HTML uses long-form paged report styling', () => {
   const html = buildBriefingPdfHtml(
     '## Lead story\nA useful paragraph.\n\n### Evidence\n- First point\n- Second point',
-    '9–13 June 2026'
+    '9–13 June 2026',
+    'Anthropic / Claude'
   );
 
   assert.match(html, /@page cover/);
   assert.match(html, /@page report/);
+  assert.match(html, /class="cover-title">Anthropic \/ Claude<\/div>/);
   assert.match(html, /class="report-masthead"/);
   assert.match(html, /class="report-end"/);
   assert.match(html, /<h2 class="rpt-h2">Lead story<\/h2>/);
