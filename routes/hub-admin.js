@@ -740,6 +740,9 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
   const m = hub.prepare('SELECT key, model_id, api_key FROM model_config WHERE key = ?').get(key);
   if (!m) return res.status(404).json({ ok: false, error: 'Model not found' });
 
+  // DSML is DeepSeek's internal tool-call format leaking as raw text — model never actually searched
+  const DSML_RE = /\u{FF5C}{2}DSML\u{FF5C}{2}|<\u{FF5C}{2}DSML/u;
+
   try {
     const apiKey = m.api_key || process.env.OPENROUTER_API_KEY;
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -758,22 +761,48 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
         stream: false,
       }),
     });
-    const data = await r.json();
-    if (!r.ok) {
-      hub.prepare('UPDATE model_config SET brave_tested = -1 WHERE key = ?').run(key);
-      return res.json({ ok: false, error: data.error?.message || `HTTP ${r.status}` });
+
+    // Some models return streaming data despite stream:false — guard against truncated JSON
+    const rawText = await r.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (_) {
+      const testedAt = new Date().toISOString();
+      const preview = `Truncated/unparseable response:\n${rawText.slice(0, 600)}`;
+      hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
+        .run(testedAt, preview, key);
+      return res.json({ ok: false, error: 'Truncated response — model may have streamed despite stream:false', testedAt, preview });
     }
+
+    if (!r.ok) {
+      const testedAt = new Date().toISOString();
+      const errMsg = data.error?.message || `HTTP ${r.status}`;
+      hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
+        .run(testedAt, errMsg, key);
+      return res.json({ ok: false, error: errMsg, testedAt, preview: errMsg });
+    }
+
     const content = data.choices?.[0]?.message?.content || '';
-    const passed = content.length > 80;
     const testedAt = new Date().toISOString();
+
+    if (DSML_RE.test(content)) {
+      const preview = `Model leaked internal DSML tool-call syntax instead of searching:\n\n${content.slice(0, 600)}`;
+      hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
+        .run(testedAt, preview, key);
+      return res.json({ ok: false, error: 'Model output raw DSML tool syntax — does not support OpenAI tool calling', testedAt, preview });
+    }
+
+    const passed = content.length > 80;
     hub.prepare('UPDATE model_config SET brave_tested = ?, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
       .run(passed ? 1 : -1, testedAt, content.slice(0, 800), key);
-    return res.json({ ok: passed, chars: content.length, testedAt, preview: content });
+    const preview = passed ? content : (content || 'Empty response from model.');
+    return res.json({ ok: passed, chars: content.length, testedAt, preview });
   } catch (err) {
     const testedAt = new Date().toISOString();
     hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
       .run(testedAt, err.message, key);
-    return res.status(500).json({ ok: false, error: err.message, testedAt });
+    return res.status(500).json({ ok: false, error: err.message, testedAt, preview: err.message });
   }
 });
 
