@@ -61,9 +61,25 @@
   .badge-brave-fail { background: rgba(186,26,26,0.10); color: #ba1a1a; }
   .badge-brave-none { background: rgba(0,0,0,0.05); color: #888; }
 
-  /* Brave test button + result */
+  /* Brave test button + result panel */
   .brave-test-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .brave-test-result { font-size: 11px; color: var(--text-dim,#767586); max-width: 260px; }
+  .brave-result-panel {
+    margin-top: 12px; padding: 10px 12px;
+    border-top: 1px solid var(--line, #e8e8e8);
+    background: var(--bg-soft, #f9f9fb);
+    border-radius: 0 0 8px 8px;
+  }
+  .brave-result-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: var(--text-dim, #767586); margin-bottom: 6px;
+  }
+  .brave-result-status-ok  { color: #15803d; font-weight: 600; }
+  .brave-result-status-fail { color: #ba1a1a; font-weight: 600; }
+  .brave-result-body {
+    font-size: 12px; line-height: 1.55; color: var(--text, #222);
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 160px; overflow-y: auto;
+  }
 
   .model-card-cost {
     font-size: 11px; color: var(--text-dim, #767586);
@@ -205,7 +221,7 @@
           <% if (m.brave_tested === 1) { %>
             <span class="badge badge-brave-ok" id="brave-badge-<%= m.key.replace(/\W/g,'_') %>">Brave ✓</span>
           <% } else if (m.brave_tested === -1) { %>
-            <span class="badge badge-brave-fail" id="brave-badge-<%= m.key.replace(/\W/g,'_') %>">Brave ✗</span>
+            <span class="badge badge-brave-fail" id="brave-badge-<%= m.key.replace(/\W/g,'_') %>">Not Suitable</span>
           <% } else { %>
             <span class="badge badge-brave-none" id="brave-badge-<%= m.key.replace(/\W/g,'_') %>">Brave untested</span>
           <% } %>
@@ -231,10 +247,7 @@
           <button class="btn-sm" type="submit"><%= m.enabled ? 'Disable' : 'Enable' %></button>
         </form>
         <% if (m.search === 'web-plugin') { %>
-        <div class="brave-test-wrap">
-          <button class="btn-sm" onclick="testBrave('<%= m.key %>', '<%= m.key.replace(/\W/g,'_') %>', this)">Test Brave</button>
-          <span class="brave-test-result" id="brave-result-<%= m.key.replace(/\W/g,'_') %>"></span>
-        </div>
+        <button class="btn-sm" onclick="testBrave('<%= m.key %>', '<%= m.key.replace(/\W/g,'_') %>', this)">Test Brave</button>
         <% } %>
         <% if (m.key !== defaultModel) { %>
         <form method="POST" action="/admin/models/_set-default" style="display:inline">
@@ -250,6 +263,18 @@
         </form>
         <% } %>
       </div>
+
+      <% if (m.search === 'web-plugin') { %>
+      <div class="brave-result-panel" id="brave-card-<%= m.key.replace(/\W/g,'_') %>"<%= m.brave_tested === 0 ? ' style="display:none"' : '' %>>
+        <div class="brave-result-meta">
+          <span class="<%= m.brave_tested === 1 ? 'brave-result-status-ok' : 'brave-result-status-fail' %>">
+            <%= m.brave_tested === 1 ? 'Brave search working' : 'Not suitable for Brave search' %>
+          </span>
+          <span id="brave-date-<%= m.key.replace(/\W/g,'_') %>"><%= m.brave_tested_at ? new Date(m.brave_tested_at).toLocaleString('en-GB', { dateStyle:'short', timeStyle:'short' }) : '' %></span>
+        </div>
+        <div class="brave-result-body" id="brave-body-<%= m.key.replace(/\W/g,'_') %>"><%= m.brave_preview || 'No response received from model.' %></div>
+      </div>
+      <% } %>
 
       <div class="edit-panel" id="edit-<%= m.key.replace(/\//g,'__') %>">
         <form method="POST" action="/admin/models/_update" class="model-form">
@@ -800,11 +825,14 @@
 })();
 
 window.testBrave = async function(key, safeKey, btn) {
-  const resultEl = document.getElementById('brave-result-' + safeKey);
-  const badgeEl  = document.getElementById('brave-badge-'  + safeKey);
+  const badgeEl  = document.getElementById('brave-badge-' + safeKey);
+  const cardEl   = document.getElementById('brave-card-'  + safeKey);
+  const dateEl   = document.getElementById('brave-date-'  + safeKey);
+  const bodyEl   = document.getElementById('brave-body-'  + safeKey);
+  const statusEl = cardEl?.querySelector('.brave-result-status-ok, .brave-result-status-fail');
   btn.disabled = true;
   btn.textContent = 'Testing…';
-  if (resultEl) resultEl.textContent = '';
+  if (cardEl) cardEl.style.display = 'none';
   try {
     const r = await fetch('/admin/models/_test-brave', {
       method: 'POST',
@@ -812,15 +840,23 @@ window.testBrave = async function(key, safeKey, btn) {
       body: JSON.stringify({ key }),
     });
     const d = await r.json();
+    const dateStr = d.testedAt ? new Date(d.testedAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '';
     if (d.ok) {
       if (badgeEl) { badgeEl.className = 'badge badge-brave-ok'; badgeEl.textContent = 'Brave ✓'; }
-      if (resultEl) resultEl.textContent = '✓ ' + d.chars + ' chars — ' + d.preview;
+      if (statusEl) { statusEl.className = 'brave-result-status-ok'; statusEl.textContent = 'Brave search working'; }
+      if (bodyEl) bodyEl.textContent = d.preview || '(no content)';
     } else {
-      if (badgeEl) { badgeEl.className = 'badge badge-brave-fail'; badgeEl.textContent = 'Brave ✗'; }
-      if (resultEl) resultEl.textContent = '✗ ' + (d.error || 'No response');
+      if (badgeEl) { badgeEl.className = 'badge badge-brave-fail'; badgeEl.textContent = 'Not Suitable'; }
+      if (statusEl) { statusEl.className = 'brave-result-status-fail'; statusEl.textContent = 'Not suitable for Brave search'; }
+      if (bodyEl) bodyEl.textContent = d.error || 'No response received from model.';
     }
+    if (dateEl) dateEl.textContent = dateStr;
+    if (cardEl) cardEl.style.display = '';
   } catch (err) {
-    if (resultEl) resultEl.textContent = '✗ ' + err.message;
+    if (badgeEl) { badgeEl.className = 'badge badge-brave-fail'; badgeEl.textContent = 'Not Suitable'; }
+    if (statusEl) { statusEl.className = 'brave-result-status-fail'; statusEl.textContent = 'Not suitable for Brave search'; }
+    if (bodyEl) bodyEl.textContent = err.message;
+    if (cardEl) cardEl.style.display = '';
   } finally {
     btn.disabled = false;
     btn.textContent = 'Test Brave';

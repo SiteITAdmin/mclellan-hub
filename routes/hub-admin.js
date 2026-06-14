@@ -765,11 +765,15 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
     }
     const content = data.choices?.[0]?.message?.content || '';
     const passed = content.length > 80;
-    hub.prepare('UPDATE model_config SET brave_tested = ? WHERE key = ?').run(passed ? 1 : -1, key);
-    return res.json({ ok: passed, chars: content.length, preview: content.slice(0, 200) });
+    const testedAt = new Date().toISOString();
+    hub.prepare('UPDATE model_config SET brave_tested = ?, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
+      .run(passed ? 1 : -1, testedAt, content.slice(0, 800), key);
+    return res.json({ ok: passed, chars: content.length, testedAt, preview: content });
   } catch (err) {
-    hub.prepare('UPDATE model_config SET brave_tested = -1 WHERE key = ?').run(key);
-    return res.status(500).json({ ok: false, error: err.message });
+    const testedAt = new Date().toISOString();
+    hub.prepare('UPDATE model_config SET brave_tested = -1, brave_tested_at = ?, brave_preview = ? WHERE key = ?')
+      .run(testedAt, err.message, key);
+    return res.status(500).json({ ok: false, error: err.message, testedAt });
   }
 });
 
