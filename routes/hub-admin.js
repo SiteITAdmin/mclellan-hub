@@ -827,6 +827,16 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
     log(`content preview: ${content.slice(0, 200).replace(/\n/g, ' ')}`);
     if (citations.length) citations.forEach((c, i) => log(`  cite${i + 1}: ${c.url_citation?.url}`));
 
+    // finish_reason=tool_calls means OpenRouter returned the intermediate tool-call turn and stopped —
+    // the model invoked the web search but never wrote the final response the user would actually see
+    if (finishReason === 'tool_calls' || (content.length === 0 && citations.length > 0)) {
+      const citeSample = citations.slice(0, 5).map(c => `• ${c.url_citation?.url}`).join('\n');
+      return fail(
+        `Model stopped at tool call stage (finish_reason=${finishReason}) — searched but produced no output`,
+        `Model invoked web search (${citations.length} citations) but finish_reason=${finishReason} with no text output.\nUser would see a blank response in chat.\n\nCitations found:\n${citeSample}`
+      );
+    }
+
     if (TOOL_LEAK_RE.test(content)) {
       const leakType = content.includes('<|tool_calls_section_begin|>') ? 'Kimi <|tool_calls_section_begin|>' : 'DSML';
       log(`TOOL LEAK detected (${leakType}) — citations present but output is raw tool syntax`);
