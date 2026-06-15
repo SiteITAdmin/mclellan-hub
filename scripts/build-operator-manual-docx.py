@@ -292,8 +292,8 @@ def add_cover(doc):
     table = doc.add_table(rows=3, cols=2)
     table.style = "Table Grid"
     values = [
-        ("Version", "2.0"),
-        ("Current as of", "8 June 2026"),
+        ("Version", "3.0"),
+        ("Current as of", "12 June 2026"),
         ("Repository", "SiteITAdmin/mclellan-hub"),
     ]
     for i, (label, value) in enumerate(values):
@@ -398,7 +398,7 @@ def build():
     set_run_font(run, size=8.5, color=GRAY)
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run = footer.add_run("Version 2.0  |  ")
+    run = footer.add_run("Version 3.0  |  ")
     set_run_font(run, size=8.5, color=GRAY)
     add_page_field(footer)
 

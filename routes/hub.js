@@ -28,6 +28,8 @@ const { getWeekKey, weekKeyRange } = require('../lib/newsletter-pipeline');
 const newsletterRouter = require('./hub-newsletter');
 router.use('/newsletter', requireAuth, newsletterRouter);
 
+const MAX_CHAT_MESSAGE_CHARS = 100000;
+
 function buildHubMsg(researchMode = false) {
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const base = [
@@ -382,7 +384,11 @@ router.get('/p/:slug', requireAuth, (req, res) => {
 router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (req, res) => {
   const { content, model, convId: existingConvId, projectSlug, noSearch, searchProvider, searchDepth, researchMode, exaDays } = req.body;
   if (!content?.trim()) return res.status(400).json({ error: 'Empty message' });
-  if (String(content).length > 12000) return res.status(400).json({ error: 'Message too long' });
+  if (String(content).length > MAX_CHAT_MESSAGE_CHARS) {
+    return res.status(413).json({
+      error: `Message is too long (${String(content).length.toLocaleString()} characters; maximum ${MAX_CHAT_MESSAGE_CHARS.toLocaleString()}). Attach it as a .txt file instead.`,
+    });
+  }
 
   const hub = db.hub();
   const logId = uuid();

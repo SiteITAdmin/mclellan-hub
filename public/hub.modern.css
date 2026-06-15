@@ -152,6 +152,16 @@ body {
 .sb-collapse:hover { background: var(--bg-soft); color: var(--text); }
 .hub-sidebar:not([data-expanded="true"]) .sb-collapse { display: none; }
 
+.sb-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
 .sb-new {
   margin: 4px 12px 12px;
   padding: 9px 10px;
@@ -1156,16 +1166,12 @@ body {
 
 /* ── Recent conversations grouped list ───────────────────────────────────── */
 .sb-recent {
-  flex: 1;
-  overflow-y: auto;
+  overflow: visible;
   overflow-x: hidden;
   padding: 4px 0 8px;
   display: flex;
   flex-direction: column;
   gap: 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
-  min-height: 0;
 }
 .sb-recent-group {
   padding: 10px 0 4px;

@@ -1,15 +1,24 @@
 # McLellan Hub Operator Manual
 
-**Version:** 2.0
-**Current as of:** 8 June 2026
+**Version:** 3.0
+**Current as of:** 12 June 2026
 **Repository:** `SiteITAdmin/mclellan-hub`  
 **Production host:** `178.104.235.142` (`/app`, `hub.service`)
 
 ## Purpose
 
-This is the operating manual for the complete McLellan tool set. It explains what each tool is for, where to find it, how the tools exchange information, how models and prompts are governed, what runs automatically, and how to deploy, back up, and recover the system.
+This is the system and operating manual for the complete McLellan tool set. It explains what each tool is for, where to find it, what information it consumes and produces, how the tools exchange information, what runs automatically, how agent assessments work, and how to deploy, back up, diagnose, and recover the system.
 
 The Hub is a private operating environment rather than a collection of isolated apps. Chat, projects, CRM, email, meetings, tasks, the wiki, content, flights, intelligence, and the public portfolio share context through the Hub database, Google services, and the Obsidian/Synthadoc knowledge store.
+
+### Status language used in this manual
+
+- **Working:** real production data shows the end-to-end outcome.
+- **Partial:** the feature works through at least one path, but a named or expected path is incomplete.
+- **Configured:** code, credentials, or a schedule exists, but useful output has not been verified.
+- **Manual:** the feature works only when someone deliberately starts it.
+- **Advisory:** the feature recommends an action but does not act automatically.
+- **Oddity:** a process is misplaced, duplicated, misleadingly named, ineffective, or silently failing.
 
 ## 1. Quick Start
 
@@ -288,7 +297,16 @@ A newsletter reminder runs on Saturday at 09:00.
 
 ### Wiki
 
-The wiki searches and browses durable material across project pages, meetings, journals, Workday records, people notes, and selected email-derived context. Search combines the Wiki index with Synthadoc/BM25 retrieval when the sidecar is available. It also exposes sources, graph relationships, and orphaned-page information so disconnected knowledge can be repaired.
+The Wiki is the human-facing knowledge layer. It indexes Markdown from Wiki pages, meetings, journals, daily notes, Workday interviews, people notes, project notes, nested project files, and loose vault notes. Search also includes matching email summaries from SQLite.
+
+For every search, the Wiki:
+
+1. Runs local full-text retrieval across indexed vault files.
+2. Adds matching email summaries.
+3. Labels every excerpt with a source ID.
+4. Optionally asks the configured model to produce a source-bounded JSON synthesis with a headline, summary, facts, gaps, and an evidence-completeness assessment.
+
+The synthesis model is currently hardcoded in the Wiki route rather than selected through the named model-slot administration. If model governance should apply uniformly, this route needs to use the configured Wiki/search slot.
 
 ### Creating and editing pages
 
@@ -314,7 +332,9 @@ The configured **Wiki page writer** controls document and Q&A conversion. The **
 
 ### Synthadoc
 
-Synthadoc indexes raw sources into searchable knowledge. It runs as an HTTP sidecar, normally at the configured `SYNTHADOC_URL`, and supports status, list, ingest, jobs, and serve operations. The Hub submits URL, YouTube, Workday, and local-source ingestion through the API. If the sidecar is unavailable, Wiki file browsing still works but indexed search and new ingestion may be incomplete.
+Synthadoc indexes raw sources into searchable knowledge. It runs as an HTTP sidecar, normally at the configured `SYNTHADOC_URL`, and supports status, list, ingest, jobs, and serve operations. The Hub submits URL, YouTube, Workday, and local-source ingestion through the API. If the sidecar is unavailable, Wiki browsing and the Hub's local full-text fallback still work, but semantic context building and new queued ingestion are unavailable.
+
+As checked on 12 June 2026, production had 116 Markdown knowledge files, including 32 Wiki pages, but no service listening at `127.0.0.1:7091`. This means the durable files exist while the expected production sidecar is not running.
 
 ### Obsidian vault
 
@@ -322,7 +342,29 @@ The vault is the readable, editable knowledge layer. Trusted API operations supp
 
 ### Workday vault sync
 
-`scripts/sync-workday-vault.sh` synchronizes Workday material into the indexed knowledge workspace. A launchd job can run the installed copy automatically. Logs are stored under `data/logs/`.
+`scripts/sync-workday-vault.sh` synchronizes Workday material into the indexed knowledge workspace, rebuilds daily indexes, and can generate a digest. The installed macOS LaunchAgent runs every 30 minutes and invokes `/Users/dm_mini/bin/sync-workday-vault.sh`.
+
+The repository plist describes a different five-minute schedule and a different script path. The installed LaunchAgent is authoritative for the current Mac. Its configured output logs were empty at the 12 June audit, so a successful run should be verified from output files and timestamps rather than assumed from the installed plist.
+
+### Wiki graph and relationship repair
+
+The graph is built from `[[wikilinks]]`, title/alias resolution, and manually confirmed relationships. It can:
+
+- Show real pages and unresolved phantom nodes.
+- Add a `same` or `related` relationship.
+- Store manual relationships in `raw_sources/manual-links.json`.
+- Write backlinks into writable Wiki pages.
+- Remove both the relationship record and the corresponding links from writable pages.
+
+Project and people notes are created automatically when graph data is requested so that CRM entities and the vault share stable nodes. The Orphans view identifies pages with no useful links, while the graph exposes broken or unresolved links.
+
+### Wiki write and delete behavior
+
+- New and edited Wiki pages are Markdown files under `wiki/`.
+- Renaming changes the slug and URL but does not rewrite every inbound link.
+- Deleting a page is immediate from the UI and writes a deletion tombstone for synchronization.
+- Source files outside `wiki/` can be read and, through the source editor, deliberately edited.
+- Manual graph links are durable because they are stored in the vault rather than only in the browser or database.
 
 ### Boox Drive import
 
@@ -368,29 +410,133 @@ Use the scoring stage as editorial feedback, not as an automatic publishing deci
 
 ## 12. Flights
 
-The Flights tool stores and analyses flight history. It supports:
+### Intended end-to-end behavior
+
+The Flight Tracker is intended to follow a Ryanair journey from booking email through preparation, departure, arrival, and final historical statistics:
+
+1. Gmail processing identifies a Ryanair itinerary and creates the flight record.
+2. A scheduled flight immediately queues Mycelium task creation and a `flight_refresh` job.
+3. Mycelium creates preparation and check-in tasks when the travel date approaches.
+4. The live worker starts two hours before departure and checks AeroDataBox every 30 minutes.
+5. The worker records revised departure/arrival times and resolves completed, cancelled, or diverted flights.
+6. A nightly backfill repairs recently completed flights with missing actual times.
+7. The Flights page calculates route, airline, delay, duration, and punctuality statistics.
+
+### User-visible capabilities
 
 - Manual create, update, and delete.
-- XLSX imports.
+- XLSX import for historical records.
 - Ryanair itinerary extraction from email.
-- AeroDataBox lookup and bulk lookup.
+- Single and bulk AeroDataBox lookups.
+- Scheduled versus actual departure and arrival times.
 - Route, airline, delay, and actual-duration statistics.
 
-Keep imported workbook formats stable. When flight details are incomplete, use lookup before manually estimating arrival, departure, or duration data.
+### What production showed on 12 June 2026
 
-## 13. Public Portfolio and CV Tools
+The 11 June flight `FR808 DUB-EDI` is present as completed with scheduled times `06:10-07:20` and actual times `06:11-06:58`. It was repaired by the backfill around 19:06 on 11 June rather than captured reliably by the live tracker. The system therefore contains the journey now, but the live-tracking promise was not met at travel time.
 
-The public portfolio includes profile material, experience, skills, CV content, an AI assistant, a job-description analyser, executive-summary PDF generation, and a contact form.
+The return flight `FR815 EDI-DUB` for 13 June had `actual_arr=23:05` written before the flight occurred. This is not an actual arrival; the backfill treated a future revised/scheduled value as actual.
 
-The private portfolio admin controls:
+### Flight failure signals
 
-- Profile and experience content.
-- Skills, gaps, FAQs, and CV context.
-- AI instructions.
-- Skill candidates generated from evidence.
-- Public intelligence publications.
+- A completed flight has blank `actual_dep` or `actual_arr`.
+- A future flight has an actual time.
+- A scheduled flight has no pending `flight_refresh` job.
+- Multiple pending `flight_backfill` jobs exist.
+- The tracker logs “tracking complete” without storing actual times.
+- Preparation/check-in tasks are created after the journey rather than before it.
 
-Treat portfolio changes as public publishing. Preview factual edits and generated PDFs before relying on them. See `docs/portfolio-cv-admin-manual.md` for the detailed CV workflow.
+Keep imported workbook formats stable. Do not manually invent actual times. Use the lookup/backfill path, inspect the raw provider fields, and confirm the database result.
+
+## 13. Profile, Public Portfolio, and CV Tools
+
+### What the Profile system is
+
+The Profile system is both a public portfolio and a structured candidate knowledge base. It serves four different audiences:
+
+- A human visitor reading the public page.
+- A recruiter downloading the Executive Summary PDF.
+- A visitor asking the public portfolio AI questions.
+- A visitor submitting a role to Candidate Analysis.
+
+These surfaces do not use the same context. A field being present in Admin does not mean it appears everywhere.
+
+### Main data stores
+
+- `profile`: identity, contact details, role preferences, working style, salary, availability, and values.
+- `cv_context`: flexible public copy and broad AI context.
+- `experiences`: employment timeline and evidence.
+- `skills`: visible and AI-readable capability records.
+- `skill_candidates`: topics detected from CV-tagged Hub projects.
+- `gaps`: honest limitations and development areas.
+- `faqs`: prepared public-chat answers.
+- `ai_instructions`: behavioral instructions for portfolio chat.
+- `jd_submissions`: submitted role descriptions and generated assessments.
+- `portfolio_messages`: public AI-chat transcripts.
+- Hub projects marked `is_cv_context=1`: private evidence made available to selected portfolio workflows.
+
+Production contained 19 CV-context rows, 10 experiences, 41 skills, 24 detected skill candidates, 7 Candidate Analysis submissions, and 43 portfolio messages at the audit date.
+
+### Public page
+
+The public page combines selected database fields with some hardcoded sections:
+
+- Hero: name, credentials, title, tagline, portrait, availability, notice period, and remote preference.
+- Vision section: configurable CV-copy fields.
+- AI-assisted builds: currently Douglas-specific content from `lib/aiBuilds.js`.
+- Experience timeline: experiences marked as CV context.
+- Capability: only the first three `strong` skills are data-driven; other cards contain static text.
+- Governance essay and statistics: configured CV-copy fields plus two hardcoded visual tiles.
+- Footer: role label, email, phone reveal, LinkedIn, and Executive Summary link.
+
+### Executive Summary PDF
+
+The PDF includes profile identity/contact basics, role label, summary, location, LinkedIn, the first five CV-context experiences, and Douglas's AI-assisted builds. It does not currently include salary, values, gaps, FAQs, management style, target roles, or the selected availability/remote fields, even though some of those are present elsewhere.
+
+### Portfolio AI chat
+
+This is the broadest Profile surface. It receives profile preferences, all CV copy, experiences, detailed skills, gaps, values, FAQs, AI instructions, chat-only detected topics, recent messages from CV-context Hub projects, and recent visitor conversation history. It speaks in first person as the candidate and is instructed not to fabricate.
+
+Because salary, preferences, and other backend-only fields can be supplied to a public visitor through AI chat, every Profile field should be treated as potentially public unless the prompt explicitly excludes it.
+
+### Candidate Analysis
+
+Candidate Analysis is narrower than portfolio chat. It receives:
+
+- All CV-context rows.
+- CV-context experiences.
+- Skills as name, level, and category.
+- Douglas AI-assisted builds.
+- The submitted role description.
+
+It does not receive most profile preferences, detailed skill evidence, gaps, values, FAQs, AI instructions, or Hub project memories. Each submission and response is retained for Admin review.
+
+### Profile Admin
+
+The private Admin tabs control:
+
+- **Profile:** identity, contact details, target roles, preferences, working style, salary, availability, remote preference, and values.
+- **Experience:** public/AI/PDF roles and their ordering. Existing rows can currently be added or deleted but not fully edited inline.
+- **Skills:** level, category, evidence, self-rating, years, recency, and honest notes.
+- **Detected Topics:** repeated topics found in CV-tagged Hub projects; promote to a skill, expose to chat only, dismiss, or reset.
+- **Gaps:** honest limitations supplied to portfolio chat.
+- **Values & Culture:** working-environment preferences supplied to portfolio chat.
+- **FAQ:** prepared answers supplied to portfolio chat.
+- **AI Instructions:** honesty level and additional chat behavior.
+- **Candidate Analysis Submissions:** read-only review of public submissions and responses.
+- **CV Copy:** flexible key/value content; only known keys render visibly, but every key can influence AI.
+- **Hub Projects:** controls which private projects feed portfolio chat and topic detection.
+
+### Profile surfacing gaps
+
+- Values, gaps, FAQs, management style, and detailed skill evidence influence portfolio chat but not Candidate Analysis.
+- Salary is available to portfolio chat but not visibly printed.
+- Availability and remote preference appear on the page but not in the current PDF.
+- Hub project evidence reaches portfolio chat and topic detection, but not the PDF or Candidate Analysis except through promoted skills.
+- Several visible capability/strategy blocks are hardcoded and cannot be maintained from Admin.
+- New arbitrary CV-copy keys affect AI but do not create new public-page sections.
+
+Treat Profile changes as public publishing. Preview the page, test both AI surfaces, and generate the PDF after factual edits.
 
 ## 14. Token Burn
 
@@ -560,22 +706,201 @@ The Email screen manages canonical labels and classification rules, reviews Agen
 
 ## 17. Automation Schedule
 
+The system has three scheduling layers. A missed action must be diagnosed in the correct layer.
+
+### Layer 1: Persistent SQLite job queue
+
+The queue is checked every minute. Jobs survive a Node restart, are visible at `/admin/jobs`, and usually schedule their own next run.
+
+| Job | Normal timing | What it does |
+|---|---|---|
+| `email_process` | Every 15 minutes | Fetches and classifies Gmail for configured users |
+| `agentmail_process` | Every 15 minutes | Processes the AI-facing AgentMail inbox |
+| `mycelium_run` | Every 6 hours | Connects flights, documents, meetings, contacts, tasks, and projects |
+| `mycelium_doc` | Event-driven | Extracts tasks and contact links after document upload |
+| `mycelium_flights` | Event-driven | Creates preparation/check-in tasks after flight creation |
+| `flight_refresh` | Starts 2 hours before departure, then every 30 minutes | Reads live flight status until resolved or attempt limit |
+| `flight_backfill` | Startup and intended daily 23:00 | Repairs missing flight times |
+| `reminder_sweep` | Every 15 minutes | Creates overdue reminders, cancels resolved reminders, repairs missing fire jobs |
+| `reminder_fire` | Per reminder | Delivers and escalates one reminder |
+| `crm_nudges` | Daily about 06:50 Dublin | Recomputes last-contacted dates and creates birthday reminders |
+| `suggestion_run` | Daily about 07:00 Dublin | Runs LLM travel/content assessments and creates advisory suggestions |
+
+### Layer 2: In-process wall-clock schedules
+
+These are minute checks inside `server.js`. They do not create persistent job rows, so a stopped service or a restart at the scheduled minute can miss the run.
+
 | Time | Time zone | Automation |
 |---|---|---|
-| Every 15 minutes | Server process | Gmail processing |
-| Every 15 minutes | Server process | AgentMail processing |
-| 06:45 | Europe/Dublin | CRM Calendar sync |
-| 07:00 | Configured daily schedule | RH statistics |
-| 07:30 | Europe/London | Morning CRM briefing |
-| 08:00 | Configured daily schedule | Regulatory monitor |
-| 09:30 | Europe/Dublin | Creator RSS feed ingestion |
-| 16:00 | Europe/Dublin | Daily email digest |
-| Saturday 09:00 | Configured schedule | Newsletter reminder |
-| Sunday 14:00 | Configured schedule | Weekly digest |
+| 06:45 daily | Europe/Dublin | CRM Calendar sync |
+| 07:00 daily | Europe/Dublin | RH website statistics |
+| 07:30 daily | Europe/London | Morning CRM briefing |
+| 08:00 daily | Europe/Dublin | Regulatory monitor |
+| 09:30 daily | Europe/Dublin | Creator RSS feed ingestion |
+| 16:00 daily | Europe/Dublin | Daily email digest |
+| 09:00 Saturday | Europe/Dublin | Newsletter review reminder |
+| 14:00 Sunday | Europe/Dublin | Weekly digest |
+| 21:00 daily | Europe/Dublin | Daily system report |
 
-In addition, launchd and systemd timers may run vault synchronization, backup, or Boox ingestion outside the Node scheduler. Check both the application service and OS schedulers when diagnosing a missed job.
+### Layer 3: Operating-system schedules
 
-## 18. Data and Storage Map
+| Host | Schedule | Process |
+|---|---|---|
+| Mac LaunchAgent | 02:00 daily and at load | Regenerates and publishes Token Burn data |
+| Mac LaunchAgent | Every 30 minutes and at load | Runs the installed Workday/vault synchronization script |
+| VPS systemd | Continuous, restart after failure | Runs `hub.service` |
+| Mac crontab | Intended 07:00 daily when installed | Pulls VPS backups to offsite storage |
+
+### Timed agent assessments
+
+The main timed agent assessment is `suggestion_run`. It gathers calendar events, travel-related CRM facts, booked flights, Skyscanner price points, RSS articles, newsletter topics, and recent LinkedIn posts. It asks an LLM to identify useful travel-booking or content opportunities.
+
+The assessment is advisory:
+
+- It creates no booking or publication.
+- It stores evidence with each suggestion.
+- It pushes at most two new suggestions to Google Chat.
+- Open suggestions appear in the morning briefing.
+- `accept N` creates a task; `dismiss N` closes it; `why N` shows evidence.
+- Suggestions expire after 14 days.
+
+Other timed assessments are deterministic rather than LLM-led:
+
+- Content cadence checks assess LinkedIn and newsletter pipeline health.
+- CRM nudges assess birthdays, overdue follow-ups, and keep-warm cadence.
+- The reminder sweep assesses overdue tasks and whether reminder jobs have become detached.
+- The system report assesses module health each evening.
+
+### Reminder escalation
+
+Ordinary reminders fire at the requested time and then at approximately +30 minutes, +3 hours, and +24 hours, with quiet hours from 22:00 to 07:30 Dublin. Content cadence reminders do not escalate; they inspect real pipeline state, skip silently when healthy, and reschedule.
+
+There were no separate Codex desktop recurring automations configured in `$CODEX_HOME/automations` during the audit. The schedules described above belong to the Hub and the operating system.
+
+## 18. Operational Oddities and Effectiveness Audit
+
+This register records processes that are misleading, duplicated, ineffective, or not producing the outcome their name implies. It is a dated operational snapshot, not a permanent claim.
+
+### P1 - Production is not traceable to Git
+
+Production reports Git HEAD `bf130b9` from 8 June 2026, while the running `/app` tree contains dozens of modified and untracked files implementing later features. Local `main` contains 12 June commits that are not represented by production HEAD.
+
+**Why it matters:** rollback, comparison, incident diagnosis, and deployment confidence are compromised. The exact running system cannot be recreated from the recorded production commit.
+
+**Required outcome:** commit and push the intended source, deploy from that clean revision, and confirm local, GitHub, and VPS hashes match.
+
+### P1 - Flight live tracker uses the wrong provider fields
+
+The live `flight_refresh` worker reads `actualTime`; the repaired backfill reads `revisedTime`. Production evidence shows the 11 June flight was populated by backfill after travel.
+
+**Why it matters:** the live tracker can claim completion without recording actual departure/arrival times.
+
+**Required outcome:** use the verified provider fields consistently in live and backfill paths, test against a real raw response, and assert the database fields after the worker runs.
+
+### P1 - Flight backfill corrupts future-flight actual times
+
+The backfill query includes future flights and treats revised values as actual values. The 13 June return flight had `actual_arr=23:05` on 12 June.
+
+**Why it matters:** statistics and the UI can present scheduled/revised future values as completed historical facts.
+
+**Required outcome:** restrict backfill to flights whose departure window has passed; only store an actual value when provider status/time semantics prove it is actual.
+
+### P1 - Flight backfill jobs multiply
+
+Every service startup adds a backfill job without checking for an existing pending job. Each completed backfill schedules another daily run. Production had six pending backfill jobs.
+
+**Why it matters:** repeated API calls waste quota, create noisy logs, and increase the chance of bad writes.
+
+**Required outcome:** seed only when no pending/running backfill exists and ensure exactly one self-scheduling chain.
+
+### P1 - System report has a broken Nginx check
+
+`lib/system-report.js` calls `fs.readFileSync` without importing `fs`. The exception is caught and converted into a warning, so the report does not compare Nginx files.
+
+**Why it matters:** a check described as protection against configuration drift cannot perform that check.
+
+**Required outcome:** import `fs`, test matching and mismatching configurations, and ensure the warning is specific.
+
+### P1 - Synthadoc production sidecar is unavailable
+
+No service was listening on `127.0.0.1:7091` during the 12 June production check.
+
+**Why it matters:** the Wiki still browses files and can use local fallback search, but semantic context building and new sidecar ingestion are unavailable.
+
+**Required outcome:** either run and monitor the sidecar or change the documentation/UI to state that local search is the intended production mode.
+
+### P2 - Future flight is labelled with an actual arrival
+
+This is the visible data consequence of the backfill bug. Correct the record after correcting the process so the false actual time does not remain.
+
+### P2 - Document task extraction has 11 unexplained no-task documents
+
+Production contained 11 non-image documents with extracted Markdown and no document-sourced task. Some may genuinely contain no actions, but the database cannot distinguish “assessed and no tasks found” from “never assessed.”
+
+**Why it matters:** the process may repeatedly reassess no-action documents, or silently leave actionable documents untouched.
+
+**Required outcome:** store an extraction assessment/result marker even when zero tasks are found.
+
+### P2 - Workday LaunchAgent definition differs from the installed job
+
+The repository plist says every five minutes and points into the repository. The installed job runs every 30 minutes and points to `/Users/dm_mini/bin/sync-workday-vault.sh`.
+
+**Why it matters:** operators reading Git will diagnose the wrong schedule and script.
+
+**Required outcome:** make the installer, repository plist, and installed job converge; document whether the installed copy or repo script is authoritative.
+
+### P2 - Workday LaunchAgent logs are empty
+
+The configured stdout/stderr files contained no evidence at audit time.
+
+**Why it matters:** installation alone does not prove synchronization is occurring.
+
+**Required outcome:** record start/end, source counts, files changed, digest outcome, and a non-zero failure exit.
+
+### P2 - Wall-clock schedules are less resilient than queue jobs
+
+Calendar sync, briefings, RSS, regulatory monitoring, digests, and the system report depend on the Node process being alive during one exact minute.
+
+**Why it matters:** a restart or outage at that minute can skip a whole day without a retry record.
+
+**Required outcome:** move critical schedules into the persistent queue or record daily run claims and retry missed runs.
+
+### P2 - Wiki synthesis model bypasses model administration
+
+The Wiki search route hardcodes `deepseek/deepseek-v3.2`.
+
+**Why it matters:** changing the configured Wiki model slot may have no effect on search synthesis, creating governance and cost confusion.
+
+**Required outcome:** route synthesis through the named system-model configuration.
+
+### P2 - Profile surfaces expose inconsistent context
+
+Portfolio chat sees sensitive preference fields that are absent from the visible page, while Candidate Analysis omits useful evidence available elsewhere.
+
+**Why it matters:** administrators may assume a field is private because it is not printed, or assume an assessment uses evidence that it never receives.
+
+**Required outcome:** add per-field surfacing controls or a clear Admin matrix showing Public Page, PDF, Chat, and Candidate Analysis exposure.
+
+### P3 - Package has no aggregate test command
+
+Synthetic tests exist and most passed individually, but `npm test` is not defined. The suggestion test also requires a real OpenRouter call and failed locally under restricted DNS.
+
+**Required outcome:** add offline unit coverage, an explicit opt-in integration test, and a single test script.
+
+### P3 - Repeated `punycode` deprecation warnings add noise
+
+Production logs repeatedly emit the Node deprecation warning. It is not currently breaking behavior, but it dilutes the visibility of operational warnings.
+
+### Verified working outcomes
+
+- Gmail and AgentMail queue chains had pending jobs and recent successful runs.
+- Reminder delivery, escalation, cancellation-on-resolution, CRM nudges, and content cadence synthetic tests passed.
+- The daily suggestion run created two content suggestions and delivered them.
+- The 11 June flight is now present with actual times after backfill.
+- Token Burn regenerated and published successfully at 02:00 each day from 8-12 June.
+- Production contained active data across projects, documents, contacts, CRM facts, tasks, RSS, meetings, profile content, Candidate Analysis, and portfolio chat.
+
+## 19. Data and Storage Map
 
 | Location | Contents | Backup treatment |
 |---|---|---|
@@ -588,7 +913,7 @@ In addition, launchd and systemd timers may run vault synchronization, backup, o
 
 Never put API keys, OAuth tokens, production databases, or private exports into Git.
 
-## 19. Local Development
+## 20. Local Development
 
 ### Start
 
@@ -618,7 +943,7 @@ Also check every changed JavaScript file, then exercise changed pages locally. F
 - Confirm `git status --short` is empty after the final commit.
 - Push before deployment so GitHub and production identify the same revision.
 
-## 20. Production Deployment
+## 21. Production Deployment
 
 ### Standard command
 
@@ -649,7 +974,7 @@ Use `journalctl -f -u hub.service` during a controlled live test.
 
 The deploy script synchronizes a broad application set. Review local Git status before running it. Do not deploy from a worktree containing unrelated or uncommitted experiments.
 
-## 21. Backups and Recovery
+## 22. Backups and Recovery
 
 ### Production backup
 
@@ -675,7 +1000,7 @@ to pull an offsite copy. Verify that a backup exists and is non-empty; a success
 
 Prefer deploying a known-good Git commit. Do not use destructive Git commands on a dirty worktree. Database rollback and code rollback are separate decisions because a newer schema may have been created.
 
-## 22. Security and Configuration
+## 23. Security and Configuration
 
 ### Secret groups
 
@@ -701,7 +1026,7 @@ API keys stored directly through Model Admin are database secrets and require th
 - Revoke and replace credentials after accidental disclosure.
 - Google OAuth scopes may require users to re-authorize after a new integration is added.
 
-## 23. Troubleshooting
+## 24. Troubleshooting
 
 ### Site unavailable
 
@@ -793,7 +1118,7 @@ API keys stored directly through Model Admin are database secrets and require th
 4. Check Nginx is routing to the expected process.
 5. Rule out browser cache for static CSS or JavaScript.
 
-## 24. Change Checklist
+## 25. Change Checklist
 
 ### Before implementation
 
@@ -819,7 +1144,7 @@ API keys stored directly through Model Admin are database secrets and require th
 - Test the primary user workflow.
 - Confirm `main`, `origin/main`, and production represent the same release.
 
-## 25. Command Reference
+## 26. Command Reference
 
 ```bash
 # Development
@@ -852,6 +1177,6 @@ node scripts/ingest-boox-drive-notes.js
 npm run init-db
 ```
 
-## 26. Maintainer Notes
+## 27. Maintainer Notes
 
 Update this manual whenever a tool, route, automation, data store, OAuth scope, deployment step, or recovery procedure changes. Keep operational facts dated. Do not embed live credentials. The Word edition is generated from this maintained source and should be rendered and visually checked before release.

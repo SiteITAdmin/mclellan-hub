@@ -65,6 +65,10 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .mgmt-card { border: 1px solid var(--card-border); border-radius: var(--card-radius); background: var(--card-bg); padding: 14px 16px; }
 .mgmt-card-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .mgmt-card-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; }
+.source-priority { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.source-priority label { font-size: 11px; font-weight: 600; color: var(--text-dim); }
+.source-priority select { width: auto; padding: 5px 8px; font-size: 12px; border: 1px solid var(--card-border); border-radius: 6px; background: var(--bg, #fcf8ff); color: var(--text); }
+.source-priority-status { font-size: 11px; color: var(--text-dim); }
 .edit-panel { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--card-border); }
 .edit-panel.open { display: block; }
 .model-form { display: flex; flex-direction: column; gap: 10px; }
@@ -257,12 +261,23 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
   <div class="section-card" id="sources">
     <p class="section-title">Approved external sources</p>
-    <p class="section-desc">Only these registered senders and enabled RSS feeds can enter Intelligence. Messages filed under Resources/Newsletters or Resources/Research register their sender automatically.</p>
+    <p class="section-desc">Rate how strongly each source should influence briefings: 5 is strongly preferred, 3 is normal, 2 is occasional direct context, and 1 is never included. Content is still ingested and searchable.</p>
     <div class="mgmt-grid">
       <% for (const source of sources) { %>
       <div class="mgmt-card">
         <div class="mgmt-card-name"><%= source.name %></div>
         <div class="mgmt-card-meta"><%= source.source_kind.toUpperCase() %> · <%= source.match_value %> · <%= source.document_count %> documents</div>
+        <div class="source-priority">
+          <label for="priority-<%= source.id %>">Briefing priority</label>
+          <select id="priority-<%= source.id %>" data-saved-value="<%= source.briefing_priority %>" onchange="setSourcePriority('<%= source.id %>', this)">
+            <option value="5" <%= source.briefing_priority === 5 ? 'selected' : '' %>>5 — Strongly prioritize</option>
+            <option value="4" <%= source.briefing_priority === 4 ? 'selected' : '' %>>4 — Prefer</option>
+            <option value="3" <%= source.briefing_priority === 3 ? 'selected' : '' %>>3 — Normal</option>
+            <option value="2" <%= source.briefing_priority === 2 ? 'selected' : '' %>>2 — Occasional context</option>
+            <option value="1" <%= source.briefing_priority === 1 ? 'selected' : '' %>>1 — Never include</option>
+          </select>
+          <span class="source-priority-status" id="priority-status-<%= source.id %>"></span>
+        </div>
       </div>
       <% } %>
       <% if (!sources.length) { %>
@@ -490,6 +505,32 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
   window.toggleEdit = function(id) {
     document.getElementById(id)?.classList.toggle('open');
+  };
+
+  window.setSourcePriority = async function(id, select) {
+    const status = document.getElementById('priority-status-' + id);
+    const savedValue = select.dataset.savedValue || '3';
+    select.disabled = true;
+    if (status) status.textContent = 'Saving...';
+    try {
+      const response = await fetch(`/newsletter/sources/${encodeURIComponent(id)}/priority`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ priority: select.value }).toString(),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save priority');
+      select.dataset.savedValue = String(data.priority);
+      if (status) status.textContent = 'Saved';
+      setTimeout(() => {
+        if (status?.textContent === 'Saved') status.textContent = '';
+      }, 1400);
+    } catch (error) {
+      select.value = savedValue;
+      if (status) status.textContent = error.message;
+    } finally {
+      select.disabled = false;
+    }
   };
 
   let currentBriefingId = null;

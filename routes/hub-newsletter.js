@@ -130,6 +130,22 @@ router.post('/topics/toggle-week', (req, res) => {
   res.redirect(`/newsletter?week=${week}`);
 });
 
+// ── Source briefing priority ─────────────────────────────────────────────────
+
+router.post('/sources/:id/priority', (req, res) => {
+  const priority = Number(req.body.priority);
+  if (!Number.isInteger(priority) || priority < 1 || priority > 5) {
+    return res.status(400).json({ error: 'Priority must be an integer from 1 to 5.' });
+  }
+  const result = db.hub().prepare(`
+    UPDATE intel_sources
+    SET briefing_priority = ?
+    WHERE id = ? AND user = ?
+  `).run(priority, req.params.id, req.hubUser);
+  if (!result.changes) return res.status(404).json({ error: 'Source not found.' });
+  res.json({ ok: true, priority });
+});
+
 // ── Gmail label list ──────────────────────────────────────────────────────────
 
 router.get('/gmail-labels', async (req, res) => {
