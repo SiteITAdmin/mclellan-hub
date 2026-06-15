@@ -299,6 +299,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         <button class="btn-sm view-btn" onclick="toggleExpand('<%= p.id %>')">View</button>
         <% } %>
         <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">PDF</a><% } %>
+        <% if (!p.carousel_url && p.status !== 'processing' && (p.draft || p.preview)) { %><button class="btn-sm" id="retry-btn-<%= p.id %>" onclick="retryCarousel('<%= p.id %>')">Retry PDF</button><% } %>
         <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">📅 Cal</a><% } %>
         <% if (p.status !== 'processing') { %>
         <button class="btn-sm danger" onclick="deletePost('<%= p.id %>')">Delete</button>
@@ -523,6 +524,32 @@ window.schedulePost = async function(id) {
     body: JSON.stringify({ date }),
   });
   if (r.ok) window.location.reload();
+};
+
+// ── Retry carousel ────────────────────────────────────────────────────────────
+window.retryCarousel = async function(id) {
+  const btn = document.getElementById('retry-btn-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
+  try {
+    const r = await fetch('/api/content/posts/' + id + '/retry-carousel', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Failed'); }
+    // Poll until no longer processing
+    const poll = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/content/posts/' + id);
+        const pd = await pr.json();
+        if (pd.post?.status !== 'processing') {
+          clearInterval(poll);
+          window.location.reload();
+        }
+      } catch (_) {}
+    }, 3000);
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Retry PDF'; }
+    alert('Error: ' + err.message);
+  }
 };
 
 // ── Delete ────────────────────────────────────────────────────────────────────
