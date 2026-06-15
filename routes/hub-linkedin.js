@@ -14,7 +14,7 @@ const CONTENT_TYPES_HUB = [
 
 router.get('/lin', requireAuth, (req, res) => {
   const posts = db.hub().prepare(
-    `SELECT id, topic, content_type, score_json, carousel_url, sheet_url,
+    `SELECT id, topic, content_type, spiciness, score_json, carousel_url, sheet_url,
             scheduled_date, status, created_at,
             substr(refined_draft, 1, 300) AS preview
      FROM linkedin_posts WHERE user = ? ORDER BY created_at DESC LIMIT 100`
@@ -34,15 +34,17 @@ router.post('/api/content/generate', requireAuth, requireSameOrigin, writeLimite
   if (rawSourceUrl) {
     try { sourceUrl = new URL(rawSourceUrl).href; } catch (_) { /* ignore invalid URLs */ }
   }
+  const validSpiciness = ['professional', 'challenging', 'provocative'];
+  const spiciness = validSpiciness.includes(req.body?.spiciness) ? req.body.spiciness : 'professional';
   const { randomUUID } = require('crypto');
   const { runPipeline } = require('../lib/linkedin-pipeline');
   const postId = randomUUID();
   db.hub().prepare(
-    `INSERT INTO linkedin_posts (id, user, topic, status) VALUES (?, ?, ?, 'processing')`
-  ).run(postId, req.hubUser, topic);
+    `INSERT INTO linkedin_posts (id, user, topic, status, spiciness) VALUES (?, ?, ?, 'processing', ?)`
+  ).run(postId, req.hubUser, topic, spiciness);
   setImmediate(async () => {
     try {
-      await runPipeline(req.hubUser, topic, s => console.log('[content]', s), postId, sourceUrl);
+      await runPipeline(req.hubUser, topic, s => console.log('[content]', s), postId, sourceUrl, spiciness);
     } catch (err) {
       console.error('[content] pipeline error:', err.message);
       try { db.hub().prepare(`UPDATE linkedin_posts SET status = 'error' WHERE id = ?`).run(postId); } catch (_) {}
