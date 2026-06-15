@@ -90,6 +90,8 @@ echo "==> Enforcing sensitive file permissions..."
    chmod 750 /app &&
    install -d -o hub -g hub -m 700 /app/data /app/exports &&
    install -d -o root -g hub -m 750 /app/config &&
+   find /app/config -maxdepth 1 -type f -exec chown root:hub {} + &&
+   find /app/config -maxdepth 1 -type f -exec chmod 640 {} + &&
    test ! -f /app/.env || { chown root:hub /app/.env && chmod 640 /app/.env; } &&
    test ! -f /app/config/google-service-account.json || { chown root:hub /app/config/google-service-account.json && chmod 640 /app/config/google-service-account.json; } &&
    test ! -d /app/backups || { chown -R root:root /app/backups && chmod -R go-rwx /app/backups; }"
