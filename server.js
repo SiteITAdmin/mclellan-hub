@@ -21,6 +21,7 @@ const { processJobs, seedJobs } = require('./lib/job-queue');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
+const HOST = process.env.HOST || (isProduction ? '127.0.0.1' : '0.0.0.0');
 const sessionSecret = process.env.SESSION_SECRET || (!isProduction ? 'local-dev-session-secret' : null);
 
 if (!sessionSecret) {
@@ -119,8 +120,8 @@ app.use((err, req, res, next) => {
   res.status(500).send('Internal server error');
 });
 
-app.listen(PORT, () => {
-  console.log(`mclellan-hub listening on port ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`mclellan-hub listening on ${HOST}:${PORT}`);
 });
 
 // ── Scheduler helpers ─────────────────────────────────────────────────────────

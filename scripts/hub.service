@@ -10,6 +10,9 @@ EnvironmentFile=/app/.env
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
 StandardOutput=journal
 StandardError=journal
 

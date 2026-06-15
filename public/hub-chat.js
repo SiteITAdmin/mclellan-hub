@@ -337,6 +337,15 @@ document.getElementById('chat-form').addEventListener('submit', async function (
       }),
     });
 
+    if (!res.ok) {
+      let message = `Request failed (${res.status})`;
+      try {
+        const data = await res.json();
+        if (data.error) message = data.error;
+      } catch (_) {}
+      throw new Error(message);
+    }
+
     const reader = res.body.getReader();
     activeReader = reader;
     const decoder = new TextDecoder();

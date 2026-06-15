@@ -2,6 +2,7 @@
 // All mock data replaced with window.HUB_DATA injected from chat.ejs
 
 const HUB = window.HUB_DATA || {};
+const MAX_CHAT_MESSAGE_CHARS = 100000;
 
 // ── Data from server ───────────────────────────────────────────────────────
 // Map availableModels (grouped) to the internal format { group, options[] }
@@ -374,62 +375,64 @@ function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
           </button>
         </div>
 
-        <button className="sb-new" onClick={() => window.location.href = '/c'}>
-          <Icon name="edit" size={16} />
-          {expanded && <span>New chat</span>}
-        </button>
+        <div className="sb-scroll">
+          <button className="sb-new" onClick={() => window.location.href = '/c'}>
+            <Icon name="edit" size={16} />
+            {expanded && <span>New chat</span>}
+          </button>
 
-        {expanded && (
-          <div className="sb-search">
-            <Icon name="search" size={14} />
-            <input placeholder="Search…" onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) window.location.href = '/c?q=' + encodeURIComponent(e.target.value.trim()); }} />
-          </div>
-        )}
-
-        <nav className="sb-nav">
-          <SbItem icon="chat" label="Chats" expanded={expanded} active={!activeSlug} onClick={() => window.location.href = '/c'} />
-          <SbItem icon="people" label="People" expanded={expanded} onClick={() => window.location.href = '/crm'} />
-          <SbItem icon="sparkle" label="Content" expanded={expanded} onClick={() => window.location.href = '/lin'} />
-          <SbItem icon="edit" label="Tasks" expanded={expanded} onClick={() => window.location.href = '/crm/tasks'} />
-          <SbItem icon="mic" label="Debrief" expanded={expanded} onClick={() => window.location.href = '/debrief'} />
-          <SbItem icon="file" label="Intelligence" expanded={expanded} onClick={() => window.location.href = '/newsletter'} />
-          <SbItem icon="settings" label="Admin" expanded={expanded} onClick={() => window.location.href = '/admin'} />
-        </nav>
-
-        {expanded && projects.length > 0 && (
-          <>
-            <div className="sb-section-head sb-section-toggle" onClick={() => setProjectsOpen(o => !o)} style={{ cursor: 'pointer' }}>
-              <span>Projects</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <button title="New project" onClick={e => { e.stopPropagation(); setShowNewProj(true); }}><Icon name="plus" size={14} /></button>
-                <span style={{ display: 'inline-flex', transition: 'transform 0.15s', transform: projectsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}><Icon name="chevron" size={14} /></span>
-              </div>
+          {expanded && (
+            <div className="sb-search">
+              <Icon name="search" size={14} />
+              <input placeholder="Search…" onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) window.location.href = '/c?q=' + encodeURIComponent(e.target.value.trim()); }} />
             </div>
-            {projectsOpen && (
-              <div className="sb-list">
-                {projects.map(p => (
-                  <button
-                    key={p.slug}
-                    className={'sb-row sb-project ' + (activeSlug === p.slug ? 'is-active' : '')}
-                    onClick={() => window.location.href = '/p/' + p.slug}
-                  >
-                    <span className="sb-row-label">/{p.slug}</span>
-                  </button>
-                ))}
+          )}
+
+          <nav className="sb-nav">
+            <SbItem icon="chat" label="Chats" expanded={expanded} active={!activeSlug} onClick={() => window.location.href = '/c'} />
+            <SbItem icon="people" label="People" expanded={expanded} onClick={() => window.location.href = '/crm'} />
+            <SbItem icon="sparkle" label="Content" expanded={expanded} onClick={() => window.location.href = '/lin'} />
+            <SbItem icon="edit" label="Tasks" expanded={expanded} onClick={() => window.location.href = '/crm/tasks'} />
+            <SbItem icon="mic" label="Debrief" expanded={expanded} onClick={() => window.location.href = '/debrief'} />
+            <SbItem icon="file" label="Intelligence" expanded={expanded} onClick={() => window.location.href = '/newsletter'} />
+            <SbItem icon="settings" label="Admin" expanded={expanded} onClick={() => window.location.href = '/admin'} />
+          </nav>
+
+          {expanded && projects.length > 0 && (
+            <>
+              <div className="sb-section-head sb-section-toggle" onClick={() => setProjectsOpen(o => !o)} style={{ cursor: 'pointer' }}>
+                <span>Projects</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button title="New project" onClick={e => { e.stopPropagation(); setShowNewProj(true); }}><Icon name="plus" size={14} /></button>
+                  <span style={{ display: 'inline-flex', transition: 'transform 0.15s', transform: projectsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}><Icon name="chevron" size={14} /></span>
+                </div>
               </div>
-            )}
-          </>
-        )}
+              {projectsOpen && (
+                <div className="sb-list">
+                  {projects.map(p => (
+                    <button
+                      key={p.slug}
+                      className={'sb-row sb-project ' + (activeSlug === p.slug ? 'is-active' : '')}
+                      onClick={() => window.location.href = '/p/' + p.slug}
+                    >
+                      <span className="sb-row-label">/{p.slug}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
 
-        {expanded && activeSlug && projectsOpen && <ProjectDocs slug={activeSlug} />}
+          {expanded && activeSlug && projectsOpen && <ProjectDocs slug={activeSlug} />}
 
-        {expanded && convs.length > 0 && (
-          <div className="sb-section-head sb-section-toggle" onClick={() => setRecentsOpen(o => !o)} style={{ cursor: 'pointer' }}>
-            <span>Recent chats</span>
-            <span style={{ display: 'inline-flex', transition: 'transform 0.15s', transform: recentsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}><Icon name="chevron" size={14} /></span>
-          </div>
-        )}
-        {expanded && recentsOpen && <RecentConvs convs={convs} activeConvId={activeConvId} />}
+          {expanded && convs.length > 0 && (
+            <div className="sb-section-head sb-section-toggle" onClick={() => setRecentsOpen(o => !o)} style={{ cursor: 'pointer' }}>
+              <span>Recent chats</span>
+              <span style={{ display: 'inline-flex', transition: 'transform 0.15s', transform: recentsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}><Icon name="chevron" size={14} /></span>
+            </div>
+          )}
+          {expanded && recentsOpen && <RecentConvs convs={convs} activeConvId={activeConvId} />}
+        </div>
 
         <div className="sb-foot">
           <div className="sb-foot-row" style={{ cursor: 'default' }}>
@@ -935,6 +938,7 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
   const [val, setVal] = React.useState('');
   const [more, setMore] = React.useState(false);
   const [uploadStatus, setUploadStatus] = React.useState('');
+  const [composerError, setComposerError] = React.useState('');
   const [opts, setOpts] = React.useState({
     sensitive: false,
     research: false,
@@ -1089,6 +1093,13 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
 
   const send = () => {
     if (!val.trim() || streaming) return;
+    if (val.length > MAX_CHAT_MESSAGE_CHARS) {
+      setComposerError(
+        `This message is ${val.length.toLocaleString()} characters. The maximum is ${MAX_CHAT_MESSAGE_CHARS.toLocaleString()}; attach it as a .txt file instead.`
+      );
+      return;
+    }
+    setComposerError('');
     onSend(val.trim(), opts);
     setVal('');
     if (textRef.current) textRef.current.style.height = 'auto';
@@ -1155,10 +1166,27 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
           rows={1}
           placeholder={placeholder}
           value={val}
-          onChange={e => setVal(e.target.value)}
+          onChange={e => {
+            setVal(e.target.value);
+            if (composerError) setComposerError('');
+          }}
           onKeyDown={onKey}
           disabled={streaming}
         />
+        {val.length >= MAX_CHAT_MESSAGE_CHARS * 0.8 && (
+          <span
+            title={`${MAX_CHAT_MESSAGE_CHARS.toLocaleString()} character maximum`}
+            style={{
+              position: 'absolute',
+              right: 12,
+              top: 8,
+              color: val.length > MAX_CHAT_MESSAGE_CHARS ? 'var(--danger, #c0392b)' : 'var(--text-3)',
+              fontSize: 11,
+            }}
+          >
+            {val.length.toLocaleString()} / {MAX_CHAT_MESSAGE_CHARS.toLocaleString()}
+          </span>
+        )}
         <div className="comp-bar">
           <button className="comp-btn" title="Attach file" onClick={() => fileRef.current?.click()}>
             <Icon name="paperclip" size={16} />
@@ -1291,6 +1319,11 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
           </div>
         )}
       </div>
+      {composerError && (
+        <div style={{ color: 'var(--danger, #c0392b)', fontSize: 12, marginTop: 6 }}>
+          {composerError}
+        </div>
+      )}
       <div className="comp-footnote">
         Hub responses can be wrong. Verify what matters.
       </div>
@@ -1504,6 +1537,15 @@ function ChatApp() {
           exaDays: opts.exaDays > 0 ? opts.exaDays : 0,
         }),
       });
+
+      if (!res.ok) {
+        let message = `Request failed (${res.status})`;
+        try {
+          const data = await res.json();
+          if (data.error) message = data.error;
+        } catch (_) {}
+        throw new Error(message);
+      }
 
       const reader = res.body.getReader();
       activeReaderRef.current = reader;

@@ -75,6 +75,7 @@ rsync -avz --no-perms --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r --progress -e "
   --exclude data \
   --exclude .env \
   --exclude '.env*' \
+  --exclude config/google-service-account.json \
   --exclude exports \
   --exclude '*.rtf' \
   --exclude '*.zip' \
@@ -82,6 +83,16 @@ rsync -avz --no-perms --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r --progress -e "
   --exclude 'mclellan hub' \
   "$APP_DIR/" \
   "${VPS_USER}@${VPS_IP}:/app/"
+
+echo "==> Enforcing sensitive file permissions..."
+"${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" \
+  "chown root:hub /app &&
+   chmod 750 /app &&
+   install -d -o hub -g hub -m 700 /app/data /app/exports &&
+   install -d -o root -g hub -m 750 /app/config &&
+   test ! -f /app/.env || { chown root:hub /app/.env && chmod 640 /app/.env; } &&
+   test ! -f /app/config/google-service-account.json || { chown root:hub /app/config/google-service-account.json && chmod 640 /app/config/google-service-account.json; } &&
+   test ! -d /app/backups || { chown -R root:root /app/backups && chmod -R go-rwx /app/backups; }"
 
 echo "==> Syncing wiki policy and Synthadoc ingest override..."
 rsync -avz --progress -e "$RSYNC_RSH" \
