@@ -63,7 +63,8 @@ if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
   exit 1
 fi
 git push origin main
-echo "    GitHub up to date: $(git rev-parse --short HEAD)"
+REVISION="$(git rev-parse HEAD)"
+echo "    GitHub up to date: ${REVISION:0:7}"
 
 echo "==> Syncing code to VPS..."
 rsync -avz --no-perms --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r --progress -e "$RSYNC_RSH" \
@@ -83,6 +84,13 @@ rsync -avz --no-perms --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r --progress -e "
   --exclude 'mclellan hub' \
   "$APP_DIR/" \
   "${VPS_USER}@${VPS_IP}:/app/"
+
+echo "==> Recording deployed revision..."
+"${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" \
+  "printf '%s\n' '$REVISION' > /app/.deployed-revision &&
+   chown root:hub /app/.deployed-revision &&
+   chmod 640 /app/.deployed-revision &&
+   rm -f /app/deploy.sh"
 
 echo "==> Enforcing sensitive file permissions..."
 "${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" \
@@ -123,6 +131,9 @@ echo "==> Restarting service..."
 "${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" "systemctl restart hub"
 
 echo "==> Status:"
-"${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" "systemctl status hub --no-pager -l | head -12"
+"${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" \
+  "systemctl status hub --no-pager -l | head -12 &&
+   printf 'Deployed revision: ' &&
+   cat /app/.deployed-revision"
 
 echo "Done."
