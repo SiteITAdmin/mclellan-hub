@@ -12,6 +12,8 @@ const db     = require('../lib/db');
 const { vaultRoot } = require('../lib/obsidian-vault');
 const { startGoogleAuth, finishGoogleAuth } = require('../lib/google-auth');
 const { requireSameOrigin } = require('../lib/security');
+const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
+const { logUsageFromResponse } = require('../lib/openrouter-usage');
 const {
   indexAll,
   buildGraph,
@@ -499,11 +501,9 @@ router.get('/api/search', requireAuth, async (req, res) => {
       ))).join('\n');
       const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://wiki.mclellan.scot',
-        },
+        headers: openRouterHeaders(TASK_CODES.WIKI, {
+          baseUrl: 'https://wiki.mclellan.scot',
+        }),
         body: JSON.stringify({
           model: 'deepseek/deepseek-v3.2',
           messages: [
@@ -529,6 +529,14 @@ router.get('/api/search', requireAuth, async (req, res) => {
         }),
       });
       const data = await resp.json();
+      logUsageFromResponse({
+        user: req.hubUser || 'system',
+        feature: 'wiki-search',
+        modelKey: 'wiki-search',
+        fallbackModelId: 'deepseek/deepseek-v3.2',
+        data,
+        taskCode: TASK_CODES.WIKI,
+      });
       const rawSynthesis = data.choices?.[0]?.message?.content?.trim();
       if (rawSynthesis) synthesis = JSON.parse(rawSynthesis);
     } catch (_) {}

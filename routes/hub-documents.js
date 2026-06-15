@@ -91,6 +91,7 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
   }
   const fetch = require('../lib/fetch');
   const { logUsageFromResponse } = require('../lib/openrouter-usage');
+  const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
   const { createTask } = require('../lib/google-tasks');
   const { getSystemModelId } = require('../lib/settings');
 
@@ -107,11 +108,7 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
   try {
     const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://dchat.mclellan.scot',
-      },
+      headers: openRouterHeaders(TASK_CODES.DOCUMENT_TASKS),
       body: JSON.stringify({
         model: modelId,
         messages: [{ role: 'user', content: prompt }],
@@ -124,6 +121,7 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
     logUsageFromResponse({
       user: req.hubUser, feature: 'doc-task-extractor', modelKey: 'task_extractor',
       fallbackModelId: modelId, data, durationMs: Date.now() - started,
+      taskCode: TASK_CODES.DOCUMENT_TASKS,
     });
     extracted = JSON.parse(data.choices[0].message.content);
   } catch (err) {

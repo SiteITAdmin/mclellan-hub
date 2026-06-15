@@ -16,6 +16,8 @@ require('dotenv').config({ path: path.join(ROOT, '.env') });
 
 const db = require('../lib/db');
 const { writeNote, vaultRoot } = require('../lib/obsidian-vault');
+const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
+const { logUsageFromResponse } = require('../lib/openrouter-usage');
 
 const args = Object.fromEntries(
   process.argv.slice(2)
@@ -125,11 +127,7 @@ Write 2–4 sentences covering: what's happened recently, any open threads or de
   try {
     const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://dchat.mclellan.scot',
-      },
+      headers: openRouterHeaders(TASK_CODES.DAILY_DIGEST),
       body: JSON.stringify({
         model: process.env.DIGEST_MODEL || 'deepseek/deepseek-v3.2',
         messages: [{ role: 'user', content: prompt }],
@@ -138,6 +136,14 @@ Write 2–4 sentences covering: what's happened recently, any open threads or de
     });
     if (!resp.ok) throw new Error(`LLM ${resp.status}`);
     const data = await resp.json();
+    logUsageFromResponse({
+      user,
+      feature: 'daily-digest',
+      modelKey: 'daily-digest',
+      fallbackModelId: process.env.DIGEST_MODEL || 'deepseek/deepseek-v3.2',
+      data,
+      taskCode: TASK_CODES.DAILY_DIGEST,
+    });
     return data.choices[0].message.content.trim();
   } catch (err) {
     console.warn(`[digest] synthesis failed for ${topicName}:`, err.message);

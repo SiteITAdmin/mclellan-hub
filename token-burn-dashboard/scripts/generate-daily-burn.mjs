@@ -239,7 +239,7 @@ function addOpenRouterSummary(bucket, key, tokens, cost) {
 
 function normalizeOpenRouterApp(appName) {
   const value = String(appName || "").trim();
-  return value || "Hub Automations";
+  return value || "Legacy-Unattributed";
 }
 
 function finalizeOpenRouterSummary() {

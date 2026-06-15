@@ -152,8 +152,37 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
   <section class="burn-panel">
     <div class="burn-panel-head">
+      <div><span class="burn-label">McLellan hub</span><h2>Live OpenRouter tasks</h2></div>
+      <p>Hub calls grouped by task identity. `UT` means user-triggered; `AT` means an automatic task.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="row-list">
+        <thead><tr><th>Task</th><th>Type</th><th>Calls</th><th>Input</th><th>Output</th><th>Total</th><th>Cost</th><th>Avg time</th></tr></thead>
+        <tbody>
+          <% if (!tokenBurn.liveTasks.length) { %>
+            <tr><td colspan="8">No task-attributed OpenRouter rows in the current hub DB yet.</td></tr>
+          <% } %>
+          <% for (const row of tokenBurn.liveTasks) { %>
+            <tr>
+              <td><strong><%= row.task_code %></strong></td>
+              <td><span class="pill <%= row.task_type === 'legacy' ? 'estimated' : 'exact' %>"><%= row.task_type %></span></td>
+              <td><%= row.calls %></td>
+              <td><%= formatTokens(row.tokens_in) %></td>
+              <td><%= formatTokens(row.tokens_out) %></td>
+              <td><span class="pill exact"><%= formatTokens(row.total) %></span></td>
+              <td><%= formatUsd(row.cost_usd) %></td>
+              <td><%= row.avg_duration_ms == null ? '—' : row.avg_duration_ms >= 1000 ? `${(row.avg_duration_ms / 1000).toFixed(1)}s` : `${row.avg_duration_ms}ms` %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="burn-panel">
+    <div class="burn-panel-head">
       <div><span class="burn-label">McLellan hub</span><h2>Live OpenRouter daily log</h2></div>
-      <p>This table uses the current hub `request_logs` table. It will fill as the hub records successful model calls.</p>
+      <p>Daily totals from the same task-attributed `request_logs` records.</p>
     </div>
     <div class="table-wrap">
       <table class="row-list">
