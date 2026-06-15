@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ingestion detail — <%= document.title %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+.back { display: inline-block; margin-bottom: 16px; color: var(--primary); text-decoration: none; font-weight: 600; }
+.stage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+.stage { border: 1px solid var(--border); border-radius: 9px; padding: 13px; background: var(--surface); }
+.stage h2 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.stage strong { display: block; margin-bottom: 5px; overflow-wrap: anywhere; }
+.muted { color: var(--text-muted); }
+.mono { font-family: var(--mono); overflow-wrap: anywhere; }
+.detail-section { margin: 24px 0; }
+.detail-section h2 { font-size: 18px; margin-bottom: 10px; }
+.run-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.run-table th, .run-table td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.run-table th { color: var(--text-muted); }
+.item { border: 1px solid var(--border); border-radius: 9px; padding: 14px; margin-bottom: 10px; background: var(--surface); }
+.item h3 { margin: 0 0 5px; font-size: 15px; }
+.item p { white-space: pre-wrap; line-height: 1.5; }
+.source { max-height: 650px; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font: 12px/1.5 var(--mono); }
+@media (max-width: 900px) { .stage-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .stage-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="admin-page">
+<%- include('partials/admin-header', { title: 'Newsletter ingestion detail' }) %>
+<section class="admin-section">
+  <a class="back" href="/admin/newsletter-ingestion">← Back to ingestion</a>
+
+  <div class="stage-grid">
+    <div class="stage">
+      <h2>1. Admission</h2>
+      <strong><%= document.source_name || 'Unmatched source' %></strong>
+      <div><%= document.source_kind %> · priority <%= document.briefing_priority ?? '—' %></div>
+      <div class="muted mono"><%= document.match_type ? `${document.match_type}: ${document.match_value}` : 'No matching rule recorded' %></div>
+    </div>
+    <div class="stage">
+      <h2>2. Stored input</h2>
+      <strong><%= document.title %></strong>
+      <div><%= Number(document.source_chars || 0).toLocaleString('en-GB') %> chars</div>
+      <div class="muted"><%= document.sender_name || document.sender_email || 'Unknown sender' %></div>
+    </div>
+    <div class="stage">
+      <h2>3. Extraction</h2>
+      <strong><%= runs[0]?.status || (items.length ? 'complete (historical)' : 'stored only') %></strong>
+      <div><%= runs[0]?.method || items[0]?.extraction_method || 'Method not recorded' %></div>
+      <div class="muted mono"><%= runs[0]?.actual_model_id || runs[0]?.requested_model_id || items[0]?.extraction_model_label || items[0]?.extraction_model_id || 'Model not recorded' %></div>
+    </div>
+    <div class="stage">
+      <h2>4. Output</h2>
+      <strong><%= items.length %> item<%= items.length === 1 ? '' : 's' %></strong>
+      <div><%= items.reduce((sum, item) => sum + String(item.content_text || '').length, 0).toLocaleString('en-GB') %> chars</div>
+      <div class="muted"><%= items.filter(item => item.selected).length %> selected</div>
+    </div>
+  </div>
+
+  <section class="detail-section">
+    <h2>Run history</h2>
+    <% if (!runs.length) { %>
+      <p class="muted">This predates run-level logging. Model and method below are reconstructed from the extracted items where available.</p>
+    <% } else { %>
+      <div style="overflow-x:auto">
+        <table class="run-table">
+          <thead><tr><th>Started</th><th>Status</th><th>Method</th><th>Requested model</th><th>Actual model</th><th>Attempts</th><th>Items</th><th>Usage</th><th>Duration</th><th>Error</th></tr></thead>
+          <tbody>
+          <% for (const run of runs) {
+               const started = new Date(run.started_at * 1000).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'medium' });
+          %>
+            <tr>
+              <td><%= started %></td>
+              <td><strong><%= run.status %></strong></td>
+              <td><%= run.method %></td>
+              <td class="mono"><%= run.requested_model_id || '—' %></td>
+              <td class="mono"><%= run.actual_model_id || '—' %></td>
+              <td><%= run.attempt_count %></td>
+              <td><%= run.item_count %></td>
+              <td class="mono"><%= run.tokens_in %> in / <%= run.tokens_out %> out · $<%= Number(run.cost_usd || 0).toFixed(5) %></td>
+              <td><%= run.duration_ms == null ? '—' : `${run.duration_ms}ms` %></td>
+              <td><%= run.error || '—' %></td>
+            </tr>
+          <% } %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+
+  <section class="detail-section">
+    <h2>Extracted output</h2>
+    <% if (!items.length) { %><p class="muted">No extracted items were stored.</p><% } %>
+    <% for (const item of items) { %>
+      <article class="item">
+        <h3><%= item.title %></h3>
+        <div class="muted">
+          <%= item.item_type %><%= item.category ? ` · ${item.category}` : '' %>
+          · <%= item.selected ? 'selected' : 'not selected' %>
+          · <span class="mono"><%= item.extraction_model_label || item.extraction_model_id || item.extraction_method || 'model not recorded' %></span>
+        </div>
+        <% if (item.summary) { %><p><strong>Summary:</strong> <%= item.summary %></p><% } %>
+        <details>
+          <summary>Full extracted content (<%= String(item.content_text || '').length.toLocaleString('en-GB') %> chars)</summary>
+          <p><%= item.content_text %></p>
+        </details>
+      </article>
+    <% } %>
+  </section>
+
+  <section class="detail-section">
+    <h2>Stored source</h2>
+    <details>
+      <summary>View raw stored input (<%= Number(document.source_chars || 0).toLocaleString('en-GB') %> chars)</summary>
+      <pre class="source"><%= document.content_text %></pre>
+    </details>
+  </section>
+</section>
+</body>
+</html>

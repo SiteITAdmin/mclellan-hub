@@ -16,6 +16,7 @@ const {
 const { uuid } = require('../lib/id');
 const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const { ingestFeed, ingestAllFeeds } = require('../lib/rss-ingest');
+const { listIngestionAudit, getIngestionAudit } = require('../lib/intelligence-audit');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -497,6 +498,71 @@ router.get('/admin/chatlogs', requireHubAdmin, (req, res) => {
      LIMIT ?
   `).all(req.hubUser, limit);
   res.render('hub-admin/chatlogs', { user: req.hubUser, logs, limit, rating, sort: req.query.sort || 'newest' });
+});
+
+// ── Newsletter ingestion audit ────────────────────────────────────────────────
+router.get('/admin/newsletter-ingestion', requireHubAdmin, (req, res) => {
+  const sourceKinds = new Set(['email', 'rss']);
+  const statuses = new Set(['running', 'complete', 'fallback', 'failed', 'stored']);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+  const sourceKind = sourceKinds.has(req.query.source_kind) ? req.query.source_kind : '';
+  const status = statuses.has(req.query.status) ? req.query.status : '';
+  const model = typeof req.query.model === 'string' ? req.query.model.trim() : '';
+  const rows = listIngestionAudit(req.hubUser, { limit, sourceKind, status, model });
+  const hub = db.hub();
+
+  if (rows.length) {
+    const documentIds = rows.map(row => row.id);
+    const placeholders = documentIds.map(() => '?').join(',');
+    const items = hub.prepare(`
+      SELECT document_id, id, title, summary, item_type, category,
+             length(COALESCE(content_text, '')) AS content_chars
+        FROM intel_items
+       WHERE user = ? AND document_id IN (${placeholders})
+       ORDER BY created_at, id
+    `).all(req.hubUser, ...documentIds);
+    const itemsByDocument = new Map();
+    for (const item of items) {
+      if (!itemsByDocument.has(item.document_id)) itemsByDocument.set(item.document_id, []);
+      itemsByDocument.get(item.document_id).push(item);
+    }
+    for (const row of rows) row.items = itemsByDocument.get(row.id) || [];
+  }
+
+  const models = hub.prepare(`
+    SELECT model_id
+      FROM (
+        SELECT actual_model_id AS model_id
+          FROM intel_extraction_runs
+         WHERE user = ? AND actual_model_id IS NOT NULL
+        UNION
+        SELECT requested_model_id
+          FROM intel_extraction_runs
+         WHERE user = ? AND requested_model_id IS NOT NULL
+        UNION
+        SELECT extraction_model_id
+          FROM intel_items
+         WHERE user = ? AND extraction_model_id IS NOT NULL
+      )
+     WHERE model_id <> ''
+     ORDER BY model_id
+  `).all(req.hubUser, req.hubUser, req.hubUser).map(row => row.model_id);
+
+  res.render('hub-admin/newsletter-ingestion', {
+    user: req.hubUser,
+    rows,
+    models,
+    filters: { limit, sourceKind, status, model },
+  });
+});
+
+router.get('/admin/newsletter-ingestion/:id', requireHubAdmin, (req, res) => {
+  const audit = getIngestionAudit(req.hubUser, req.params.id);
+  if (!audit) return res.status(404).send('Newsletter ingestion record not found');
+  res.render('hub-admin/newsletter-ingestion-detail', {
+    user: req.hubUser,
+    ...audit,
+  });
 });
 
 // ── Debrief session logs ──────────────────────────────────────────────────────
