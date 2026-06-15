@@ -17,6 +17,8 @@ const { uuid } = require('../lib/id');
 const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const { ingestFeed, ingestAllFeeds } = require('../lib/rss-ingest');
 const { listIngestionAudit, getIngestionAudit } = require('../lib/intelligence-audit');
+const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
+const { logOpenRouterUsage, logUsageFromResponse } = require('../lib/openrouter-usage');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -859,12 +861,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
     log(`calling OpenRouter stream=false`);
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://mclellan.scot',
-        'X-Title': 'McLellan Hub Brave test',
-      },
+      headers: openRouterHeaders(TASK_CODES.TESTBENCH, { apiKey }),
       body: JSON.stringify({
         model: m.model_id,
         messages: [{ role: 'user', content: prompt }],
@@ -890,6 +887,14 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
       log(`OpenRouter error: ${errMsg}`);
       return fail(errMsg);
     }
+    logUsageFromResponse({
+      user: req.hubUser,
+      feature: 'testbench-brave',
+      modelKey: m.key,
+      fallbackModelId: m.model_id,
+      data,
+      taskCode: TASK_CODES.TESTBENCH,
+    });
 
     const msg        = data.choices?.[0]?.message || {};
     const content    = msg.content || '';
@@ -1110,12 +1115,7 @@ Return ONLY the improved prompt. No explanation, no preamble, no commentary. Jus
 router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
   const { question } = req.body;
   if (!question?.trim()) return res.json({ ok: false, error: 'No prompt provided' });
-  const orHeaders = {
-    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-    'Content-Type': 'application/json',
-    'HTTP-Referer': 'https://mclellan.scot',
-    'X-Title': 'McLellan Hub Test',
-  };
+  const orHeaders = openRouterHeaders(TASK_CODES.TESTBENCH);
   try {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -1130,6 +1130,14 @@ router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
       }),
     });
     const data = await r.json();
+    logUsageFromResponse({
+      user: req.hubUser,
+      feature: 'testbench-prompt-improver',
+      modelKey: 'prompt_improver',
+      fallbackModelId: getSystemModelId('prompt_improver', 'system', IMPROVE_PROMPT_FALLBACK),
+      data,
+      taskCode: TASK_CODES.TESTBENCH,
+    });
     const improved = data.choices?.[0]?.message?.content?.trim();
     if (!improved) return res.json({ ok: false, error: data.error?.message || 'Model returned no content' });
     res.json({ ok: true, improved });
@@ -1140,12 +1148,7 @@ router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
 
 // Shared combo execution — used by both /run (single) and /run-all (SSE)
 async function runComboInternal(question, model, search) {
-  const orHeaders = {
-    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-    'Content-Type': 'application/json',
-    'HTTP-Referer': 'https://mclellan.scot',
-    'X-Title': 'McLellan Hub Test',
-  };
+  const orHeaders = openRouterHeaders(TASK_CODES.TESTBENCH);
 
   // No explicit timeout — infrastructure (nginx 300s) is the backstop,
   // same as the main chat. Individual combos run in parallel so a slow
@@ -1189,6 +1192,17 @@ async function runComboInternal(question, model, search) {
     tokensIn  = usage.prompt_tokens     || 0;
     tokensOut = usage.completion_tokens || 0;
     if (usage.cost != null) costUsd = usage.cost;
+    logOpenRouterUsage({
+      user: 'system',
+      feature: 'testbench',
+      modelKey: model.key || 'multi-search',
+      modelId: data.model || 'google/gemini-2.5-flash-lite',
+      tokensIn,
+      tokensOut,
+      costUsd,
+      durationMs: Date.now() - start,
+      taskCode: TASK_CODES.TESTBENCH,
+    });
     return {
       ok: true, answer,
       time_ms: Date.now() - start,
@@ -1266,6 +1280,19 @@ async function runComboInternal(question, model, search) {
 
   if (costUsd == null && model.cost_input != null && model.cost_output != null) {
     costUsd = (tokensIn / 1_000_000) * model.cost_input + (tokensOut / 1_000_000) * model.cost_output;
+  }
+  if (model.endpoint !== 'custom-openai') {
+    logOpenRouterUsage({
+      user: 'system',
+      feature: 'testbench',
+      modelKey: model.key,
+      modelId: model.model_id,
+      tokensIn,
+      tokensOut,
+      costUsd,
+      durationMs: Date.now() - start,
+      taskCode: TASK_CODES.TESTBENCH,
+    });
   }
 
   return {
@@ -1421,11 +1448,7 @@ router.post('/admin/test/run-all', requireHubAdmin, async (req, res) => {
 router.get('/admin/openrouter-models', requireHubAdmin, async (req, res) => {
   try {
     const r = await fetch('https://openrouter.ai/api/v1/models', {
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://mclellan.scot',
-        'X-Title': 'McLellan Hub admin',
-      },
+      headers: openRouterHeaders(TASK_CODES.ADMIN),
     });
     if (!r.ok) return res.status(r.status).json({ error: `OpenRouter ${r.status}` });
     const data = await r.json();

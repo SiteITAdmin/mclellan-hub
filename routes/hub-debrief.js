@@ -8,6 +8,8 @@ const { writeNote } = require('../lib/obsidian-vault');
 const { writeMeetingNote } = require('../lib/meeting');
 const { uuid } = require('../lib/id');
 const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
+const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
+const { logUsageFromResponse } = require('../lib/openrouter-usage');
 const { PROMPTS } = require('../lib/prompts');
 const { createTask } = require('../lib/google-tasks');
 const {
@@ -52,12 +54,7 @@ router.post('/api/debrief/message', requireAuth, requireSameOrigin, chatLimiter,
   try {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'HTTP-Referer': 'https://dchat.mclellan.scot',
-        'X-Title': 'McLellan Hub Debrief',
-      },
+      headers: openRouterHeaders(TASK_CODES.DEBRIEF),
       body: JSON.stringify({
         model: getSystemModelId('debrief_interviewer', user, 'anthropic/claude-haiku-4-5'),
         messages: [{ role: 'system', content: systemPrompt }, ...history],
@@ -67,6 +64,14 @@ router.post('/api/debrief/message', requireAuth, requireSameOrigin, chatLimiter,
     });
     if (!r.ok) throw new Error(`LLM ${r.status}`);
     const data = await r.json();
+    logUsageFromResponse({
+      user,
+      feature: 'debrief-interviewer',
+      modelKey: 'debrief_interviewer',
+      fallbackModelId: getSystemModelId('debrief_interviewer', user, 'anthropic/claude-haiku-4-5'),
+      data,
+      taskCode: TASK_CODES.DEBRIEF,
+    });
     const raw = data.choices[0].message.content.trim();
     const done = raw.includes('[DONE]');
     const reply = raw.replace('[DONE]', '').trim();
@@ -173,11 +178,7 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
 
   const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'HTTP-Referer': 'https://dchat.mclellan.scot',
-    },
+    headers: openRouterHeaders(TASK_CODES.DEBRIEF),
     body: JSON.stringify({
       model: getSystemModelId('debrief_extractor', user, 'deepseek/deepseek-v3.2'),
       messages: [{ role: 'user', content: prompt }],
@@ -188,6 +189,14 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
 
   if (!r.ok) throw new Error(`Extraction LLM ${r.status}`);
   const data = await r.json();
+  logUsageFromResponse({
+    user,
+    feature: 'debrief-extractor',
+    modelKey: 'debrief_extractor',
+    fallbackModelId: getSystemModelId('debrief_extractor', user, 'deepseek/deepseek-v3.2'),
+    data,
+    taskCode: TASK_CODES.DEBRIEF,
+  });
   const extracted = JSON.parse(data.choices[0].message.content);
 
   // Log people mentions in CRM

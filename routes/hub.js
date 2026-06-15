@@ -19,6 +19,7 @@ const {
   formatUsd,
   heatLevel,
 } = require('../lib/token-burn');
+const { TASK_CODES } = require('../lib/openrouter-attribution');
 const { buildPromptInjectionGuard, wrapUntrustedBlock } = require('../lib/security');
 const {
   upload, audioUpload, chatLimiter, uploadLimiter, writeLimiter,
@@ -394,17 +395,22 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
   const logId = uuid();
   const startMs = Date.now();
   const insertLog = hub.prepare(`
-    INSERT INTO request_logs (id, user, conv_id, project_slug, model_key, search_provider, msg_chars)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO request_logs
+      (id, user, conv_id, project_slug, model_key, search_provider, msg_chars, task_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateLog = hub.prepare(`
     UPDATE request_logs SET
       conv_id = ?, model_id = ?, endpoint = ?, search_used = ?,
       context_count = ?, tokens_in = ?, tokens_out = ?, cost_usd = ?,
-      duration_ms = ?, status = ?, error_msg = ?, asst_msg_id = ?
+      duration_ms = ?, status = ?, error_msg = ?, asst_msg_id = ?, task_code = ?
     WHERE id = ?
   `);
-  insertLog.run(logId, req.hubUser, existingConvId || null, projectSlug || null, model || 'default', searchProvider || 'openrouter', (content || '').length);
+  insertLog.run(
+    logId, req.hubUser, existingConvId || null, projectSlug || null,
+    model || 'default', searchProvider || 'openrouter',
+    (content || '').length, TASK_CODES.CHAT
+  );
 
   // Detect /crm command — parse and store relationship facts
   const crmCmd = content.match(/^\/crm\s+([\s\S]+)$/i);
@@ -663,7 +669,10 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
       `INSERT INTO messages (id, conversation_id, project_id, role, content, user, model)
        VALUES (?, ?, ?, 'assistant', ?, ?, 'recall')`
     ).run(asstMsgId, convId, project?.id || null, formatted, req.hubUser);
-    updateLog.run(convId, 'recall', 'local', 0, 0, 0, 0, 0, Date.now() - startMs, 'ok', null, asstMsgId, logId);
+    updateLog.run(
+      convId, 'recall', 'local', 0, 0, 0, 0, 0,
+      Date.now() - startMs, 'ok', null, asstMsgId, TASK_CODES.CHAT, logId
+    );
     safeWrite(`data: ${JSON.stringify({ done: true, convId, msgId: asstMsgId, model: 'recall', projectSlug: project?.slug || null })}\n\n`);
     try { res.end(); } catch (_) {}
     return;
@@ -720,6 +729,7 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
       contextMessages.filter(m => m.role !== 'system').length,
       result.tokensIn, result.tokensOut, result.costUsd,
       Date.now() - startMs, 'ok', null, asstMsgId,
+      result.taskCode || TASK_CODES.CHAT,
       logId
     );
 
@@ -762,6 +772,7 @@ router.post('/api/message', requireAuth, requireSameOrigin, chatLimiter, async (
     updateLog.run(
       convId, null, null, 0, 0, 0, 0, 0,
       Date.now() - startMs, 'error', err.message, null,
+      TASK_CODES.CHAT,
       logId
     );
     safeWrite(`data: ${JSON.stringify({ error: err.message })}\n\n`);
@@ -961,6 +972,7 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
         { role: 'user', content: wrapUntrustedBlock('analysis_request', prompt) },
       ],
       user: req.hubUser,
+      taskCode: TASK_CODES.DOCUMENT_ANALYSIS,
       onChunk: (chunk) => res.write(`data: ${JSON.stringify({ chunk })}\n\n`),
     });
 
@@ -974,6 +986,19 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
       asstMsgId, convId, result.content, req.hubUser, result.model, result.endpoint,
       result.searchUsed ? 1 : 0, result.tokensIn, result.tokensOut, result.costUsd
     );
+    const { logOpenRouterUsage } = require('../lib/openrouter-usage');
+    if (result.endpoint === 'openrouter' || result.endpoint === 'multi-search') {
+      logOpenRouterUsage({
+        user: req.hubUser,
+        feature: 'document-analysis',
+        modelKey: result.model,
+        modelId: result.modelId,
+        tokensIn: result.tokensIn,
+        tokensOut: result.tokensOut,
+        costUsd: result.costUsd,
+        taskCode: TASK_CODES.DOCUMENT_ANALYSIS,
+      });
+    }
 
     res.write(`data: ${JSON.stringify({
       done: true, convId, msgId: asstMsgId, model: result.model,
