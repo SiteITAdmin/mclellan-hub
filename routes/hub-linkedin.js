@@ -140,6 +140,26 @@ router.post('/api/content/posts/:id/schedule', requireAuth, requireSameOrigin, w
   res.json({ ok: true });
 });
 
+router.post('/api/content/posts/:id/retry-carousel', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const post = db.hub().prepare(
+    `SELECT id, status FROM linkedin_posts WHERE id = ? AND user = ?`
+  ).get(req.params.id, req.hubUser);
+  if (!post) return res.status(404).json({ error: 'Not found' });
+  if (post.status === 'processing') return res.status(409).json({ error: 'Post is still processing' });
+
+  const { resumePost } = require('../lib/linkedin-pipeline');
+  db.hub().prepare(`UPDATE linkedin_posts SET status = 'processing' WHERE id = ?`).run(req.params.id);
+  setImmediate(async () => {
+    try {
+      await resumePost(req.params.id, req.hubUser, s => console.log('[carousel-retry]', s));
+    } catch (err) {
+      console.error('[carousel-retry] error:', err.message);
+      try { db.hub().prepare(`UPDATE linkedin_posts SET status = 'draft' WHERE id = ?`).run(req.params.id); } catch (_) {}
+    }
+  });
+  res.json({ ok: true });
+});
+
 router.post('/api/content/posts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   db.hub().prepare(`DELETE FROM linkedin_posts WHERE id = ? AND user = ?`).run(req.params.id, req.hubUser);
   res.json({ ok: true });

@@ -636,6 +636,14 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'linkedin_carousel_reviewer', scope: 'user', label: 'Carousel reviewer', note: 'Reviews generated carousel JSON against the content rubric.', fallback: 'mistralai/mistral-medium-3' },
     { feature: 'linkedin_image',      scope: 'user', label: 'Image prompt writer',    note: 'Writes the prompt used for image generation.', fallback: 'deepseek/deepseek-chat' },
   ]},
+  { id: 'linkedin-tone', label: 'LinkedIn tone modifiers', slots: [
+    { feature: 'spiciness_challenging_drafter',  scope: 'user', label: 'Challenging — post drafter',    note: 'Appended to the drafter prompt when Challenging tone is selected. Edit to adjust how direct/judgmental the post voice is.', fallback: 'prompt only' },
+    { feature: 'spiciness_provocative_drafter',  scope: 'user', label: 'Provocative — post drafter',   note: 'Appended to the drafter prompt when Provocative tone is selected. Edit to adjust boldness and hot-take framing.', fallback: 'prompt only' },
+    { feature: 'spiciness_challenging_refiner',  scope: 'user', label: 'Challenging — draft refiner',  note: 'Appended to the refiner prompt when Challenging tone is selected.', fallback: 'prompt only' },
+    { feature: 'spiciness_provocative_refiner',  scope: 'user', label: 'Provocative — draft refiner',  note: 'Appended to the refiner prompt when Provocative tone is selected.', fallback: 'prompt only' },
+    { feature: 'spiciness_challenging_carousel', scope: 'user', label: 'Challenging — carousel',       note: 'Appended to the carousel prompt when Challenging tone is selected.', fallback: 'prompt only' },
+    { feature: 'spiciness_provocative_carousel', scope: 'user', label: 'Provocative — carousel',       note: 'Appended to the carousel prompt when Provocative tone is selected.', fallback: 'prompt only' },
+  ]},
   { id: 'workday', label: 'Workday', slots: [
     { feature: 'workday_narrative', scope: 'user', label: 'Narrative writer', note: 'Converts a workday voice transcript into a structured Markdown note.', fallback: 'free (or WORKDAY_NARRATIVE_MODEL env)' },
   ]},
