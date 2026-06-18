@@ -65,8 +65,19 @@ The Hub is a private operating environment rather than a collection of isolated 
 - **Identity:** Google OAuth for Hub users; separate protected admin/wiki routes.
 - **AI:** OpenRouter plus configured OpenAI and Google capabilities.
 - **Google Workspace:** Gmail, Calendar, Drive, Sheets, Tasks, and Google Chat.
-- **Knowledge:** Obsidian-compatible vault files indexed by Synthadoc.
+- **Knowledge:** a derived knowledge layer (see below) compiled from all sources; the Obsidian/Synthadoc vault is one human-readable store feeding it.
 - **Public output:** Portfolio pages, CV tools, RSS feeds, and `llms.txt`.
+
+### The knowledge layer (the substrate, not a table)
+
+The CRM, wiki, and project pages are no longer the knowledge — they are **views over a derived substrate** compiled continuously from the raw material:
+
+- **Embeddings (`embeddings`):** documents, email summaries, CRM facts, meeting transcripts and atoms are embedded (OpenRouter; model set in admin) for semantic retrieval.
+- **Atoms (`knowledge_atoms`):** derived `subject–predicate–value` claims, each with provenance (the source rows that justify it), confidence and status. Not authored by hand.
+- **Synthesis (nightly `synthesis_run`):** re-reads new sources *after* ingestion, extracts atoms and links them to the right contact/company/project from the whole corpus — so a care-plan address attaches to the person even though the email that first arrived knew nothing about them.
+- **Routing & lint:** `task_route_run` attaches free-text tasks to the entity their knowledge points to; `knowledge_lint_run` decays stale claims and surfaces contradictions/duplicates at `/admin/knowledge`.
+
+A contact or project page renders the atoms about that entity, each claim click-through to its source. The vault/wiki is a feeder and a human-facing view — not the master knowledge store.
 
 ### Shared context flow
 
@@ -297,7 +308,7 @@ A newsletter reminder runs on Saturday at 09:00.
 
 ### Wiki
 
-The Wiki is the human-facing knowledge layer. It indexes Markdown from Wiki pages, meetings, journals, daily notes, Workday interviews, people notes, project notes, nested project files, and loose vault notes. Search also includes matching email summaries from SQLite.
+The Wiki is one human-facing view over the knowledge layer (see "The knowledge layer" in section 2) — not the master knowledge store. It indexes Markdown from Wiki pages, meetings, journals, daily notes, Workday interviews, people notes, project notes, nested project files, and loose vault notes. Search also includes matching email summaries from SQLite. The derived substrate (embeddings + atoms + nightly synthesis) is what links facts to people across the whole corpus.
 
 For every search, the Wiki:
 

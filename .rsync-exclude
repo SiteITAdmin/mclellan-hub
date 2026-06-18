@@ -1,4 +1,5 @@
 .git
+.tools
 node_modules
 data
 .env

@@ -1,0 +1,9 @@
+<%- include('partials/crm-head', { title: title, active: '' }) %>
+<a class="crm-back" href="javascript:history.back()">← Back</a>
+<section class="section-card" style="max-width:820px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;opacity:.55;margin-bottom:6px;">Source · <%= kind.replace(/_/g,' ') %></div>
+  <h1 style="font-size:20px;margin:0 0 6px;"><%= title %></h1>
+  <% if (meta) { %><p class="crm-muted" style="font-size:13px;margin:0 0 14px;"><%= meta %></p><% } %>
+  <div style="white-space:pre-wrap;font-size:14px;line-height:1.6;color:var(--text-1);"><%= body %></div>
+</section>
+<%- include('partials/crm-foot') %>

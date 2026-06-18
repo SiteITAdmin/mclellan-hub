@@ -97,6 +97,21 @@ If what you're adding changes the purpose, update this file first.
 
 ---
 
+## Knowledge Layer
+**Purpose:** The derived substrate the CRM/wiki/project pages are *views* over — not another table of hand-entered records. Compiled continuously from raw sources so connections are made from the whole corpus after ingestion, not from the thin context available at capture time. Files: `lib/retrieval.js` (embeddings), `lib/atoms.js` (atoms), `lib/synthesis.js` (extract + link), `lib/task-router.js`, `lib/knowledge-lint.js`. Jobs: `embed_backfill`, `atoms_backfill`, `synthesis_run` (nightly), `task_route_run` (daily), `knowledge_lint_run` (weekly). All model calls go through OpenRouter; `embeddings`, `atom_extractor`, `entity_linker` are admin model slots.
+
+**Healthy looks like:**
+- `embeddings` count tracks the corpus; changing the embeddings model in admin causes a gradual re-index (isIndexed is model-aware)
+- A care-plan/email mentioning a known person produces atoms on that contact with `lives_at`/`needs`/etc., each carrying provenance back to the source
+- A free-text task ("get dad's medicine") gets routed to the right contact by `task_route_run`
+- `/admin/knowledge` review queue stays small (proposed atoms approved/rejected; contradictions and duplicate contacts surfaced)
+
+**Does not own:** The raw sources (documents, emails, meetings, crm_facts) — those remain the source of truth; atoms are derived and re-derivable. Does not write to the public portfolio (private knowledge stays private).
+
+**Health check:** `knowledge_atoms` and `embeddings` counts are non-zero and growing; open a contact page and confirm the Knowledge panel shows claims with click-through sources; `/admin/knowledge` shows the review queue.
+
+---
+
 ## Mycelium
 **Purpose:** Grow connections between isolated data nodes. Runs every 6 hours and on-demand to ensure that information in one module is reflected appropriately in others.
 

@@ -945,6 +945,37 @@ router.post('/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req,
   res.redirect('/crm/contact/' + id);
 });
 
+// Provenance resolver — turns an atom's source_ref {kind,id} into a viewable
+// source so every claim on a contact/project page is traceable in one click.
+router.get('/crm/source/:kind/:id', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const { kind, id } = req.params;
+  let title = 'Source', meta = '', body = '';
+  if (kind === 'crm_fact') {
+    const f = hub.prepare('SELECT contact_id FROM crm_facts WHERE id = ? AND user = ?').get(id, req.hubUser);
+    if (!f) return res.status(404).send('Source not found');
+    return res.redirect('/crm/contact/' + f.contact_id);
+  } else if (kind === 'document') {
+    const d = hub.prepare('SELECT filename, markdown FROM documents WHERE id = ? AND user = ?').get(id, req.hubUser);
+    if (!d) return res.status(404).send('Source not found');
+    title = d.filename || 'Document'; body = d.markdown || '';
+  } else if (kind === 'email_summary') {
+    const e = hub.prepare('SELECT subject, from_name, from_email, summary, received_at FROM email_summaries WHERE id = ? AND user = ?').get(id, req.hubUser);
+    if (!e) return res.status(404).send('Source not found');
+    title = e.subject || '(no subject)';
+    meta = `From ${e.from_name || ''} ${e.from_email ? '<' + e.from_email + '>' : ''}`.trim();
+    body = e.summary || '';
+  } else if (kind === 'meeting_intake') {
+    const m = hub.prepare('SELECT title, summary, transcript FROM meeting_intakes WHERE id = ? AND user = ?').get(id, req.hubUser);
+    if (!m) return res.status(404).send('Source not found');
+    title = m.title || 'Meeting';
+    body = (m.summary ? m.summary + '\n\n' : '') + (m.transcript || '');
+  } else {
+    return res.status(404).send('Unknown source kind');
+  }
+  res.render('hub/crm-source', { ...crmPageData(req.hubUser), kind, title, meta, body });
+});
+
 router.get('/crm/contact/:id', requireAuth, (req, res) => {
   const hub = db.hub();
   const contact = hub.prepare('SELECT * FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
@@ -1017,7 +1048,7 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
     try { refs = JSON.parse(a.source_refs || '[]'); } catch { refs = []; }
     (knowledgeByPredicate[a.predicate] ||= []).push({
       value: a.value, confidence: a.confidence, status: a.status,
-      sources: refs.map(r => r.kind),
+      sources: refs.filter(r => r && r.kind && r.id),
     });
   }
 
@@ -1997,7 +2028,7 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
     try { refs = JSON.parse(a.source_refs || '[]'); } catch { refs = []; }
     (knowledgeByPredicate[a.predicate] ||= []).push({
       value: a.value, confidence: a.confidence, status: a.status,
-      sources: refs.map(r => r.kind),
+      sources: refs.filter(r => r && r.kind && r.id),
     });
   }
 
