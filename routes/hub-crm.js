@@ -145,7 +145,7 @@ function helpText() {
     '"follow up ..." appends a follow-up to today\'s daily note',
     '"linkedin <topic>" generates a scored LinkedIn post + image + adds to content calendar (include a URL to anchor research to that article)',
     '"remind me to X at/in Y" sets an escalating reminder',
-    '"reminders" lists open reminders; reply "done 3", "snooze 3 2h", or "ok 3"',
+    '"reminders" lists open reminders; reply "done 3", "snooze 3 2h", "ok 3", or "edit 3 new title at 3pm"',
     '"suggestions" lists AI suggestions; reply "accept 2", "dismiss 2", or "why 2"',
     '"who is Tom" looks up a contact',
     '"flights" shows upcoming flights',
@@ -198,6 +198,74 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
     else if (verb === 'snooze') result = snoozeReminder(user, code, rest);
     else if (verb === 'cancel') result = cancelReminder(user, code);
     else result = ackReminder(user, code);
+    return result.message;
+  }
+
+  // edit <n> with no text — prompt with current title so user knows what they're editing
+  const editPromptCmd = lower.match(/^edit\s+(\d+)$/);
+  if (editPromptCmd) {
+    const { findByShortCode } = require('../lib/reminders');
+    const r = findByShortCode(user, editPromptCmd[1]);
+    if (!r) return `No open reminder #${editPromptCmd[1]}.`;
+    const when = r.next_fire_at
+      ? new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' })
+      : r.status;
+    return `✏️ Editing #${r.short_code}: _"${r.title}"_ — ${when}\n\nType: \`edit ${r.short_code} <new title and/or new time>\`\nExamples:\n• \`edit ${r.short_code} Call the pharmacist at 3pm\`\n• \`edit ${r.short_code} at 9am tomorrow\`\n• \`edit ${r.short_code} Chase the consultant instead\``;
+  }
+
+  const editCmd = lower.match(/^edit\s+(\d+)\s+(.+)$/);
+  if (editCmd) {
+    const [, code, editText] = editCmd;
+    const { findByShortCode, editReminder, dublinIsoToEpoch, epochAtNextDublin } = require('../lib/reminders');
+    const r = findByShortCode(user, code);
+    if (!r) return `No open reminder #${code}.`;
+
+    // Use LLM to split edit text into optional new title + optional new time
+    const nowIso = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Dublin' }).replace(' ', 'T');
+    let newTitle = null;
+    let newRemindAt = null;
+    try {
+      const parseResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: openRouterHeaders(TASK_CODES.HERMES_CRM_CAPTURE),
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          response_format: { type: 'json_object' },
+          messages: [{
+            role: 'user',
+            content: `Now is ${nowIso} Dublin time. I'm editing reminder #${code} whose current title is: "${r.title}"
+
+Edit instruction: "${editText}"
+
+Return JSON:
+{
+  "title": "new title if the instruction changes the title, else null to keep current",
+  "remind_at_iso": "ISO 8601 datetime if the instruction specifies a new time, else null to keep current"
+}
+
+Examples:
+- "Call the doctor at 3pm Friday" → title: "Call the doctor", remind_at_iso: "2026-06-20T15:00:00"
+- "at 9am tomorrow" → title: null, remind_at_iso: "2026-06-19T09:00:00"
+- "Chase the pharmacist instead" → title: "Chase the pharmacist instead", remind_at_iso: null
+- "in 2h" → title: null, remind_at_iso: (now + 2 hours ISO)`,
+          }],
+        }),
+      });
+      if (parseResp.ok) {
+        const data = await parseResp.json();
+        const raw = (data.choices?.[0]?.message?.content || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+        const parsed = JSON.parse(raw);
+        newTitle = parsed.title || null;
+        newRemindAt = parsed.remind_at_iso ? dublinIsoToEpoch(parsed.remind_at_iso) : null;
+      }
+    } catch (e) {
+      console.warn('[google-chat] edit parse:', e.message);
+    }
+
+    // Fallback: treat whole text as new title if parse failed
+    if (!newTitle && !newRemindAt) newTitle = editText;
+
+    const result = editReminder(user, code, { title: newTitle, remindAt: newRemindAt });
     return result.message;
   }
 
