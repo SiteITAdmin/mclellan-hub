@@ -112,6 +112,13 @@ if (req.path.startsWith('/admin') || req.path.startsWith('/mcp')) {
     }
     return hubRouter(req, res, next);
   }
+  if (allowDevQueryRouting && !req.query.prompt && !req.query.portfolio) {
+    req.hubUser = 'douglas';
+    if (req.path.startsWith('/admin') || req.path.startsWith('/mcp')) {
+      return hubAdminRouter(req, res, next);
+    }
+    return hubRouter(req, res, next);
+  }
   if (allowDevQueryRouting && req.query.prompt) {
     return promptRouter(req, res, next);
   }

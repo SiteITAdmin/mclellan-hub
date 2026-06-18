@@ -11,6 +11,7 @@ const {
   inferPromptTitleFromText,
   extractNotionPageId,
   notionRecordMapToMarkdown,
+  mergeNotionRecordMaps,
   savePrompt,
   listPrompts,
   normalizeImportSourceUrl,
@@ -346,6 +347,37 @@ test('notionRecordMapToMarkdown converts public Notion prompt libraries into pro
   assert.equal(kit.prompts.length, 1);
   assert.equal(kit.prompts[0].title, '1. Decision Document Evaluator');
   assert.match(kit.prompts[0].raw_prompt, /rigorous evaluator/);
+});
+
+test('mergeNotionRecordMaps preserves prompts split across Notion chunks', () => {
+  const pageId = '2c65a2cc-b526-8028-b24e-c0dcbdaaa4a1';
+  const firstCodeId = '2c65a2cc-b526-8098-936b-cad4564f9ff1';
+  const secondCodeId = '2c65a2cc-b526-8098-936b-cad4564f9ff2';
+  const chunkOne = {
+    block: {
+      [pageId]: { value: { value: {
+        id: pageId,
+        type: 'page',
+        properties: { title: [['Agent Prompt Library']] },
+        content: ['h1', firstCodeId, 'h2', secondCodeId],
+      } } },
+      h1: { value: { value: { id: 'h1', type: 'sub_header', properties: { title: [['1. First Agent Mission']] } } } },
+      [firstCodeId]: { value: { value: { id: firstCodeId, type: 'code', properties: { title: [['First prompt body.']] } } } },
+    },
+  };
+  const chunkTwo = {
+    block: {
+      h2: { value: { value: { id: 'h2', type: 'sub_header', properties: { title: [['2. Second Agent Mission']] } } } },
+      [secondCodeId]: { value: { value: { id: secondCodeId, type: 'code', properties: { title: [['Second prompt body.']] } } } },
+    },
+  };
+
+  const recordMap = mergeNotionRecordMaps(mergeNotionRecordMaps({}, chunkOne), chunkTwo);
+  const kit = parsePromptKitMarkdown(notionRecordMapToMarkdown(recordMap, pageId));
+
+  assert.equal(kit.prompts.length, 2);
+  assert.equal(kit.prompts[0].title, '1. First Agent Mission');
+  assert.equal(kit.prompts[1].title, '2. Second Agent Mission');
 });
 
 test('parseOptimizerExamples extracts reusable prompt test cases', () => {

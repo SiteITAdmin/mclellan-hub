@@ -1,0 +1,104 @@
+<%- include('partials/crm-head', { title: 'Meeting Intake', active: 'meeting-intake' }) %>
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Transcript routing</p>
+    <h1>Meeting Intake</h1>
+    <p>Paste or upload a transcript, then update meetings, people, projects, and tasks in one pass.</p>
+  </div>
+</section>
+
+<% if (query && query.intake) { %>
+  <p class="crm-notice">
+    Processed transcript: <%= query.attendees || 0 %> attendee<%= query.attendees === '1' ? '' : 's' %>,
+    <%= query.facts || 0 %> outcome<%= query.facts === '1' ? '' : 's' %>,
+    <%= query.tasks || 0 %> task<%= query.tasks === '1' ? '' : 's' %>,
+    <%= query.docs || 0 %> project note<%= query.docs === '1' ? '' : 's' %>.
+    <% if (query.meeting) { %><a href="/crm/meeting/<%= query.meeting %>">Open meeting</a><% } %>
+  </p>
+<% } %>
+<% if (query && query.queued) { %>
+  <p class="crm-notice">
+    Transcript queued and processing in the background. Refresh this page in a moment to see the meeting, outcomes, and tasks.
+  </p>
+<% } %>
+<% if (query && query.deleted) { %>
+  <p class="crm-notice">
+    Intake deleted. Removed <%= query.meetings || 0 %> meeting<%= query.meetings === '1' ? '' : 's' %>,
+    <%= query.facts || 0 %> outcome<%= query.facts === '1' ? '' : 's' %>,
+    <%= query.tasks || 0 %> task<%= query.tasks === '1' ? '' : 's' %>, and
+    <%= query.docs || 0 %> project note<%= query.docs === '1' ? '' : 's' %>.
+  </p>
+<% } %>
+
+<div class="crm-two-col">
+  <section class="section-card">
+    <h2>New transcript</h2>
+    <form class="crm-form-grid" method="post" action="/crm/meeting-intake" enctype="multipart/form-data">
+      <label class="wide">Title hint<input name="title" placeholder="e.g. Beacon weekly catch-up"></label>
+      <label>Date<input name="meeting_date" type="date" value="<%= new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }) %>"></label>
+      <label>Attach to meeting
+        <select name="meeting_id">
+          <option value="">Create a new CRM meeting</option>
+          <% for (const meeting of meetings) { %>
+            <option value="<%= meeting.id %>">
+              <%= meeting.meeting_date %><%= meeting.meeting_time ? ` ${meeting.meeting_time}` : '' %> | <%= meeting.title %><%= meeting.company_name ? ` | ${meeting.company_name}` : '' %>
+            </option>
+          <% } %>
+        </select>
+      </label>
+      <label>Project
+        <select name="project_slug">
+          <option value="">Infer from transcript</option>
+          <% for (const project of projects) { %>
+            <option value="<%= project.slug %>"><%= project.name %> /<%= project.slug %></option>
+          <% } %>
+        </select>
+      </label>
+      <label class="wide">Upload .txt or .md transcript<input name="transcript_file" type="file" accept=".txt,.md,text/plain,text/markdown"></label>
+      <label class="wide">Paste transcript<textarea name="transcript" rows="16" placeholder="Paste the full meeting transcript here..."></textarea></label>
+      <button class="btn" type="submit">Process transcript</button>
+    </form>
+  </section>
+
+  <aside class="crm-stack">
+    <section class="section-card">
+      <h2>What gets updated</h2>
+      <div class="crm-action"><span><span class="crm-type note">note</span> Meeting summary and attendees</span></div>
+      <div class="crm-action"><span><span class="crm-type fact">fact</span> CRM facts, decisions, and notes</span></div>
+      <div class="crm-action"><span><span class="crm-type action">action</span> Google Tasks for explicit follow-ups</span></div>
+      <div class="crm-action"><span><span class="crm-type decision">decision</span> Project meeting note documents</span></div>
+    </section>
+
+    <section class="section-card">
+      <h2>Recent intakes</h2>
+      <% for (const item of recent) {
+        let counts = {};
+        try { counts = JSON.parse(item.created_counts || '{}'); } catch (_) {}
+      %>
+        <div class="crm-action">
+          <span>
+            <strong><%= item.title || item.meeting_title || 'Meeting transcript' %></strong>
+            <small>
+              <%= new Date(item.created_at * 1000).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %>
+              | <%= item.status %>
+              <% if (item.status === 'processed') { %>
+                | <%= counts.facts || 0 %> outcomes | <%= counts.tasks || 0 %> tasks
+              <% } else if (item.error) { %>
+                | <%= item.error.slice(0, 90) %>
+              <% } %>
+            </small>
+          </span>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <% if (item.meeting_id) { %><a class="btn btn-sm" href="/crm/meeting/<%= item.meeting_id %>">Open</a><% } %>
+            <form method="post" action="/crm/meeting-intake/<%= item.id %>/delete" onsubmit="return confirm('Delete this intake and all meeting-transcript data it created? This can remove the generated CRM meeting, attendee links, CRM outcomes, project notes, and Google Tasks related to that meeting. This is useful for duplicates, but it cannot be undone.');">
+              <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>
+      <% } %>
+      <% if (!recent.length) { %><p class="crm-muted">No transcript intakes yet.</p><% } %>
+    </section>
+  </aside>
+</div>
+
+<%- include('partials/crm-foot') %>

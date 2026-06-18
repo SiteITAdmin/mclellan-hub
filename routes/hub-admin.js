@@ -19,6 +19,8 @@ const { ingestFeed, ingestAllFeeds } = require('../lib/rss-ingest');
 const { listIngestionAudit, getIngestionAudit } = require('../lib/intelligence-audit');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logOpenRouterUsage, logUsageFromResponse } = require('../lib/openrouter-usage');
+const { reviewQueue: knowledgeReviewQueue } = require('../lib/knowledge-lint');
+const { setStatus: setAtomStatus } = require('../lib/atoms');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -621,7 +623,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'email_classifier', scope: 'system', label: 'Email classifier',    note: 'Runs on Gmail ingestion.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'agentmail_extractor', scope: 'system', label: 'AgentMail extractor', note: 'Extracts people, facts and multiple actions from AgentMail messages.', fallback: 'google/gemini-3.1-pro-preview' },
     { feature: 'task_extractor',  scope: 'system', label: 'Task extractor',      note: 'Extracts follow-up tasks from documents and learns from rejected task suggestions.', fallback: 'google/gemini-2.5-pro-preview' },
-    { feature: 'reg_synopsis',     scope: 'system', label: 'Regulatory synopsis', note: 'Writes 2-sentence summaries of regulatory publications.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'reg_synopsis',     scope: 'system', label: 'Regulatory synopsis', note: 'Assesses regulatory publications for Nakai-only email alerts.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'prompt_improver',  scope: 'system', label: 'Prompt improver',     note: 'Rewrites prompts in the admin test panel.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'prompt_adapter',   scope: 'system', label: 'Prompt adapter',      note: 'Builds structured reusable prompts from rough prompts and saved examples.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
@@ -655,6 +657,11 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'portfolio_chat', scope: 'user', label: '"Ask me" chat',  note: 'Public-facing portfolio chat — anyone can trigger. Prefer fast, cheap models.', fallback: 'free' },
     { feature: 'jd_analyser',   scope: 'user', label: 'JD analyser',    note: 'Public-facing JD analyser — anyone can trigger. Prefer fast, cheap models.', fallback: 'free' },
   ]},
+  { id: 'knowledge', label: 'Knowledge layer', slots: [
+    { feature: 'embeddings', scope: 'system', label: 'Embeddings model', note: 'Embeds documents, emails, CRM facts and meetings for semantic retrieval. Must be an OpenRouter embeddings model; query and corpus share one model, so changing it re-indexes over time.', fallback: 'openai/text-embedding-3-small' },
+    { feature: 'atom_extractor', scope: 'system', label: 'Atom extractor', note: 'Nightly synthesis — extracts durable claims (atoms) from raw documents, emails and meetings.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'entity_linker', scope: 'system', label: 'Entity linker', note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
+  ]},
   { id: 'wiki', label: 'Wiki', slots: [
     { feature: 'wiki_page_writer', scope: 'system', label: 'Page writer',     note: 'Converts documents and Q&A into structured wiki pages.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'wiki_image_vision',scope: 'system', label: 'Image vision',    note: 'Describes uploaded images before converting them to wiki pages. Cheap vision model recommended.', fallback: 'google/gemini-2.0-flash-001' },
@@ -662,6 +669,9 @@ const SYSTEM_MODEL_GROUPS = [
   { id: 'newsletter', label: 'Newsletter intelligence', slots: [
     { feature: 'newsletter_extractor', scope: 'system', label: 'Topic extractor', note: 'Extracts structured topics from newsletter emails. Runs on every newsletter received.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'newsletter_briefing',  scope: 'user',   label: 'Briefing writer',  note: 'Writes the weekly intelligence briefing from selected topics.', fallback: 'anthropic/claude-sonnet-4-6' },
+  ]},
+  { id: 'nakai', label: 'Nakai intelligence', slots: [
+    { feature: 'nakai_daily_briefing',  scope: 'system', label: 'Nakai daily briefing', note: 'Writes the daily PDF briefing for Nakai from regulator, government, financial press, and Block product source packs.', fallback: 'anthropic/claude-sonnet-4-6' },
   ]},
 ];
 
@@ -727,6 +737,20 @@ router.post('/admin/system-models/_set-prompt', requireHubAdmin, (req, res) => {
   const resolvedScope = scope === 'system' ? 'system' : req.hubUser;
   setSystemPromptOverride(feature, resolvedScope, prompt || null);
   res.redirect('/admin/models#sys-' + feature);
+});
+
+// ── Knowledge layer review queue ────────────────────────────────────────────
+router.get('/admin/knowledge', requireHubAdmin, (req, res) => {
+  const queue = knowledgeReviewQueue(req.hubUser);
+  res.render('hub-admin/knowledge', { user: req.hubUser, queue });
+});
+
+// Approve (→active) or reject (→retired) a proposed/stale atom.
+router.post('/admin/knowledge/atom/:id/:action', requireHubAdmin, (req, res) => {
+  const { id, action } = req.params;
+  if (action === 'approve') setAtomStatus(id, 'active');
+  else if (action === 'reject') setAtomStatus(id, 'retired');
+  res.redirect('/admin/knowledge');
 });
 
 router.post('/admin/models', requireHubAdmin, (req, res) => {
@@ -1667,6 +1691,17 @@ router.post('/admin/linkedin/:id/status', requireHubAdmin, (req, res) => {
       require('../lib/reminders').advanceRecurringReminder(req.hubUser, `content-linkedin:${req.hubUser}`);
     } catch (err) {
       console.warn('[admin-linkedin] could not advance LinkedIn cadence reminder:', err.message);
+    }
+    try {
+      require('../lib/knowledge-format').captureLinkedInPost(req.hubUser, req.params.id);
+    } catch (err) {
+      console.warn('[admin-linkedin] knowledge capture failed:', err.message);
+    }
+  } else {
+    try {
+      require('../lib/knowledge-format').removeKnowledgeBySourceId({ user: req.hubUser, public: true, sourceId: `linkedin:${req.params.id}` });
+    } catch (err) {
+      console.warn('[admin-linkedin] knowledge removal failed:', err.message);
     }
   }
   res.redirect('/admin/linkedin');

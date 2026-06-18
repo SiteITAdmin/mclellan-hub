@@ -113,13 +113,15 @@ If what you're adding changes the purpose, update this file first.
 ---
 
 ## Regulatory Monitor
-**Purpose:** Scan specified websites daily for regulatory updates relevant to Douglas's work and surface them as CRM notes tagged to relevant projects.
+**Purpose:** Scan specified websites daily for regulatory updates, read new publication pages with Firecrawl, and send Nakai a private regulatory email digest.
 
 **Healthy looks like:**
-- `reg_monitor_items` has entries from the last 24h
-- Items matching project keywords have CRM facts with `source='reg-monitor'`
+- Nakai receives the scheduled regulatory email.
+- The email lists sources checked, new links found, relevant items, priority, affected firms, evidence, confidence, and source URLs.
 
-**Health check:** `reg_monitor_items` created today > 0.
+**Does not own:** Hub CRM notes, Google Chat alerts, weekly digest content, or Douglas-facing regulatory surfaces.
+
+**Health check:** Check process logs for `[reg-monitor] email sent` and Firecrawl fetch warnings.
 
 ---
 

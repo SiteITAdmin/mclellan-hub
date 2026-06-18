@@ -13,6 +13,7 @@ const {
 const { ingestFeed } = require('../lib/rss-ingest');
 const { listUserLabels } = require('../lib/gmail');
 const { writeWikiPage } = require('../lib/vault');
+const { captureNewsletterBriefing, removeKnowledgeBySourceId } = require('../lib/knowledge-format');
 
 function markdownToHtml(md) {
   return String(md || '')
@@ -342,12 +343,26 @@ router.post('/briefing/:id/publish', (req, res) => {
   const b = hub.prepare('SELECT id FROM nl_briefings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
   if (!b) return res.status(404).json({ error: 'Briefing not found' });
   hub.prepare('UPDATE nl_briefings SET published_at = unixepoch() WHERE id = ?').run(b.id);
+  try {
+    captureNewsletterBriefing(req.hubUser, b.id);
+  } catch (err) {
+    console.warn('[newsletter] knowledge capture failed:', err.message);
+  }
   res.json({ ok: true });
 });
 
 router.post('/briefing/:id/unpublish', (req, res) => {
   const hub = db.hub();
   hub.prepare('UPDATE nl_briefings SET published_at = NULL WHERE id = ? AND user = ?').run(req.params.id, req.hubUser);
+  try {
+    removeKnowledgeBySourceId({
+      user: req.hubUser,
+      public: req.hubUser === 'douglas',
+      sourceId: `newsletter-briefing:${req.params.id}`,
+    });
+  } catch (err) {
+    console.warn('[newsletter] knowledge removal failed:', err.message);
+  }
   res.json({ ok: true });
 });
 

@@ -120,6 +120,25 @@ async function taskAction(id, action) {
       <p class="crm-muted" id="contact-task-msg" style="font-size:12px;margin-top:4px;"></p>
     </section>
 
+    <% const predicates = Object.keys(knowledgeByPredicate || {}); %>
+    <% if (predicates.length) { %>
+    <section class="section-card">
+      <h2 style="margin-bottom:4px;">Knowledge</h2>
+      <p class="crm-muted" style="font-size:12px;margin:0 0 12px;">Compiled from your documents, emails and meetings by the nightly synthesis job — each claim links back to its source.</p>
+      <% for (const pred of predicates) { %>
+        <div style="margin-bottom:10px;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;opacity:.55;margin-bottom:3px;"><%= pred.replace(/_/g,' ') %></div>
+          <% for (const a of knowledgeByPredicate[pred]) { %>
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--border);">
+              <span style="font-size:13px;"><%= a.value %><% if (a.status === 'proposed') { %> <span title="awaiting review" style="font-size:10px;opacity:.6;">· proposed</span><% } %></span>
+              <span style="font-size:11px;opacity:.5;white-space:nowrap;" title="confidence <%= a.confidence.toFixed(2) %>; from <%= a.sources.join(', ') || 'derived' %>"><%= Math.round(a.confidence*100) %>%<% if (a.sources.length) { %> · <%= a.sources.length %> src<% } %></span>
+            </div>
+          <% } %>
+        </div>
+      <% } %>
+    </section>
+    <% } %>
+
     <section class="section-card">
       <h2>Also worked with</h2>
       <div class="crm-badges">
