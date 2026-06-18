@@ -5,3 +5,4 @@ data
 .env.local
 .claude
 exports
+config/google-service-account.json
