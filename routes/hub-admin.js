@@ -1619,7 +1619,7 @@ const CONTENT_TYPES = [
 router.get('/admin/linkedin', requireHubAdmin, (req, res) => {
   const posts = db.hub().prepare(
     `SELECT id, user, topic, content_type, score_json, carousel_url, image_url,
-            sheet_url, scheduled_date, status, created_at,
+            sheet_url, scheduled_date, status, created_at, published_at,
             substr(draft, 1, 200) AS draft_preview,
             substr(refined_draft, 1, 200) AS refined_preview
      FROM linkedin_posts WHERE user = ? ORDER BY created_at DESC LIMIT 100`
@@ -1653,8 +1653,22 @@ router.post('/admin/linkedin/:id/status', requireHubAdmin, (req, res) => {
   const { status } = req.body;
   const allowed = ['draft', 'scheduled', 'published', 'archived'];
   if (!allowed.includes(status)) return res.redirect('/admin/linkedin');
-  db.hub().prepare('UPDATE linkedin_posts SET status = ? WHERE id = ? AND user = ?')
-    .run(status, req.params.id, req.hubUser);
+  db.hub().prepare(`
+    UPDATE linkedin_posts
+       SET status = ?,
+           published_at = CASE
+             WHEN ? = 'published' THEN COALESCE(published_at, unixepoch())
+             ELSE NULL
+           END
+     WHERE id = ? AND user = ?
+  `).run(status, status, req.params.id, req.hubUser);
+  if (status === 'published') {
+    try {
+      require('../lib/reminders').advanceRecurringReminder(req.hubUser, `content-linkedin:${req.hubUser}`);
+    } catch (err) {
+      console.warn('[admin-linkedin] could not advance LinkedIn cadence reminder:', err.message);
+    }
+  }
   res.redirect('/admin/linkedin');
 });
 

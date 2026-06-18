@@ -282,6 +282,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     data-type="<%= p.content_type || '' %>"
     data-created="<%= p.created_at %>"
     data-score="<%= scoreNum %>"
+    data-published="<%= p.published_at || '' %>"
     data-scheduled="<%= p.scheduled_date || '' %>">
 
     <div class="row-main">
@@ -608,8 +609,7 @@ function applyFilterSort() {
       case 'date-desc': return Number(b.dataset.created) - Number(a.dataset.created);
       case 'score-desc': return Number(b.dataset.score) - Number(a.dataset.score);
       case 'published-desc': {
-        const da = a.dataset.scheduled || '0', db = b.dataset.scheduled || '0';
-        return db.localeCompare(da);
+        return Number(b.dataset.published || 0) - Number(a.dataset.published || 0);
       }
       default: return 0;
     }

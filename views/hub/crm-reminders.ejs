@@ -19,9 +19,37 @@
 
 <% const statusLabel = { scheduled: 'scheduled', snoozed: 'snoozed', acked: 'acknowledged', stale: 'stale — in morning briefing' }; %>
 <section class="section-card">
-  <h2>Open (<%= open.length %>)</h2>
-  <% if (!open.length) { %><p class="crm-muted">No open reminders.</p><% } %>
-  <% for (const r of open) { %>
+  <h2>Today (<%= today.length %>)</h2>
+  <% if (!today.length) { %><p class="crm-muted">Today is empty. Nice.</p><% } %>
+  <% for (const r of today) { %>
+    <div class="crm-task-row">
+      <div class="crm-task-main">
+        <span class="crm-task-title">#<%= r.short_code %> <%= r.title %></span>
+        <div class="crm-task-meta">
+          <% if (r.next_fire_at) { %>
+            <span class="crm-badge"><%= new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Dublin' }) %></span>
+          <% } %>
+          <span class="crm-badge subtle"><%= statusLabel[r.status] || r.status %></span>
+          <% if (r.escalation_level > 0) { %><span class="crm-badge subtle">pinged <%= r.escalation_level %>×</span><% } %>
+          <span class="crm-badge subtle"><%= r.kind %><%= r.recur ? ' · recurring' : '' %></span>
+        </div>
+      </div>
+      <div class="crm-task-actions">
+        <button class="btn btn-sm" onclick="reminderAction('<%= r.id %>', 'done')">Done</button>
+        <button class="btn btn-sm btn-ghost" onclick="reminderSnooze('<%= r.id %>')">Snooze</button>
+        <% if (['scheduled','snoozed'].includes(r.status)) { %>
+          <button class="btn btn-sm btn-ghost" onclick="reminderAction('<%= r.id %>', 'ack')" title="Stop pinging, keep in briefing">Ok</button>
+        <% } %>
+        <button class="btn btn-sm btn-ghost" onclick="reminderAction('<%= r.id %>', 'cancel')">Cancel</button>
+      </div>
+    </div>
+  <% } %>
+</section>
+
+<section class="section-card" style="margin-top:16px;">
+  <h2>Open reminders (<%= general.length %>)</h2>
+  <% if (!general.length) { %><p class="crm-muted">No other open reminders.</p><% } %>
+  <% for (const r of general) { %>
     <div class="crm-task-row">
       <div class="crm-task-main">
         <span class="crm-task-title">#<%= r.short_code %> <%= r.title %></span>

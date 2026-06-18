@@ -28,6 +28,7 @@ require('dotenv').config({ path: envPath });
 const fetch  = require('node-fetch');
 const fs     = require('fs');
 const vault  = require('../lib/vault');
+const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 
 // ── Inline model registry (mirrors lib/router.js DEFAULT_MODELS) ─────────────
 const MODELS = {
@@ -42,14 +43,11 @@ const MODELS = {
   'o3':               'openai/o3',
 };
 
-async function fetchOpenRouterFull(modelId, messages) {
+async function fetchOpenRouterFull(modelId, messages, taskCode = TASK_CODES.WIKI_INGEST) {
   const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://mclellan.scot',
-      'X-Title': 'McLellan Hub',
+      ...openRouterHeaders(taskCode),
       'X-OpenRouter-Cache': 'true',
     },
     body: JSON.stringify({ model: modelId, messages, stream: false }),
@@ -196,7 +194,7 @@ ${pageList}
 Use [[slug]] format for links. Only link if there is a real thematic connection.`,
       },
       { role: 'user', content: `Source document from project "${raw.project}":\n\n${content}` },
-    ]);
+    ], TASK_CODES.WIKI_INGEST);
 
     const text = data.choices?.[0]?.message?.content || '';
     if (!text.trim()) { console.log('  ⚠ Empty response, skipping.'); continue; }
@@ -265,7 +263,7 @@ Return raw JSON array only, no markdown fences.`,
         summaries.map(s => `${s.slug}: ${s.existingLinks.join(', ') || 'none'}`).join('\n')
       }`,
     },
-  ]);
+  ], TASK_CODES.WIKI_LINKING);
 
   const text = data.choices?.[0]?.message?.content || '';
   let pairs = [];

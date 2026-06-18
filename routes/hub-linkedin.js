@@ -15,7 +15,7 @@ const CONTENT_TYPES_HUB = [
 router.get('/lin', requireAuth, (req, res) => {
   const posts = db.hub().prepare(
     `SELECT id, topic, content_type, spiciness, score_json, carousel_url, sheet_url,
-            scheduled_date, status, created_at,
+            scheduled_date, status, created_at, published_at,
             substr(refined_draft, 1, 300) AS preview
      FROM linkedin_posts WHERE user = ? ORDER BY created_at DESC LIMIT 100`
   ).all(req.hubUser);
@@ -79,11 +79,22 @@ router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, wri
   const status = String(req.body?.status || '').trim();
   if (!['draft', 'scheduled', 'published'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
   const result = db.hub().prepare(
-    `UPDATE linkedin_posts SET status = ? WHERE id = ? AND user = ?`
-  ).run(status, req.params.id, req.hubUser);
+    `UPDATE linkedin_posts
+       SET status = ?,
+           published_at = CASE
+             WHEN ? = 'published' THEN COALESCE(published_at, unixepoch())
+             ELSE NULL
+           END
+     WHERE id = ? AND user = ?`
+  ).run(status, status, req.params.id, req.hubUser);
   if (!result.changes) return res.status(404).json({ error: 'Not found' });
 
   if (status === 'published') {
+    try {
+      require('../lib/reminders').advanceRecurringReminder(req.hubUser, `content-linkedin:${req.hubUser}`);
+    } catch (err) {
+      console.warn('[content] could not advance LinkedIn cadence reminder:', err.message);
+    }
     setImmediate(async () => {
       try {
         const post = db.hub().prepare(
