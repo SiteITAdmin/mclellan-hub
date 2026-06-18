@@ -574,9 +574,23 @@ Return JSON:
   "summary": "one-sentence summary of what this image shows",
   "contact_name": "full name of the primary person this relates to, or null",
   "crm_note": "complete CRM note to save — write naturally including the person's name if known, all facts, any context",
-  "action_items": [{"title": "specific action to take", "due_iso": "ISO 8601 datetime if a date/time is visible or implied, else null"}],
+  "action_items": [
+    {
+      "title": "specific action to take",
+      "due_iso": "ISO 8601 datetime if a date/time is visible or implied, else null",
+      "kind": "reminder | task | fact",
+      "kind_reason": "one phrase explaining the classification"
+    }
+  ],
   "obsidian_note": "markdown paragraph to log in today's daily note capturing what was seen and why it matters, or null if nothing journal-worthy"
 }
+
+Classification rules for kind:
+- "reminder": time-sensitive nudge that should fire in chat (e.g. "call the doctor", "collect prescription", "pay this by Friday")
+- "task": a concrete piece of work to add to a task list (e.g. "draft the report", "book flights", "review document")
+- "fact": informational only — record it but no action needed (e.g. a bill amount already paid, a reference number, a test result to note)
+
+Bills and invoices: if unpaid with a due date → "reminder". If already paid or just for records → "fact".
 
 Be thorough. If you see a prescription, extract drug names, dosages, instructions. If a letter, extract sender, date, key points, any deadlines. If a whiteboard or handwritten note, transcribe it. If a business card, extract everything.` },
                   ],
@@ -616,14 +630,39 @@ Be thorough. If you see a prescription, extract drug names, dosages, instruction
               lines.push(crmResult.ok ? '✅ CRM note saved' : `⚠️ CRM: ${crmResult.message}`);
             }
 
-            // ── Action items → reminders ──────────────────────────────────────
+            // ── Action items — routed by kind ─────────────────────────────────
             if (action_items.length) {
               const { createReminder, dublinIsoToEpoch, epochAtNextDublin } = require('../lib/reminders');
               const nowSecs = Math.floor(Date.now() / 1000);
               for (const item of action_items) {
+                const kind = item.kind || 'reminder';
+
+                if (kind === 'fact') {
+                  // Informational only — already captured in crm_note, just acknowledge
+                  lines.push(`📎 Noted: "${item.title}"`);
+                  continue;
+                }
+
+                if (kind === 'task') {
+                  try {
+                    const t = await createTask(user, {
+                      title: item.title,
+                      notes: item.kind_reason || '',
+                      due: item.due_iso || null,
+                      source: 'photo',
+                      sourceId: resolvedContact?.id || null,
+                    });
+                    lines.push(`✅ Task: "${item.title}"`);
+                  } catch (e) {
+                    lines.push(`⚠️ Task failed: "${item.title}" — ${e.message}`);
+                  }
+                  continue;
+                }
+
+                // Default: reminder
                 const remindAt = item.due_iso
                   ? (dublinIsoToEpoch(item.due_iso) || epochAtNextDublin(9, 0))
-                  : epochAtNextDublin(9, 0); // default: next 09:00
+                  : epochAtNextDublin(9, 0);
                 const r = createReminder(user, {
                   title: item.title,
                   remindAt: Math.max(remindAt, nowSecs + 60),
