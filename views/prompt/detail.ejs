@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= prompt.title %> — Prompt Library</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body { min-height:100vh; overflow:auto; background:var(--bg-page,#f4f3fb); color:var(--text,#15131e); }
+.wrap { max-width:920px; margin:0 auto; padding:28px 16px 80px; }
+.back { color:var(--text-dim,#767586); text-decoration:none; font-size:13px; }
+.card { background:var(--bg,#fff); border:1px solid var(--border,#e0ddf0); border-radius:15px; padding:20px; margin-top:16px; }
+h1 { margin:10px 0 6px; font-size:26px; letter-spacing:-.02em; }
+.sub { color:var(--text-dim,#767586); font-size:13px; line-height:1.55; margin:0; }
+.meta-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px; margin:18px 0; }
+.meta { border:1px solid var(--border,#e0ddf0); border-radius:11px; padding:10px 12px; background:var(--surface,#faf9fb); }
+.label { font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--text-dim,#767586); margin-bottom:4px; }
+.value { font-size:13px; font-weight:700; line-height:1.4; }
+pre { white-space:pre-wrap; font-family:inherit; font-size:13px; line-height:1.65; background:var(--surface,#faf9fb); border:1px solid var(--border,#e0ddf0); border-radius:12px; padding:16px; overflow:auto; }
+.btn { border:1px solid var(--border,#e0ddf0); background:transparent; color:var(--text,#15131e); border-radius:9px; padding:8px 13px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; }
+.btn.primary { background:var(--primary,#4648d4); color:#fff; border-color:var(--primary,#4648d4); }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.field { display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
+.field label { font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--text-dim,#767586); }
+input, select, textarea { width:100%; box-sizing:border-box; border:1px solid var(--border,#e0ddf0); border-radius:9px; background:var(--surface,#faf9fb); color:var(--text,#15131e); font:inherit; font-size:13px; padding:9px 10px; }
+textarea { min-height:120px; resize:vertical; line-height:1.5; }
+.edit-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">← Prompt Library</a>
+  <h1><%= prompt.title %></h1>
+  <p class="sub"><%= prompt.description || 'Saved prompt example.' %></p>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <strong>Classification</strong>
+      <div class="row">
+        <form method="POST" action="/prompts/<%= prompt.id %>/reclassify">
+          <input type="hidden" name="purpose" value="<%= prompt.purpose %>">
+          <button class="btn" type="submit">Reclassify from text</button>
+        </form>
+        <button class="btn" type="button" onclick="copyPrompt()">Copy prompt</button>
+      </div>
+    </div>
+    <div class="meta-grid">
+      <div class="meta"><div class="label">Purpose</div><div class="value"><%= prompt.purpose %></div></div>
+      <div class="meta"><div class="label">Function</div><div class="value"><%= prompt.function_type %></div></div>
+      <div class="meta"><div class="label">Domain</div><div class="value"><%= prompt.domain %></div></div>
+      <div class="meta"><div class="label">Artifact</div><div class="value"><%= prompt.artifact_type %></div></div>
+      <div class="meta"><div class="label">Interaction</div><div class="value"><%= prompt.interaction_type %></div></div>
+      <div class="meta"><div class="label">Inputs</div><div class="value"><%= prompt.input_types %></div></div>
+      <div class="meta"><div class="label">Tools</div><div class="value"><%= prompt.tool_needs %></div></div>
+      <div class="meta"><div class="label">Risk</div><div class="value"><%= prompt.risk_level %></div></div>
+      <div class="meta"><div class="label">Minimum model</div><div class="value"><%= modelTiers[prompt.minimum_model_tier] || prompt.minimum_model_tier %></div></div>
+      <div class="meta"><div class="label">Recommended model</div><div class="value"><%= modelTiers[prompt.recommended_model_tier] || prompt.recommended_model_tier %></div></div>
+      <div class="meta"><div class="label">Verification</div><div class="value"><%= prompt.verification_type %></div></div>
+      <div class="meta"><div class="label">Source</div><div class="value"><%= prompt.source_author || prompt.source_type %></div></div>
+    </div>
+    <% if (prompt.source_title || prompt.source_url) { %>
+      <p class="sub">Source: <%= prompt.source_title || 'Imported source' %><% if (prompt.source_url) { %> · <a href="<%= prompt.source_url %>" target="_blank" rel="noopener">open</a><% } %></p>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <strong>Prompt Text</strong>
+    <pre id="prompt-text"><%= prompt.raw_prompt %></pre>
+  </div>
+
+  <div class="card">
+    <strong>Edit Prompt / Classification</strong>
+    <p class="sub" style="margin-top:6px">Use this when the importer guessed the wrong purpose, model tier, tool needs, or prompt category.</p>
+    <form method="POST" action="/prompts/<%= prompt.id %>/update" style="margin-top:14px">
+      <div class="field"><label>Title</label><input name="title" value="<%= prompt.title %>" required></div>
+      <div class="field"><label>Description</label><textarea name="description"><%= prompt.description || '' %></textarea></div>
+      <div class="edit-grid">
+        <div class="field"><label>Purpose</label><select name="purpose"><% for (const p of purposes) { %><option value="<%= p.key %>" <%= prompt.purpose === p.key ? 'selected' : '' %>><%= p.label %></option><% } %></select></div>
+        <div class="field"><label>Function type</label><input name="function_type" value="<%= prompt.function_type %>"></div>
+        <div class="field"><label>Domain</label><input name="domain" value="<%= prompt.domain %>"></div>
+        <div class="field"><label>Artifact type</label><input name="artifact_type" value="<%= prompt.artifact_type %>"></div>
+        <div class="field"><label>Interaction type</label><input name="interaction_type" value="<%= prompt.interaction_type %>"></div>
+        <div class="field"><label>Input types</label><input name="input_types" value="<%= prompt.input_types %>"></div>
+        <div class="field"><label>Tool needs</label><input name="tool_needs" value="<%= prompt.tool_needs %>"></div>
+        <div class="field"><label>Minimum model</label><select name="minimum_model_tier"><% for (const [key, label] of Object.entries(modelTiers)) { %><option value="<%= key %>" <%= prompt.minimum_model_tier === key ? 'selected' : '' %>><%= label %></option><% } %></select></div>
+        <div class="field"><label>Recommended model</label><select name="recommended_model_tier"><% for (const [key, label] of Object.entries(modelTiers)) { %><option value="<%= key %>" <%= prompt.recommended_model_tier === key ? 'selected' : '' %>><%= label %></option><% } %></select></div>
+        <div class="field"><label>Risk</label><select name="risk_level"><% for (const risk of ['low','medium','high']) { %><option value="<%= risk %>" <%= prompt.risk_level === risk ? 'selected' : '' %>><%= risk %></option><% } %></select></div>
+        <div class="field"><label>Verification</label><input name="verification_type" value="<%= prompt.verification_type %>"></div>
+        <div class="field"><label>Tags</label><input name="tags" value="<%= (prompt.tags || []).join(', ') %>"></div>
+      </div>
+      <div class="field"><label>Prompt text</label><textarea name="raw_prompt" style="min-height:260px"><%= prompt.raw_prompt %></textarea></div>
+      <button class="btn primary" type="submit">Save changes</button>
+    </form>
+  </div>
+</div>
+<script>
+async function copyPrompt() {
+  await navigator.clipboard.writeText(document.getElementById('prompt-text').textContent);
+}
+</script>
+</body>
+</html>

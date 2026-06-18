@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt Library — Sign in</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body { min-height:100vh; margin:0; display:flex; align-items:center; justify-content:center; background:var(--bg-page,#f4f3fb); color:var(--text,#15131e); font-family:var(--font,sans-serif); }
+.card { width:min(420px, calc(100% - 32px)); background:var(--bg,#fff); border:1px solid var(--border,#e0ddf0); border-radius:18px; padding:28px; box-shadow:0 12px 38px rgba(24,21,43,.08); }
+h1 { margin:0 0 6px; font-size:24px; }
+p { color:var(--text-dim,#767586); line-height:1.55; margin:0 0 22px; }
+.choices { display:grid; gap:10px; }
+.choice { display:block; text-decoration:none; color:#fff; background:var(--primary,#4648d4); border-radius:12px; padding:13px 16px; font-weight:700; text-align:center; }
+.choice.secondary { background:#15131e; }
+.error { background:#fff1f1; color:#a61b1b; border:1px solid #ffd2d2; border-radius:10px; padding:10px 12px; margin-bottom:16px; font-size:13px; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>Prompt Library</h1>
+    <p>Sign in as the person whose prompt library you want to use. Saved prompts and adaptation history stay separate.</p>
+    <% if (error) { %><div class="error"><%= error %></div><% } %>
+    <div class="choices">
+      <a class="choice" href="/auth/google?user=douglas">Continue as Douglas</a>
+      <a class="choice secondary" href="/auth/google?user=nakai">Continue as Nakai</a>
+    </div>
+  </main>
+</body>
+</html>

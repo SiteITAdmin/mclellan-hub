@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt Library</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.prompt-page { min-height:100vh; overflow:auto; background:var(--bg-page,#f4f3fb); color:var(--text,#15131e); }
+.wrap { max-width:1180px; margin:0 auto; padding:28px 16px 80px; }
+.top { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:22px; }
+h1 { margin:0; font-size:26px; letter-spacing:-.02em; }
+.sub { margin:5px 0 0; color:var(--text-dim,#767586); font-size:13px; line-height:1.55; }
+.logout { background:transparent; border:1px solid var(--border,#e0ddf0); border-radius:9px; padding:7px 12px; color:var(--text-dim,#767586); cursor:pointer; }
+.grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr); gap:18px; align-items:start; }
+.card { background:var(--bg,#fff); border:1px solid var(--border,#e0ddf0); border-radius:15px; padding:18px; margin-bottom:16px; }
+.card h2 { margin:0 0 4px; font-size:16px; }
+.card-desc { margin:0 0 14px; color:var(--text-dim,#767586); font-size:12px; line-height:1.5; }
+.field { display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
+.field label { font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--text-dim,#767586); }
+input, select, textarea { width:100%; box-sizing:border-box; border:1px solid var(--border,#e0ddf0); border-radius:9px; background:var(--surface,#faf9fb); color:var(--text,#15131e); font:inherit; font-size:13px; padding:9px 10px; }
+textarea { min-height:130px; resize:vertical; line-height:1.5; }
+.rough { min-height:220px; }
+.row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.btn { border:1px solid var(--border,#e0ddf0); background:transparent; color:var(--text,#15131e); border-radius:9px; padding:8px 13px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
+.btn.primary { background:var(--primary,#4648d4); color:#fff; border-color:var(--primary,#4648d4); }
+.btn.danger { color:#a61b1b; border-color:#ffd2d2; }
+.btn:disabled { opacity:.55; cursor:default; }
+.filters { display:flex; gap:9px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.filters form { display:flex; gap:8px; flex:1; min-width:280px; }
+.prompt-list { display:grid; gap:10px; }
+.prompt-card { border:1px solid var(--border,#e0ddf0); border-radius:12px; padding:13px; background:var(--surface,#faf9fb); }
+.prompt-head { display:flex; gap:10px; justify-content:space-between; align-items:flex-start; }
+.prompt-title { font-weight:800; color:var(--text,#15131e); text-decoration:none; line-height:1.35; }
+.prompt-meta { color:var(--text-dim,#767586); font-size:11px; line-height:1.5; margin-top:4px; }
+.prompt-desc { color:var(--text-dim,#767586); font-size:12px; line-height:1.45; margin-top:6px; }
+.badges { display:flex; gap:5px; flex-wrap:wrap; margin-top:8px; }
+.badge { font-size:10px; font-weight:800; border-radius:99px; padding:3px 7px; border:1px solid var(--border,#e0ddf0); color:var(--text-dim,#767586); background:var(--bg,#fff); }
+.badge.risk-high { color:#a34b00; border-color:#ffd9a8; background:#fff7ed; }
+.badge.risk-medium { color:#6d5e00; border-color:#eee3a0; background:#fffbea; }
+.pick { margin-top:2px; }
+.small { color:var(--text-dim,#767586); font-size:12px; }
+.candidate { display:flex; gap:10px; align-items:flex-start; border-bottom:1px solid var(--border,#e0ddf0); padding:10px 0; }
+.candidate:last-child { border-bottom:none; }
+.candidate-main { flex:1; min-width:0; }
+.candidate-title { font-size:13px; font-weight:800; line-height:1.35; }
+.candidate-meta { font-size:11px; color:var(--text-dim,#767586); margin-top:3px; }
+.result { display:none; margin-top:14px; border:1px solid var(--primary,#4648d4); border-radius:12px; overflow:hidden; }
+.result.open { display:block; }
+.result-head { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:10px 12px; background:rgba(70,72,212,.08); border-bottom:1px solid rgba(70,72,212,.18); }
+.result-head strong { color:var(--primary,#4648d4); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+.result pre { margin:0; white-space:pre-wrap; padding:14px; font-family:inherit; font-size:13px; line-height:1.6; max-height:520px; overflow:auto; }
+.counts { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+.history-item { border-top:1px solid var(--border,#e0ddf0); padding:10px 0; }
+.history-item:first-child { border-top:none; }
+.history-title { font-size:12px; font-weight:800; }
+.history-text { font-size:12px; color:var(--text-dim,#767586); margin-top:3px; line-height:1.45; }
+.sense-box { display:none; margin:12px 0; border:1px solid var(--border,#e0ddf0); border-radius:12px; background:var(--surface,#faf9fb); padding:13px; }
+.sense-box.open { display:block; }
+.sense-box.warn { border-color:#ffd9a8; background:#fff7ed; }
+.sense-title { font-size:12px; font-weight:900; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; color:var(--primary,#4648d4); }
+.sense-box.warn .sense-title { color:#a34b00; }
+.sense-line { font-size:12px; line-height:1.5; margin:4px 0; }
+.sense-list { margin:7px 0 0 18px; padding:0; color:var(--text-dim,#767586); font-size:12px; line-height:1.45; }
+.check-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin-bottom:10px; }
+.check-pill { display:flex; align-items:center; gap:7px; border:1px solid var(--border,#e0ddf0); background:var(--surface,#faf9fb); border-radius:10px; padding:8px 10px; font-size:12px; font-weight:700; cursor:pointer; }
+.check-pill input { width:auto; }
+.agent-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+.optimizer-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; }
+.score-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+.score-table th, .score-table td { border:1px solid var(--border,#e0ddf0); padding:6px 7px; text-align:left; vertical-align:top; }
+.score-table th { background:var(--surface,#faf9fb); font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim,#767586); }
+.mini-section { border-top:1px solid var(--border,#e0ddf0); padding-top:10px; margin-top:10px; }
+.mini-section h3 { margin:0 0 6px; font-size:13px; }
+@media(max-width:900px) { .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body class="prompt-page">
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Prompt Library</h1>
+      <p class="sub">Save prompt examples, import prompt snippets from newsletter intelligence, classify what model/tool surface they need, then adapt rough prompts into stronger work orders.</p>
+      <div class="counts">
+        <% for (const c of counts) { %><span class="badge"><%= c.purpose %>: <%= c.n %></span><% } %>
+      </div>
+    </div>
+    <form method="POST" action="/logout"><button class="logout" type="submit">Sign out <%= user %></button></form>
+  </div>
+
+  <div class="grid">
+    <section>
+      <% if (user === 'nakai' || user === 'douglas') { %>
+      <div class="card">
+        <h2>Internal Audit Agent Builder</h2>
+        <p class="card-desc">Build a stage-specific agent orchestration pack for audit work. It creates separate copy-paste prompts for Claude Opus, ChatGPT 5.5, Goose, and Codex/OpenCode-style harnesses.</p>
+        <div class="agent-grid">
+          <div class="field">
+            <label>Audit name</label>
+            <input id="agent-audit-name" placeholder="e.g. AML 2026 audit">
+          </div>
+          <div class="field">
+            <label>Audit stage</label>
+            <select id="agent-stage">
+              <% for (const s of auditStages) { %><option value="<%= s.key %>"><%= s.label %> — <%= s.primaryJob %></option><% } %>
+            </select>
+          </div>
+          <div class="field">
+            <label>Business/process area</label>
+            <input id="agent-business-area" placeholder="e.g. AML transaction monitoring">
+          </div>
+          <div class="field">
+            <label>Audience</label>
+            <input id="agent-audience" placeholder="e.g. Internal Audit peer reviewer">
+          </div>
+        </div>
+        <div class="field">
+          <label>Audit objective</label>
+          <textarea id="agent-objective" style="min-height:70px" placeholder="What is this stage trying to achieve?"></textarea>
+        </div>
+        <div class="agent-grid">
+          <div class="field">
+            <label>Source folders / files, one per line</label>
+            <textarea id="agent-source-folders" placeholder="/Users/nakai/.../Evidence pack&#10;/Users/nakai/.../Policies"></textarea>
+          </div>
+          <div class="field">
+            <label>Output folder</label>
+            <textarea id="agent-output-folder" placeholder="/Users/nakai/.../AI outputs"></textarea>
+          </div>
+        </div>
+        <div class="agent-grid">
+          <div class="field">
+            <label>Frameworks / criteria, one per line</label>
+            <textarea id="agent-frameworks" placeholder="Audit methodology&#10;AML policy&#10;Regulatory inspection scope"></textarea>
+          </div>
+          <div class="field">
+            <label>Constraints / do-not-do rules</label>
+            <textarea id="agent-constraints" placeholder="Do not edit source evidence&#10;Do not infer effectiveness without evidence"></textarea>
+          </div>
+        </div>
+        <div class="field">
+          <label>Desired outcomes</label>
+          <textarea id="agent-outcomes" style="min-height:80px" placeholder="What should the agents produce or decide by the end of this stage?"></textarea>
+        </div>
+        <div class="agent-grid">
+          <div class="field">
+            <label>Risk tolerance</label>
+            <select id="agent-risk">
+              <option value="High evidence discipline. Do not overstate conclusions.">High evidence discipline</option>
+              <option value="Drafting support only. Human auditor must validate every conclusion.">Drafting support only</option>
+              <option value="Exploratory analysis. Label all assumptions and gaps.">Exploratory analysis</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>External knowledge</label>
+            <select id="agent-external">
+              <option value="not-allowed">Use supplied material only</option>
+              <option value="allowed">Allow general knowledge for framing only</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Harness prompts to generate</label>
+          <div class="check-grid">
+            <% for (const [key, label] of Object.entries(harnessLabels)) { %>
+            <label class="check-pill"><input type="checkbox" class="agent-harness" value="<%= key %>" <%= ['claude','chatgpt','goose'].includes(key) ? 'checked' : '' %>> <%= label %></label>
+            <% } %>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="agent-preview-btn" type="button" onclick="previewAgentPack()">Preview agent pack</button>
+          <button class="btn" id="agent-save-btn" type="button" onclick="saveAgentPack()" disabled>Save pack</button>
+          <button class="btn" type="button" onclick="copyAgentPack()">Copy pack</button>
+          <span class="small" id="agent-status">Stage-aware audit prompts for controlled delegation.</span>
+        </div>
+        <div class="result" id="agent-result">
+          <div class="result-head"><strong>Agent orchestration pack</strong></div>
+          <pre id="agent-output"></pre>
+        </div>
+      </div>
+      <% } %>
+
+      <div class="card">
+        <h2>Builder</h2>
+        <p class="card-desc">Paste a rough prompt. Pick a purpose and, optionally, examples to borrow structure from. The output is a reusable prompt, not the answer to the task.</p>
+        <div class="row">
+          <div class="field" style="flex:1;min-width:220px">
+            <label>Purpose</label>
+            <select id="adapt-purpose">
+              <% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %>
+            </select>
+          </div>
+          <div class="field" style="width:170px">
+            <label>Mode</label>
+            <select id="adapt-mode">
+              <option value="quick">Quick restructure</option>
+              <option value="guided">Guided prompt</option>
+              <option value="workflow">Workflow kit</option>
+              <option value="tool-assisted">Tool-assisted</option>
+              <option value="high-stakes">High-stakes</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Rough prompt</label>
+          <textarea class="rough" id="rough-prompt" placeholder="Paste the basic prompt you want upgraded..."></textarea>
+        </div>
+        <div class="row">
+          <button class="btn" id="sense-btn" type="button" onclick="senseCheckPrompt()">Sense check</button>
+          <button class="btn primary" id="adapt-btn" type="button" onclick="adaptPrompt()">Build adapted prompt</button>
+          <span class="small" id="adapt-status">Selected examples: <span id="selected-count">0</span></span>
+        </div>
+        <div class="sense-box" id="sense-box">
+          <div class="sense-title" id="sense-title">Sense check</div>
+          <div id="sense-content"></div>
+        </div>
+        <div class="result" id="adapt-result">
+          <div class="result-head">
+            <strong>Adapted prompt</strong>
+            <div class="row">
+              <input id="save-title" placeholder="Title to save as..." style="width:240px;padding:6px 8px">
+              <button class="btn" type="button" onclick="saveAdapted()">Save</button>
+              <button class="btn" type="button" onclick="copyAdapted()">Copy</button>
+            </div>
+          </div>
+          <pre id="adapt-output"></pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Prompt Gym / Optimiser</h2>
+        <p class="card-desc">For recurring prompts. Add example input/output pairs and it will create a rubric, test candidate prompts, pick a winner, and give you a logbook entry for future review.</p>
+        <div class="optimizer-grid">
+          <div class="field">
+            <label>Purpose</label>
+            <select id="opt-purpose">
+              <% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %>
+            </select>
+          </div>
+          <div class="field">
+            <label>Task description</label>
+            <textarea id="opt-task" style="min-height:88px" placeholder="What recurring task should this prompt handle?"></textarea>
+          </div>
+        </div>
+        <div class="optimizer-grid">
+          <div class="field">
+            <label>Current prompt, if any</label>
+            <textarea id="opt-current" placeholder="Paste the prompt you currently use, or leave blank."></textarea>
+          </div>
+          <div class="field">
+            <label>Example input/output pairs</label>
+            <textarea id="opt-examples" placeholder="Example 1:&#10;Input: ...&#10;Output: ...&#10;&#10;---&#10;&#10;Example 2:&#10;Input: ...&#10;Output: ..."></textarea>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="opt-btn" type="button" onclick="optimizePrompt()">Run Prompt Gym</button>
+          <span class="small" id="opt-status">Best for prompts you will reuse and want to test.</span>
+        </div>
+        <div class="result" id="opt-result">
+          <div class="result-head">
+            <strong>Optimised prompt asset</strong>
+            <div class="row">
+              <input id="opt-save-title" placeholder="Title to save as..." style="width:240px;padding:6px 8px">
+              <button class="btn" type="button" onclick="saveOptimized()">Save winner</button>
+              <button class="btn" type="button" onclick="copyOptimized()">Copy winner</button>
+            </div>
+          </div>
+          <div style="padding:14px">
+            <div id="opt-summary" class="small"></div>
+            <div class="mini-section"><h3>Rubric</h3><div id="opt-rubric"></div></div>
+            <div class="mini-section"><h3>Candidate scores</h3><div id="opt-candidates"></div></div>
+            <div class="mini-section"><h3>Final prompt</h3><pre id="opt-output" style="padding:0;max-height:420px"></pre></div>
+            <div class="mini-section"><h3>Logbook</h3><div id="opt-logbook" class="small"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Library</h2>
+        <p class="card-desc">Saved prompt examples. Tick examples before using the builder, or leave unticked and it will pick examples from the chosen purpose.</p>
+        <div class="filters">
+          <form method="GET" action="/">
+            <select name="purpose" style="max-width:230px">
+              <option value="all" <%= purpose === 'all' ? 'selected' : '' %>>All purposes</option>
+              <% for (const p of purposes) { %><option value="<%= p.key %>" <%= purpose === p.key ? 'selected' : '' %>><%= p.label %></option><% } %>
+            </select>
+            <input name="q" value="<%= q %>" placeholder="Search prompts...">
+            <button class="btn" type="submit">Filter</button>
+          </form>
+        </div>
+        <div class="prompt-list">
+          <% if (!prompts.length && totalPromptCount) { %>
+            <p class="small">No prompts match this filter/search. You have <%= totalPromptCount %> saved prompt<%= totalPromptCount === 1 ? '' : 's' %>; switch to “All purposes” or clear the search box.</p>
+          <% } else if (!prompts.length) { %>
+            <p class="small">No saved prompts yet. Import a kit URL, import from newsletter, or add one manually.</p>
+          <% } %>
+          <% for (const p of prompts) { %>
+          <article class="prompt-card">
+            <div class="prompt-head">
+              <div>
+                <a class="prompt-title" href="/prompts/<%= p.id %>"><%= p.title %></a>
+                <div class="prompt-meta"><%= p.source_author || p.source_type %> · <%= p.function_type %> · <%= p.domain %></div>
+              </div>
+              <input class="pick" type="checkbox" value="<%= p.id %>" onchange="updateSelectedCount()">
+            </div>
+            <% if (p.description) { %><div class="prompt-desc"><%= p.description %></div><% } %>
+            <div class="badges">
+              <span class="badge"><%= p.purpose %></span>
+              <span class="badge <%= p.risk_level === 'high' ? 'risk-high' : p.risk_level === 'medium' ? 'risk-medium' : '' %>"><%= p.risk_level %> risk</span>
+              <span class="badge">min: <%= p.minimum_model_tier %></span>
+              <span class="badge">rec: <%= p.recommended_model_tier %></span>
+              <span class="badge"><%= p.tool_needs %></span>
+            </div>
+          </article>
+          <% } %>
+        </div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>Add Prompt</h2>
+        <p class="card-desc">Manually save Nate-style examples, work prompts, or reusable harness instructions.</p>
+        <form method="POST" action="/prompts">
+          <div class="field"><label>Title</label><input name="title" required></div>
+          <div class="field"><label>Purpose</label><select name="purpose"><% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %></select></div>
+          <div class="field"><label>Description</label><textarea name="description" style="min-height:70px"></textarea></div>
+          <div class="field"><label>Prompt text</label><textarea name="raw_prompt" required></textarea></div>
+          <div class="field"><label>Tags, comma separated</label><input name="tags" placeholder="Nate, audit, evaluator"></div>
+          <button class="btn primary" type="submit">Save prompt</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Import Kit URL</h2>
+        <p class="card-desc">Paste a promptkit link. The importer fetches the Markdown version when available, splits individual prompts, saves provenance, and classifies each one.</p>
+        <div class="field">
+          <label>Prompt kit URL</label>
+          <input id="kit-url" placeholder="https://promptkit.natebjones.com/...">
+        </div>
+        <div class="field">
+          <label>Default purpose</label>
+          <select id="kit-purpose">
+            <option value="">Auto-classify</option>
+            <% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %>
+          </select>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="kit-import-btn" type="button" onclick="importKitUrl()">Import kit</button>
+          <span class="small" id="kit-import-status"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <h2>Newsletter Inbox</h2>
+            <p class="card-desc">Prompt-type items extracted from newsletter intelligence.</p>
+          </div>
+          <form method="POST" action="/newsletter/import-all"><button class="btn" type="submit">Import all new</button></form>
+        </div>
+        <% if (!candidates.length) { %><p class="small">No newsletter prompt candidates found yet.</p><% } %>
+        <% for (const c of candidates.slice(0, 10)) { %>
+        <div class="candidate">
+          <div class="candidate-main">
+            <div class="candidate-title"><%= c.title %></div>
+            <div class="candidate-meta"><%= c.sender_name %> · <%= c.source_title %></div>
+          </div>
+          <% if (c.saved_id) { %>
+            <a class="btn" href="/prompts/<%= c.saved_id %>">Saved</a>
+          <% } else { %>
+            <form method="POST" action="/newsletter/import/<%= c.id %>"><button class="btn" type="submit">Import</button></form>
+          <% } %>
+        </div>
+        <% } %>
+      </div>
+
+      <div class="card">
+        <h2>Recent Builds</h2>
+        <p class="card-desc">Last adapted prompts generated from rough prompts.</p>
+        <% if (!adaptations.length) { %><p class="small">No adaptations yet.</p><% } %>
+        <% for (const a of adaptations) { %>
+        <div class="history-item">
+          <div class="history-title"><%= a.purpose %> · <%= new Date(a.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+          <div class="history-text"><%= a.raw_request.slice(0, 160) %><%= a.raw_request.length > 160 ? '...' : '' %></div>
+        </div>
+        <% } %>
+      </div>
+
+      <div class="card">
+        <h2>Prompt Gym Runs</h2>
+        <p class="card-desc">Recent self-optimising prompt runs with scoring/logbook metadata.</p>
+        <% if (!optimizations.length) { %><p class="small">No Prompt Gym runs yet.</p><% } %>
+        <% for (const o of optimizations) { %>
+        <div class="history-item">
+          <div class="history-title"><%= o.purpose %> · <%= o.logbook.version_label || 'Prompt_v1' %> · <%= new Date(o.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+          <div class="history-text"><%= o.task_description.slice(0, 160) %><%= o.task_description.length > 160 ? '...' : '' %></div>
+        </div>
+        <% } %>
+      </div>
+
+      <div class="card">
+        <h2>Audit Agent Packs</h2>
+        <p class="card-desc">Saved stage-specific orchestration packs.</p>
+        <% if (!agentPacks.length) { %><p class="small">No audit agent packs saved yet.</p><% } %>
+        <% for (const p of agentPacks) { %>
+        <div class="history-item">
+          <div class="history-title"><a href="/agent-packs/<%= p.id %>"><%= p.title %></a></div>
+          <div class="history-text"><%= p.stage %> · <%= new Date(p.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+        </div>
+        <% } %>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+let latestAdaptationId = null;
+let latestAdaptedText = '';
+let latestOptimizationId = null;
+let latestOptimizedText = '';
+let latestAgentPackText = '';
+let latestAgentPackInput = null;
+
+function selectedPromptIds() {
+  return [...document.querySelectorAll('.pick:checked')].map(cb => cb.value);
+}
+
+function updateSelectedCount() {
+  document.getElementById('selected-count').textContent = selectedPromptIds().length;
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderSenseCheck(d) {
+  const box = document.getElementById('sense-box');
+  const title = document.getElementById('sense-title');
+  const content = document.getElementById('sense-content');
+  if (!box || !content || !d) return;
+  box.classList.add('open');
+  box.classList.toggle('warn', d.verdict === 'needs-attention');
+  title.textContent = d.verdict === 'needs-attention' ? 'Sense check: review before build' : 'Sense check: good fit';
+  const list = (label, items) => items?.length
+    ? `<div class="sense-line"><strong>${label}</strong></div><ul class="sense-list">${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`
+    : '';
+  content.innerHTML = [
+    `<div class="sense-line"><strong>Task:</strong> ${escapeHtml(d.taskSummary)}</div>`,
+    `<div class="sense-line"><strong>Your selection:</strong> ${escapeHtml(d.selected.purposeLabel)} · ${escapeHtml(d.selected.mode)} · ${d.selected.exampleCount} example${d.selected.exampleCount === 1 ? '' : 's'}</div>`,
+    `<div class="sense-line"><strong>Suggested fit:</strong> ${escapeHtml(d.recommended.purposeLabel)} · ${escapeHtml(d.recommended.mode)} · ${escapeHtml(d.recommended.recommendedModelTier)} · ${escapeHtml(d.recommended.toolNeeds)}</div>`,
+    list('Prompt improver vs task', d.education),
+    list('Issues', d.issues),
+    list('Suggestions', d.suggestions),
+    list('Notes', d.notes),
+  ].filter(Boolean).join('');
+}
+
+async function senseCheckPrompt() {
+  const rough = document.getElementById('rough-prompt').value.trim();
+  if (!rough) { alert('Paste a rough prompt first.'); return; }
+  const btn = document.getElementById('sense-btn');
+  const status = document.getElementById('adapt-status');
+  btn.disabled = true;
+  status.textContent = 'Checking purpose, mode, examples and tool needs...';
+  try {
+    const r = await fetch('/adapt/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rough_prompt: rough,
+        purpose: document.getElementById('adapt-purpose').value,
+        mode: document.getElementById('adapt-mode').value,
+        source_prompt_ids: selectedPromptIds(),
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Sense check failed');
+    renderSenseCheck(d);
+    status.textContent = d.verdict === 'needs-attention' ? 'Sense check found things to review.' : 'Sense check looks good.';
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Sense check failed.';
+  } finally {
+    btn.disabled = false;
+    updateSelectedCount();
+  }
+}
+
+async function adaptPrompt() {
+  const rough = document.getElementById('rough-prompt').value.trim();
+  if (!rough) { alert('Paste a rough prompt first.'); return; }
+  const btn = document.getElementById('adapt-btn');
+  const status = document.getElementById('adapt-status');
+  btn.disabled = true;
+  btn.textContent = 'Building...';
+  status.textContent = 'Borrowing structure and routing guidance...';
+  try {
+    const r = await fetch('/adapt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rough_prompt: rough,
+        purpose: document.getElementById('adapt-purpose').value,
+        mode: document.getElementById('adapt-mode').value,
+        source_prompt_ids: selectedPromptIds(),
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Adaptation failed');
+    latestAdaptationId = d.id;
+    latestAdaptedText = d.adapted;
+    renderSenseCheck(d.senseCheck);
+    document.getElementById('adapt-output').textContent = d.adapted;
+    document.getElementById('adapt-result').classList.add('open');
+    document.getElementById('save-title').value = '';
+    status.textContent = `Built with ${d.examples.length} example${d.examples.length === 1 ? '' : 's'} · recommended ${d.classification.recommended_model_tier}`;
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Adaptation failed.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Build adapted prompt';
+    updateSelectedCount();
+  }
+}
+
+async function saveAdapted() {
+  if (!latestAdaptationId) return;
+  const title = document.getElementById('save-title').value.trim() || 'Adapted prompt';
+  const r = await fetch(`/adaptations/${latestAdaptationId}/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Save failed'); return; }
+  window.location.href = `/prompts/${d.id}`;
+}
+
+async function copyAdapted() {
+  if (!latestAdaptedText) return;
+  await navigator.clipboard.writeText(latestAdaptedText);
+  document.getElementById('adapt-status').textContent = 'Copied adapted prompt.';
+}
+
+function renderList(items) {
+  return items?.length ? `<ul class="sense-list">${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : '<p class="small">None.</p>';
+}
+
+function renderOptimizerResult(d) {
+  latestOptimizationId = d.id;
+  latestOptimizedText = d.final_prompt || '';
+  document.getElementById('opt-result').classList.add('open');
+  document.getElementById('opt-output').textContent = latestOptimizedText;
+  document.getElementById('opt-save-title').value = '';
+  const winner = Number.isInteger(d.winner_index) ? d.winner_index : 0;
+  document.getElementById('opt-summary').innerHTML = `Winner: candidate ${winner + 1} · examples tested: ${d.examples?.length || 0} · recommended ${escapeHtml(d.classification?.recommended_model_tier || 'general-reasoning')}`;
+  const criteria = d.rubric?.criteria || [];
+  document.getElementById('opt-rubric').innerHTML = criteria.length ? `<table class="score-table"><thead><tr><th>Criterion</th><th>Weight</th><th>Rule</th></tr></thead><tbody>${criteria.map(c => `<tr><td><strong>${escapeHtml(c.name)}</strong><br>${escapeHtml(c.description || '')}</td><td>${escapeHtml(c.weight ?? '')}</td><td>${escapeHtml(c.score_rule || '')}</td></tr>`).join('')}</tbody></table>` : '<p class="small">No rubric returned.</p>';
+  const candidates = d.candidates || [];
+  document.getElementById('opt-candidates').innerHTML = candidates.length ? candidates.map((c, i) => `
+    <div class="history-item">
+      <div class="history-title">${i === winner ? 'Winner · ' : ''}${escapeHtml(c.name || `Candidate ${i + 1}`)} · avg ${escapeHtml(c.average_score ?? '?')}/10</div>
+      <div class="history-text"><strong>Strengths:</strong> ${(c.strengths || []).map(escapeHtml).join('; ') || 'None listed.'}</div>
+      <div class="history-text"><strong>Weaknesses:</strong> ${(c.weaknesses || []).map(escapeHtml).join('; ') || 'None listed.'}</div>
+    </div>`).join('') : '<p class="small">No candidates returned.</p>';
+  const log = d.logbook || {};
+  document.getElementById('opt-logbook').innerHTML = [
+    `<div class="sense-line"><strong>Version:</strong> ${escapeHtml(log.version_label || 'Prompt_v1')}</div>`,
+    `<div class="sense-line"><strong>Review cadence:</strong> ${escapeHtml(log.review_cadence || 'Review after a few uses')}</div>`,
+    `<div class="sense-line"><strong>Next experiment:</strong> ${escapeHtml(log.next_experiment || '')}</div>`,
+    `<div class="sense-line"><strong>DSPy candidate:</strong> ${log.dspy_candidate ? 'Yes' : 'No'} — ${escapeHtml(log.dspy_reason || '')}</div>`,
+    `<div class="sense-line"><strong>Success metrics:</strong></div>${renderList(log.success_metrics || [])}`,
+    `<div class="sense-line"><strong>Pitfalls:</strong></div>${renderList(d.pitfalls || [])}`,
+  ].join('');
+}
+
+async function optimizePrompt() {
+  const task = document.getElementById('opt-task').value.trim();
+  if (!task) { alert('Describe the recurring task first.'); return; }
+  const btn = document.getElementById('opt-btn');
+  const status = document.getElementById('opt-status');
+  btn.disabled = true;
+  btn.textContent = 'Optimising...';
+  status.textContent = 'Generating rubric, candidates, scores and logbook...';
+  try {
+    const r = await fetch('/optimize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task_description: task,
+        current_prompt: document.getElementById('opt-current').value,
+        examples_text: document.getElementById('opt-examples').value,
+        purpose: document.getElementById('opt-purpose').value,
+        source_prompt_ids: selectedPromptIds(),
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Prompt Gym failed');
+    renderOptimizerResult(d);
+    status.textContent = `Prompt Gym complete · ${d.candidates?.length || 0} candidates scored.`;
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Prompt Gym failed.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Prompt Gym';
+  }
+}
+
+async function saveOptimized() {
+  if (!latestOptimizationId) return;
+  const title = document.getElementById('opt-save-title').value.trim() || 'Optimized prompt';
+  const r = await fetch(`/optimizations/${latestOptimizationId}/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Save failed'); return; }
+  window.location.href = `/prompts/${d.id}`;
+}
+
+async function copyOptimized() {
+  if (!latestOptimizedText) return;
+  await navigator.clipboard.writeText(latestOptimizedText);
+  document.getElementById('opt-status').textContent = 'Copied optimized prompt.';
+}
+
+function agentInput() {
+  return {
+    audit_name: document.getElementById('agent-audit-name')?.value || '',
+    stage: document.getElementById('agent-stage')?.value || 'planning',
+    business_area: document.getElementById('agent-business-area')?.value || '',
+    audience: document.getElementById('agent-audience')?.value || '',
+    audit_objective: document.getElementById('agent-objective')?.value || '',
+    source_folders: document.getElementById('agent-source-folders')?.value || '',
+    output_folder: document.getElementById('agent-output-folder')?.value || '',
+    frameworks: document.getElementById('agent-frameworks')?.value || '',
+    constraints: document.getElementById('agent-constraints')?.value || '',
+    desired_outcomes: document.getElementById('agent-outcomes')?.value || '',
+    risk_tolerance: document.getElementById('agent-risk')?.value || '',
+    external_knowledge: document.getElementById('agent-external')?.value || 'not-allowed',
+    harnesses: [...document.querySelectorAll('.agent-harness:checked')].map(cb => cb.value),
+  };
+}
+
+async function previewAgentPack() {
+  const input = agentInput();
+  if (!input.audit_name.trim()) { alert('Add an audit name first.'); return; }
+  const btn = document.getElementById('agent-preview-btn');
+  const status = document.getElementById('agent-status');
+  btn.disabled = true;
+  status.textContent = 'Building stage-specific pack...';
+  try {
+    const r = await fetch('/agent-builder/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Preview failed');
+    latestAgentPackText = d.markdown;
+    latestAgentPackInput = input;
+    document.getElementById('agent-output').textContent = d.markdown;
+    document.getElementById('agent-result').classList.add('open');
+    document.getElementById('agent-save-btn').disabled = false;
+    status.textContent = `${d.stageLabel} pack ready · ${d.harnesses.length} harness prompt${d.harnesses.length === 1 ? '' : 's'}`;
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Agent pack preview failed.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveAgentPack() {
+  if (!latestAgentPackInput) await previewAgentPack();
+  if (!latestAgentPackInput) return;
+  const r = await fetch('/agent-builder/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(latestAgentPackInput),
+  });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Save failed'); return; }
+  window.location.href = `/agent-packs/${d.id}`;
+}
+
+async function copyAgentPack() {
+  if (!latestAgentPackText) await previewAgentPack();
+  if (!latestAgentPackText) return;
+  await navigator.clipboard.writeText(latestAgentPackText);
+  document.getElementById('agent-status').textContent = 'Copied agent pack.';
+}
+
+async function importKitUrl() {
+  const url = document.getElementById('kit-url').value.trim();
+  if (!url) { alert('Paste a prompt kit URL first.'); return; }
+  const btn = document.getElementById('kit-import-btn');
+  const status = document.getElementById('kit-import-status');
+  btn.disabled = true;
+  status.textContent = 'Fetching kit...';
+  try {
+    const r = await fetch('/import-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        purpose: document.getElementById('kit-purpose').value,
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Import failed');
+    if (d.duplicate) {
+      status.textContent = `Already saved: ${d.existing} prompt${d.existing === 1 ? '' : 's'} from ${d.title}.`;
+    } else {
+      status.textContent = `Imported ${d.imported} prompt${d.imported === 1 ? '' : 's'} from ${d.title}.`;
+    }
+    setTimeout(() => window.location.href = '/?q=' + encodeURIComponent(d.title), 700);
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Import failed.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+updateSelectedCount();
+</script>
+</body>
+</html>

@@ -164,7 +164,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
           <% } %>
           <% for (const row of tokenBurn.liveTasks) { %>
             <tr>
-              <td><strong><%= row.task_code %></strong></td>
+              <td><strong><%= row.label %></strong><br><span class="burn-note"><%= row.task_code %></span></td>
               <td><span class="pill <%= row.task_type === 'legacy' ? 'estimated' : 'exact' %>"><%= row.task_type %></span></td>
               <td><%= row.calls %></td>
               <td><%= formatTokens(row.tokens_in) %></td>
