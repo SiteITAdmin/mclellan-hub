@@ -14,6 +14,7 @@ const USER = 'douglas';
 let failures = 0;
 const fakeTopicIds = [];
 const fakeDocumentIds = [];
+const fakePostIds = [];
 
 function check(label, fn) {
   try { fn(); console.log(`  ✅ ${label}`); }
@@ -24,6 +25,7 @@ function cleanup() {
   hub.prepare("DELETE FROM reminders WHERE kind = 'content' AND user = ?").run(USER);
   for (const id of fakeTopicIds) hub.prepare('DELETE FROM intel_items WHERE id = ?').run(id);
   for (const id of fakeDocumentIds) hub.prepare('DELETE FROM intel_documents WHERE id = ?').run(id);
+  for (const id of fakePostIds) hub.prepare('DELETE FROM linkedin_posts WHERE id = ?').run(id);
   hub.prepare("DELETE FROM system_jobs WHERE type = 'reminder_fire' AND json_extract(payload, '$.reminderId') NOT IN (SELECT id FROM reminders)").run();
 }
 
@@ -47,6 +49,16 @@ function cleanup() {
   const liResult = content.evaluateCheck(liRem);
   check('overdue message produced', () =>
     assert(liResult.message && liResult.message.includes('LinkedIn'), JSON.stringify(liResult)));
+  const postId = uuid();
+  fakePostIds.push(postId);
+  hub.prepare(`
+    INSERT INTO linkedin_posts (id, user, topic, status, published_at)
+    VALUES (?, ?, 'synthtest published cadence post', 'published', unixepoch())
+  `).run(postId, USER);
+  check('published post today makes LinkedIn cadence healthy', () =>
+    assert.strictEqual(content.evaluateCheck(liRem).skip, true));
+  hub.prepare('DELETE FROM linkedin_posts WHERE id = ?').run(postId);
+  fakePostIds.length = 0;
 
   console.log('3. Fire → single ping, reschedule to next occurrence, no escalation');
   hub.prepare('UPDATE reminders SET next_fire_at = ? WHERE id = ?').run(Math.floor(Date.now() / 1000) - 5, liRem.id);

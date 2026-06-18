@@ -31,16 +31,21 @@ function todayIso() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
 }
 
-function chatResponse(text) {
-  return { text: String(text || '').slice(0, 3500) };
+function chatResponse(text, card) {
+  const msg = { text: String(text || '').slice(0, 3500) };
+  if (card?.cardsV2) msg.cardsV2 = card.cardsV2;
+  return msg;
 }
 
 function isGoogleWorkspaceAddOnRequest(req) {
   return Boolean(req.body?.chat || String(req.headers['user-agent'] || '').includes('Google-gsuiteaddons'));
 }
 
-function googleChatReply(req, text) {
-  const message = chatResponse(text);
+// replyOrText can be a plain string or { text, card } from handlers that produce cards
+function googleChatReply(req, replyOrText) {
+  const text = typeof replyOrText === 'object' ? (replyOrText.text || '') : replyOrText;
+  const card = typeof replyOrText === 'object' ? replyOrText.card : undefined;
+  const message = chatResponse(text, card);
   if (!isGoogleWorkspaceAddOnRequest(req)) return message;
   return {
     hostAppDataAction: {
@@ -152,22 +157,18 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
   // Reminder commands — regex-first so acks are instant and cost no tokens
   if (lower === 'reminders') {
     const { listOpenReminders } = require('../lib/reminders');
+    const { buildReminderCard } = require('../lib/google-chat');
     const open = listOpenReminders(user);
     if (!open.length) return 'No open reminders. Say "remind me to X at Y" to set one.';
-    const lines = open.map(r => {
-      const when = r.next_fire_at
-        ? new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' })
-        : r.status;
-      return `#${r.short_code} ${r.title} — ${when}`;
-    });
-    return `*Open reminders:*\n${lines.join('\n')}\n\nReply: done <n> · snooze <n> 2h · ok <n>`;
+    return { text: `${open.length} open reminder${open.length !== 1 ? 's' : ''}`, card: buildReminderCard(open) };
   }
 
   if (lower === 'suggestions') {
     const { listOpenSuggestions } = require('../lib/suggestion-engine');
+    const { buildSuggestionCard } = require('../lib/google-chat');
     const open = listOpenSuggestions(user);
     if (!open.length) return 'No open suggestions. The daily run looks at travel and content signals each morning.';
-    return `*Open suggestions:*\n${open.map(s => `#${s.short_code} [${s.domain}] ${s.title}`).join('\n')}\n\nReply: accept <n> · dismiss <n> · why <n>`;
+    return { text: `${open.length} open suggestion${open.length !== 1 ? 's' : ''}`, card: buildSuggestionCard(open) };
   }
 
   const suggestionCmd = lower.match(/^(accept|dismiss|why)\s+(\d+)$/);
@@ -427,6 +428,18 @@ router.post('/api/google-chat/hermes', writeLimiter, async (req, res) => {
         ON CONFLICT(user, key) DO UPDATE SET value = excluded.value
       `).run(uuid(), user, spaceName);
     }
+
+    // Card button clicks arrive as CARD_CLICKED with the action in event.action.actionMethodName.
+    // The function name is whatever string we put in the button's onClick.action.function,
+    // so it maps directly to existing command handlers — no new logic needed.
+    if (type === 'CARD_CLICKED') {
+      const actionText = event.action?.actionMethodName || event.common?.invokedFunction || '';
+      if (!actionText) return res.json({});
+      const reply = await handleGoogleChatCommand(user, actionText, { spaceName });
+      console.log(`[google-chat] card click action="${actionText}"`);
+      return res.json(googleChatReply(req, reply));
+    }
+
     const text = cleanGoogleChatText(message.argumentText || message.text || '');
     const reply = await handleGoogleChatCommand(user, text, { spaceName });
     console.log(`[google-chat] handled ${type || 'event'} addon=${isGoogleWorkspaceAddOnRequest(req)} text_chars=${text.length} reply_chars=${String(reply || '').length}`);
@@ -1312,12 +1325,27 @@ router.get('/crm/reminders', requireAuth, (req, res) => {
   const { listOpenReminders } = require('../lib/reminders');
   const hub = db.hub();
   const open = listOpenReminders(req.hubUser);
+  const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+  const dueDay = (r) => new Date(((r.next_fire_at || r.remind_at || 0) * 1000))
+    .toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+  const stillNeedsAction = (r) => {
+    if (r.kind !== 'content') return true;
+    try {
+      const { evaluateCheck } = require('../lib/content-reminders');
+      return Boolean(evaluateCheck(r).message);
+    } catch (_) {
+      return true;
+    }
+  };
+  const today = open.filter(r => dueDay(r) <= todayKey && stillNeedsAction(r));
+  const todayIds = new Set(today.map(r => r.id));
+  const general = open.filter(r => !todayIds.has(r.id));
   const resolved = hub.prepare(`
     SELECT * FROM reminders
     WHERE user = ? AND status IN ('done','cancelled') AND updated_at > unixepoch() - 7 * 86400
     ORDER BY updated_at DESC LIMIT 20
   `).all(req.hubUser);
-  res.render('hub/crm-reminders', { ...crmPageData(req.hubUser), open, resolved });
+  res.render('hub/crm-reminders', { ...crmPageData(req.hubUser), open, today, general, resolved });
 });
 
 router.post('/api/reminders', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {

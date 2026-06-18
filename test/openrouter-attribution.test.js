@@ -27,6 +27,7 @@ test('builds distinct OpenRouter attribution headers for each task', () => {
   const promptAdapter = openRouterHeaders(TASK_CODES.PROMPT_ADAPTER, { apiKey: 'test-key' });
   const promptOptimizer = openRouterHeaders(TASK_CODES.PROMPT_OPTIMIZER, { apiKey: 'test-key' });
   const wikiVision = openRouterHeaders(TASK_CODES.WIKI_IMAGE_VISION, { apiKey: 'test-key' });
+  const wikiLinking = openRouterHeaders(TASK_CODES.WIKI_LINKING, { apiKey: 'test-key' });
   const hermesCapture = openRouterHeaders(TASK_CODES.HERMES_CRM_CAPTURE, { apiKey: 'test-key' });
 
   assert.equal(chat['X-OpenRouter-Title'], 'McLellan User: Hub Chat');
@@ -37,6 +38,7 @@ test('builds distinct OpenRouter attribution headers for each task', () => {
   assert.equal(promptAdapter['X-OpenRouter-Title'], 'McLellan User: Prompt Adapter');
   assert.equal(promptOptimizer['X-OpenRouter-Title'], 'McLellan User: Prompt Optimizer');
   assert.equal(wikiVision['X-OpenRouter-Title'], 'McLellan Auto: Wiki Image Vision');
+  assert.equal(wikiLinking['X-OpenRouter-Title'], 'McLellan Auto: Wiki Link Discovery');
   assert.equal(hermesCapture['X-OpenRouter-Title'], 'McLellan User: Hermes CRM Capture');
   assert.match(chat['HTTP-Referer'], /^https:\/\/ut-chat\.openrouter\.mclellan\.scot$/);
   assert.match(ingest['HTTP-Referer'], /^https:\/\/at-newsletteringest\.openrouter\.mclellan\.scot$/);
@@ -44,6 +46,7 @@ test('builds distinct OpenRouter attribution headers for each task', () => {
   assert.notEqual(chat['HTTP-Referer'], ingest['HTTP-Referer']);
   assert.equal(taskCodeForFeature('newsletter-extractor'), 'AT-NewsletterIngest');
   assert.equal(taskCodeForFeature('wiki-doc-save'), 'AT-WikiDocPage');
+  assert.equal(taskCodeForFeature('wiki-linking'), 'AT-WikiLinking');
   assert.equal(taskCodeForFeature('testbench-prompt-improver'), 'UT-PromptQuickImprover');
   assert.equal(taskCodeForFeature('prompt-optimizer'), 'UT-PromptOptimizer');
   assert.equal(taskCodeForFeature('hermes-crm-capture'), 'UT-HermesCrmCapture');
