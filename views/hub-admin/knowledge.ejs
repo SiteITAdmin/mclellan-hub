@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+.wrap { padding:24px; max-width:820px; }
+.section-head { font-size:13px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin:26px 0 10px; }
+.intro { font-size:13px; color:var(--text-dim); margin-bottom:18px; }
+.atom { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-radius:8px; margin-bottom:8px; background:var(--surface-2, rgba(255,255,255,0.03)); border:1px solid var(--border); }
+.atom-body { flex:1; font-size:13px; }
+.atom-claim { color:var(--text); }
+.atom-pred { color:#7c6af5; font-family:monospace; font-size:12px; }
+.atom-meta { font-size:12px; color:var(--text-dim); margin-top:4px; }
+.atom-actions { display:flex; gap:6px; }
+.btn { padding:5px 10px; border-radius:6px; font-size:12px; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--text); }
+.btn.approve { background:#3a7c5f; border-color:#3a7c5f; color:#fff; }
+.btn.reject  { color:#e06c6c; }
+.warn { border-left:3px solid #e06c6c; }
+.empty { padding:24px 0; color:var(--text-dim); font-size:13px; }
+.count { font-weight:700; }
+</style>
+</head>
+<body>
+
+<%- include('partials/admin-header', { title: `Knowledge — ${user}` }) %>
+
+<div class="wrap">
+  <p class="intro">
+    The knowledge layer is compiled from your documents, emails, meetings and CRM facts by the nightly synthesis job.
+    This queue shows what needs a human eye: claims the linker was unsure about, contradictions, and possible duplicate contacts.
+    Approving a proposed claim makes it active and visible on the contact; rejecting retires it.
+  </p>
+
+  <div class="section-head">Proposed claims (<span class="count"><%= queue.proposed.length %></span>)</div>
+  <% if (!queue.proposed.length) { %>
+    <div class="empty">Nothing waiting. The linker has been confident about everything it found.</div>
+  <% } else { %>
+    <% queue.proposed.forEach(function(a){ %>
+      <div class="atom">
+        <div class="atom-body">
+          <div class="atom-claim"><strong><%= a.subject_label %></strong> <span class="atom-pred"><%= a.predicate %></span> <%= a.value %></div>
+          <div class="atom-meta">confidence <%= a.confidence.toFixed(2) %> · <%= a.subject_id ? 'linked to an entity' : 'no entity matched' %> · derived by <%= a.derived_by || 'synthesis' %></div>
+        </div>
+        <div class="atom-actions">
+          <form method="post" action="/admin/knowledge/atom/<%= a.id %>/approve"><button class="btn approve" type="submit">Approve</button></form>
+          <form method="post" action="/admin/knowledge/atom/<%= a.id %>/reject"><button class="btn reject" type="submit">Reject</button></form>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+
+  <div class="section-head">Contradictions (<span class="count"><%= queue.contradictions.length %></span>)</div>
+  <% if (!queue.contradictions.length) { %>
+    <div class="empty">No conflicting single-valued facts.</div>
+  <% } else { %>
+    <% queue.contradictions.forEach(function(c){ %>
+      <div class="atom warn">
+        <div class="atom-body">
+          <div class="atom-claim"><strong><%= c.subjectLabel %></strong> has <%= c.values.length %> values for <span class="atom-pred"><%= c.predicate %></span></div>
+          <% c.values.forEach(function(v){ %>
+            <div class="atom-meta">• <%= v.value %> (conf <%= v.confidence.toFixed(2) %>)
+              <form method="post" action="/admin/knowledge/atom/<%= v.id %>/reject" style="display:inline"><button class="btn reject" type="submit">Retire</button></form>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+
+  <div class="section-head">Possible duplicate contacts (<span class="count"><%= queue.duplicateContacts.length %></span>)</div>
+  <% if (!queue.duplicateContacts.length) { %>
+    <div class="empty">No likely duplicates.</div>
+  <% } else { %>
+    <% queue.duplicateContacts.forEach(function(p){ %>
+      <div class="atom warn">
+        <div class="atom-body">
+          <div class="atom-claim"><strong><%= p.a.name %></strong> &nbsp;↔&nbsp; <strong><%= p.b.name %></strong></div>
+          <div class="atom-meta"><%= p.reasons.join(', ') %></div>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+
+  <div class="section-head">Stale claims (<span class="count"><%= queue.stale.length %></span>)</div>
+  <% if (!queue.stale.length) { %>
+    <div class="empty">Nothing stale.</div>
+  <% } else { %>
+    <% queue.stale.forEach(function(a){ %>
+      <div class="atom">
+        <div class="atom-body">
+          <div class="atom-claim"><strong><%= a.subject_label %></strong> <span class="atom-pred"><%= a.predicate %></span> <%= a.value %></div>
+          <div class="atom-meta">not reconfirmed in over a year</div>
+        </div>
+        <div class="atom-actions">
+          <form method="post" action="/admin/knowledge/atom/<%= a.id %>/approve"><button class="btn approve" type="submit">Still true</button></form>
+          <form method="post" action="/admin/knowledge/atom/<%= a.id %>/reject"><button class="btn reject" type="submit">Retire</button></form>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+</div>
+</body>
+</html>

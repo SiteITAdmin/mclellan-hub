@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../lib/db');
+const { captureLinkedInPost, removeKnowledgeBySourceId } = require('../lib/knowledge-format');
 const {
   writeLimiter, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
@@ -95,6 +96,11 @@ router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, wri
     } catch (err) {
       console.warn('[content] could not advance LinkedIn cadence reminder:', err.message);
     }
+    try {
+      captureLinkedInPost(req.hubUser, req.params.id);
+    } catch (err) {
+      console.warn('[content] knowledge capture failed:', err.message);
+    }
     setImmediate(async () => {
       try {
         const post = db.hub().prepare(
@@ -136,6 +142,12 @@ router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, wri
         console.error('[content] wiki write failed:', err.message);
       }
     });
+  } else {
+    try {
+      removeKnowledgeBySourceId({ user: req.hubUser, public: true, sourceId: `linkedin:${req.params.id}` });
+    } catch (err) {
+      console.warn('[content] knowledge removal failed:', err.message);
+    }
   }
 
   res.json({ ok: true });

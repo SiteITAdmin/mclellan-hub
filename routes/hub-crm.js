@@ -16,7 +16,7 @@ const {
 const { readNote, searchNotes, writeNote } = require('../lib/obsidian-vault');
 const { uuid } = require('../lib/id');
 const {
-  writeLimiter, requireAuth, requireSameOrigin,
+  upload, uploadLimiter, writeLimiter, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
 const {
   createTask, createSubtask, updateTask,
@@ -152,6 +152,7 @@ function helpText() {
     '"agenda" shows today\'s calendar, flights, and due reminders',
     '"regs" explains that regulatory monitoring now sends Nakai-only email',
     '"debrief" opens the end-of-day debrief',
+    '"meeting transcript <text>" processes a meeting transcript into CRM outcomes and tasks',
     'Send a photo → extracted and saved to CRM',
   ].join('\n- ');
 }
@@ -445,6 +446,32 @@ Examples:
         }],
       },
     };
+  }
+
+  if (lower.startsWith('meeting transcript ') || lower.startsWith('transcript:')) {
+    const transcript = text.replace(/^meeting transcript\s+/i, '').replace(/^transcript:\s*/i, '').trim();
+    if (transcript.length < 80) return 'Send the full transcript after "meeting transcript", or use the CRM Intake page.';
+    if (spaceName) {
+      setImmediate(async () => {
+        try {
+          const { processMeetingTranscript } = require('../lib/meeting-intake');
+          const result = await processMeetingTranscript(user, { transcript, title: 'Chat meeting transcript' });
+          const hubUrl = (process.env.HUB_BASE_URL || 'https://dchat.mclellan.scot').replace(/\/$/, '');
+          await postToGoogleChatSpace(spaceName, [
+            `Meeting transcript processed: *${result.meetingTitle}*`,
+            `${result.counts.attendees} attendees | ${result.counts.facts} outcomes | ${result.counts.tasks} tasks | ${result.counts.projectDocuments} project notes`,
+            `${hubUrl}/crm/meeting/${result.meetingId}`,
+          ].join('\n'));
+        } catch (err) {
+          console.error('[meeting-intake chat]', err);
+          await postToGoogleChatSpace(spaceName, `Meeting transcript failed: ${err.message}`);
+        }
+      });
+      return 'Got the transcript. I will process it into CRM outcomes, tasks, and project notes.';
+    }
+    const { processMeetingTranscript } = require('../lib/meeting-intake');
+    const result = await processMeetingTranscript(user, { transcript, title: 'Chat meeting transcript' });
+    return `Meeting transcript processed: ${result.counts.attendees} attendees, ${result.counts.facts} outcomes, ${result.counts.tasks} tasks. Open /crm/meeting/${result.meetingId}`;
   }
 
   const result = await processCrmCommand(user, text, 'google-chat');
@@ -860,6 +887,7 @@ function crmPageData(user) {
       { href: '/crm/contacts', label: 'People' },
       { href: '/crm/companies', label: 'Companies' },
       { href: '/crm/meetings', label: 'Meetings' },
+      { href: '/crm/meeting-intake', label: 'Intake' },
       { href: '/crm/tasks', label: 'Tasks' },
       { href: '/crm/reminders', label: 'Reminders' },
       { href: '/crm/projects', label: 'Projects' },
@@ -979,11 +1007,26 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
   const allCompanies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const availableCompanies = allCompanies.filter(c => !linkedCompanyIds.has(c.id));
 
+  // Knowledge layer (L2): claims the synthesis loop compiled about this contact,
+  // grouped by predicate, each carrying its provenance. This is the view reading
+  // from the knowledge substrate rather than only flat crm_facts.
+  const { atomsForEntity } = require('../lib/atoms');
+  const knowledgeByPredicate = {};
+  for (const a of atomsForEntity(req.hubUser, 'contact', contact.id, { includeProposed: true })) {
+    let refs = [];
+    try { refs = JSON.parse(a.source_refs || '[]'); } catch { refs = []; }
+    (knowledgeByPredicate[a.predicate] ||= []).push({
+      value: a.value, confidence: a.confidence, status: a.status,
+      sources: refs.map(r => r.kind),
+    });
+  }
+
   res.render('hub/crm-contact', {
     ...crmPageData(req.hubUser), contact, companies,
     meetings, upcomingMeetings, pastMeetings,
     facts, workedWith, tasks, showHistory,
     linkedProjects, availableProjects, availableCompanies,
+    knowledgeByPredicate,
   });
 });
 
@@ -1171,6 +1214,120 @@ router.post('/crm/meetings/sync-calendar', requireAuth, requireSameOrigin, write
   } catch (err) {
     console.error('[crm calendar sync]', err);
     res.status(500).send(`Calendar sync failed: ${err.message}`);
+  }
+});
+
+router.get('/crm/meeting-intake', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const meetings = hub.prepare(`
+    SELECT m.id, m.title, m.meeting_date, m.meeting_time, co.name AS company_name
+    FROM meetings m
+    LEFT JOIN companies co ON co.id = m.company_id
+    WHERE m.user = ?
+    ORDER BY m.meeting_date DESC, m.meeting_time DESC
+    LIMIT 80
+  `).all(req.hubUser);
+  const projects = hub.prepare('SELECT slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  const recent = hub.prepare(`
+    SELECT mi.*, m.title AS meeting_title
+    FROM meeting_intakes mi
+    LEFT JOIN meetings m ON m.id = mi.meeting_id
+    WHERE mi.user = ?
+    ORDER BY mi.created_at DESC
+    LIMIT 12
+  `).all(req.hubUser);
+  res.render('hub/crm-meeting-intake', {
+    ...crmPageData(req.hubUser), meetings, projects, recent, query: req.query,
+  });
+});
+
+router.post('/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter, upload.single('transcript_file'), async (req, res) => {
+  const transcript = req.file
+    ? req.file.buffer.toString('utf8')
+    : String(req.body.transcript || '');
+  if (!transcript.trim()) return res.status(400).send('Transcript required');
+  const hub = db.hub();
+  const intakeId = uuid();
+  const title = String(req.body.title || '').trim() || 'Meeting transcript';
+  const projectSlug = String(req.body.project_slug || '').trim() || null;
+  const sourceFilename = req.file?.originalname || '';
+  hub.prepare(`
+    INSERT INTO meeting_intakes
+      (id, user, meeting_id, project_slug, title, source_filename, transcript, status, created_counts)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'processing', '{}')
+  `).run(
+    intakeId, req.hubUser, String(req.body.meeting_id || '').trim() || null,
+    projectSlug, title, sourceFilename || null, transcript, 
+  );
+
+  setImmediate(async () => {
+    try {
+      const { processMeetingTranscript } = require('../lib/meeting-intake');
+      const result = await processMeetingTranscript(req.hubUser, {
+        intakeId,
+        transcript,
+        title: req.body.title,
+        meetingDate: req.body.meeting_date,
+        meetingId: req.body.meeting_id,
+        projectSlug: req.body.project_slug,
+        sourceFilename,
+      });
+      console.log(`[meeting-intake] processed ${intakeId}: meeting=${result.meetingId} facts=${result.counts.facts} tasks=${result.counts.tasks}`);
+    } catch (err) {
+      console.error('[meeting-intake async]', err);
+      try {
+        db.hub().prepare(`
+          UPDATE meeting_intakes
+          SET status = 'error', error = ?, created_counts = COALESCE(NULLIF(created_counts, ''), '{}')
+          WHERE id = ? AND user = ?
+        `).run(err.message, intakeId, req.hubUser);
+      } catch (_) {}
+    }
+  });
+
+  const params = new URLSearchParams({ queued: intakeId });
+  res.redirect(`/crm/meeting-intake?${params.toString()}`);
+});
+
+router.post('/api/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter, upload.single('transcript_file'), async (req, res) => {
+  const transcript = req.file
+    ? req.file.buffer.toString('utf8')
+    : String(req.body.transcript || '');
+  if (!transcript.trim()) return res.status(400).json({ error: 'Transcript required' });
+  try {
+    const { processMeetingTranscript } = require('../lib/meeting-intake');
+    const result = await processMeetingTranscript(req.hubUser, {
+      transcript,
+      title: req.body.title,
+      meetingDate: req.body.meeting_date,
+      meetingId: req.body.meeting_id,
+      projectSlug: req.body.project_slug,
+      sourceFilename: req.file?.originalname || '',
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[meeting-intake]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/crm/meeting-intake/:id/delete', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { deleteMeetingIntake } = require('../lib/meeting-intake');
+    const result = await deleteMeetingIntake(req.hubUser, req.params.id);
+    if (!result.ok) return res.status(404).send(result.error || 'Intake not found');
+    const counts = result.deleted || {};
+    const params = new URLSearchParams({
+      deleted: req.params.id,
+      meetings: String(counts.meeting || 0),
+      facts: String(counts.facts || 0),
+      tasks: String(counts.tasks || 0),
+      docs: String(counts.documents || 0),
+    });
+    res.redirect(`/crm/meeting-intake?${params.toString()}`);
+  } catch (err) {
+    console.error('[meeting-intake delete]', err);
+    res.status(500).send(`Delete failed: ${err.message}`);
   }
 });
 
@@ -1832,12 +1989,24 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
     'SELECT id, filename, size_bytes, uploaded_at FROM documents WHERE project_id = ? ORDER BY uploaded_at DESC'
   ).all(project.id);
 
+  // Knowledge layer (L2): claims compiled about this project.
+  const { atomsForEntity: atomsForProject } = require('../lib/atoms');
+  const knowledgeByPredicate = {};
+  for (const a of atomsForProject(req.hubUser, 'project', project.id, { includeProposed: true })) {
+    let refs = [];
+    try { refs = JSON.parse(a.source_refs || '[]'); } catch { refs = []; }
+    (knowledgeByPredicate[a.predicate] ||= []).push({
+      value: a.value, confidence: a.confidence, status: a.status,
+      sources: refs.map(r => r.kind),
+    });
+  }
+
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),
     project, tasks, contacts, directContactIds: [...directContactIds],
     availableContacts, linkedCompanies, linkedCompanyIds: [...linkedCompanyIds],
     availableCompanies, recentEmails, projectFacts, recentMessages, showHistory, todayIsoStr,
-    projectDocs,
+    projectDocs, knowledgeByPredicate,
   });
 });
 

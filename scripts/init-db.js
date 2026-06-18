@@ -80,6 +80,26 @@ hub.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
   CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user);
+
+  CREATE TABLE IF NOT EXISTS meeting_intakes (
+    id TEXT PRIMARY KEY,
+    user TEXT NOT NULL,
+    meeting_id TEXT,
+    project_slug TEXT,
+    title TEXT NOT NULL DEFAULT '',
+    source_filename TEXT,
+    transcript TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    extraction TEXT NOT NULL DEFAULT '{}',
+    created_counts TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'processed',
+    error TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+  CREATE INDEX IF NOT EXISTS idx_meeting_intakes_user
+    ON meeting_intakes(user, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_meeting_intakes_meeting
+    ON meeting_intakes(meeting_id, created_at DESC);
 `);
 
 // Seed known projects for Douglas

@@ -6,6 +6,7 @@ const { scanCvContextCandidates } = require('../lib/cvCandidates');
 const { routeMessage } = require('../lib/router');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { createRateLimiter, requireSameOrigin } = require('../lib/security');
+const { capturePortfolioAbout } = require('../lib/knowledge-format');
 
 function requireAdmin(req, res, next) {
   if (req.session?.adminUser === req.portfolioUser) return next();
@@ -20,6 +21,14 @@ function getAdminReturnTo(req, fallback = '/admin') {
 function getPortfolioDisplayName(user) {
   const names = { douglas: 'Douglas', nakai: 'Nakai' };
   return names[user] || user;
+}
+
+function refreshPortfolioKnowledge(user) {
+  try {
+    capturePortfolioAbout(user);
+  } catch (err) {
+    console.warn(`[knowledge] portfolio capture failed for ${user}:`, err.message);
+  }
 }
 
 function rowsToCvObject(rows) {
@@ -198,6 +207,7 @@ router.post('/admin/profile', requireAdmin, (req, res) => {
   });
   const sets = fields.map(f => `${f} = ?`).join(', ');
   pdb.prepare(`UPDATE profile SET ${sets}, updated_at = unixepoch() WHERE id = 1`).run(...values);
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin#profile');
 });
 
@@ -213,6 +223,7 @@ router.post('/admin/skills/:id', requireAdmin, (req, res) => {
     parseInt(self_rating, 10) || null, evidence || null, honest_notes || null,
     parseInt(years_experience, 10) || null, last_used || null, req.params.id
   );
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin#skills');
 });
 
@@ -345,6 +356,7 @@ router.post('/admin/cv', requireAdmin, (req, res) => {
     INSERT INTO cv_context (id, section, content) VALUES (?, ?, ?)
     ON CONFLICT(section) DO UPDATE SET content = excluded.content, updated_at = unixepoch()
   `).run(uuid(), section.trim(), content || '');
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin');
 });
 
@@ -393,6 +405,7 @@ router.post('/admin/cv/summary-draft/save', requireAdmin, (req, res) => {
       INSERT INTO cv_context (id, section, content) VALUES (?, 'summary', ?)
       ON CONFLICT(section) DO UPDATE SET content = excluded.content, updated_at = unixepoch()
     `).run(uuid(), content);
+    refreshPortfolioKnowledge(req.portfolioUser);
   }
   req.session.summaryDraft = null;
   res.redirect('/admin#cv');
@@ -405,6 +418,7 @@ router.post('/admin/cv/summary-draft/discard', requireAdmin, (req, res) => {
 
 router.post('/admin/cv/:section/delete', requireAdmin, (req, res) => {
   db.portfolio(req.portfolioUser).prepare('DELETE FROM cv_context WHERE section = ?').run(req.params.section);
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin');
 });
 
@@ -420,6 +434,7 @@ router.post('/admin/experiences', requireAdmin, (req, res) => {
   pdb.prepare(
     'INSERT INTO experiences (id, company, role, start_date, end_date, description, is_cv_context, display_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(uuid(), company, role, start_date, end_date, description, is_cv_context ? 1 : 0, display_order || 0);
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin');
 });
 
@@ -432,11 +447,13 @@ router.post('/admin/experiences/:id', requireAdmin, (req, res) => {
     pdb.prepare(
       'UPDATE experiences SET description=?, is_cv_context=?, display_order=? WHERE id=?'
     ).run(description || null, is_cv_context ? 1 : 0, parseInt(display_order, 10) || 0, req.params.id);
+    refreshPortfolioKnowledge(req.portfolioUser);
     return res.redirect('/admin#experience');
   }
   pdb.prepare(
     'UPDATE experiences SET company=?, role=?, start_date=?, end_date=?, description=?, is_cv_context=?, display_order=? WHERE id=?'
   ).run(company, role, start_date, end_date, description, is_cv_context ? 1 : 0, display_order || 0, req.params.id);
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin');
 });
 
@@ -445,6 +462,7 @@ router.post('/admin/experiences/:id/delete', requireAdmin, (req, res) => {
     return res.status(409).send('Douglas verified employment records cannot be deleted.');
   }
   db.portfolio(req.portfolioUser).prepare('DELETE FROM experiences WHERE id = ?').run(req.params.id);
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin');
 });
 
@@ -455,11 +473,13 @@ router.post('/admin/skills', requireAdmin, (req, res) => {
   pdb.prepare(
     'INSERT INTO skills (id, name, level, category, display_order) VALUES (?, ?, ?, ?, ?)'
   ).run(uuid(), name, level, category, display_order || 0);
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin');
 });
 
 router.post('/admin/skills/:id/delete', requireAdmin, (req, res) => {
   db.portfolio(req.portfolioUser).prepare('DELETE FROM skills WHERE id = ?').run(req.params.id);
+  refreshPortfolioKnowledge(req.portfolioUser);
   res.redirect('/admin');
 });
 

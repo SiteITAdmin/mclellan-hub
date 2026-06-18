@@ -518,6 +518,27 @@ ${items.map(item => `    <item>
 // ── llms.txt ─────────────────────────────────────────────────────────────────
 
 router.get('/llms.txt', (req, res) => {
+  if (req.portfolioUser === 'nakai') {
+    const lines = [
+      '# Nakai McLellan',
+      '',
+      '> Internal audit, fintech risk, financial-services controls, and regulatory intelligence profile.',
+      '',
+      '## About',
+      '',
+      '- Focus: internal audit, fintech, payments, financial crime, risk, and regulatory intelligence',
+      '- Domain context: regulated financial services, EU/UK/Ireland fintech operations, payments and BNPL control environments',
+      '- Contact: https://nakai.mclellan.scot',
+      '',
+      '## Machine-Readable Knowledge',
+      '',
+      '- OKF-style bundle index: https://nakai.mclellan.scot/knowledge/nakai/index.md',
+      '- About Nakai: https://nakai.mclellan.scot/knowledge/nakai/about/me.md',
+      '- Public expertise signals from private daily briefing practice are linked from the bundle index. The private briefing content is not published.',
+    ];
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.send(lines.join('\n'));
+  }
   if (req.portfolioUser !== 'douglas') return res.status(404).end();
   const hub = db.hub();
 
@@ -548,6 +569,12 @@ router.get('/llms.txt', (req, res) => {
     '- Focus: Microsoft 365 administration, AI governance, EU AI Act compliance, Zero Trust identity',
     '- Location: Ireland',
     '- Contact: https://douglas.mclellan.scot',
+    '',
+    '## Machine-Readable Knowledge',
+    '',
+    '- OKF-style bundle index: https://douglas.mclellan.scot/knowledge/douglas/index.md',
+    '- About Douglas: https://douglas.mclellan.scot/knowledge/douglas/about/me.md',
+    '- Published LinkedIn analysis and briefings are linked from the bundle index as they are published.',
     '',
     '## Intelligence Briefings',
     '',
