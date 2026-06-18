@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= pack.title %> — Agent Pack</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body { min-height:100vh; overflow:auto; background:var(--bg-page,#f4f3fb); color:var(--text,#15131e); }
+.wrap { max-width:980px; margin:0 auto; padding:28px 16px 80px; }
+.back { color:var(--text-dim,#767586); text-decoration:none; font-size:13px; }
+h1 { margin:10px 0 6px; font-size:26px; letter-spacing:-.02em; }
+.sub { color:var(--text-dim,#767586); font-size:13px; line-height:1.55; margin:0; }
+.card { background:var(--bg,#fff); border:1px solid var(--border,#e0ddf0); border-radius:15px; padding:20px; margin-top:16px; }
+.row { display:flex; gap:8px; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+.btn { border:1px solid var(--border,#e0ddf0); background:transparent; color:var(--text,#15131e); border-radius:9px; padding:8px 13px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; }
+.btn.primary { background:var(--primary,#4648d4); color:#fff; border-color:var(--primary,#4648d4); }
+pre { white-space:pre-wrap; font-family:inherit; font-size:13px; line-height:1.65; background:var(--surface,#faf9fb); border:1px solid var(--border,#e0ddf0); border-radius:12px; padding:16px; overflow:auto; }
+.meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; margin-top:14px; }
+.pill { border:1px solid var(--border,#e0ddf0); border-radius:10px; padding:9px 11px; background:var(--surface,#faf9fb); font-size:12px; }
+.pill strong { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--text-dim,#767586); margin-bottom:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">← Prompt Library</a>
+  <h1><%= pack.title %></h1>
+  <p class="sub">Saved audit agent orchestration pack for <%= user %>.</p>
+
+  <div class="card">
+    <div class="row">
+      <strong>Pack Details</strong>
+      <button class="btn primary" type="button" onclick="copyPack()">Copy full pack</button>
+    </div>
+    <div class="meta">
+      <div class="pill"><strong>Stage</strong><%= pack.stage %></div>
+      <div class="pill"><strong>Audit</strong><%= input.audit_name || 'Not specified' %></div>
+      <div class="pill"><strong>Business area</strong><%= input.business_area || 'Not specified' %></div>
+      <div class="pill"><strong>Created</strong><%= new Date(pack.created_at * 1000).toLocaleString('en-GB') %></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <strong>Agent Pack Markdown</strong>
+    <pre id="pack-text"><%= pack.pack_markdown %></pre>
+  </div>
+</div>
+<script>
+async function copyPack() {
+  await navigator.clipboard.writeText(document.getElementById('pack-text').textContent);
+}
+</script>
+</body>
+</html>

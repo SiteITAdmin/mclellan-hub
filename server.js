@@ -9,6 +9,7 @@ const hubAdminRouter = require('./routes/hub-admin');
 const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
+const promptRouter = require('./routes/prompt');
 const { sendDailyBriefing, sendEmailBriefing, syncCalendarMeetings } = require('./lib/crm');
 const { runRegulatoryMonitor } = require('./lib/regulatory-monitor');
 const { sendWeeklyDigest } = require('./lib/weekly-digest');
@@ -83,6 +84,10 @@ app.use((req, res, next) => {
     return wikiRouter(req, res, next);
   }
 
+  if (host === 'prompt.mclellan.scot') {
+    return promptRouter(req, res, next);
+  }
+
   if (host === 'dchat.mclellan.scot' || host === 'nchat.mclellan.scot') {
     req.hubUser = host.startsWith('d') ? 'douglas' : 'nakai';
 if (req.path.startsWith('/admin') || req.path.startsWith('/mcp')) {
@@ -106,6 +111,9 @@ if (req.path.startsWith('/admin') || req.path.startsWith('/mcp')) {
       return hubAdminRouter(req, res, next);
     }
     return hubRouter(req, res, next);
+  }
+  if (allowDevQueryRouting && req.query.prompt) {
+    return promptRouter(req, res, next);
   }
   if (allowDevQueryRouting && req.query.portfolio) {
     req.portfolioUser = req.query.portfolio;

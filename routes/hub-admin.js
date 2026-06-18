@@ -620,8 +620,10 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'crm_parser',       scope: 'system', label: 'CRM intent parser',   note: 'Runs when you save a CRM note.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'email_classifier', scope: 'system', label: 'Email classifier',    note: 'Runs on Gmail ingestion.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'agentmail_extractor', scope: 'system', label: 'AgentMail extractor', note: 'Extracts people, facts and multiple actions from AgentMail messages.', fallback: 'google/gemini-3.1-pro-preview' },
+    { feature: 'task_extractor',  scope: 'system', label: 'Task extractor',      note: 'Extracts follow-up tasks from documents and learns from rejected task suggestions.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'reg_synopsis',     scope: 'system', label: 'Regulatory synopsis', note: 'Writes 2-sentence summaries of regulatory publications.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'prompt_improver',  scope: 'system', label: 'Prompt improver',     note: 'Rewrites prompts in the admin test panel.', fallback: 'google/gemini-2.5-flash-lite' },
+    { feature: 'prompt_adapter',   scope: 'system', label: 'Prompt adapter',      note: 'Builds structured reusable prompts from rough prompts and saved examples.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
   ]},
   { id: 'debrief', label: 'Debrief', slots: [
@@ -1115,7 +1117,7 @@ Return ONLY the improved prompt. No explanation, no preamble, no commentary. Jus
 router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
   const { question } = req.body;
   if (!question?.trim()) return res.json({ ok: false, error: 'No prompt provided' });
-  const orHeaders = openRouterHeaders(TASK_CODES.TESTBENCH);
+  const orHeaders = openRouterHeaders(TASK_CODES.PROMPT_QUICK_IMPROVER);
   try {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -1136,7 +1138,7 @@ router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
       modelKey: 'prompt_improver',
       fallbackModelId: getSystemModelId('prompt_improver', 'system', IMPROVE_PROMPT_FALLBACK),
       data,
-      taskCode: TASK_CODES.TESTBENCH,
+      taskCode: TASK_CODES.PROMPT_QUICK_IMPROVER,
     });
     const improved = data.choices?.[0]?.message?.content?.trim();
     if (!improved) return res.json({ ok: false, error: data.error?.message || 'Model returned no content' });
