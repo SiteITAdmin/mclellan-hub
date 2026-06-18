@@ -145,6 +145,12 @@ function helpText() {
     '"remind me to X at/in Y" sets an escalating reminder',
     '"reminders" lists open reminders; reply "done 3", "snooze 3 2h", or "ok 3"',
     '"suggestions" lists AI suggestions; reply "accept 2", "dismiss 2", or "why 2"',
+    '"who is Tom" looks up a contact',
+    '"flights" shows upcoming flights',
+    '"agenda" shows today\'s calendar, flights, and due reminders',
+    '"regs" shows regulatory updates from the past week',
+    '"debrief" opens the end-of-day debrief',
+    'Send a photo → extracted and saved to CRM',
   ].join('\n- ');
 }
 
@@ -282,6 +288,102 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
     return sourceUrl
       ? `Working on a LinkedIn post about *${topic}* — anchoring research to your source article. I'll post the result here when ready (~30 seconds).`
       : `Working on a LinkedIn post about *${topic}*. I'll post the result here when ready (~30 seconds).`;
+  }
+
+  // ── Conversational queries ─────────────────────────────────────────────────
+
+  const whoMatch = lower.match(/^who(?:'s| is)\s+(.+?)[\?.]?\s*$/);
+  if (whoMatch) {
+    const query = whoMatch[1].trim();
+    const results = listContacts(user, query);
+    if (!results.length) return `No contact found matching "${query}".`;
+    const c = results[0];
+    const company = c.company_name
+      ? `${c.company_name}${c.company_role ? `, ${c.company_role}` : ''}`
+      : null;
+    const lines = [`*${c.name}*${company ? ` — ${company}` : ''}`];
+    if (c.email) lines.push(`📧 ${c.email}`);
+    const topFacts = (c.facts || []).slice(0, 5);
+    if (topFacts.length) lines.push('', ...topFacts.map(f => `• ${f.fact}`));
+    if (results.length > 1) lines.push(`\n_Also: ${results.slice(1, 4).map(r => r.name).join(', ')}_`);
+    return lines.join('\n');
+  }
+
+  if (/^(?:my\s+)?flights?[\?]?$/.test(lower) || lower === 'next flight') {
+    const upcoming = db.hub().prepare(`
+      SELECT * FROM flights
+      WHERE user = ? AND flight_date >= ?
+      ORDER BY flight_date ASC, scheduled_dep ASC
+      LIMIT 10
+    `).all(user, todayIso());
+    if (!upcoming.length) return 'No upcoming flights logged.';
+    const lines = upcoming.map(f => {
+      const dep = f.scheduled_dep ? f.scheduled_dep.slice(0, 5) : '?';
+      const arr = f.scheduled_arr ? f.scheduled_arr.slice(0, 5) : '?';
+      const badge = f.status !== 'scheduled' ? ` _(${f.status})_` : '';
+      return `✈ *${f.flight_date}* ${f.flight_number} ${f.direction} ${dep}→${arr}${badge}`;
+    });
+    return `*Upcoming flights:*\n${lines.join('\n')}`;
+  }
+
+  if (lower === 'agenda' || lower === 'whats on' || lower === "what's on") {
+    const [events, { listOpenReminders: lor }] = await Promise.all([
+      fetchTodayCalendarEvents(user),
+      Promise.resolve(require('../lib/reminders')),
+    ]);
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const dueToday = lor(user).filter(r => r.next_fire_at && r.next_fire_at <= nowSecs + 24 * 3600);
+    const todayFlights = db.hub().prepare(
+      'SELECT * FROM flights WHERE user = ? AND flight_date = ? ORDER BY scheduled_dep ASC'
+    ).all(user, todayIso());
+    const parts = [];
+    if (events.length) {
+      parts.push(`*Calendar today:*\n${events.map(e => `• ${e.summary}${e.time ? ' ' + e.time : ''}`).join('\n')}`);
+    }
+    if (todayFlights.length) {
+      parts.push(`*Flights today:*\n${todayFlights.map(f => `✈ ${f.flight_number} ${f.direction}${f.scheduled_dep ? ' ' + f.scheduled_dep.slice(0, 5) : ''}`).join('\n')}`);
+    }
+    if (dueToday.length) {
+      parts.push(`*Due today:*\n${dueToday.map(r => `• #${r.short_code} ${r.title}`).join('\n')}`);
+    }
+    return parts.length ? parts.join('\n\n') : 'Nothing on today.';
+  }
+
+  if (lower === 'regs' || lower === 'regulatory') {
+    const items = db.hub().prepare(`
+      SELECT * FROM reg_monitor_items
+      WHERE found_at > unixepoch() - 7 * 86400
+      ORDER BY found_at DESC LIMIT 10
+    `).all();
+    if (!items.length) return 'No new regulatory items in the past week. Type "regs" again next week.';
+    const lines = items.map(i =>
+      `• *[${i.site}]* ${i.title}${i.synopsis ? '\n  ' + i.synopsis.slice(0, 150) : ''}`
+    );
+    return `*Regulatory updates (7 days):*\n\n${lines.join('\n\n')}`;
+  }
+
+  if (lower === 'debrief') {
+    const hubUrl = (process.env.HUB_BASE_URL || 'https://dchat.mclellan.scot').replace(/\/$/, '');
+    return {
+      text: 'Ready when you are.',
+      card: {
+        cardsV2: [{
+          cardId: 'debrief',
+          card: {
+            header: { title: '🎙 End-of-day debrief', subtitle: 'Voice interview — tap to start' },
+            sections: [{
+              widgets: [{
+                buttonList: {
+                  buttons: [
+                    { text: 'Start debrief →', onClick: { openLink: { url: `${hubUrl}/debrief` } } },
+                  ],
+                },
+              }],
+            }],
+          },
+        }],
+      },
+    };
   }
 
   const result = await processCrmCommand(user, text, 'google-chat');
@@ -438,6 +540,53 @@ router.post('/api/google-chat/hermes', writeLimiter, async (req, res) => {
       const reply = await handleGoogleChatCommand(user, actionText, { spaceName });
       console.log(`[google-chat] card click action="${actionText}"`);
       return res.json(googleChatReply(req, reply));
+    }
+
+    // Image/photo attachments — download and extract CRM info via vision model.
+    // Fires async so Google Chat gets an immediate ack; result posts back into the space.
+    const attachments = message.attachment || [];
+    const imageAtt = attachments.find(a => String(a.contentType || '').startsWith('image/'));
+    if (imageAtt) {
+      const resourceName = imageAtt.attachmentDataRef?.resourceName || imageAtt.name;
+      if (resourceName && spaceName) {
+        setImmediate(async () => {
+          try {
+            const { downloadChatAttachment } = require('../lib/google-chat');
+            const b64 = await downloadChatAttachment(resourceName);
+            if (!b64) {
+              await postToGoogleChatSpace(spaceName, '⚠️ Could not download the image — try sharing it from Drive instead.');
+              return;
+            }
+            const orKey = process.env.OPENROUTER_API_KEY;
+            if (!orKey) { await postToGoogleChatSpace(spaceName, '⚠️ OPENROUTER_API_KEY not set.'); return; }
+            const mimeType = imageAtt.contentType || 'image/jpeg';
+            const visionResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${orKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://dchat.mclellan.scot' },
+              body: JSON.stringify({
+                model: 'google/gemini-2.5-flash',
+                messages: [{
+                  role: 'user',
+                  content: [
+                    { type: 'image_url', image_url: { url: `data:${mimeType};base64,${b64}` } },
+                    { type: 'text', text: 'Extract all CRM-useful information from this image: names, roles, companies, contact details, topics, any visible text. Write a concise paragraph as if dictating a CRM note — no preamble.' },
+                  ],
+                }],
+              }),
+            });
+            if (!visionResp.ok) throw new Error(`Vision model ${visionResp.status}`);
+            const visionData = await visionResp.json();
+            const extracted = visionData.choices?.[0]?.message?.content?.trim();
+            if (!extracted) { await postToGoogleChatSpace(spaceName, '⚠️ Could not extract anything from the image.'); return; }
+            const crmResult = await processCrmCommand(user, extracted, 'google-chat');
+            await postToGoogleChatSpace(spaceName, `📷 Image saved to CRM:\n\n${extracted}\n\n${crmResult.ok ? '✅ Saved.' : '⚠️ ' + crmResult.message}`);
+          } catch (err) {
+            console.error('[google-chat] image processing:', err.message);
+            await postToGoogleChatSpace(spaceName, `❌ Image processing failed: ${err.message}`);
+          }
+        });
+        return res.json(googleChatReply(req, '📷 Got your image — extracting details and saving to CRM…'));
+      }
     }
 
     const text = cleanGoogleChatText(message.argumentText || message.text || '');
