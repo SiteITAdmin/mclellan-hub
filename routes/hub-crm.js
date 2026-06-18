@@ -23,6 +23,8 @@ const {
   syncTasks, completeTask, deleteTask, deleteTaskEverywhere, restoreTask,
   getTask, getCachedTasks,
 } = require('../lib/google-tasks');
+const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
+const { logUsageFromResponse } = require('../lib/openrouter-usage');
 
 const googleChatClient = new OAuth2Client();
 const GOOGLE_CHAT_ADDON_EMAIL_RE = /^service-\d+@gcp-sa-gsuiteaddons\.iam\.gserviceaccount\.com$/;
@@ -148,7 +150,7 @@ function helpText() {
     '"who is Tom" looks up a contact',
     '"flights" shows upcoming flights',
     '"agenda" shows today\'s calendar, flights, and due reminders',
-    '"regs" shows regulatory updates from the past week',
+    '"regs" explains that regulatory monitoring now sends Nakai-only email',
     '"debrief" opens the end-of-day debrief',
     'Send a photo → extracted and saved to CRM',
   ].join('\n- ');
@@ -350,16 +352,7 @@ async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
   }
 
   if (lower === 'regs' || lower === 'regulatory') {
-    const items = db.hub().prepare(`
-      SELECT * FROM reg_monitor_items
-      WHERE found_at > unixepoch() - 7 * 86400
-      ORDER BY found_at DESC LIMIT 10
-    `).all();
-    if (!items.length) return 'No new regulatory items in the past week. Type "regs" again next week.';
-    const lines = items.map(i =>
-      `• *[${i.site}]* ${i.title}${i.synopsis ? '\n  ' + i.synopsis.slice(0, 150) : ''}`
-    );
-    return `*Regulatory updates (7 days):*\n\n${lines.join('\n\n')}`;
+    return 'Regulatory monitoring is configured as a Nakai-only email digest. It no longer posts regulatory updates into Chat or the Hub.';
   }
 
   if (lower === 'debrief') {
@@ -560,32 +553,112 @@ router.post('/api/google-chat/hermes', writeLimiter, async (req, res) => {
             const orKey = process.env.OPENROUTER_API_KEY;
             if (!orKey) { await postToGoogleChatSpace(spaceName, '⚠️ OPENROUTER_API_KEY not set.'); return; }
             const mimeType = imageAtt.contentType || 'image/jpeg';
+            const nowIso = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Dublin' }).replace(' ', 'T');
+
+            // Single vision + structure call: extract and decide what to do in one pass
+            const started = Date.now();
             const visionResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
               method: 'POST',
-              headers: { Authorization: `Bearer ${orKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://dchat.mclellan.scot' },
+              headers: openRouterHeaders(TASK_CODES.HERMES_IMAGE_VISION),
               body: JSON.stringify({
                 model: 'google/gemini-2.5-flash',
+                response_format: { type: 'json_object' },
                 messages: [{
                   role: 'user',
                   content: [
                     { type: 'image_url', image_url: { url: `data:${mimeType};base64,${b64}` } },
-                    { type: 'text', text: 'Extract all CRM-useful information from this image: names, roles, companies, contact details, topics, any visible text. Write a concise paragraph as if dictating a CRM note — no preamble.' },
+                    { type: 'text', text: `Now is ${nowIso} (Europe/Dublin). Analyse this image for a personal knowledge management system. Extract ALL useful information — names, dates, medication, test results, tasks, any visible text.
+
+Return JSON:
+{
+  "summary": "one-sentence summary of what this image shows",
+  "contact_name": "full name of the primary person this relates to, or null",
+  "crm_note": "complete CRM note to save — write naturally including the person's name if known, all facts, any context",
+  "action_items": [{"title": "specific action to take", "due_iso": "ISO 8601 datetime if a date/time is visible or implied, else null"}],
+  "obsidian_note": "markdown paragraph to log in today's daily note capturing what was seen and why it matters, or null if nothing journal-worthy"
+}
+
+Be thorough. If you see a prescription, extract drug names, dosages, instructions. If a letter, extract sender, date, key points, any deadlines. If a whiteboard or handwritten note, transcribe it. If a business card, extract everything.` },
                   ],
                 }],
               }),
             });
-            if (!visionResp.ok) throw new Error(`Vision model ${visionResp.status}`);
+            if (!visionResp.ok) throw new Error(`Vision model ${visionResp.status}: ${await visionResp.text()}`);
             const visionData = await visionResp.json();
-            const extracted = visionData.choices?.[0]?.message?.content?.trim();
-            if (!extracted) { await postToGoogleChatSpace(spaceName, '⚠️ Could not extract anything from the image.'); return; }
-            const crmResult = await processCrmCommand(user, extracted, 'google-chat');
-            await postToGoogleChatSpace(spaceName, `📷 Image saved to CRM:\n\n${extracted}\n\n${crmResult.ok ? '✅ Saved.' : '⚠️ ' + crmResult.message}`);
+            logUsageFromResponse({
+              user, feature: 'hermes-image-vision', modelKey: 'hermes_image_vision',
+              fallbackModelId: 'google/gemini-2.5-flash', data: visionData,
+              durationMs: Date.now() - started, taskCode: TASK_CODES.HERMES_IMAGE_VISION,
+            });
+
+            const raw = visionData.choices?.[0]?.message?.content?.trim() || '';
+            const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+            let parsed;
+            try { parsed = JSON.parse(cleaned); } catch { parsed = null; }
+            if (!parsed) { await postToGoogleChatSpace(spaceName, '⚠️ Could not parse image content.'); return; }
+
+            const { summary, contact_name, crm_note, action_items = [], obsidian_note } = parsed;
+            const lines = [`📷 *${summary || 'Image captured'}*`];
+
+            // ── Contact resolution ───────────────────────────────────────────
+            let resolvedContact = null;
+            if (contact_name) {
+              const matches = listContacts(user, contact_name);
+              resolvedContact = matches[0] || null;
+              lines.push(resolvedContact
+                ? `Links to: *${resolvedContact.name}*`
+                : `Person mentioned: ${contact_name} _(not in CRM yet)_`);
+            }
+
+            // ── CRM note ─────────────────────────────────────────────────────
+            if (crm_note) {
+              const crmResult = await processCrmCommand(user, crm_note, 'google-chat');
+              lines.push(crmResult.ok ? '✅ CRM note saved' : `⚠️ CRM: ${crmResult.message}`);
+            }
+
+            // ── Action items → reminders ──────────────────────────────────────
+            if (action_items.length) {
+              const { createReminder, dublinIsoToEpoch, epochAtNextDublin } = require('../lib/reminders');
+              const nowSecs = Math.floor(Date.now() / 1000);
+              for (const item of action_items) {
+                const remindAt = item.due_iso
+                  ? (dublinIsoToEpoch(item.due_iso) || epochAtNextDublin(9, 0))
+                  : epochAtNextDublin(9, 0); // default: next 09:00
+                const r = createReminder(user, {
+                  title: item.title,
+                  remindAt: Math.max(remindAt, nowSecs + 60),
+                  source: 'photo',
+                  kind: resolvedContact ? 'fact' : 'adhoc',
+                  targetId: resolvedContact ? resolvedContact.id : null,
+                });
+                const when = new Date(Math.max(remindAt, nowSecs + 60) * 1000).toLocaleString('en-GB', {
+                  weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin',
+                });
+                lines.push(r ? `✅ Reminder: "${item.title}" — ${when}` : `⚠️ Could not create reminder: "${item.title}"`);
+              }
+            }
+
+            // ── Obsidian daily note ───────────────────────────────────────────
+            if (obsidian_note) {
+              try {
+                writeNote({
+                  notePath: `Daily/${todayIso()}.md`,
+                  mode: 'append',
+                  content: `\n## 📷 ${summary || 'Photo capture'}\n${obsidian_note}\n`,
+                });
+                lines.push('✅ Added to today\'s daily note');
+              } catch (e) {
+                lines.push(`⚠️ Obsidian append failed: ${e.message}`);
+              }
+            }
+
+            await postToGoogleChatSpace(spaceName, lines.join('\n'));
           } catch (err) {
             console.error('[google-chat] image processing:', err.message);
             await postToGoogleChatSpace(spaceName, `❌ Image processing failed: ${err.message}`);
           }
         });
-        return res.json(googleChatReply(req, '📷 Got your image — extracting details and saving to CRM…'));
+        return res.json(googleChatReply(req, '📷 Got your image — extracting and routing to CRM, reminders, and Obsidian…'));
       }
     }
 
