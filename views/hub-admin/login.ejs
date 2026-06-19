@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+<% const displayUser = { douglas: 'Douglas', nakai: 'Nakai' }[user] || (user ? user.charAt(0).toUpperCase() + user.slice(1) : ''); %>
 <head>
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chat Admin — <%= user %></title>
+<title>Chat Admin — <%= displayUser %></title>
 <link rel="stylesheet" href="/portfolio.css">
 </head>
 <body class="login-page">
 <div class="login-box">
   <h1>Chat Admin</h1>
-  <p class="sub"><%= user %></p>
+  <p class="sub"><%= displayUser %></p>
   <% if (error) { %><p class="error"><%= error %></p><% } %>
   <a class="login-google-btn" href="/admin/auth/google">Sign in with Google Workspace</a>
 </div>
