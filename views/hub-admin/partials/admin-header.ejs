@@ -1,7 +1,14 @@
 <%- include('../../hub/partials/top-nav') %>
+<%
+  const displayUser = { douglas: 'Douglas', nakai: 'Nakai' }[locals.user] || (locals.user ? String(locals.user).charAt(0).toUpperCase() + String(locals.user).slice(1) : '');
+  const displayTitle = String(title || 'Admin').replace(/—\s*douglas\b/ig, `— ${displayUser}`).replace(/—\s*nakai\b/ig, `— ${displayUser}`);
+%>
 <header class="admin-header">
-  <h1><%- title %></h1>
-  <nav class="admin-nav" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+  <div class="admin-title-block">
+    <p class="admin-kicker">Admin</p>
+    <h1><%- displayTitle %></h1>
+  </div>
+  <nav class="admin-nav">
     <a href="/admin">Projects</a>
     <a href="/admin/crm">CRM</a>
     <a href="/admin/models">Models &amp; prompts</a>
@@ -28,6 +35,6 @@
       const matches = href === '/admin' ? path === '/admin' : path === href || path.startsWith(href + '/');
       if (matches && (!best || href.length > best.getAttribute('href').length)) best = link;
     }
-    if (best) best.style.fontWeight = '700';
+    if (best) best.classList.add('active');
   })();
 </script>
