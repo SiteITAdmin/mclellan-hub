@@ -64,7 +64,7 @@
   }
   .edit-panel.open { display: block; }
 
-  /* Tag checkboxes */
+  /* Curation controls */
   .tag-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
   .tag-label {
     display: flex; align-items: center; gap: 5px;
@@ -74,6 +74,12 @@
   }
   .tag-label:hover { background: rgba(124,106,245,0.06); }
   .tag-label input { margin: 0; accent-color: var(--accent); }
+  .curation-notes {
+    width: 100%; min-height: 70px; resize: vertical; box-sizing: border-box;
+    border: 1px solid var(--outline, #c7c4d7); border-radius: 7px;
+    background: var(--bg, #fcf8ff); color: var(--text, #1b1b23);
+    padding: 8px 10px; font: inherit; font-size: 13px;
+  }
 
   /* Matched pages */
   .matched-pages { margin-top: 12px; }
@@ -99,17 +105,20 @@
 
 <section class="admin-section">
   <h2>Contacts (<%= contacts.length %>)</h2>
-  <p style="font-size:13px;color:var(--text-muted);">Tag each contact with wiki topics. Matching wiki pages will surface in their section of the morning briefing.</p>
-
-  <% if (!wikiTags.length) { %>
-    <p style="font-size:13px;color:var(--text-muted);">No wiki tags yet — add some content via wiki.mclellan.scot first.</p>
-  <% } %>
+  <p style="font-size:13px;color:var(--text-muted);">Curation controls express preference and attention. Relationships and knowledge are derived from source material.</p>
 
   <div class="card-grid">
   <% for (const c of contacts) { %>
   <%
-    const contactTags = JSON.parse(c.wiki_tags || '[]');
+    const curationFlags = JSON.parse(c.curation_flags || '[]');
     const aliases = JSON.parse(c.aliases || '[]');
+    const hasFlag = flag => curationFlags.includes(flag);
+    const flagLabels = [
+      hasFlag('pin_briefing') ? 'Pinned' : null,
+      hasFlag('watch') ? 'Watch' : null,
+      hasFlag('quiet_nudges') ? 'Quiet nudges' : null,
+      hasFlag('sensitive') ? 'Sensitive' : null,
+    ].filter(Boolean);
   %>
   <div class="contact-card" id="crm-card-<%= c.id %>">
     <div class="card-head">
@@ -119,51 +128,50 @@
           <div class="card-aliases">Also: <%= aliases.join(', ') %></div>
         <% } %>
       </div>
-      <span style="font-size:11px;color:var(--text-dim);white-space:nowrap;"><%= contactTags.length %> tag<%= contactTags.length !== 1 ? 's' : '' %></span>
+      <span style="font-size:11px;color:var(--text-dim);white-space:nowrap;"><%= flagLabels.length %> control<%= flagLabels.length !== 1 ? 's' : '' %></span>
     </div>
 
-    <% if (contactTags.length) { %>
+    <% if (flagLabels.length) { %>
     <div class="card-badges">
-      <% for (const t of contactTags) { %><span class="badge badge-tag"><%= t %></span><% } %>
+      <% for (const t of flagLabels) { %><span class="badge badge-tag"><%= t %></span><% } %>
     </div>
     <% } else { %>
     <div class="card-badges">
-      <span class="badge badge-none">no tags</span>
+      <span class="badge badge-none">standard</span>
     </div>
     <% } %>
 
-    <% if (contactTags.length && c.matchedPages && c.matchedPages.length) { %>
-    <div class="matched-pages">
-      <div class="matched-pages-label">Matching wiki pages</div>
-      <% for (const p of c.matchedPages) { %>
-      <div class="matched-page-item">
-        <a href="https://wiki.mclellan.scot/page/<%= p.slug %>" target="_blank"><%= p.title %></a>
-        <span class="matched-page-tags"><%= p.matchedTags.join(', ') %></span>
-      </div>
-      <% } %>
-    </div>
+    <% if (c.curation_notes) { %>
+      <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;"><%= c.curation_notes %></p>
     <% } %>
 
     <div class="card-actions" style="margin-top:12px;">
-      <button class="btn-sm" onclick="toggleCrmEdit('<%= c.id %>')">Edit tags</button>
+      <button class="btn-sm" onclick="toggleCrmEdit('<%= c.id %>')">Curate</button>
     </div>
 
     <div class="edit-panel" id="crm-edit-<%= c.id %>">
-      <form method="POST" action="/admin/contacts/<%= c.id %>/wiki-tags">
-        <% if (wikiTags.length) { %>
+      <form method="POST" action="/admin/contacts/<%= c.id %>/curation">
         <div class="tag-grid">
-          <% for (const tag of wikiTags) { %>
           <label class="tag-label">
-            <input type="checkbox" name="tags" value="<%= tag %>" <%= contactTags.includes(tag) ? 'checked' : '' %>>
-            <%= tag %>
+            <input type="checkbox" name="flags" value="pin_briefing" <%= hasFlag('pin_briefing') ? 'checked' : '' %>>
+            Pin in briefing
           </label>
-          <% } %>
+          <label class="tag-label">
+            <input type="checkbox" name="flags" value="watch" <%= hasFlag('watch') ? 'checked' : '' %>>
+            Watch closely
+          </label>
+          <label class="tag-label">
+            <input type="checkbox" name="flags" value="quiet_nudges" <%= hasFlag('quiet_nudges') ? 'checked' : '' %>>
+            Quiet nudges
+          </label>
+          <label class="tag-label">
+            <input type="checkbox" name="flags" value="sensitive" <%= hasFlag('sensitive') ? 'checked' : '' %>>
+            Sensitive
+          </label>
         </div>
-        <% } else { %>
-        <p style="font-size:12px;color:var(--text-dim);">No wiki tags available yet.</p>
-        <% } %>
+        <textarea class="curation-notes" name="curation_notes" placeholder="Optional note for why this person is pinned, watched, quiet, or sensitive."><%= c.curation_notes || '' %></textarea>
         <div class="form-actions">
-          <button type="submit" class="btn-sm primary">Save tags</button>
+          <button type="submit" class="btn-sm primary">Save curation</button>
           <button type="button" class="btn-sm" onclick="toggleCrmEdit('<%= c.id %>')">Cancel</button>
         </div>
       </form>

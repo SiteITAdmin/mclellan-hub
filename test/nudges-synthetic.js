@@ -34,8 +34,8 @@ function cleanup() {
 
 function mkContact(name, extra = {}) {
   const id = uuid();
-  hub.prepare('INSERT INTO contacts (id, user, name, birthday, keep_warm_days) VALUES (?, ?, ?, ?, ?)')
-    .run(id, USER, name, extra.birthday || null, extra.keepWarmDays || null);
+  hub.prepare('INSERT INTO contacts (id, user, name, birthday, keep_warm_days, curation_flags) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, USER, name, extra.birthday || null, extra.keepWarmDays || null, JSON.stringify(extra.curationFlags || []));
   ids.contacts.push(id);
   return id;
 }
@@ -77,15 +77,21 @@ function mkContact(name, extra = {}) {
   console.log('2. Keep-warm cadence');
   hub.prepare('UPDATE contacts SET keep_warm_days = 30 WHERE id = ?').run(cMeeting); // last contact 2026-06-01, 11 days ago — not due
   const cCold = mkContact('Synthnudge Cold Person', { keepWarmDays: 30 });
+  const cQuiet = mkContact('Synthnudge Quiet Person', { keepWarmDays: 30, curationFlags: ['quiet_nudges'] });
   const coldEmailId = uuid();
   hub.prepare('INSERT INTO email_summaries (id, user, gmail_message_id, received_at, contact_id) VALUES (?, ?, ?, ?, ?)')
     .run(coldEmailId, USER, 'synthnudge-cold-' + Date.now(), now - 45 * 86400, cCold);
   ids.emails.push(coldEmailId);
+  const quietEmailId = uuid();
+  hub.prepare('INSERT INTO email_summaries (id, user, gmail_message_id, received_at, contact_id) VALUES (?, ?, ?, ?, ?)')
+    .run(quietEmailId, USER, 'synthnudge-quiet-' + Date.now(), now - 45 * 86400, cQuiet);
+  ids.emails.push(quietEmailId);
   nudges.recomputeLastContacted(USER);
   const warm = nudges.keepWarmDue(USER);
-  check('45-days-cold contact is due, 11-days one is not', () => {
+  check('45-days-cold contact is due, 11-days one is not, quiet contact is suppressed', () => {
     assert(warm.some(c => c.id === cCold));
     assert(!warm.some(c => c.id === cMeeting));
+    assert(!warm.some(c => c.id === cQuiet));
     const cold = warm.find(c => c.id === cCold);
     assert(cold.days_since >= 44 && cold.days_since <= 46, `days_since=${cold.days_since}`);
   });
