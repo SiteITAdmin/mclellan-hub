@@ -83,3 +83,25 @@ test('knowledge synthesis keeps routed personal email summaries even with invita
     contact_id: 'contact-liz',
   }), false);
 });
+
+test('knowledge synthesis excludes unrouted automated account noise', () => {
+  assert.equal(shouldExcludeEmailSummaryFromKnowledge('douglas', {
+    subject: 'Your Apple receipt',
+    from_name: 'Apple Support',
+    from_email: 'no-reply@apple.com',
+    summary: 'Monthly iCloud subscription renewal receipt.',
+    project_slug: null,
+    contact_id: null,
+  }), true);
+});
+
+test('knowledge synthesis keeps routed care-related emails', () => {
+  assert.equal(shouldExcludeEmailSummaryFromKnowledge('douglas', {
+    subject: 'Care plan update for Dad',
+    from_name: 'Care at Home',
+    from_email: 'support@care.example.test',
+    summary: 'Care at Home confirmed a medication visit for Alister.',
+    project_slug: 'dad',
+    contact_id: null,
+  }), false);
+});
