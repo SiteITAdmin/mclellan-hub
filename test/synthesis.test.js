@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { linkableCandidates, resolveByName } = require('../lib/synthesis');
+const { canResolveByName, linkableCandidates, resolveByName } = require('../lib/synthesis');
 
 const entities = [
   { kind: 'contact', id: 'contact-m365', label: 'M365 Rollout', aliases: [] },
@@ -30,6 +30,25 @@ test('synthesis does not offer unrelated entities to the LLM linker', () => {
   assert.deepEqual(candidates, []);
 });
 
+test('synthesis refuses hallucinated contact subjects absent from the source', () => {
+  const matched = resolveByName('M365 Rollout', entities, {});
+
+  assert.equal(matched.id, 'contact-m365');
+  assert.equal(canResolveByName({ subject: 'M365 Rollout' }, matched, {}, 'Mistral AI issued an invoice.'), false);
+});
+
+test('synthesis allows contact resolution when the source actually names the contact', () => {
+  const ken = { kind: 'contact', id: 'ken', label: 'Ken Murray', aliases: [] };
+  const matched = resolveByName('Ken Murray', [ken], {});
+
+  assert.equal(canResolveByName(
+    { subject: 'Ken Murray' },
+    matched,
+    {},
+    'Ken Murray approved the Vault 365 setup for VIP Backups.'
+  ), true);
+});
+
 test('synthesis keeps source-routed project as a candidate for project emails', () => {
   const candidates = linkableCandidates({
     subject: 'licensing decision',
@@ -38,7 +57,7 @@ test('synthesis keeps source-routed project as a candidate for project emails', 
   }, entities, {
     projectId: 'project-m365',
     preferKind: 'project',
-  });
+  }, '');
 
   assert.deepEqual(candidates.map(candidate => candidate.id), ['project-m365']);
 });
