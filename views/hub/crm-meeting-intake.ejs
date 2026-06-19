@@ -73,7 +73,14 @@
       <h2>Recent intakes</h2>
       <% for (const item of recent) {
         let counts = {};
+        let extraction = {};
         try { counts = JSON.parse(item.created_counts || '{}'); } catch (_) {}
+        try { extraction = JSON.parse(item.extraction || '{}'); } catch (_) {}
+        const speakerReview = extraction.speaker_review;
+        const scopedContactOptions = item.project_slug
+          ? projectContacts.filter(c => c.project_slug === item.project_slug)
+          : allContacts;
+        const contactOptions = scopedContactOptions.length ? scopedContactOptions : allContacts;
       %>
         <div class="crm-action">
           <span>
@@ -95,6 +102,35 @@
             </form>
           </div>
         </div>
+        <% if (item.status === 'needs_speaker_review' && speakerReview && speakerReview.speakers && speakerReview.speakers.length) { %>
+          <form class="crm-form-grid" method="post" action="/crm/meeting-intake/<%= item.id %>/speakers" style="margin:8px 0 16px;padding:12px;border:1px solid var(--crm-border,#ddd);border-radius:8px;">
+            <h3 class="wide" style="margin:0;font-size:14px;">Identify speakers</h3>
+            <% for (const speaker of speakerReview.speakers) {
+              const key = speaker.label.replace(/[^a-z0-9]/gi, '_');
+            %>
+              <div class="wide" style="display:grid;gap:8px;">
+                <strong><%= speaker.label %></strong>
+                <% for (const sample of speaker.samples || []) { %>
+                  <blockquote style="margin:0;padding:8px 10px;border-left:3px solid var(--accent,#7c6af5);background:rgba(0,0,0,.03);font-size:12px;"><%= sample %></blockquote>
+                <% } %>
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;">
+                  <label>Existing person
+                    <select name="contact_<%= key %>">
+                      <option value="">Choose...</option>
+                      <% for (const contact of contactOptions) { %>
+                        <option value="<%= contact.id %>"><%= contact.name %></option>
+                      <% } %>
+                    </select>
+                  </label>
+                  <label>Or add new person
+                    <input name="new_<%= key %>" placeholder="Full name">
+                  </label>
+                </div>
+              </div>
+            <% } %>
+            <button class="btn" type="submit">Save speakers and process</button>
+          </form>
+        <% } %>
       <% } %>
       <% if (!recent.length) { %><p class="crm-muted">No transcript intakes yet.</p><% } %>
     </section>
