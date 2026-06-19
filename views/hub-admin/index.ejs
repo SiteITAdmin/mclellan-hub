@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
+<% const displayUser = { douglas: 'Douglas', nakai: 'Nakai' }[user] || (user ? user.charAt(0).toUpperCase() + user.slice(1) : ''); %>
 <head>
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chat Admin — <%= user %></title>
+<title>Hub Admin — <%= displayUser %></title>
 <link rel="stylesheet" href="/portfolio.css">
 <style>
   :root {
@@ -12,6 +13,43 @@
     --card-border: var(--border, #dddaf0);
     --card-bg: var(--bg, #fcf8ff);
     --admin-card-accent: var(--primary, #4648d4);
+  }
+
+  .admin-splash {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .admin-tool-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    color: var(--text, #15131e);
+    min-height: 160px;
+    padding: 22px 20px;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+  }
+  .admin-tool-card:hover {
+    border-color: var(--admin-card-accent);
+    box-shadow: 0 4px 16px rgba(70,72,212,.1);
+    transform: translateY(-1px);
+  }
+  .admin-tool-icon { font-size: 28px; line-height: 1; }
+  .admin-tool-title { font-size: 16px; font-weight: 800; line-height: 1.25; }
+  .admin-tool-desc { color: var(--text-dim, #464554); font-size: 12px; line-height: 1.5; }
+  .admin-tool-meta {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto;
+  }
+  .admin-tool-pill {
+    display: inline-flex; align-items: center;
+    min-height: 20px; padding: 3px 8px; border-radius: 999px;
+    border: 1px solid var(--border, #e0ddf0); color: var(--text-dim, #767586);
+    font-size: 11px; font-weight: 700; line-height: 1;
   }
 
   .card-grid {
@@ -145,9 +183,78 @@
 </head>
 <body class="admin-page">
 
-<%- include('partials/admin-header', { title: `Hub Admin — ${user}` }) %>
+<%- include('partials/admin-header', { title: `Hub Admin — ${displayUser}` }) %>
 
 <section class="admin-section">
+  <h2>Control room</h2>
+  <p>Operational views for the Hub: synthesis, curation, model routing, logs, queues, and project memory.</p>
+
+  <div class="admin-splash">
+    <a class="admin-tool-card" href="#projects">
+      <div class="admin-tool-icon">▦</div>
+      <div class="admin-tool-title">Projects</div>
+      <div class="admin-tool-desc">Manage chat memory spaces, context depth, CV context, and project documents.</div>
+      <div class="admin-tool-meta"><span class="admin-tool-pill"><%= projects.length %> projects</span></div>
+    </a>
+    <a class="admin-tool-card" href="/admin/crm">
+      <div class="admin-tool-icon">◌</div>
+      <div class="admin-tool-title">CRM curation</div>
+      <div class="admin-tool-desc">Tune contact visibility, nudge behaviour, and briefing prominence without forcing links.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/knowledge">
+      <div class="admin-tool-icon">◇</div>
+      <div class="admin-tool-title">Knowledge review</div>
+      <div class="admin-tool-desc">Approve or reject synthesized claims, contradictions, and uncertain entity links.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/connectivity">
+      <div class="admin-tool-icon">⌁</div>
+      <div class="admin-tool-title">Connectivity</div>
+      <div class="admin-tool-desc">Inspect orphaned nodes and run mycelium checks across people, projects, tasks, and flights.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/jobs">
+      <div class="admin-tool-icon">◷</div>
+      <div class="admin-tool-title">Job queue</div>
+      <div class="admin-tool-desc">Watch scheduled ingest, synthesis, reminders, routing, and housekeeping jobs.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/newsletter-ingestion">
+      <div class="admin-tool-icon">▤</div>
+      <div class="admin-tool-title">Intelligence ingestion</div>
+      <div class="admin-tool-desc">Audit newsletter and RSS processing, extraction models, fallbacks, and stored output.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/models">
+      <div class="admin-tool-icon">⚙</div>
+      <div class="admin-tool-title">Models &amp; prompts</div>
+      <div class="admin-tool-desc">Configure routing slots, model tiers, prompts, and fallback behaviour.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/test">
+      <div class="admin-tool-icon">▣</div>
+      <div class="admin-tool-title">Test arena</div>
+      <div class="admin-tool-desc">Run model and prompt comparisons against controlled tasks before changing defaults.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/shortcuts">
+      <div class="admin-tool-icon">✦</div>
+      <div class="admin-tool-title">Cards</div>
+      <div class="admin-tool-desc">Maintain chat launcher cards and the model shortcuts behind them.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/linkedin">
+      <div class="admin-tool-icon">✎</div>
+      <div class="admin-tool-title">Content</div>
+      <div class="admin-tool-desc">Review LinkedIn pipeline output, status, type, schedule, and publishing state.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/chatlogs">
+      <div class="admin-tool-icon">☷</div>
+      <div class="admin-tool-title">Chat logs</div>
+      <div class="admin-tool-desc">Inspect recent conversations, ratings, and routing behaviour.</div>
+    </a>
+    <a class="admin-tool-card" href="/admin/nakai-briefings">
+      <div class="admin-tool-icon">◫</div>
+      <div class="admin-tool-title">Nakai briefings</div>
+      <div class="admin-tool-desc">View stored daily briefing editions and resend existing artifacts.</div>
+    </a>
+  </div>
+</section>
+
+<section class="admin-section" id="projects">
   <h2>Projects</h2>
   <p>Projects store chat memory. When a user types <code>/slug</code> at the start or end of a message, that exchange is tagged to the project.</p>
 
