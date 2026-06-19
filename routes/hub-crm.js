@@ -1197,6 +1197,7 @@ router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writ
   if (!contact) return res.status(404).json({ error: 'Not found' });
   hub.transaction(() => {
     hub.prepare('DELETE FROM contact_companies WHERE contact_id = ?').run(contact.id);
+    hub.prepare('DELETE FROM contact_projects WHERE contact_id = ?').run(contact.id);
     hub.prepare('DELETE FROM meeting_attendees WHERE contact_id = ?').run(contact.id);
     hub.prepare('DELETE FROM crm_facts WHERE contact_id = ? AND user = ?').run(contact.id, req.hubUser);
     const linkedFacts = hub.prepare(
