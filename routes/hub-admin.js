@@ -21,6 +21,14 @@ const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution
 const { logOpenRouterUsage, logUsageFromResponse } = require('../lib/openrouter-usage');
 const { reviewQueue: knowledgeReviewQueue } = require('../lib/knowledge-lint');
 const { setStatus: setAtomStatus } = require('../lib/atoms');
+const {
+  START_DATE: NAKAI_BRIEFING_START_DATE,
+  briefingMeta: nakaiBriefingMeta,
+  listStoredBriefings: listNakaiBriefings,
+  getStoredBriefing: getNakaiBriefing,
+  sendStoredBriefing: resendNakaiBriefing,
+  buildNakaiDailyBriefing,
+} = require('../scripts/build-nakai-daily-briefing');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -1628,6 +1636,64 @@ router.post('/admin/trigger-email-digest', requireHubAdmin, async (req, res) => 
     res.json({ ok: true, preview });
   } catch (err) {
     res.json({ ok: false, error: err.message });
+  }
+});
+
+// ── Nakai daily briefing archive ─────────────────────────────────────────────
+router.get('/admin/nakai-briefings', requireHubAdmin, (req, res) => {
+  res.render('hub-admin/nakai-briefings', {
+    user: req.hubUser,
+    briefings: listNakaiBriefings(),
+    message: req.query.msg || '',
+    error: req.query.error || '',
+  });
+});
+
+router.post('/admin/nakai-briefings/build-test', requireHubAdmin, async (req, res) => {
+  try {
+    const todayMeta = nakaiBriefingMeta();
+    const result = await buildNakaiDailyBriefing({
+      date: todayMeta.edition ? new Date() : new Date(`${NAKAI_BRIEFING_START_DATE}T12:00:00Z`),
+    });
+    const label = result.meta?.edition ? `Daily Briefing ${result.meta.edition}` : 'test briefing';
+    res.redirect('/admin/nakai-briefings?msg=' + encodeURIComponent(`Built ${label}`));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?error=' + encodeURIComponent(err.message));
+  }
+});
+
+router.post('/admin/nakai-briefings/:edition/resend', requireHubAdmin, async (req, res) => {
+  try {
+    const result = await resendNakaiBriefing(req.params.edition, { force: true });
+    const to = result.manifest?.to || 'Nakai';
+    res.redirect('/admin/nakai-briefings?msg=' + encodeURIComponent(`Sent Daily Briefing ${req.params.edition} to ${to}`));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?error=' + encodeURIComponent(err.message));
+  }
+});
+
+router.get('/admin/nakai-briefings/:edition/resend', requireHubAdmin, async (req, res) => {
+  try {
+    const result = await resendNakaiBriefing(req.params.edition, { force: true });
+    const to = result.manifest?.to || 'Nakai';
+    res.redirect('/admin/nakai-briefings?msg=' + encodeURIComponent(`Sent Daily Briefing ${req.params.edition} to ${to}`));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?error=' + encodeURIComponent(err.message));
+  }
+});
+
+router.get('/admin/nakai-briefings/:edition/:artifact(pdf|html|md)', requireHubAdmin, (req, res) => {
+  try {
+    const briefing = getNakaiBriefing(req.params.edition);
+    const filePath = req.params.artifact === 'pdf'
+      ? briefing.pdfPath
+      : req.params.artifact === 'html'
+        ? briefing.htmlPath
+        : briefing.mdPath;
+    if (!filePath) return res.status(404).send('Not found');
+    res.sendFile(filePath);
+  } catch (err) {
+    res.status(404).send(err.message);
   }
 });
 

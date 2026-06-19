@@ -984,5 +984,22 @@
     "confidence": "measured",
     "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage"
+  },
+  {
+    "date": "2026-06-18",
+    "codex_tokens": 70971177,
+    "claude_code_tokens": 87990158,
+    "claude_code_calls": 544,
+    "api_tokens": 1876,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "Hub Development",
+    "evidence": "Codex session token counters; Claude Code message usage; Synthadoc audit logs"
   }
 ]

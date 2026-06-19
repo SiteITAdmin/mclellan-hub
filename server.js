@@ -18,6 +18,7 @@ const { sendWeeklyReminder } = require('./lib/newsletter-pipeline');
 const { ingestAllFeeds } = require('./lib/rss-ingest');
 const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
+const { sendTodayNakaiDailyBriefing } = require('./scripts/build-nakai-daily-briefing');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -224,6 +225,16 @@ setInterval(() => {
   const now = nowIn('Europe/Dublin');
   if (now.getHours() !== REG_MONITOR_HOUR || now.getMinutes() !== REG_MONITOR_MINUTE) return;
   runRegulatoryMonitor().catch(err => console.error('[reg-monitor] error:', err));
+}, 60 * 1000);
+
+// ── Nakai Daily Briefing (07:30 Europe/Dublin, daily; Edition 001 starts 2026-06-19) ──
+const NAKAI_DAILY_BRIEFING_HOUR = parseInt(process.env.NAKAI_DAILY_BRIEFING_HOUR || '7');
+const NAKAI_DAILY_BRIEFING_MINUTE = parseInt(process.env.NAKAI_DAILY_BRIEFING_MINUTE || '30');
+
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getHours() !== NAKAI_DAILY_BRIEFING_HOUR || now.getMinutes() !== NAKAI_DAILY_BRIEFING_MINUTE) return;
+  sendTodayNakaiDailyBriefing().catch(err => console.error('[nakai-briefing] scheduled send error:', err));
 }, 60 * 1000);
 
 // ── Daily system report (21:00 Europe/Dublin) ─────────────────────────────────

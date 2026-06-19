@@ -1259,6 +1259,15 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
     LIMIT 80
   `).all(req.hubUser);
   const projects = hub.prepare('SELECT slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  const projectContacts = hub.prepare(`
+    SELECT DISTINCT c.id, c.name, p.slug AS project_slug
+    FROM contacts c
+    JOIN contact_projects cp ON cp.contact_id = c.id
+    JOIN projects p ON p.id = cp.project_id
+    WHERE c.user = ?
+    ORDER BY p.slug, c.name
+  `).all(req.hubUser);
+  const allContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   const recent = hub.prepare(`
     SELECT mi.*, m.title AS meeting_title
     FROM meeting_intakes mi
@@ -1268,8 +1277,211 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
     LIMIT 12
   `).all(req.hubUser);
   res.render('hub/crm-meeting-intake', {
-    ...crmPageData(req.hubUser), meetings, projects, recent, query: req.query,
+    ...crmPageData(req.hubUser), meetings, projects, projectContacts, allContacts, recent, query: req.query,
   });
+});
+
+function queueMeetingIntakeProcessing({ user, intakeId, transcript, body = {}, sourceFilename = '' }) {
+  setImmediate(async () => {
+    try {
+      const { processMeetingTranscript } = require('../lib/meeting-intake');
+      const result = await processMeetingTranscript(user, {
+        intakeId,
+        transcript,
+        title: body.title,
+        meetingDate: body.meeting_date,
+        meetingId: body.meeting_id,
+        projectSlug: body.project_slug,
+        sourceFilename,
+      });
+      console.log(`[meeting-intake] processed ${intakeId}: meeting=${result.meetingId} facts=${result.counts.facts} tasks=${result.counts.tasks}`);
+    } catch (err) {
+      console.error('[meeting-intake async]', err);
+      try {
+        db.hub().prepare(`
+          UPDATE meeting_intakes
+          SET status = 'error', error = ?, created_counts = COALESCE(NULLIF(created_counts, ''), '{}')
+          WHERE id = ? AND user = ?
+        `).run(err.message, intakeId, user);
+      } catch (_) {}
+    }
+  });
+}
+
+function validKrispWebhook(req) {
+  const secret = process.env.KRISP_WEBHOOK_SECRET;
+  if (!secret) return { ok: false, configured: false };
+  const auth = req.headers.authorization || '';
+  const token = req.headers['x-krisp-token'] || req.headers['x-api-key'];
+  return {
+    ok: auth === `Bearer ${secret}` || token === secret,
+    configured: true,
+  };
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function collectKrispText(payload) {
+  const parts = [];
+  const seen = new Set();
+  function formatItem(item) {
+    if (typeof item === 'string') return item;
+    if (!item || typeof item !== 'object') return String(item || '');
+    const assignee = item.assignee
+      ? [item.assignee.first_name, item.assignee.last_name].filter(Boolean).join(' ')
+      : '';
+    return [
+      item.title || item.description || item.text || item.name || JSON.stringify(item),
+      assignee ? `Owner: ${assignee}` : null,
+      item.due_date ? `Due: ${item.due_date}` : null,
+      item.priority ? `Priority: ${item.priority}` : null,
+    ].filter(Boolean).join(' - ');
+  }
+  function add(label, value) {
+    if (typeof value === 'string' && value.trim() && !seen.has(`${label}:${value}`)) {
+      seen.add(`${label}:${value}`);
+      parts.push(`## ${label}\n${value.trim()}`);
+    } else if (Array.isArray(value) && value.length) {
+      const text = value.map(item => `- ${formatItem(item)}`).join('\n');
+      if (text.trim() && !seen.has(`${label}:${text}`)) {
+        seen.add(`${label}:${text}`);
+        parts.push(`## ${label}\n${text.trim()}`);
+      }
+    }
+  }
+
+  const candidates = [
+    payload,
+    payload.data,
+    payload.payload,
+    payload.meeting,
+    payload.data?.meeting,
+    payload.payload?.meeting,
+    payload.generated_content,
+    payload.data?.generated_content,
+  ].filter(Boolean);
+
+  for (const item of candidates) {
+    add('Transcript', item.transcript_text || item.transcriptText || item.transcript);
+    add('Notes', item.notes || item.key_points || item.keyPoints || item.summary);
+    add('Action Items', item.action_items || item.actionItems);
+    add('Outline', item.outline);
+    add('Krisp Notes', item.raw_content || item.rawContent);
+    if (item.sections) {
+      add('Action Items', item.sections.action_items || item.sections.actionItems);
+      add('Key Points', item.sections.key_points || item.sections.keyPoints);
+      add('Outline', item.sections.outline);
+    }
+  }
+  return parts.join('\n\n').trim();
+}
+
+function normalizeKrispPayload(payload) {
+  const data = payload?.data || {};
+  const body = payload?.payload || {};
+  const meeting = payload?.meeting || data.meeting || body.meeting || {};
+  const eventType = firstString(payload.event_type, payload.eventType, payload.event, payload.type, data.event_type, body.event_type, 'krisp');
+  const eventId = firstString(payload.event_id, payload.eventId, payload.id, data.event_id, body.event_id);
+  const meetingId = firstString(meeting.id, meeting.meeting_id, meeting.meetingId, data.meeting_id, body.meeting_id);
+  const title = firstString(meeting.title, meeting.name, meeting.topic, payload.title, data.title, body.title, 'Krisp meeting');
+  const meetingDate = firstString(
+    meeting.started_at,
+    meeting.start_time,
+    meeting.start_date,
+    meeting.startDate,
+    meeting.date,
+    data.started_at,
+    data.start_date,
+    payload.created_at
+  ).slice(0, 10);
+  const transcript = collectKrispText(payload);
+  const sourceKey = ['krisp', meetingId || 'unknown-meeting', eventType || 'event', eventId || 'unknown-event']
+    .join(':')
+    .replace(/\s+/g, '-')
+    .slice(0, 240);
+  return { eventType, eventId, meetingId, title, meetingDate, transcript, sourceKey };
+}
+
+router.post('/api/krisp/webhook', writeLimiter, (req, res) => {
+  const auth = validKrispWebhook(req);
+  if (!auth.configured) return res.status(503).json({ error: 'Krisp webhook not configured' });
+  if (!auth.ok) return res.status(401).json({ error: 'Unauthorized' });
+
+  const user = String(req.body?.user || process.env.KRISP_WEBHOOK_USER || 'douglas').trim();
+  const normalized = normalizeKrispPayload(req.body || {});
+  const hub = db.hub();
+  const existing = hub.prepare('SELECT id, status FROM meeting_intakes WHERE user = ? AND source_filename = ?')
+    .get(user, normalized.sourceKey);
+  if (existing) return res.json({ ok: true, duplicate: true, intakeId: existing.id, status: existing.status });
+
+  if (!normalized.transcript) {
+    const intakeId = uuid();
+    hub.prepare(`
+      INSERT INTO meeting_intakes
+        (id, user, meeting_id, project_slug, title, source_filename, transcript, status, error, extraction, created_counts)
+      VALUES (?, ?, NULL, NULL, ?, ?, ?, 'error', ?, ?, '{}')
+    `).run(
+      intakeId,
+      user,
+      normalized.title || 'Krisp webhook',
+      normalized.sourceKey,
+      JSON.stringify(req.body || {}, null, 2),
+      'No transcript, notes, outline, or action items found in Krisp payload',
+      JSON.stringify({
+        source: 'krisp',
+        krisp: {
+          event_type: normalized.eventType,
+          event_id: normalized.eventId,
+          meeting_id: normalized.meetingId,
+        },
+        raw_payload_captured: true,
+      })
+    );
+    console.warn(`[krisp webhook] captured unrecognized payload as intake ${intakeId}`);
+    return res.json({ ok: true, intakeId, status: 'error', message: 'Payload captured for parser review' });
+  }
+
+  const intakeId = uuid();
+  const { speakerReviewForTranscript } = require('../lib/meeting-intake');
+  const speakerReview = speakerReviewForTranscript(normalized.transcript);
+  const status = speakerReview ? 'needs_speaker_review' : 'processing';
+  hub.prepare(`
+    INSERT INTO meeting_intakes
+      (id, user, meeting_id, project_slug, title, source_filename, transcript, status, extraction, created_counts)
+    VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, '{}')
+  `).run(
+    intakeId,
+    user,
+    normalized.title,
+    normalized.sourceKey,
+    normalized.transcript,
+    status,
+    JSON.stringify({
+      source: 'krisp',
+      krisp: {
+        event_type: normalized.eventType,
+        event_id: normalized.eventId,
+        meeting_id: normalized.meetingId,
+      },
+      ...(speakerReview ? { speaker_review: speakerReview } : {}),
+    })
+  );
+
+  if (!speakerReview) {
+    queueMeetingIntakeProcessing({
+      user,
+      intakeId,
+      transcript: normalized.transcript,
+      body: { title: normalized.title, meeting_date: normalized.meetingDate },
+      sourceFilename: normalized.sourceKey,
+    });
+  }
+  res.json({ ok: true, intakeId, status });
 });
 
 router.post('/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter, upload.single('transcript_file'), async (req, res) => {
@@ -1282,42 +1494,87 @@ router.post('/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter
   const title = String(req.body.title || '').trim() || 'Meeting transcript';
   const projectSlug = String(req.body.project_slug || '').trim() || null;
   const sourceFilename = req.file?.originalname || '';
+  const { speakerReviewForTranscript } = require('../lib/meeting-intake');
+  const speakerReview = speakerReviewForTranscript(transcript);
+  const status = speakerReview ? 'needs_speaker_review' : 'processing';
   hub.prepare(`
     INSERT INTO meeting_intakes
-      (id, user, meeting_id, project_slug, title, source_filename, transcript, status, created_counts)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'processing', '{}')
+      (id, user, meeting_id, project_slug, title, source_filename, transcript, status, extraction, created_counts)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '{}')
   `).run(
     intakeId, req.hubUser, String(req.body.meeting_id || '').trim() || null,
-    projectSlug, title, sourceFilename || null, transcript, 
+    projectSlug, title, sourceFilename || null, transcript, status,
+    JSON.stringify(speakerReview ? { speaker_review: speakerReview } : {}),
   );
 
-  setImmediate(async () => {
-    try {
-      const { processMeetingTranscript } = require('../lib/meeting-intake');
-      const result = await processMeetingTranscript(req.hubUser, {
-        intakeId,
-        transcript,
-        title: req.body.title,
-        meetingDate: req.body.meeting_date,
-        meetingId: req.body.meeting_id,
-        projectSlug: req.body.project_slug,
-        sourceFilename,
-      });
-      console.log(`[meeting-intake] processed ${intakeId}: meeting=${result.meetingId} facts=${result.counts.facts} tasks=${result.counts.tasks}`);
-    } catch (err) {
-      console.error('[meeting-intake async]', err);
-      try {
-        db.hub().prepare(`
-          UPDATE meeting_intakes
-          SET status = 'error', error = ?, created_counts = COALESCE(NULLIF(created_counts, ''), '{}')
-          WHERE id = ? AND user = ?
-        `).run(err.message, intakeId, req.hubUser);
-      } catch (_) {}
-    }
-  });
+  if (!speakerReview) {
+    queueMeetingIntakeProcessing({
+      user: req.hubUser,
+      intakeId,
+      transcript,
+      body: req.body,
+      sourceFilename,
+    });
+  }
 
-  const params = new URLSearchParams({ queued: intakeId });
+  const params = new URLSearchParams(speakerReview ? { review: intakeId } : { queued: intakeId });
   res.redirect(`/crm/meeting-intake?${params.toString()}`);
+});
+
+router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const intake = hub.prepare('SELECT * FROM meeting_intakes WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!intake) return res.status(404).send('Intake not found');
+  if (intake.status !== 'needs_speaker_review') return res.status(400).send('This intake does not need speaker review');
+
+  const extraction = (() => { try { return JSON.parse(intake.extraction || '{}'); } catch { return {}; } })();
+  const speakers = extraction.speaker_review?.speakers || [];
+  const speakerMap = {};
+  const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  for (const speaker of speakers) {
+    const key = speaker.label.replace(/[^a-z0-9]/gi, '_');
+    const newName = String(req.body[`new_${key}`] || '').trim();
+    const contactId = String(req.body[`contact_${key}`] || '').trim();
+    let contact = contactId ? contacts.find(c => c.id === contactId) : null;
+    if (!contact && newName) {
+      const id = uuid();
+      hub.prepare('INSERT INTO contacts (id, user, name) VALUES (?, ?, ?)').run(id, req.hubUser, newName);
+      contact = { id, name: newName };
+      if (intake.project_slug) {
+        const project = hub.prepare('SELECT id FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, intake.project_slug);
+        if (project) hub.prepare('INSERT OR IGNORE INTO contact_projects (contact_id, project_id, role) VALUES (?, ?, ?)').run(id, project.id, 'meeting attendee');
+      }
+    }
+    if (contact) speakerMap[speaker.label] = contact.name;
+  }
+  if (Object.keys(speakerMap).length < speakers.length) {
+    return res.status(400).send('Please map every detected speaker before processing');
+  }
+
+  const { applySpeakerMap } = require('../lib/meeting-intake');
+  const resolvedTranscript = applySpeakerMap(intake.transcript, speakerMap);
+  hub.prepare(`
+    UPDATE meeting_intakes
+    SET transcript = ?, status = 'processing', extraction = ?, error = NULL
+    WHERE id = ? AND user = ?
+  `).run(
+    resolvedTranscript,
+    JSON.stringify({ ...extraction, speaker_map: speakerMap }),
+    intake.id,
+    req.hubUser
+  );
+  queueMeetingIntakeProcessing({
+    user: req.hubUser,
+    intakeId: intake.id,
+    transcript: resolvedTranscript,
+    body: {
+      title: intake.title,
+      meeting_id: intake.meeting_id,
+      project_slug: intake.project_slug,
+    },
+    sourceFilename: intake.source_filename || '',
+  });
+  res.redirect(`/crm/meeting-intake?queued=${encodeURIComponent(intake.id)}`);
 });
 
 router.post('/api/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter, upload.single('transcript_file'), async (req, res) => {

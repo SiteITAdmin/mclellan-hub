@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nakai briefings - McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+.wrap { padding: 24px; max-width: 980px; }
+.notice { margin: 12px 0; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
+.notice.ok { background: rgba(76,175,133,.12); color: #287052; }
+.notice.err { background: rgba(224,108,108,.12); color: #a33b3b; }
+.top-actions { display:flex; gap:8px; align-items:center; margin: 16px 0 20px; flex-wrap:wrap; }
+.btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text); text-decoration:none; font-family:inherit; }
+.btn-sm.primary { background: var(--accent, #7c6af5); border-color: var(--accent, #7c6af5); color: #fff; }
+.btn-sm:hover { background: rgba(0,0,0,.05); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align:left; padding: 8px 10px; border-bottom: 2px solid var(--border); color: var(--text-dim); font-weight: 600; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.mono { font-family: var(--font-mono, monospace); }
+.dim { color: var(--text-dim); }
+.actions { display:flex; gap:6px; flex-wrap:wrap; }
+.empty { color: var(--text-dim); padding: 28px 0; }
+</style>
+</head>
+<body>
+<%- include('partials/admin-header', { title: `Nakai daily briefings — ${user}` }) %>
+<div class="wrap">
+  <p class="dim" style="font-size:13px;">
+    Private stored editions for resend and continuity. Resend uses the stored PDF/HTML/Markdown and does not regenerate the briefing.
+  </p>
+
+  <% if (message) { %><div class="notice ok"><%= message %></div><% } %>
+  <% if (error) { %><div class="notice err"><%= error %></div><% } %>
+
+  <div class="top-actions">
+    <form method="POST" action="/admin/nakai-briefings/build-test" style="display:inline">
+      <button class="btn-sm" type="submit">Build test edition</button>
+    </form>
+  </div>
+
+  <% if (!briefings.length) { %>
+    <div class="empty">No stored Nakai daily briefings yet. Edition 001 starts on 19 June 2026.</div>
+  <% } else { %>
+  <table>
+    <tr>
+      <th>Edition</th>
+      <th>Date</th>
+      <th>Status</th>
+      <th>Artifacts</th>
+      <th></th>
+    </tr>
+    <% briefings.forEach(b => { %>
+    <tr>
+      <td class="mono">Daily Briefing <%= b.edition %></td>
+      <td><%= b.label || b.date %><% if (b.previousEdition) { %><div class="dim">Previous: <%= b.previousEdition %></div><% } %></td>
+      <td>
+        <% if (b.sentAt) { %>
+          Sent <span class="dim"><%= new Date(b.sentAt).toLocaleString('en-GB', { timeZone: 'Europe/Dublin', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) %></span>
+          <% if (b.to) { %><div class="dim"><%= b.to %></div><% } %>
+        <% } else { %>
+          <span class="dim">Not sent</span>
+        <% } %>
+      </td>
+      <td class="actions">
+        <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/pdf">PDF</a>
+        <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/html">HTML</a>
+        <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/md">Markdown</a>
+      </td>
+      <td>
+        <form method="POST" action="/admin/nakai-briefings/<%= b.edition %>/resend" style="display:inline">
+          <button class="btn-sm primary" type="submit">Send to Nakai again</button>
+        </form>
+      </td>
+    </tr>
+    <% }) %>
+  </table>
+  <% } %>
+</div>
+</body>
+</html>

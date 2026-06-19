@@ -568,13 +568,18 @@ router.get('/api/graph', requireAuth, (req, res) => {
   ensurePeopleNotes();
   const pages = indexAll();
   const graph = buildGraph(pages);
-  const nodes = pages.map(p => ({
+  // Only real knowledge nodes belong in the graph: drop system scaffolding pages
+  // (tags-index, dashboard, overview, purpose, etc.) and dangling-wikilink
+  // phantoms (the "slug" ghost). Connections are rebuilt from the knowledge
+  // substrate via the regenerated People/Projects notes, not these artefacts.
+  const visible = new Set(pages.filter(p => !p.system).map(p => p.slug));
+  const nodes = pages.filter(p => !p.system).map(p => ({
     id:        p.slug,
     label:     p.title,
     type:      p.type,
     typeLabel: p.typeLabel,
     tags:      p.tags || [],
-    system:    !!p.system,
+    system:    false,
   }));
   const manualByPair = new Map();
   for (const m of loadManualLinks()) {
@@ -582,26 +587,14 @@ router.get('/api/graph', requireAuth, (req, res) => {
   }
   const edges = [];
   for (const [from, targets] of graph.outbound) {
+    if (!visible.has(from)) continue;
     for (const to of targets) {
+      if (!visible.has(to)) continue; // drops edges to system + phantom/missing nodes
       const relation = manualByPair.get([from, to].sort().join('\n'));
       edges.push(relation ? { from, to, manual: true, relation } : { from, to });
     }
   }
-  // Phantom nodes for wikilinks that resolve to no indexed page
-  const slugSet  = new Set(pages.map(p => p.slug));
-  const resolver = buildLinkResolver(pages);
-  const missing  = new Map();
-  for (const p of pages) {
-    for (const link of p.wikilinks) {
-      if (slugSet.has(link) || resolver.get(link)) continue;
-      const id = `missing:${link}`;
-      if (!missing.has(id)) {
-        missing.set(id, { id, label: link, type: 'missing', typeLabel: 'Missing', tags: [], system: false });
-      }
-      edges.push({ from: p.slug, to: id });
-    }
-  }
-  res.json({ nodes: [...nodes, ...missing.values()], edges });
+  res.json({ nodes, edges });
 });
 
 // ── API: Force / remove a manual link between two pages ──────────────────────
