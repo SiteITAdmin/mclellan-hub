@@ -12,9 +12,10 @@ const { logUsageFromResponse } = require('../lib/openrouter-usage');
 const { captureNakaiDailyBriefing } = require('../lib/knowledge-format');
 
 const ROOT = path.join(__dirname, '..');
-const OUT_DIR = path.join(ROOT, 'output', 'pdf');
 const STORE_DIR = path.join(ROOT, 'data', 'nakai-briefings');
+const OUT_DIR = process.env.NAKAI_DAILY_BRIEFING_WORK_DIR || path.join(STORE_DIR, '.work');
 const START_DATE = process.env.NAKAI_DAILY_BRIEFING_START_DATE || '2026-06-19';
+const MODEL_TIMEOUT_MS = parseInt(process.env.NAKAI_DAILY_BRIEFING_TIMEOUT_MS || '180000', 10);
 
 function briefingMeta(date = new Date()) {
   const now = date instanceof Date ? date : new Date(date);
@@ -85,7 +86,7 @@ const sources = [
     id: 'S2',
     title: 'Central Bank of Ireland warning notices listing',
     date: '17 June 2026',
-    url: 'https://www.centralbank.ie/news/article/speech-gabriel-makhlouf-blavatnik-school-of-government-18-february-2026',
+    url: 'https://www.centralbank.ie/regulation/how-we-regulate/authorisation/unauthorised-firms/search-unauthorised-firms',
     notes: [
       'The Central Bank of Ireland latest article rail showed multiple 17 June 2026 warning notices, including Lambestone Holding Limited (clone), MakoTrade, AllianceBernstein Limited (clone), and SMH Markets (clone).',
     ],
@@ -506,13 +507,13 @@ async function generateMarkdown(meta = briefingMeta()) {
   fs.writeFileSync(path.join(OUT_DIR, 'nakai-daily-briefing-prompt.md'), fullPrompt, 'utf8');
 
   if (process.env.NAKAI_DAILY_BRIEFING_FORCE_FALLBACK) return fallbackBriefing(meta);
-  if (!process.env.OPENROUTER_API_KEY) return fallbackBriefing(meta);
+  if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set');
 
   try {
     const started = Date.now();
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      timeout: 60000,
+      timeout: Number.isFinite(MODEL_TIMEOUT_MS) ? MODEL_TIMEOUT_MS : 180000,
       headers: openRouterHeaders(TASK_CODES.NAKAI_DAILY_BRIEFING),
       body: JSON.stringify({
         model: modelId,
@@ -535,10 +536,14 @@ async function generateMarkdown(meta = briefingMeta()) {
       taskCode: TASK_CODES.NAKAI_DAILY_BRIEFING,
     });
     const text = data.choices?.[0]?.message?.content?.trim();
-    return text && /^# Daily Briefing/m.test(text) ? text : fallbackBriefing(meta);
+    if (!text || !/^# Daily Briefing/m.test(text)) throw new Error('Model response did not contain a Daily Briefing');
+    return text;
   } catch (err) {
-    console.warn(`[nakai-briefing] model generation failed, using fallback: ${err.message}`);
-    return fallbackBriefing(meta);
+    if (process.env.NAKAI_DAILY_BRIEFING_ALLOW_STATIC_FALLBACK === '1') {
+      console.warn(`[nakai-briefing] model generation failed, using fallback: ${err.message}`);
+      return fallbackBriefing(meta);
+    }
+    throw err;
   }
 }
 
@@ -728,13 +733,12 @@ async function sendStoredBriefing(edition, { force = false } = {}) {
   if (manifest.sentAt && !force) return { ok: true, skipped: true, manifest };
   const to = nakaiEmail();
   if (!to) throw new Error('No Nakai email configured. Set NAKAI_GOOGLE_EMAIL or NAKAI_GOOGLE_EMAILS.');
-  const { sendEmail } = require('../lib/agentmail');
+  const { sendEmail } = require('../lib/gmail');
+  const fromUser = process.env.NAKAI_DAILY_BRIEFING_GMAIL_USER || 'douglas';
   const pdf = fs.readFileSync(manifest.pdfPath);
   const markdown = fs.readFileSync(manifest.mdPath, 'utf8');
   const subject = `${manifest.title} - ${manifest.label}`;
-  await sendEmail({
-    to,
-    subject,
+  await sendEmail(fromUser, to, subject, {
     text: `${markdown}\n\n---\nStored copy: Daily Briefing ${manifest.edition}\nResend: ${resendUrl(manifest.edition)}`,
     html: emailHtml(manifest),
     attachments: [{

@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const fetch = require('../lib/fetch');
-const { OAuth2Client } = require('google-auth-library');
 const db = require('../lib/db');
 const {
   processCrmCommand,
@@ -26,457 +25,11 @@ const {
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
 
-const googleChatClient = new OAuth2Client();
-const GOOGLE_CHAT_ADDON_EMAIL_RE = /^service-\d+@gcp-sa-gsuiteaddons\.iam\.gserviceaccount\.com$/;
 
 function todayIso() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
 }
 
-function chatResponse(text, card) {
-  const msg = { text: String(text || '').slice(0, 3500) };
-  if (card?.cardsV2) msg.cardsV2 = card.cardsV2;
-  return msg;
-}
-
-function isGoogleWorkspaceAddOnRequest(req) {
-  return Boolean(req.body?.chat || String(req.headers['user-agent'] || '').includes('Google-gsuiteaddons'));
-}
-
-// replyOrText can be a plain string or { text, card } from handlers that produce cards
-function googleChatReply(req, replyOrText) {
-  const text = typeof replyOrText === 'object' ? (replyOrText.text || '') : replyOrText;
-  const card = typeof replyOrText === 'object' ? replyOrText.card : undefined;
-  const message = chatResponse(text, card);
-  if (!isGoogleWorkspaceAddOnRequest(req)) return message;
-  return {
-    hostAppDataAction: {
-      chatDataAction: {
-        createMessageAction: { message },
-      },
-    },
-  };
-}
-
-function cleanGoogleChatText(raw) {
-  return String(raw || '')
-    .replace(/<users\/[^>]+>/g, '')
-    .replace(/@[^\s]+/g, '')
-    .trim()
-    .replace(/^\/(crm|hermes)\s*/i, '')
-    .trim();
-}
-
-function decodeJwtClaims(token) {
-  try {
-    const payload = token.split('.')[1];
-    if (!payload) return null;
-    const padded = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=');
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-  } catch (_) {
-    return null;
-  }
-}
-
-async function verifyGoogleChatRequest(req) {
-  const skip = process.env.GOOGLE_CHAT_VERIFY === 'false';
-  if (skip) return true;
-
-  const auth = req.headers.authorization || '';
-  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!bearer) {
-    console.warn('[google-chat] auth failed: missing bearer token');
-    return false;
-  }
-
-  const audiences = [
-    process.env.GOOGLE_CHAT_AUTH_AUDIENCE,
-    process.env.GOOGLE_CHAT_PROJECT_NUMBER,
-    'https://dchat.mclellan.scot/api/google-chat/hermes',
-    '801490335247',
-  ].filter(Boolean);
-
-  const chatIssuer = 'chat@system.gserviceaccount.com';
-  const isAllowedGoogleChatEmail = (email) =>
-    email === chatIssuer || GOOGLE_CHAT_ADDON_EMAIL_RE.test(String(email || ''));
-
-  try {
-    for (const audience of audiences) {
-      try {
-        const ticket = await googleChatClient.verifyIdToken({ idToken: bearer, audience });
-        const payload = ticket.getPayload();
-        if (payload?.email_verified && isAllowedGoogleChatEmail(payload.email)) return true;
-      } catch (_) {}
-    }
-
-    const certResp = await fetch(`https://www.googleapis.com/service_accounts/v1/metadata/x509/${encodeURIComponent(chatIssuer)}`);
-    const certs = await certResp.json();
-    for (const audience of audiences) {
-      try {
-        await googleChatClient.verifySignedJwtWithCertsAsync(bearer, certs, audience, [chatIssuer]);
-        return true;
-      } catch (_) {}
-    }
-
-    const claims = decodeJwtClaims(bearer) || {};
-    console.warn(`[google-chat] auth failed: token did not verify for audiences ${audiences.join(', ')}; claims=${JSON.stringify({
-      iss: claims.iss,
-      aud: claims.aud,
-      email: claims.email,
-      azp: claims.azp,
-    })}`);
-    return false;
-  } catch (err) {
-    console.warn('[google-chat] auth failed:', err.message);
-    return false;
-  }
-}
-
-const { postToGoogleChatSpace } = require('../lib/google-chat');
-
-function helpText() {
-  return [
-    '"Had a call with Karol - she is pushing for June" saves a CRM note',
-    '"briefing" shows today\'s open CRM items',
-    '"today" reads today\'s Obsidian daily note',
-    '"search Dad physio" searches the vault',
-    '"read Daily/2026-05-13.md" reads a vault note',
-    '"remember ..." appends to today\'s daily note',
-    '"follow up ..." appends a follow-up to today\'s daily note',
-    '"linkedin <topic>" generates a scored LinkedIn post + image + adds to content calendar (include a URL to anchor research to that article)',
-    '"remind me to X at/in Y" sets an escalating reminder',
-    '"reminders" lists open reminders; reply "done 3", "snooze 3 2h", "ok 3", or "edit 3 new title at 3pm"',
-    '"suggestions" lists AI suggestions; reply "accept 2", "dismiss 2", or "why 2"',
-    '"who is Tom" looks up a contact',
-    '"flights" shows upcoming flights',
-    '"agenda" shows today\'s calendar, flights, and due reminders',
-    '"regs" explains that regulatory monitoring now sends Nakai-only email',
-    '"debrief" opens the end-of-day debrief',
-    '"meeting transcript <text>" processes a meeting transcript into CRM outcomes and tasks',
-    'Send a photo → extracted and saved to CRM',
-  ].join('\n- ');
-}
-
-async function handleGoogleChatCommand(user, text, { spaceName = '' } = {}) {
-  if (!text) return helpText();
-  const lower = text.toLowerCase();
-
-  if (lower === 'help') return helpText();
-
-  // Reminder commands — regex-first so acks are instant and cost no tokens
-  if (lower === 'reminders') {
-    const { listOpenReminders } = require('../lib/reminders');
-    const { buildReminderCard } = require('../lib/google-chat');
-    const open = listOpenReminders(user);
-    if (!open.length) return 'No open reminders. Say "remind me to X at Y" to set one.';
-    return { text: `${open.length} open reminder${open.length !== 1 ? 's' : ''}`, card: buildReminderCard(open) };
-  }
-
-  if (lower === 'suggestions') {
-    const { listOpenSuggestions } = require('../lib/suggestion-engine');
-    const { buildSuggestionCard } = require('../lib/google-chat');
-    const open = listOpenSuggestions(user);
-    if (!open.length) return 'No open suggestions. The daily run looks at travel and content signals each morning.';
-    return { text: `${open.length} open suggestion${open.length !== 1 ? 's' : ''}`, card: buildSuggestionCard(open) };
-  }
-
-  const suggestionCmd = lower.match(/^(accept|dismiss|why)\s+(\d+)$/);
-  if (suggestionCmd) {
-    const { acceptSuggestion, dismissSuggestion, whySuggestion } = require('../lib/suggestion-engine');
-    const [, verb, code] = suggestionCmd;
-    const result = verb === 'accept' ? await acceptSuggestion(user, code)
-      : verb === 'dismiss' ? dismissSuggestion(user, code)
-      : whySuggestion(user, code);
-    return result.message;
-  }
-
-  const reminderCmd = lower.match(/^(done|did|ok|ack|snooze|cancel)\s+(\d+)\s*(.*)$/);
-  if (reminderCmd) {
-    const { doneReminder, ackReminder, snoozeReminder, cancelReminder } = require('../lib/reminders');
-    const [, verb, code, rest] = reminderCmd;
-    let result;
-    if (verb === 'done' || verb === 'did') result = await doneReminder(user, code);
-    else if (verb === 'snooze') result = snoozeReminder(user, code, rest);
-    else if (verb === 'cancel') result = cancelReminder(user, code);
-    else result = ackReminder(user, code);
-    return result.message;
-  }
-
-  // edit <n> with no text — prompt with current title so user knows what they're editing
-  const editPromptCmd = lower.match(/^edit\s+(\d+)$/);
-  if (editPromptCmd) {
-    const { findByShortCode } = require('../lib/reminders');
-    const r = findByShortCode(user, editPromptCmd[1]);
-    if (!r) return `No open reminder #${editPromptCmd[1]}.`;
-    const when = r.next_fire_at
-      ? new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' })
-      : r.status;
-    return `✏️ Editing #${r.short_code}: _"${r.title}"_ — ${when}\n\nType: \`edit ${r.short_code} <new title and/or new time>\`\nExamples:\n• \`edit ${r.short_code} Call the pharmacist at 3pm\`\n• \`edit ${r.short_code} at 9am tomorrow\`\n• \`edit ${r.short_code} Chase the consultant instead\``;
-  }
-
-  const editCmd = lower.match(/^edit\s+(\d+)\s+(.+)$/);
-  if (editCmd) {
-    const [, code, editText] = editCmd;
-    const { findByShortCode, editReminder, dublinIsoToEpoch, epochAtNextDublin } = require('../lib/reminders');
-    const r = findByShortCode(user, code);
-    if (!r) return `No open reminder #${code}.`;
-
-    // Use LLM to split edit text into optional new title + optional new time
-    const nowIso = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Dublin' }).replace(' ', 'T');
-    let newTitle = null;
-    let newRemindAt = null;
-    try {
-      const parseResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: openRouterHeaders(TASK_CODES.HERMES_CRM_CAPTURE),
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          response_format: { type: 'json_object' },
-          messages: [{
-            role: 'user',
-            content: `Now is ${nowIso} Dublin time. I'm editing reminder #${code} whose current title is: "${r.title}"
-
-Edit instruction: "${editText}"
-
-Return JSON:
-{
-  "title": "new title if the instruction changes the title, else null to keep current",
-  "remind_at_iso": "ISO 8601 datetime if the instruction specifies a new time, else null to keep current"
-}
-
-Examples:
-- "Call the doctor at 3pm Friday" → title: "Call the doctor", remind_at_iso: "2026-06-20T15:00:00"
-- "at 9am tomorrow" → title: null, remind_at_iso: "2026-06-19T09:00:00"
-- "Chase the pharmacist instead" → title: "Chase the pharmacist instead", remind_at_iso: null
-- "in 2h" → title: null, remind_at_iso: (now + 2 hours ISO)`,
-          }],
-        }),
-      });
-      if (parseResp.ok) {
-        const data = await parseResp.json();
-        const raw = (data.choices?.[0]?.message?.content || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-        const parsed = JSON.parse(raw);
-        newTitle = parsed.title || null;
-        newRemindAt = parsed.remind_at_iso ? dublinIsoToEpoch(parsed.remind_at_iso) : null;
-      }
-    } catch (e) {
-      console.warn('[google-chat] edit parse:', e.message);
-    }
-
-    // Fallback: treat whole text as new title if parse failed
-    if (!newTitle && !newRemindAt) newTitle = editText;
-
-    const result = editReminder(user, code, { title: newTitle, remindAt: newRemindAt });
-    return result.message;
-  }
-
-  if (lower === 'briefing' || lower === 'brief') {
-    const events = await fetchTodayCalendarEvents(user);
-    return buildBriefingText(user, events) || '_No open items._';
-  }
-
-  if (lower === 'today' || lower === 'daily') {
-    const note = readNote(`Daily/${todayIso()}.md`);
-    return note ? `${note.path}\n\n${note.content.slice(0, 3000)}` : `No daily note for ${todayIso()}.`;
-  }
-
-  if (lower.startsWith('search ') || lower.startsWith('find ')) {
-    const query = text.replace(/^(search|find)\s+/i, '').trim();
-    if (!query) return 'Search for what? Example: search Dad physio';
-    const results = await searchNotes({ query, limit: 5 });
-    if (!results.length) return `No vault matches for: ${query}`;
-    return results.map((r, i) => `${i + 1}. ${r.path}\n${(r.excerpt || '').slice(0, 280)}`).join('\n\n');
-  }
-
-  if (lower.startsWith('read ')) {
-    const notePath = text.slice(5).trim();
-    if (!notePath) return 'Read which note? Example: read Daily/2026-05-13.md';
-    const note = readNote(notePath);
-    return note ? `${note.path}\n\n${note.content.slice(0, 3000)}` : `No such vault note: ${notePath}`;
-  }
-
-  if (lower.startsWith('remember ') || lower.startsWith('follow up ')) {
-    const isFollowUp = lower.startsWith('follow up ');
-    const body = text.slice(isFollowUp ? 10 : 9).trim();
-    if (!body) return 'Append what?';
-    const section = isFollowUp ? 'Follow-ups' : 'Remembered';
-    writeNote({
-      notePath: `Daily/${todayIso()}.md`,
-      mode: 'append',
-      content: `\n## ${section}\n- ${body}\n`,
-    });
-    try {
-      await processCrmCommand(user, isFollowUp ? `follow up: ${body}` : body, 'google-chat');
-    } catch (err) {
-      console.warn('[google-chat] CRM side-write skipped:', err.message);
-    }
-    return `Added to Daily/${todayIso()}.md`;
-  }
-
-  if (lower.startsWith('linkedin ') || lower.startsWith('content ')) {
-    const raw = text.replace(/^(linkedin|content)\s+/i, '').trim();
-    if (!raw) return 'What topic? e.g. "linkedin Microsoft Teams new AI feature"';
-
-    // Extract any URL present in the message — treat it as the primary source
-    const urlMatch = raw.match(/https?:\/\/\S+/);
-    let sourceUrl = null;
-    let topic = raw;
-    if (urlMatch) {
-      sourceUrl = urlMatch[0].replace(/[.,;!?)]+$/, ''); // strip trailing punctuation
-      topic = raw.replace(urlMatch[0], '').replace(/\s{2,}/g, ' ').trim() || raw;
-    }
-
-    if (!topic) return 'What topic? e.g. "linkedin Microsoft Teams new AI feature"';
-    const { runPipeline } = require('../lib/linkedin-pipeline');
-
-    setImmediate(async () => {
-      try {
-        const result = await runPipeline(user, topic, s => console.log('[linkedin]', s), null, sourceUrl);
-        const sc = result.score || {};
-        const overall = sc.overall_score || '?';
-        const verdict = sc.recruiter_value || '';
-        const emoji = overall >= 4 ? '🟢' : overall >= 3 ? '🟡' : '🔴';
-        const postText = result.refinedDraft || result.draft;
-        const lines = [
-          `✅ *LinkedIn post ready — ${topic}*`,
-          '',
-          postText,
-          '',
-          `${emoji} *${overall}/5* ${verdict}`,
-        ];
-        const topFix1 = sc.top_fixes?.[0];
-        if (topFix1) lines.push(`_Top fix: ${topFix1.problem} → ${topFix1.fix}_`);
-        if (sc.recruiter_perspective) lines.push(`_${sc.recruiter_perspective}_`);
-        if (result.carouselUrl) lines.push(`📄 Carousel: ${result.carouselUrl}`);
-        if (result.sheetUrl) lines.push(`📋 ${result.sheetUrl}`);
-        await postToGoogleChatSpace(spaceName, lines.join('\n'));
-      } catch (err) {
-        console.error('[linkedin] pipeline error:', err);
-        await postToGoogleChatSpace(spaceName, `❌ LinkedIn pipeline failed: ${err.message}`);
-      }
-    });
-
-    return sourceUrl
-      ? `Working on a LinkedIn post about *${topic}* — anchoring research to your source article. I'll post the result here when ready (~30 seconds).`
-      : `Working on a LinkedIn post about *${topic}*. I'll post the result here when ready (~30 seconds).`;
-  }
-
-  // ── Conversational queries ─────────────────────────────────────────────────
-
-  const whoMatch = lower.match(/^who(?:'s| is)\s+(.+?)[\?.]?\s*$/);
-  if (whoMatch) {
-    const query = whoMatch[1].trim();
-    const results = listContacts(user, query);
-    if (!results.length) return `No contact found matching "${query}".`;
-    const c = results[0];
-    const company = c.company_name
-      ? `${c.company_name}${c.company_role ? `, ${c.company_role}` : ''}`
-      : null;
-    const lines = [`*${c.name}*${company ? ` — ${company}` : ''}`];
-    if (c.email) lines.push(`📧 ${c.email}`);
-    const topFacts = (c.facts || []).slice(0, 5);
-    if (topFacts.length) lines.push('', ...topFacts.map(f => `• ${f.fact}`));
-    if (results.length > 1) lines.push(`\n_Also: ${results.slice(1, 4).map(r => r.name).join(', ')}_`);
-    return lines.join('\n');
-  }
-
-  if (/^(?:my\s+)?flights?[\?]?$/.test(lower) || lower === 'next flight') {
-    const upcoming = db.hub().prepare(`
-      SELECT * FROM flights
-      WHERE user = ? AND flight_date >= ?
-      ORDER BY flight_date ASC, scheduled_dep ASC
-      LIMIT 10
-    `).all(user, todayIso());
-    if (!upcoming.length) return 'No upcoming flights logged.';
-    const lines = upcoming.map(f => {
-      const dep = f.scheduled_dep ? f.scheduled_dep.slice(0, 5) : '?';
-      const arr = f.scheduled_arr ? f.scheduled_arr.slice(0, 5) : '?';
-      const badge = f.status !== 'scheduled' ? ` _(${f.status})_` : '';
-      return `✈ *${f.flight_date}* ${f.flight_number} ${f.direction} ${dep}→${arr}${badge}`;
-    });
-    return `*Upcoming flights:*\n${lines.join('\n')}`;
-  }
-
-  if (lower === 'agenda' || lower === 'whats on' || lower === "what's on") {
-    const [events, { listOpenReminders: lor }] = await Promise.all([
-      fetchTodayCalendarEvents(user),
-      Promise.resolve(require('../lib/reminders')),
-    ]);
-    const nowSecs = Math.floor(Date.now() / 1000);
-    const dueToday = lor(user).filter(r => r.next_fire_at && r.next_fire_at <= nowSecs + 24 * 3600);
-    const todayFlights = db.hub().prepare(
-      'SELECT * FROM flights WHERE user = ? AND flight_date = ? ORDER BY scheduled_dep ASC'
-    ).all(user, todayIso());
-    const parts = [];
-    if (events.length) {
-      parts.push(`*Calendar today:*\n${events.map(e => `• ${e.summary}${e.time ? ' ' + e.time : ''}`).join('\n')}`);
-    }
-    if (todayFlights.length) {
-      parts.push(`*Flights today:*\n${todayFlights.map(f => `✈ ${f.flight_number} ${f.direction}${f.scheduled_dep ? ' ' + f.scheduled_dep.slice(0, 5) : ''}`).join('\n')}`);
-    }
-    if (dueToday.length) {
-      parts.push(`*Due today:*\n${dueToday.map(r => `• #${r.short_code} ${r.title}`).join('\n')}`);
-    }
-    return parts.length ? parts.join('\n\n') : 'Nothing on today.';
-  }
-
-  if (lower === 'regs' || lower === 'regulatory') {
-    return 'Regulatory monitoring is configured as a Nakai-only email digest. It no longer posts regulatory updates into Chat or the Hub.';
-  }
-
-  if (lower === 'debrief') {
-    const hubUrl = (process.env.HUB_BASE_URL || 'https://dchat.mclellan.scot').replace(/\/$/, '');
-    return {
-      text: 'Ready when you are.',
-      card: {
-        cardsV2: [{
-          cardId: 'debrief',
-          card: {
-            header: { title: '🎙 End-of-day debrief', subtitle: 'Voice interview — tap to start' },
-            sections: [{
-              widgets: [{
-                buttonList: {
-                  buttons: [
-                    { text: 'Start debrief →', onClick: { openLink: { url: `${hubUrl}/debrief` } } },
-                  ],
-                },
-              }],
-            }],
-          },
-        }],
-      },
-    };
-  }
-
-  if (lower.startsWith('meeting transcript ') || lower.startsWith('transcript:')) {
-    const transcript = text.replace(/^meeting transcript\s+/i, '').replace(/^transcript:\s*/i, '').trim();
-    if (transcript.length < 80) return 'Send the full transcript after "meeting transcript", or use the CRM Intake page.';
-    if (spaceName) {
-      setImmediate(async () => {
-        try {
-          const { processMeetingTranscript } = require('../lib/meeting-intake');
-          const result = await processMeetingTranscript(user, { transcript, title: 'Chat meeting transcript' });
-          const hubUrl = (process.env.HUB_BASE_URL || 'https://dchat.mclellan.scot').replace(/\/$/, '');
-          await postToGoogleChatSpace(spaceName, [
-            `Meeting transcript processed: *${result.meetingTitle}*`,
-            `${result.counts.attendees} attendees | ${result.counts.facts} outcomes | ${result.counts.tasks} tasks | ${result.counts.projectDocuments} project notes`,
-            `${hubUrl}/crm/meeting/${result.meetingId}`,
-          ].join('\n'));
-        } catch (err) {
-          console.error('[meeting-intake chat]', err);
-          await postToGoogleChatSpace(spaceName, `Meeting transcript failed: ${err.message}`);
-        }
-      });
-      return 'Got the transcript. I will process it into CRM outcomes, tasks, and project notes.';
-    }
-    const { processMeetingTranscript } = require('../lib/meeting-intake');
-    const result = await processMeetingTranscript(user, { transcript, title: 'Chat meeting transcript' });
-    return `Meeting transcript processed: ${result.counts.attendees} attendees, ${result.counts.facts} outcomes, ${result.counts.tasks} tasks. Open /crm/meeting/${result.meetingId}`;
-  }
-
-  const result = await processCrmCommand(user, text, 'google-chat');
-  return result.ok ? result.message : result.message || 'Could not process that note.';
-}
 
 // ── CRM endpoints ─────────────────────────────────────────────────────────────
 router.get('/api/crm/contacts', requireAuth, (req, res) => {
@@ -587,224 +140,6 @@ router.get('/api/crm/briefing', requireAuth, async (req, res) => {
   }
 });
 
-// Direct Google Chat HTTP endpoint. This bypasses Apps Script entirely:
-// configure Google Chat API connection settings to HTTP endpoint URL:
-// https://dchat.mclellan.scot/api/google-chat/hermes
-router.post('/api/google-chat/hermes', writeLimiter, async (req, res) => {
-  const authed = await verifyGoogleChatRequest(req);
-  if (!authed) return res.status(401).json({ error: 'Unauthorized' });
-
-  const event = req.body?.chat || req.body || {};
-  const type = event.type || '';
-  const message = event.message || event.messagePayload?.message || {};
-  const user = process.env.GOOGLE_CHAT_USER || req.hubUser || 'douglas';
-
-  try {
-    if (type === 'ADDED_TO_SPACE' || event.addedToSpacePayload) {
-      return res.json(googleChatReply(req, 'McLellan Hermes connected.\n\n- ' + helpText()));
-    }
-
-    if (type === 'REMOVED_FROM_SPACE' || event.removedFromSpacePayload) {
-      console.log('[google-chat] removed from space', event.space?.name || '');
-      return res.json({});
-    }
-
-    const spaceName = event.space?.name || message.space?.name || '';
-    // Remember where Douglas talks to hermes so reminders can post into a
-    // space where replies actually reach this endpoint (webhooks are one-way)
-    if (spaceName) {
-      db.hub().prepare(`
-        INSERT INTO crm_context (id, user, key, value) VALUES (?, ?, '_hermes_space', ?)
-        ON CONFLICT(user, key) DO UPDATE SET value = excluded.value
-      `).run(uuid(), user, spaceName);
-    }
-
-    // Card button clicks arrive as CARD_CLICKED with the action in event.action.actionMethodName.
-    // The function name is whatever string we put in the button's onClick.action.function,
-    // so it maps directly to existing command handlers — no new logic needed.
-    if (type === 'CARD_CLICKED') {
-      const actionText = event.action?.actionMethodName || event.common?.invokedFunction || '';
-      if (!actionText) return res.json({});
-      const reply = await handleGoogleChatCommand(user, actionText, { spaceName });
-      console.log(`[google-chat] card click action="${actionText}"`);
-      return res.json(googleChatReply(req, reply));
-    }
-
-    // Image/photo attachments — download and extract CRM info via vision model.
-    // Fires async so Google Chat gets an immediate ack; result posts back into the space.
-    const attachments = message.attachment || [];
-    const imageAtt = attachments.find(a => String(a.contentType || '').startsWith('image/'));
-    if (imageAtt) {
-      const resourceName = imageAtt.attachmentDataRef?.resourceName || imageAtt.name;
-      if (resourceName && spaceName) {
-        setImmediate(async () => {
-          try {
-            const { downloadChatAttachment } = require('../lib/google-chat');
-            const b64 = await downloadChatAttachment(resourceName);
-            if (!b64) {
-              await postToGoogleChatSpace(spaceName, '⚠️ Could not download the image — try sharing it from Drive instead.');
-              return;
-            }
-            const orKey = process.env.OPENROUTER_API_KEY;
-            if (!orKey) { await postToGoogleChatSpace(spaceName, '⚠️ OPENROUTER_API_KEY not set.'); return; }
-            const mimeType = imageAtt.contentType || 'image/jpeg';
-            const nowIso = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Dublin' }).replace(' ', 'T');
-
-            // Single vision + structure call: extract and decide what to do in one pass
-            const started = Date.now();
-            const visionResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-              method: 'POST',
-              headers: openRouterHeaders(TASK_CODES.HERMES_IMAGE_VISION),
-              body: JSON.stringify({
-                model: 'google/gemini-2.5-flash',
-                response_format: { type: 'json_object' },
-                messages: [{
-                  role: 'user',
-                  content: [
-                    { type: 'image_url', image_url: { url: `data:${mimeType};base64,${b64}` } },
-                    { type: 'text', text: `Now is ${nowIso} (Europe/Dublin). Analyse this image for a personal knowledge management system. Extract ALL useful information — names, dates, medication, test results, tasks, any visible text.
-
-Return JSON:
-{
-  "summary": "one-sentence summary of what this image shows",
-  "contact_name": "full name of the primary person this relates to, or null",
-  "crm_note": "complete CRM note to save — write naturally including the person's name if known, all facts, any context",
-  "action_items": [
-    {
-      "title": "specific action to take",
-      "due_iso": "ISO 8601 datetime if a date/time is visible or implied, else null",
-      "kind": "reminder | task | fact",
-      "kind_reason": "one phrase explaining the classification"
-    }
-  ],
-  "obsidian_note": "markdown paragraph to log in today's daily note capturing what was seen and why it matters, or null if nothing journal-worthy"
-}
-
-Classification rules for kind:
-- "reminder": time-sensitive nudge that should fire in chat (e.g. "call the doctor", "collect prescription", "pay this by Friday")
-- "task": a concrete piece of work to add to a task list (e.g. "draft the report", "book flights", "review document")
-- "fact": informational only — record it but no action needed (e.g. a bill amount already paid, a reference number, a test result to note)
-
-Bills and invoices: if unpaid with a due date → "reminder". If already paid or just for records → "fact".
-
-Be thorough. If you see a prescription, extract drug names, dosages, instructions. If a letter, extract sender, date, key points, any deadlines. If a whiteboard or handwritten note, transcribe it. If a business card, extract everything.` },
-                  ],
-                }],
-              }),
-            });
-            if (!visionResp.ok) throw new Error(`Vision model ${visionResp.status}: ${await visionResp.text()}`);
-            const visionData = await visionResp.json();
-            logUsageFromResponse({
-              user, feature: 'hermes-image-vision', modelKey: 'hermes_image_vision',
-              fallbackModelId: 'google/gemini-2.5-flash', data: visionData,
-              durationMs: Date.now() - started, taskCode: TASK_CODES.HERMES_IMAGE_VISION,
-            });
-
-            const raw = visionData.choices?.[0]?.message?.content?.trim() || '';
-            const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-            let parsed;
-            try { parsed = JSON.parse(cleaned); } catch { parsed = null; }
-            if (!parsed) { await postToGoogleChatSpace(spaceName, '⚠️ Could not parse image content.'); return; }
-
-            const { summary, contact_name, crm_note, action_items = [], obsidian_note } = parsed;
-            const lines = [`📷 *${summary || 'Image captured'}*`];
-
-            // ── Contact resolution ───────────────────────────────────────────
-            let resolvedContact = null;
-            if (contact_name) {
-              const matches = listContacts(user, contact_name);
-              resolvedContact = matches[0] || null;
-              lines.push(resolvedContact
-                ? `Links to: *${resolvedContact.name}*`
-                : `Person mentioned: ${contact_name} _(not in CRM yet)_`);
-            }
-
-            // ── CRM note ─────────────────────────────────────────────────────
-            if (crm_note) {
-              const crmResult = await processCrmCommand(user, crm_note, 'google-chat');
-              lines.push(crmResult.ok ? '✅ CRM note saved' : `⚠️ CRM: ${crmResult.message}`);
-            }
-
-            // ── Action items — routed by kind ─────────────────────────────────
-            if (action_items.length) {
-              const { createReminder, dublinIsoToEpoch, epochAtNextDublin } = require('../lib/reminders');
-              const nowSecs = Math.floor(Date.now() / 1000);
-              for (const item of action_items) {
-                const kind = item.kind || 'reminder';
-
-                if (kind === 'fact') {
-                  // Informational only — already captured in crm_note, just acknowledge
-                  lines.push(`📎 Noted: "${item.title}"`);
-                  continue;
-                }
-
-                if (kind === 'task') {
-                  try {
-                    const t = await createTask(user, {
-                      title: item.title,
-                      notes: item.kind_reason || '',
-                      due: item.due_iso || null,
-                      source: 'photo',
-                      sourceId: resolvedContact?.id || null,
-                    });
-                    lines.push(`✅ Task: "${item.title}"`);
-                  } catch (e) {
-                    lines.push(`⚠️ Task failed: "${item.title}" — ${e.message}`);
-                  }
-                  continue;
-                }
-
-                // Default: reminder
-                const remindAt = item.due_iso
-                  ? (dublinIsoToEpoch(item.due_iso) || epochAtNextDublin(9, 0))
-                  : epochAtNextDublin(9, 0);
-                const r = createReminder(user, {
-                  title: item.title,
-                  remindAt: Math.max(remindAt, nowSecs + 60),
-                  source: 'photo',
-                  kind: resolvedContact ? 'fact' : 'adhoc',
-                  targetId: resolvedContact ? resolvedContact.id : null,
-                });
-                const when = new Date(Math.max(remindAt, nowSecs + 60) * 1000).toLocaleString('en-GB', {
-                  weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin',
-                });
-                lines.push(r ? `✅ Reminder: "${item.title}" — ${when}` : `⚠️ Could not create reminder: "${item.title}"`);
-              }
-            }
-
-            // ── Obsidian daily note ───────────────────────────────────────────
-            if (obsidian_note) {
-              try {
-                writeNote({
-                  notePath: `Daily/${todayIso()}.md`,
-                  mode: 'append',
-                  content: `\n## 📷 ${summary || 'Photo capture'}\n${obsidian_note}\n`,
-                });
-                lines.push('✅ Added to today\'s daily note');
-              } catch (e) {
-                lines.push(`⚠️ Obsidian append failed: ${e.message}`);
-              }
-            }
-
-            await postToGoogleChatSpace(spaceName, lines.join('\n'));
-          } catch (err) {
-            console.error('[google-chat] image processing:', err.message);
-            await postToGoogleChatSpace(spaceName, `❌ Image processing failed: ${err.message}`);
-          }
-        });
-        return res.json(googleChatReply(req, '📷 Got your image — extracting and routing to CRM, reminders, and Obsidian…'));
-      }
-    }
-
-    const text = cleanGoogleChatText(message.argumentText || message.text || '');
-    const reply = await handleGoogleChatCommand(user, text, { spaceName });
-    console.log(`[google-chat] handled ${type || 'event'} addon=${isGoogleWorkspaceAddOnRequest(req)} text_chars=${text.length} reply_chars=${String(reply || '').length}`);
-    return res.json(googleChatReply(req, reply));
-  } catch (err) {
-    console.error('[google-chat]', err);
-    return res.json(googleChatReply(req, 'Error: ' + err.message));
-  }
-});
 
 // Hermes (or any external agent) posts a /crm note here
 // Secured by a shared secret: Authorization: Bearer <HERMES_WEBHOOK_SECRET>
@@ -836,36 +171,6 @@ router.post('/api/crm/webhook', writeLimiter, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[crm webhook]', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// On-demand briefing push (callable from Google Chat bot or Hermes)
-router.post('/api/crm/briefing-push', writeLimiter, async (req, res) => {
-  const secret = process.env.HERMES_WEBHOOK_SECRET;
-  if (!secret) return res.status(503).json({ error: 'Not configured' });
-  const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
-
-  const user = req.hubUser || req.body.user;
-  if (!user) return res.status(400).json({ error: 'user required' });
-
-  try {
-    const { sendDailyBriefing } = require('../lib/crm');
-    const hub = db.hub();
-    const existing = hub.prepare(
-      `SELECT id FROM crm_context WHERE user = ? AND key = '_briefing_push_lock' AND CAST(value AS INTEGER) > ?`
-    ).get(user, Date.now() - 5 * 60 * 1000);
-    if (existing) return res.json({ ok: true, message: 'Briefing already sent recently' });
-
-    hub.prepare(`INSERT INTO crm_context (id, user, key, value) VALUES (?, ?, '_briefing_push_lock', ?)
-      ON CONFLICT(user, key) DO UPDATE SET value = excluded.value`)
-      .run(uuid(), user, Date.now().toString());
-
-    res.json({ ok: true, message: 'Briefing push started' });
-    sendDailyBriefing(user).catch(err => console.error('[crm briefing-push]', err));
-  } catch (err) {
-    console.error('[crm briefing-push]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1250,6 +555,7 @@ router.post('/crm/meetings/sync-calendar', requireAuth, requireSameOrigin, write
 
 router.get('/crm/meeting-intake', requireAuth, (req, res) => {
   const hub = db.hub();
+  const { isPlaceholderPersonName } = require('../lib/meeting-intake');
   const meetings = hub.prepare(`
     SELECT m.id, m.title, m.meeting_date, m.meeting_time, co.name AS company_name
     FROM meetings m
@@ -1266,8 +572,9 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
     JOIN projects p ON p.id = cp.project_id
     WHERE c.user = ?
     ORDER BY p.slug, c.name
-  `).all(req.hubUser);
-  const allContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  `).all(req.hubUser).filter(contact => !isPlaceholderPersonName(contact.name));
+  const allContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser)
+    .filter(contact => !isPlaceholderPersonName(contact.name));
   const recent = hub.prepare(`
     SELECT mi.*, m.title AS meeting_title
     FROM meeting_intakes mi
@@ -1305,6 +612,37 @@ function queueMeetingIntakeProcessing({ user, intakeId, transcript, body = {}, s
         `).run(err.message, intakeId, user);
       } catch (_) {}
     }
+  });
+}
+
+function parseMeetingIntakeExtraction(value) {
+  try {
+    const parsed = JSON.parse(value || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function queueStoredMeetingIntake(user, intake) {
+  const extraction = parseMeetingIntakeExtraction(intake.extraction);
+  const options = extraction.intake_options || {};
+  db.hub().prepare(`
+    UPDATE meeting_intakes
+    SET status = 'processing', error = NULL
+    WHERE id = ? AND user = ?
+  `).run(intake.id, user);
+  queueMeetingIntakeProcessing({
+    user,
+    intakeId: intake.id,
+    transcript: intake.transcript,
+    body: {
+      title: intake.title || options.title,
+      meeting_date: options.meeting_date,
+      meeting_id: intake.meeting_id || options.meeting_id,
+      project_slug: intake.project_slug || options.project_slug,
+    },
+    sourceFilename: intake.source_filename || '',
   });
 }
 
@@ -1496,7 +834,13 @@ router.post('/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter
   const sourceFilename = req.file?.originalname || '';
   const { speakerReviewForTranscript } = require('../lib/meeting-intake');
   const speakerReview = speakerReviewForTranscript(transcript);
-  const status = speakerReview ? 'needs_speaker_review' : 'processing';
+  const status = speakerReview ? 'needs_speaker_review' : 'draft';
+  const intakeOptions = {
+    title,
+    meeting_date: String(req.body.meeting_date || '').trim(),
+    meeting_id: String(req.body.meeting_id || '').trim(),
+    project_slug: projectSlug,
+  };
   hub.prepare(`
     INSERT INTO meeting_intakes
       (id, user, meeting_id, project_slug, title, source_filename, transcript, status, extraction, created_counts)
@@ -1504,21 +848,27 @@ router.post('/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter
   `).run(
     intakeId, req.hubUser, String(req.body.meeting_id || '').trim() || null,
     projectSlug, title, sourceFilename || null, transcript, status,
-    JSON.stringify(speakerReview ? { speaker_review: speakerReview } : {}),
+    JSON.stringify({
+      intake_options: intakeOptions,
+      ...(speakerReview ? { speaker_review: speakerReview } : {}),
+    }),
   );
 
-  if (!speakerReview) {
-    queueMeetingIntakeProcessing({
-      user: req.hubUser,
-      intakeId,
-      transcript,
-      body: req.body,
-      sourceFilename,
-    });
-  }
-
-  const params = new URLSearchParams(speakerReview ? { review: intakeId } : { queued: intakeId });
+  const params = new URLSearchParams(speakerReview ? { review: intakeId } : { draft: intakeId });
   res.redirect(`/crm/meeting-intake?${params.toString()}`);
+});
+
+router.post('/crm/meeting-intake/:id/save', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const intake = hub.prepare('SELECT * FROM meeting_intakes WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!intake) return res.status(404).send('Intake not found');
+  if (intake.status === 'needs_speaker_review') {
+    return res.status(400).send('Identify the detected speakers before saving this intake to CRM');
+  }
+  if (intake.status === 'processing') return res.redirect(`/crm/meeting-intake?queued=${encodeURIComponent(intake.id)}`);
+  if (intake.status === 'processed') return res.redirect(`/crm/meeting-intake?intake=${encodeURIComponent(intake.id)}&meeting=${encodeURIComponent(intake.meeting_id || '')}`);
+  queueStoredMeetingIntake(req.hubUser, intake);
+  res.redirect(`/crm/meeting-intake?queued=${encodeURIComponent(intake.id)}`);
 });
 
 router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
@@ -1530,13 +880,18 @@ router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, 
   const extraction = (() => { try { return JSON.parse(intake.extraction || '{}'); } catch { return {}; } })();
   const speakers = extraction.speaker_review?.speakers || [];
   const speakerMap = {};
+  const { isPlaceholderPersonName } = require('../lib/meeting-intake');
   const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   for (const speaker of speakers) {
     const key = speaker.label.replace(/[^a-z0-9]/gi, '_');
     const newName = String(req.body[`new_${key}`] || '').trim();
     const contactId = String(req.body[`contact_${key}`] || '').trim();
     let contact = contactId ? contacts.find(c => c.id === contactId) : null;
+    if (contact && isPlaceholderPersonName(contact.name)) {
+      return res.status(400).send('Speaker labels are placeholders. Please choose or enter the real person name.');
+    }
     if (!contact && newName) {
+      if (isPlaceholderPersonName(newName)) return res.status(400).send('Speaker labels are placeholders. Please choose or enter the real person name.');
       const id = uuid();
       hub.prepare('INSERT INTO contacts (id, user, name) VALUES (?, ?, ?)').run(id, req.hubUser, newName);
       contact = { id, name: newName };
@@ -1563,17 +918,7 @@ router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, 
     intake.id,
     req.hubUser
   );
-  queueMeetingIntakeProcessing({
-    user: req.hubUser,
-    intakeId: intake.id,
-    transcript: resolvedTranscript,
-    body: {
-      title: intake.title,
-      meeting_id: intake.meeting_id,
-      project_slug: intake.project_slug,
-    },
-    sourceFilename: intake.source_filename || '',
-  });
+  queueStoredMeetingIntake(req.hubUser, { ...intake, transcript: resolvedTranscript, extraction: JSON.stringify({ ...extraction, speaker_map: speakerMap }) });
   res.redirect(`/crm/meeting-intake?queued=${encodeURIComponent(intake.id)}`);
 });
 

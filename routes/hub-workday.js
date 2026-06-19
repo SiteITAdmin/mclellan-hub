@@ -65,9 +65,6 @@ router.post('/api/workday/webhook', requireWorkdayWebhookAuth, uploadLimiter, au
     ingestWorkdayInterview(opts)
       .then(result => {
         console.log(`[workday webhook] done for ${user}: ${result.document?.filename}`);
-        const { pushGoogleChatBriefing } = require('../lib/crm');
-        pushGoogleChatBriefing(user, `✅ *Workday note saved:* ${opts.title || 'Workday interview'}\n_Stored in Workday Journal_`)
-          .catch(() => {});
       })
       .catch(err => console.error('[workday webhook] background processing failed:', err.message));
     return;
@@ -112,10 +109,6 @@ router.post('/api/workday/audio', requireWorkdayWebhookAuth, uploadLimiter, expr
   ingestWorkdayInterview(opts)
     .then(result => {
       console.log(`[workday audio] done for ${user}: ${result.document?.filename} (${result.transcriptChars} chars)`);
-      const { pushGoogleChatBriefing } = require('../lib/crm');
-      const title = opts.title;
-      pushGoogleChatBriefing(user, `✅ *Workday note saved:* ${title}\n_Transcribed and stored in Workday Journal_`)
-        .catch(() => {});
     })
     .catch(err => console.error('[workday audio] background processing failed:', err.message));
 });
