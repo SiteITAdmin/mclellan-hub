@@ -1625,14 +1625,10 @@ router.post('/admin/trigger-agentmail-fetch', requireHubAdmin, async (req, res) 
 
 // ── Manual email digest send ──────────────────────────────────────────────────
 router.post('/admin/trigger-email-digest', requireHubAdmin, async (req, res) => {
-  const { sendEmailBriefing, buildEmailBriefingText } = require('../lib/crm');
+  const { buildEmailBriefingText } = require('../lib/crm');
   try {
     const preview = buildEmailBriefingText(req.hubUser);
     if (!preview) return res.json({ ok: true, message: 'No emails to digest yet.' });
-    // Force-send by clearing the log entry first
-    db.hub().prepare("DELETE FROM crm_briefing_log WHERE user = ? AND date_str = ?")
-      .run(req.hubUser, `email-${new Date().toLocaleDateString('en-GB')}`);
-    await sendEmailBriefing(req.hubUser);
     res.json({ ok: true, preview });
   } catch (err) {
     res.json({ ok: false, error: err.message });

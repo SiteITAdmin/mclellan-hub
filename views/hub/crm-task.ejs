@@ -18,7 +18,7 @@
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <% if (!task.deleted_at && task.status === 'needsAction') { %>
       <button class="btn" onclick="taskAction('<%= task.id %>', 'complete')">Mark done</button>
-      <button class="btn" style="opacity:.6;" onclick="remindMe()" title="Set an escalating Google Chat reminder for this task">🔔 Remind me</button>
+      <button class="btn" style="opacity:.6;" onclick="remindMe()" title="Set an escalating reminder for this task">🔔 Remind me</button>
       <% if (['document','email','agentmail'].includes(task.source)) { %>
         <button class="btn" style="color:var(--crm-danger,#c0392b);background:transparent;border:1px solid currentColor;" onclick="markTaskWrong('<%= task.id %>')">Wrong — teach extractor</button>
       <% } %>
@@ -182,7 +182,7 @@ async function remindMe() {
     body: JSON.stringify({ kind: 'task', target_id: '<%= task.id %>', title: <%- JSON.stringify(task.title) %>, remind_at: when }),
   });
   const j = await r.json();
-  if (j.ok) alert(`Reminder #${j.reminder.short_code} set — it will ping Google Chat and escalate until you reply.`);
+  if (j.ok) alert(`Reminder #${j.reminder.short_code} set.`);
   else alert(j.error || 'Error');
 }
 

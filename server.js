@@ -10,7 +10,7 @@ const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
 const promptRouter = require('./routes/prompt');
-const { sendDailyBriefing, sendEmailBriefing, syncCalendarMeetings } = require('./lib/crm');
+const { syncCalendarMeetings } = require('./lib/crm');
 const { runRegulatoryMonitor } = require('./lib/regulatory-monitor');
 const { sendWeeklyDigest } = require('./lib/weekly-digest');
 const { sendRhStats } = require('./lib/rh-stats');
@@ -164,30 +164,6 @@ setInterval(() => {
   sendRhStats().catch(err => console.error('[rh-stats] error:', err));
 }, 60 * 1000);
 
-// ── Morning CRM briefing (07:30 Europe/London) ────────────────────────────────
-const BRIEFING_HOUR = parseInt(process.env.BRIEFING_HOUR || '7');
-const BRIEFING_MINUTE = parseInt(process.env.BRIEFING_MINUTE || '30');
-
-setInterval(() => {
-  const now = nowIn('Europe/London');
-  if (now.getHours() !== BRIEFING_HOUR || now.getMinutes() !== BRIEFING_MINUTE) return;
-  for (const user of BRIEFING_USERS) {
-    sendDailyBriefing(user).catch(err => console.error(`[crm] morning briefing error for ${user}:`, err));
-  }
-}, 60 * 1000);
-
-// ── Email digest (16:00 Europe/Dublin) ───────────────────────────────────────
-const EMAIL_BRIEFING_HOUR = parseInt(process.env.EMAIL_BRIEFING_HOUR || '16');
-const EMAIL_BRIEFING_MINUTE = parseInt(process.env.EMAIL_BRIEFING_MINUTE || '0');
-
-setInterval(() => {
-  const now = nowIn('Europe/Dublin');
-  if (now.getHours() !== EMAIL_BRIEFING_HOUR || now.getMinutes() !== EMAIL_BRIEFING_MINUTE) return;
-  for (const user of BRIEFING_USERS) {
-    sendEmailBriefing(user).catch(err => console.error(`[email] digest error for ${user}:`, err));
-  }
-}, 60 * 1000);
-
 // ── Email + AgentMail: now handled by job queue (see lib/job-queue.js) ────────
 
 // ── Weekly digest (Sunday 14:00 Europe/Dublin) ───────────────────────────────
@@ -218,10 +194,12 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ── Regulatory monitor (08:00 Europe/Dublin, daily) ───────────────────────────
+const REG_MONITOR_ENABLED = process.env.REG_MONITOR_ENABLED === '1';
 const REG_MONITOR_HOUR   = parseInt(process.env.REG_MONITOR_HOUR   || '8');
 const REG_MONITOR_MINUTE = parseInt(process.env.REG_MONITOR_MINUTE || '0');
 
 setInterval(() => {
+  if (!REG_MONITOR_ENABLED) return;
   const now = nowIn('Europe/Dublin');
   if (now.getHours() !== REG_MONITOR_HOUR || now.getMinutes() !== REG_MONITOR_MINUTE) return;
   runRegulatoryMonitor().catch(err => console.error('[reg-monitor] error:', err));
@@ -230,11 +208,19 @@ setInterval(() => {
 // ── Nakai Daily Briefing (07:30 Europe/Dublin, daily; Edition 001 starts 2026-06-19) ──
 const NAKAI_DAILY_BRIEFING_HOUR = parseInt(process.env.NAKAI_DAILY_BRIEFING_HOUR || '7');
 const NAKAI_DAILY_BRIEFING_MINUTE = parseInt(process.env.NAKAI_DAILY_BRIEFING_MINUTE || '30');
+let nakaiDailyBriefingAttemptDate = '';
 
 setInterval(() => {
   const now = nowIn('Europe/Dublin');
-  if (now.getHours() !== NAKAI_DAILY_BRIEFING_HOUR || now.getMinutes() !== NAKAI_DAILY_BRIEFING_MINUTE) return;
-  sendTodayNakaiDailyBriefing().catch(err => console.error('[nakai-briefing] scheduled send error:', err));
+  const dateKey = now.toLocaleDateString('sv-SE');
+  const dueMinute = (NAKAI_DAILY_BRIEFING_HOUR * 60) + NAKAI_DAILY_BRIEFING_MINUTE;
+  const currentMinute = (now.getHours() * 60) + now.getMinutes();
+  if (currentMinute < dueMinute || nakaiDailyBriefingAttemptDate === dateKey) return;
+  nakaiDailyBriefingAttemptDate = dateKey;
+  sendTodayNakaiDailyBriefing().catch(err => {
+    nakaiDailyBriefingAttemptDate = '';
+    console.error('[nakai-briefing] scheduled send error:', err);
+  });
 }, 60 * 1000);
 
 // ── Daily system report (21:00 Europe/Dublin) ─────────────────────────────────

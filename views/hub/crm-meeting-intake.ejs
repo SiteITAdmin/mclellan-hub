@@ -21,6 +21,16 @@
     Transcript queued and processing in the background. Refresh this page in a moment to see the meeting, outcomes, and tasks.
   </p>
 <% } %>
+<% if (query && query.draft) { %>
+  <p class="crm-notice">
+    Transcript captured as a draft. Use Save to CRM when you want it to create the meeting, outcomes, project notes, and tasks.
+  </p>
+<% } %>
+<% if (query && query.review) { %>
+  <p class="crm-notice">
+    Transcript captured. Identify each detected speaker below, then save it to CRM.
+  </p>
+<% } %>
 <% if (query && query.deleted) { %>
   <p class="crm-notice">
     Intake deleted. Removed <%= query.meetings || 0 %> meeting<%= query.meetings === '1' ? '' : 's' %>,
@@ -56,7 +66,7 @@
       </label>
       <label class="wide">Upload .txt or .md transcript<input name="transcript_file" type="file" accept=".txt,.md,text/plain,text/markdown"></label>
       <label class="wide">Paste transcript<textarea name="transcript" rows="16" placeholder="Paste the full meeting transcript here..."></textarea></label>
-      <button class="btn" type="submit">Process transcript</button>
+      <button class="btn" type="submit">Capture transcript</button>
     </form>
   </section>
 
@@ -97,6 +107,11 @@
           </span>
           <div style="display:flex;gap:6px;align-items:center;">
             <% if (item.meeting_id) { %><a class="btn btn-sm" href="/crm/meeting/<%= item.meeting_id %>">Open</a><% } %>
+            <% if (item.status === 'draft' || item.status === 'error') { %>
+              <form method="post" action="/crm/meeting-intake/<%= item.id %>/save">
+                <button class="btn btn-sm" type="submit">Save to CRM</button>
+              </form>
+            <% } %>
             <form method="post" action="/crm/meeting-intake/<%= item.id %>/delete" onsubmit="return confirm('Delete this intake and all meeting-transcript data it created? This can remove the generated CRM meeting, attendee links, CRM outcomes, project notes, and Google Tasks related to that meeting. This is useful for duplicates, but it cannot be undone.');">
               <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
             </form>
@@ -128,7 +143,7 @@
                 </div>
               </div>
             <% } %>
-            <button class="btn" type="submit">Save speakers and process</button>
+            <button class="btn" type="submit">Save to CRM</button>
           </form>
         <% } %>
       <% } %>
