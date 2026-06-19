@@ -5,9 +5,9 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nakai briefings - McLellan Hub</title>
-<link rel="stylesheet" href="/hub.css">
+<link rel="stylesheet" href="/portfolio.css">
 <style>
-.wrap { padding: 24px; max-width: 980px; }
+.wrap { max-width: var(--max-w); }
 .notice { margin: 12px 0; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
 .notice.ok { background: rgba(76,175,133,.12); color: #287052; }
 .notice.err { background: rgba(224,108,108,.12); color: #a33b3b; }
@@ -24,9 +24,9 @@ td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: 
 .empty { color: var(--text-dim); padding: 28px 0; }
 </style>
 </head>
-<body>
+<body class="admin-page">
 <%- include('partials/admin-header', { title: `Nakai daily briefings — ${user}` }) %>
-<div class="wrap">
+<section class="admin-section wrap">
   <p class="dim" style="font-size:13px;">
     Private stored editions for resend and continuity. Resend uses the stored PDF/HTML/Markdown and does not regenerate the briefing.
   </p>
@@ -77,6 +77,6 @@ td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: 
     <% }) %>
   </table>
   <% } %>
-</div>
+</section>
 </body>
 </html>

@@ -5,9 +5,9 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Job queue — McLellan Hub</title>
-<link rel="stylesheet" href="/hub.css">
+<link rel="stylesheet" href="/portfolio.css">
 <style>
-.wrap { padding: 24px; max-width: 900px; }
+.wrap { max-width: var(--max-w); }
 .section-head { font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase;
   letter-spacing: .04em; margin: 24px 0 10px; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -27,9 +27,9 @@ tr:hover td { background: var(--surface-2, rgba(255,255,255,.03)); }
 .empty { color: var(--text-dim); padding: 20px 0; font-size: 13px; }
 </style>
 </head>
-<body>
+<body class="admin-page">
 <%- include('partials/admin-header', { title: `Job queue — ${user}` }) %>
-<div class="wrap">
+<section class="admin-section wrap">
   <p style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">
     All polling is driven by this queue. Each job re-enqueues itself when done.
     Refreshes every 60 seconds.
@@ -94,7 +94,7 @@ tr:hover td { background: var(--surface-2, rgba(255,255,255,.03)); }
     <% }) %>
   </table>
   <% } %>
-</div>
+</section>
 <script>setTimeout(() => location.reload(), 60000);</script>
 </body>
 </html>

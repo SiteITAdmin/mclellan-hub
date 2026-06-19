@@ -5,14 +5,9 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Connectivity — McLellan Hub</title>
-<link rel="stylesheet" href="/hub.css">
+<link rel="stylesheet" href="/portfolio.css">
 <style>
-.page-header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid var(--border); }
-.page-header h1 { font-size:16px; font-weight:600; margin:0; }
-.page-header nav { display:flex; gap:16px; align-items:center; font-size:13px; }
-.page-header nav a { color:var(--text-dim); text-decoration:none; }
-.page-header nav a:hover { color:var(--text); }
-.wrap { padding:24px; max-width:760px; }
+.wrap { max-width: var(--max-w); }
 .section-head { font-size:13px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin:24px 0 10px; }
 .item { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-radius:8px; margin-bottom:8px; background:var(--surface-2, rgba(255,255,255,0.03)); border:1px solid var(--border); }
 .item.warning { border-left:3px solid #e06c6c; }
@@ -29,11 +24,11 @@
 .empty { padding:32px 0; text-align:center; color:var(--text-dim); font-size:14px; }
 </style>
 </head>
-<body>
+<body class="admin-page">
 
 <%- include('partials/admin-header', { title: `Connectivity — ${user}` }) %>
 
-<div class="wrap">
+<section class="admin-section wrap">
   <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px;">
     Orphaned nodes and underconnected data across the hub. Mycelium runs at 00:00, 06:00, 12:00, 18:00 (Dublin time) to grow paths between them automatically.
   </p>
@@ -58,7 +53,7 @@
       </div>
     <% }) %>
   <% } %>
-</div>
+</section>
 
 <script>
 async function runMycelium() {
