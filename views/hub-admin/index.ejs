@@ -235,18 +235,6 @@
 </section>
 
 <section class="admin-section">
-  <h2>Email integration</h2>
-  <p>Fetches new emails from Google, classifies them against your projects and contacts, and builds a digest preview.</p>
-  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px;">
-    <a href="/admin/email-taxonomy"><button type="button">Manage email taxonomy</button></a>
-    <button id="btn-fetch-email" onclick="triggerEmailAction('fetch')">Fetch &amp; classify emails now</button>
-    <button id="btn-digest-email" onclick="triggerEmailAction('digest')">Preview email digest</button>
-    <span id="email-status" style="font-size:13px;color:var(--text-muted);"></span>
-  </div>
-  <pre id="email-result" style="margin-top:10px;font-size:12px;white-space:pre-wrap;display:none;background:var(--surface-raised,#f4f4f4);padding:10px;border-radius:6px;"></pre>
-</section>
-
-<section class="admin-section">
   <h2>MCP endpoints</h2>
   <p>For a future MCP server to read this project memory. Send <code>Authorization: Bearer &lt;token&gt;</code> (set <code><%= user === 'douglas' ? 'DCHAT_MCP_TOKEN' : 'NCHAT_MCP_TOKEN' %></code> in the server <code>.env</code>).</p>
   <ul style="font-family:var(--mono);font-size:13px;">
@@ -260,33 +248,6 @@ window.toggleProjEdit = function(id) {
   const panel = document.getElementById('proj-edit-' + id);
   if (panel) panel.classList.toggle('open');
 };
-
-async function triggerEmailAction(action) {
-  const status = document.getElementById('email-status');
-  const result = document.getElementById('email-result');
-  const btn = document.getElementById(action === 'fetch' ? 'btn-fetch-email' : 'btn-digest-email');
-  btn.disabled = true;
-  status.textContent = action === 'fetch' ? 'Fetching & classifying…' : 'Building digest preview…';
-  result.style.display = 'none';
-  try {
-    const r = await fetch(`/admin/trigger-email-${action}`, { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) {
-      if (action === 'fetch') {
-        status.textContent = `Done — ${d.processed ?? 0} email(s) processed, ${d.moved ?? 0} filed to labels.`;
-      } else {
-        status.textContent = d.message || 'Digest preview built.';
-      }
-      if (d.preview) { result.textContent = d.preview; result.style.display = 'block'; }
-      if (d.error) { status.textContent = `Error: ${d.error}`; }
-    } else {
-      status.textContent = `Error: ${d.error}`;
-    }
-  } catch(e) {
-    status.textContent = `Request failed: ${e.message}`;
-  }
-  btn.disabled = false;
-}
 </script>
 
 </body>
