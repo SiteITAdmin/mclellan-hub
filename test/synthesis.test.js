@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { canResolveByName, linkableCandidates, resolveByName } = require('../lib/synthesis');
+const { canResolveByName, linkableCandidates, resolveByName, shouldExcludeEmailSummaryFromKnowledge } = require('../lib/synthesis');
 
 const entities = [
   { kind: 'contact', id: 'contact-m365', label: 'M365 Rollout', aliases: [] },
@@ -60,4 +60,26 @@ test('synthesis keeps source-routed project as a candidate for project emails', 
   }, '');
 
   assert.deepEqual(candidates.map(candidate => candidate.id), ['project-m365']);
+});
+
+test('knowledge synthesis excludes unrouted newsletter email summaries', () => {
+  assert.equal(shouldExcludeEmailSummaryFromKnowledge('douglas', {
+    subject: 'Weekly AI digest',
+    from_name: 'Nate Newsletter',
+    from_email: 'natesnewsletter@substack.com',
+    summary: 'A roundup of AI model news.',
+    project_slug: null,
+    contact_id: null,
+  }), true);
+});
+
+test('knowledge synthesis keeps routed personal email summaries even with invitation wording', () => {
+  assert.equal(shouldExcludeEmailSummaryFromKnowledge('douglas', {
+    subject: 'Invitation to Kelty',
+    from_name: 'Aunt Liz',
+    from_email: 'liz@example.test',
+    summary: 'Liz invited Douglas to Kelty next weekend.',
+    project_slug: null,
+    contact_id: 'contact-liz',
+  }), false);
 });

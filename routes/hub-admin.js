@@ -607,8 +607,10 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'agentmail_extractor', scope: 'system', label: 'AgentMail extractor', note: 'Extracts people, facts and multiple actions from AgentMail messages.', fallback: 'google/gemini-3.1-pro-preview' },
     { feature: 'task_extractor',  scope: 'system', label: 'Task extractor',      note: 'Extracts follow-up tasks from documents and learns from rejected task suggestions.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'reg_synopsis',     scope: 'system', label: 'Regulatory synopsis', note: 'Assesses regulatory publications for Nakai-only email alerts.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'hub_dev_constraint', scope: 'system', label: 'Hub dev constraint', note: 'Knowledge-first development constraint for Hub coding and prompt work.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'prompt_improver',  scope: 'system', label: 'Prompt improver',     note: 'Rewrites prompts in the admin test panel.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'prompt_adapter',   scope: 'system', label: 'Prompt adapter',      note: 'Builds structured reusable prompts from rough prompts and saved examples.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'prompt_optimizer', scope: 'system', label: 'Prompt optimizer',    note: 'Optimises recurring prompt assets against examples and a scored rubric.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
   ]},
   { id: 'debrief', label: 'Debrief', slots: [
