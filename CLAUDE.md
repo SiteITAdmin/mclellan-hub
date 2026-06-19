@@ -6,6 +6,30 @@ A personal AI workspace for Douglas McLellan. It connects email, calendar, conta
 
 Douglas has ADHD. The system should surface everything it can automatically, without requiring Douglas to trigger it manually. When in doubt, do the work.
 
+## Knowledge-first development constraint
+
+Before implementing anything, the default question is not "what table do I add this to?" The default question is: **what does the system already know, and how does this connect to it?**
+
+The Hub's ambition is a second brain: ingested content such as emails, documents, care plans, debrief recordings, notes, and photos should produce emergent knowledge, not just rows. The CRM is a label for the relationship layer, not an instruction to build an Access database.
+
+Before writing code, answer:
+
+- Does this require new storage, or better synthesis of existing storage? A contact address mentioned in three care plan documents does not need a new addresses table; it needs a process that reads those documents and surfaces the connection.
+- Is this a fact to store, or a relationship to recognise? Facts go stale. Relationships derived from existing sources stay current as the sources update. Prefer derivation over duplication.
+- If this is built as a database row, what happens when context changes? A row written today about "Dad's address" is frozen. A wiki page or synthesis job that re-reads the care plans every night is alive.
+- What is the ingest-to-knowledge cycle? Raw content enters, an LLM synthesises it into a structured knowledge layer, and queries run against the knowledge layer. Storing raw content and querying it directly skips the middle step.
+- Are tasks, people, facts, and documents being treated as the same underlying reality, differently labelled? A task called "get Dad's medicine" is about Alister McLellan, which connects to his care plans, which mention his GP, which is a contact. The system should traverse these connections because a synthesis pass compiled the knowledge into something the query layer can read.
+
+Implementation rules:
+
+- If you find yourself creating a new column to link two things that are already mentioned in ingested documents, stop. Write a synthesis job instead.
+- If you find yourself hardcoding a relationship, such as contact A is related to contact B, stop. Write a rule the LLM can apply to find that relationship from first principles.
+- New database tables are justified only for raw ingestion the system has not seen before, or for a compiled knowledge cache that is the output of a synthesis job. They are not justified for manually-maintained structured data the LLM could derive.
+- When Douglas says "I want X connected to Y," the implementation is a synthesis or review job, not a schema change.
+- The daily/nightly review job is the mechanism for emergence. If a feature requires a human to manually maintain a link, the feature is incomplete.
+
+The Hub ingests raw life. A synthesis layer, with LLM jobs running on schedule, compiles that raw life into a knowledge base. The CRM, wiki, task list, and project notes are all views into that knowledge base. The work is to build better synthesis, not better storage.
+
 ## The most important rules
 
 **Rule 1: Naming something is not building it.**
