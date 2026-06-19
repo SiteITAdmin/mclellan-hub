@@ -115,21 +115,7 @@ router.get('/admin', requireHubAdmin, (req, res) => {
      WHERE p.user = ?
   ORDER BY p.name
   `).all(req.hubUser);
-  const contacts = hub.prepare('SELECT id, name, wiki_tags FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
-  const { getAllWikiTags } = require('../lib/wiki-tags');
-  const wikiTags = getAllWikiTags();
-  // Combined tag pool: wiki tags + project names + contact names
-  const nameTagSet = new Set([
-    ...projects.map(p => p.name),
-    ...contacts.map(c => c.name),
-  ]);
-  const allTags = [...new Set([...wikiTags, ...nameTagSet])].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  const assignedTagSet = new Set([
-    ...projects.flatMap(p => JSON.parse(p.wiki_tags || '[]')),
-    ...contacts.flatMap(c => JSON.parse(c.wiki_tags || '[]')),
-  ]);
-  const unassignedTags = allTags.filter(t => !assignedTagSet.has(t));
-  res.render('hub-admin/index', { user: req.hubUser, projects, wikiTags: allTags, unassignedTags });
+  res.render('hub-admin/index', { user: req.hubUser, projects });
 });
 
 // ── Projects CRUD ─────────────────────────────────────────────────────────────
@@ -245,11 +231,8 @@ router.post('/admin/memories/:id/delete', requireHubAdmin, (req, res) => {
 const { getAllWikiTags, getWikiPagesByTags } = require('../lib/wiki-tags');
 
 function getCombinedTags(user) {
-  const hub = db.hub();
-  const projects = hub.prepare('SELECT name FROM projects WHERE user = ?').all(user);
-  const contacts = hub.prepare('SELECT name FROM contacts WHERE user = ?').all(user);
   const wikiTags = getAllWikiTags();
-  return [...new Set([...wikiTags, ...projects.map(p => p.name), ...contacts.map(c => c.name)])]
+  return [...new Set(wikiTags)]
     .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 }
 
@@ -266,8 +249,7 @@ router.post('/admin/projects/:id/wiki-tags', requireHubAdmin, (req, res) => {
   try {
     const { writeTagsIndex, getAllWikiTags } = require('../lib/wiki-tags');
     const projects = hub.prepare('SELECT id, name, wiki_tags FROM projects WHERE user = ?').all(req.hubUser);
-    const contacts = hub.prepare('SELECT id, name, wiki_tags FROM contacts WHERE user = ?').all(req.hubUser);
-    writeTagsIndex({ projects, contacts, wikiTags: getAllWikiTags() });
+    writeTagsIndex({ projects, wikiTags: getAllWikiTags() });
   } catch (e) { console.warn('[tags-index]', e.message); }
   res.redirect('/admin');
 });
@@ -277,26 +259,19 @@ router.get('/admin/crm', requireHubAdmin, (req, res) => {
   const hub = db.hub();
   const contacts = hub.prepare(
     'SELECT * FROM contacts WHERE user = ? ORDER BY name'
-  ).all(req.hubUser).map(c => ({
-    ...c,
-    matchedPages: getWikiPagesByTags(JSON.parse(c.wiki_tags || '[]'), { limit: 5 }),
-  }));
-  const wikiTags = getCombinedTags(req.hubUser);
-  res.render('hub-admin/crm', { user: req.hubUser, contacts, wikiTags });
+  ).all(req.hubUser);
+  res.render('hub-admin/crm', { user: req.hubUser, contacts });
 });
 
-router.post('/admin/contacts/:id/wiki-tags', requireHubAdmin, (req, res) => {
-  const tags = req.body.tags;
-  const arr = Array.isArray(tags) ? tags : (tags ? [tags] : []);
+router.post('/admin/contacts/:id/curation', requireHubAdmin, (req, res) => {
+  const flags = req.body.flags;
+  const arr = Array.isArray(flags) ? flags : (flags ? [flags] : []);
+  const allowed = new Set(['pin_briefing', 'watch', 'quiet_nudges', 'sensitive']);
+  const cleanFlags = [...new Set(arr.map(flag => String(flag || '').trim()).filter(flag => allowed.has(flag)))];
+  const notes = String(req.body.curation_notes || '').trim().slice(0, 1000);
   const hub = db.hub();
-  hub.prepare('UPDATE contacts SET wiki_tags = ? WHERE id = ? AND user = ?')
-    .run(JSON.stringify(arr), req.params.id, req.hubUser);
-  try {
-    const { writeTagsIndex, getAllWikiTags } = require('../lib/wiki-tags');
-    const projects = hub.prepare('SELECT id, name, wiki_tags FROM projects WHERE user = ?').all(req.hubUser);
-    const contacts = hub.prepare('SELECT id, name, wiki_tags FROM contacts WHERE user = ?').all(req.hubUser);
-    writeTagsIndex({ projects, contacts, wikiTags: getAllWikiTags() });
-  } catch (e) { console.warn('[tags-index]', e.message); }
+  hub.prepare('UPDATE contacts SET curation_flags = ?, curation_notes = ? WHERE id = ? AND user = ?')
+    .run(JSON.stringify(cleanFlags), notes, req.params.id, req.hubUser);
   res.redirect('/admin/crm');
 });
 

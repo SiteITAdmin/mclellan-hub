@@ -50,8 +50,8 @@
 </section>
 
 <section class="admin-section">
-  <h2>Knowledge tags</h2>
-  <p style="font-size:13px;color:var(--text-muted);">Tag this project with topics from the wiki. Matching pages will surface in the morning briefing and project context.</p>
+  <h2>Wiki context pins</h2>
+  <p style="font-size:13px;color:var(--text-muted);">Optional manual pins for wiki pages that should be injected into <code>/<%= project.slug %></code> chat context. Project knowledge itself comes from uploaded documents, meetings, emails, and synthesis.</p>
   <form method="POST" action="/admin/projects/<%= project.id %>/wiki-tags">
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
       <% const projectTags = JSON.parse(project.wiki_tags || '[]'); %>
@@ -63,10 +63,10 @@
       <% } %>
       <% if (!wikiTags.length) { %><span style="font-size:13px;color:var(--text-muted);">No wiki tags yet — add some content via wiki.mclellan.scot first.</span><% } %>
     </div>
-    <button type="submit">Save tags</button>
+    <button type="submit">Save context pins</button>
   </form>
   <% if (matchedPages.length) { %>
-  <h3 style="font-size:13px;margin-top:16px;margin-bottom:8px;">Matching wiki pages</h3>
+  <h3 style="font-size:13px;margin-top:16px;margin-bottom:8px;">Pinned wiki pages</h3>
   <ul style="list-style:none;display:flex;flex-direction:column;gap:4px;">
     <% for (const p of matchedPages) { %>
     <li style="font-size:13px;">

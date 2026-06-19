@@ -235,52 +235,6 @@
 </section>
 
 <section class="admin-section">
-  <h2>Knowledge tags</h2>
-  <p style="font-size:13px;color:var(--text-muted);">Tags come from synthadoc-processed wiki pages. Assign them to projects so matching articles surface in context.</p>
-
-  <% if (!wikiTags.length) { %>
-    <p style="font-size:13px;color:var(--text-muted);">No wiki tags yet — content needs to sync from the vault first.</p>
-  <% } else { %>
-
-  <% for (const p of projects) { %>
-  <% const pTags = JSON.parse(p.wiki_tags || '[]'); if (!pTags.length) continue; %>
-  <div style="margin-bottom:14px;">
-    <div style="font-size:13px;font-weight:600;margin-bottom:6px;"><a href="/admin/projects/<%= p.slug %>" style="color:inherit;"><%= p.name %></a></div>
-    <div class="tag-section">
-      <% for (const t of pTags) { %>
-      <span class="tag-chip">
-        <%= t %>
-        <button type="button" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:.5;padding:0;line-height:1;" onclick="removeTag('<%= p.id %>', '<%= p.slug %>', <%- JSON.stringify(pTags) %>, '<%= t %>')">✕</button>
-      </span>
-      <% } %>
-    </div>
-  </div>
-  <% } %>
-
-  <% if (unassignedTags.length) { %>
-  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border,#e5e3f0);">
-    <div style="font-size:13px;font-weight:600;color:var(--text-muted,#888);margin-bottom:8px;">Unassigned (<%= unassignedTags.length %>)</div>
-    <div class="tag-section">
-      <% for (const t of unassignedTags) { %>
-      <span class="tag-chip unassigned" style="gap:8px;">
-        <%= t %>
-        <select class="tag-proj-select" data-tag="<%= t %>" style="font-size:11px;padding:1px 4px;border-radius:4px;border:1px solid var(--border,#ddd);">
-          <option value="">assign to…</option>
-          <% for (const p of projects) { %><option value="<%= p.id %>|<%= p.slug %>|<%- encodeURIComponent(JSON.stringify(JSON.parse(p.wiki_tags||'[]'))) %>"><%= p.name %></option><% } %>
-        </select>
-        <button type="button" style="font-size:11px;padding:1px 6px;" onclick="assignTag(this)">+</button>
-      </span>
-      <% } %>
-    </div>
-  </div>
-  <% } else { %>
-  <p style="font-size:13px;color:var(--text-muted);">All wiki tags are assigned to projects.</p>
-  <% } %>
-
-  <% } %>
-</section>
-
-<section class="admin-section">
   <h2>Email integration</h2>
   <p>Fetches new emails from Google, classifies them against your projects and contacts, and builds a digest preview.</p>
   <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px;">
@@ -306,30 +260,6 @@ window.toggleProjEdit = function(id) {
   const panel = document.getElementById('proj-edit-' + id);
   if (panel) panel.classList.toggle('open');
 };
-
-async function assignTag(btn) {
-  const chip = btn.closest('.tag-chip');
-  const sel = chip.querySelector('select');
-  if (!sel.value) return;
-  const [projectId, projectSlug, encodedTags] = sel.value.split('|');
-  const tag = sel.dataset.tag || chip.querySelector('select').dataset.tag;
-  const currentTags = JSON.parse(decodeURIComponent(encodedTags));
-  if (currentTags.includes(tag)) { location.reload(); return; }
-  const newTags = [...currentTags, tag];
-  const fd = new FormData();
-  newTags.forEach(t => fd.append('tags', t));
-  await fetch(`/admin/projects/${projectId}/wiki-tags`, { method: 'POST', body: fd });
-  location.reload();
-}
-
-async function removeTag(projectId, projectSlug, currentTags, tagToRemove) {
-  if (!confirm(`Remove "${tagToRemove}" from this project?`)) return;
-  const newTags = currentTags.filter(t => t !== tagToRemove);
-  const fd = new FormData();
-  newTags.forEach(t => fd.append('tags', t));
-  await fetch(`/admin/projects/${projectId}/wiki-tags`, { method: 'POST', body: fd });
-  location.reload();
-}
 
 async function triggerEmailAction(action) {
   const status = document.getElementById('email-status');
