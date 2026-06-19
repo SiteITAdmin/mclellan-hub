@@ -5,9 +5,9 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Knowledge — McLellan Hub</title>
-<link rel="stylesheet" href="/hub.css">
+<link rel="stylesheet" href="/portfolio.css">
 <style>
-.wrap { padding:24px; max-width:820px; }
+.wrap { max-width: var(--max-w); }
 .section-head { font-size:13px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin:26px 0 10px; }
 .intro { font-size:13px; color:var(--text-dim); margin-bottom:18px; }
 .atom { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-radius:8px; margin-bottom:8px; background:var(--surface-2, rgba(255,255,255,0.03)); border:1px solid var(--border); }
@@ -24,11 +24,11 @@
 .count { font-weight:700; }
 </style>
 </head>
-<body>
+<body class="admin-page">
 
 <%- include('partials/admin-header', { title: `Knowledge — ${user}` }) %>
 
-<div class="wrap">
+<section class="admin-section wrap">
   <p class="intro">
     The knowledge layer is compiled from your documents, emails, meetings and CRM facts by the nightly synthesis job.
     This queue shows what needs a human eye: claims the linker was unsure about, contradictions, and possible duplicate contacts.
@@ -102,6 +102,6 @@
       </div>
     <% }); %>
   <% } %>
-</div>
+</section>
 </body>
 </html>
