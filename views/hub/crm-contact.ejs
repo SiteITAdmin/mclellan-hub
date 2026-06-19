@@ -254,6 +254,13 @@ async function taskAction(id, action) {
         <div id="merge-results" style="margin-top:6px;font-size:13px;"></div>
         <span class="crm-muted" id="merge-msg" style="font-size:12px;"></span>
       </section>
+
+      <section class="crm-section" style="margin-top:24px;">
+        <h3 class="crm-section-title">Delete contact</h3>
+        <p class="crm-muted" style="font-size:13px;margin-bottom:8px;">Remove this CRM contact and its direct CRM links. Use for placeholder people such as transcript speaker labels.</p>
+        <button class="btn btn-ghost" id="delete-contact-btn" style="color:var(--crm-danger,#c0392b);border-color:currentColor;">Delete contact</button>
+        <span class="crm-muted" id="delete-contact-msg" style="font-size:12px;"></span>
+      </section>
     </section>
   </aside>
 </div>
@@ -475,7 +482,10 @@ const mergeSearch = document.getElementById('merge-search');
 const mergeResults = document.getElementById('merge-results');
 const mergeBtn = document.getElementById('merge-btn');
 const mergeMsg = document.getElementById('merge-msg');
+const deleteContactBtn = document.getElementById('delete-contact-btn');
+const deleteContactMsg = document.getElementById('delete-contact-msg');
 const CURRENT_ID = '<%= contact.id %>';
+const CURRENT_NAME = <%- JSON.stringify(contact.name) %>;
 
 let mergeDebounce;
 mergeSearch.addEventListener('input', () => {
@@ -523,8 +533,27 @@ mergeBtn.addEventListener('click', async () => {
     } else {
       mergeMsg.textContent = j.error || 'Error';
       mergeBtn.disabled = false;
-    }
+  }
   } catch (err) { mergeMsg.textContent = err.message; mergeBtn.disabled = false; }
+});
+
+deleteContactBtn.addEventListener('click', async () => {
+  if (!confirm(`Delete "${CURRENT_NAME}" from CRM? This removes its direct facts, meeting attendance, and company/project links. This cannot be undone.`)) return;
+  deleteContactBtn.disabled = true;
+  deleteContactMsg.textContent = 'Deleting...';
+  try {
+    const r = await fetch(`/api/crm/contacts/${CURRENT_ID}/delete`, { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) {
+      window.location.href = '/crm/contacts';
+    } else {
+      deleteContactMsg.textContent = j.error || 'Error';
+      deleteContactBtn.disabled = false;
+    }
+  } catch (err) {
+    deleteContactMsg.textContent = err.message;
+    deleteContactBtn.disabled = false;
+  }
 });
 </script>
 <%- include('partials/crm-foot') %>
