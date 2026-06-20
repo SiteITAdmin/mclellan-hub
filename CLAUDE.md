@@ -77,6 +77,7 @@ Each module has a defined purpose and a definition of healthy. Read it before ad
 - Local, VPS (`root@178.104.235.142`, app at `/app/`), and GitHub must all be in sync after every agreed change.
 - Backups, cron, and env files must never live inside `/app/`. rsync always uses `.rsync-exclude`.
 - DB is SQLite at `/app/data/hub.db`. Never modify production DB directly unless diagnosing — use migrations in `lib/db.js`.
+- Production-only data bugs must use the diagnostic snapshot loop before code changes when feasible: pull a controlled production diagnostic snapshot, reproduce locally against `HUB_DB_PATH`, fix locally, commit, push, deploy, then run any deliberate production repair if needed. Use `scripts/pull-prod-snapshot.sh` and `scripts/run-with-prod-snapshot.sh`; do not edit live VPS code just because local data is empty.
 
 ## What not to do
 
@@ -88,6 +89,8 @@ Each module has a defined purpose and a definition of healthy. Read it before ad
 **Rule 4: Diagnose the instance, not just the process.**
 
 When Douglas reports that something didn't happen — tasks not created, times not populated, data missing — fix the actual missing data first, then fix the process that caused it. "The 24-hour window excluded your document" is a diagnosis. It is not a fix. The document still has no tasks. Check the DB, run the backfill, and confirm the data is there before declaring the problem resolved. A fix that only prevents the issue next time has not helped Douglas today.
+
+If the missing or bad data only exists in production, first pull a controlled production diagnostic snapshot, reproduce locally, fix locally, commit, push, deploy, then run any deliberate production repair if needed. A backup in Google Drive is not the same thing as a local diagnostic snapshot the app can run against.
 
 ## Before ending any session
 
