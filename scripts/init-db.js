@@ -74,6 +74,7 @@ hub.exec(`
     mimetype TEXT,
     size_bytes INTEGER,
     markdown TEXT NOT NULL,
+    ingestion_package_path TEXT,
     uploaded_at INTEGER DEFAULT (unixepoch()),
     FOREIGN KEY(project_id) REFERENCES projects(id)
   );

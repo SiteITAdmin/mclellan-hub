@@ -112,6 +112,25 @@ If what you're adding changes the purpose, update this file first.
 
 ---
 
+## Core Infrastructure Primitives
+**Purpose:** Shared capabilities other modules call instead of reimplementing ingestion, current-information research, or durable report rendering. These are primitives, not user-facing modules.
+
+**Files:**
+- `lib/heavy-file-ingestion.js` creates a standard ingestion package (`index.json`, canonical Markdown, readable chunks) before synthesis/retrieval reason over heavy files.
+- `lib/current-info-search.js` routes stale-risk research through Exa/Brave/Tavily with checked-at timestamps and source metadata.
+- `lib/html-artifact-builder.js` turns dense Markdown reports into single-file offline HTML artifacts.
+
+**Healthy looks like:**
+- Project document upload stores `documents.markdown` for existing views and an `ingestion_package_path` pointing at the reusable artifact package.
+- Multi-search uses the current-info primitive for live source gathering, and synthesis receives checked-at source context.
+- Daily system reports still send plain text but also generate a local HTML artifact and include HTML email content when AgentMail accepts it.
+
+**Does not own:** Relationship extraction, task routing, or durable claims. Those remain Knowledge Layer/Mycelium responsibilities. These primitives only prepare inputs and presentation artifacts.
+
+**Health check:** Run `node --test test/infrastructure-primitives.test.js`; spot-check a recent uploaded document has a readable package under `data/ingested/`.
+
+---
+
 ## Mycelium
 **Purpose:** Grow connections between isolated data nodes. Runs every 6 hours and on-demand to ensure that information in one module is reflected appropriately in others.
 

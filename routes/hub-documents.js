@@ -25,6 +25,7 @@ router.get('/api/documents/:id', requireAuth, (req, res) => {
   res.json({
     id: doc.id, filename: doc.filename, size_bytes: doc.size_bytes,
     uploaded_at: doc.uploaded_at, markdown: doc.markdown,
+    ingestion_package_path: doc.ingestion_package_path || null,
   });
 });
 
