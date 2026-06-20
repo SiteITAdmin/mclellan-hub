@@ -77,7 +77,9 @@ Each module has a defined purpose and a definition of healthy. Read it before ad
 - Local, VPS (`root@178.104.235.142`, app at `/app/`), and GitHub must all be in sync after every agreed change.
 - Backups, cron, and env files must never live inside `/app/`. rsync always uses `.rsync-exclude`.
 - DB is SQLite at `/app/data/hub.db`. Never modify production DB directly unless diagnosing — use migrations in `lib/db.js`.
-- Production-only data bugs must use the diagnostic snapshot loop before code changes when feasible: pull a controlled production diagnostic snapshot, reproduce locally against `HUB_DB_PATH`, fix locally, commit, push, deploy, then run any deliberate production repair if needed. Use `scripts/pull-prod-snapshot.sh` and `scripts/run-with-prod-snapshot.sh`; do not edit live VPS code just because local data is empty.
+- **The only permitted deploy path is `scripts/deploy.sh`.** Never rsync to the VPS manually or edit files on the VPS directly. The deploy script pushes to GitHub first, then rsyncs — this is the only way to guarantee all three stay in sync.
+- **Start every session by running `scripts/sync-check.sh`** to confirm local, GitHub, and VPS are all on the same commit. If they are not, resolve the drift before writing any code.
+- Production-only data bugs must use the diagnostic snapshot loop before code changes — not "when feasible", always. The steps are: (1) run `scripts/pull-prod-snapshot.sh` to pull the live DB and recent logs locally, (2) run `scripts/run-with-prod-snapshot.sh` to start Hub against the real data, (3) reproduce the actual error with the actual bad rows, (4) fix the code, (5) verify the fix against the snapshot, (6) commit, push, deploy, (7) repair the already-bad production rows that the fix does not retroactively correct. Do not guess at what the data looks like. Do not declare a bug fixed until step 7 is done — fixing the process without fixing the existing bad data has not helped Douglas today.
 
 ## What not to do
 
