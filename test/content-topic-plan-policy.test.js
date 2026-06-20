@@ -36,6 +36,16 @@ assert.strictEqual(isContentCandidate({
   source_title: 'myFT Daily Digest',
 }, topics), false);
 
+assert.strictEqual(isContentCandidate({
+  title: "Colombia's Cocaine Boom",
+  summary: 'Despite a 2016 peace deal, cocaine production in Colombia has tripled.',
+  category: 'Other',
+  item_type: 'analysis',
+  source_url: 'https://www.ft.com/example',
+  source_name: 'Patrick Jenkins',
+  source_title: "Editor's Choice: Burnham's path to power",
+}, topics), false);
+
 const aiReport = {
   title: 'New report: How to power data centres',
   summary: 'Energy requirements and infrastructure bottlenecks facing data centre growth due to AI transformation.',
