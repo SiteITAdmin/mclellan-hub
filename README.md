@@ -23,6 +23,20 @@ The app is a Node.js/Express + EJS application using SQLite for persistence. It 
 
 Private chat and admin areas use Google Workspace OAuth. Runtime secrets live outside git in `.env`, and production data stays out of the repository.
 
+## Production-Only Bugs
+
+When a bug depends on live data, pull a diagnostic snapshot instead of editing
+code directly on the VPS:
+
+```bash
+scripts/pull-prod-snapshot.sh
+scripts/run-with-prod-snapshot.sh
+```
+
+The snapshot lives under `data/prod-snapshots/`, is ignored by git, and points
+local code at the copied production database via `HUB_DB_PATH`. See
+`docs/production-diagnostic-snapshots.md`.
+
 ## Products
 
 ### 1. McLellan Hub (Chat App)
