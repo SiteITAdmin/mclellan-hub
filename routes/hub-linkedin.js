@@ -54,6 +54,8 @@ router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, write
     topicPlan: {
       days: req.body?.topicPlanDays,
       suggestionsPerDay: req.body?.topicPlanSuggestionsPerDay,
+      researchEnabled: bool(req.body?.topicPlanResearchEnabled),
+      researchRecur: req.body?.topicPlanResearchRecur,
       dayPrefs: req.body?.topicPlanDayPrefs,
     },
   });
@@ -63,6 +65,26 @@ router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, write
     console.warn('[content] cadence policy saved but reminder sync failed:', err.message);
   }
   res.json({ ok: true, policy });
+});
+
+router.post('/api/content/topic-plan/research', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const date = String(req.body?.date || '').trim();
+  const topic = String(req.body?.topic || '').trim();
+  const tone = String(req.body?.tone || 'professional').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Invalid date' });
+  if (!topic) return res.status(400).json({ error: 'Choose a topic first' });
+  try {
+    const result = await require('../lib/content-research').researchPlannedTopic(req.hubUser, {
+      date,
+      topic,
+      tone,
+      limit: 3,
+    });
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error('[content] topic research failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/api/content/generate', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {

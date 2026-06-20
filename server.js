@@ -147,6 +147,11 @@ function nowIn(tz) {
 }
 
 const BRIEFING_USERS = (process.env.BRIEFING_USERS || 'douglas,nakai').split(',').map(u => u.trim()).filter(Boolean);
+const BACKGROUND_JOBS_ENABLED = process.env.HUB_DISABLE_JOBS !== '1';
+
+if (!BACKGROUND_JOBS_ENABLED) {
+  console.log('[scheduler] background jobs disabled by HUB_DISABLE_JOBS=1');
+} else {
 
 // ── CRM calendar sync (06:45 Europe/Dublin) ──────────────────────────────────
 setInterval(() => {
@@ -236,3 +241,4 @@ setInterval(() => {
 // ── Job queue — single tick drives all polling (email, agentmail, mycelium, flights) ──
 setInterval(() => processJobs().catch(err => console.error('[jobs] tick error:', err)), 60 * 1000);
 seedJobs(); // seed pending jobs on startup; idempotent
+}
