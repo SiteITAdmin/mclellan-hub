@@ -102,20 +102,11 @@ else
 fi
 
 # Puppeteer Chrome binary
-CHROME_VER=$(cd /app && PUPPETEER_CACHE_DIR=/home/hub/.cache/puppeteer node -e "
-try {
-  const p = require('puppeteer');
-  const b = p.executablePath ? p.executablePath() : 'unknown';
-  const fs = require('fs');
-  console.log(fs.existsSync(b) ? 'found:' + b : 'missing:' + b);
-} catch(e) { console.log('error:' + e.message); }
-" 2>/dev/null || echo "error:node failed")
-if [[ "$CHROME_VER" == found:* ]]; then
-  echo "OK:Puppeteer Chrome binary present"
-elif [[ "$CHROME_VER" == missing:* ]]; then
-  echo "FAIL:Puppeteer Chrome binary missing — run: cd /app && PUPPETEER_CACHE_DIR=/home/hub/.cache/puppeteer npx puppeteer browsers install chrome"
+CHROME_BIN=$(find /home/hub/.cache/puppeteer -name "chrome" -type f -executable 2>/dev/null | head -1)
+if [[ -n "$CHROME_BIN" ]]; then
+  echo "OK:Puppeteer Chrome binary present (${CHROME_BIN})"
 else
-  echo "FAIL:Puppeteer check error — ${CHROME_VER}"
+  echo "FAIL:Puppeteer Chrome binary missing — run: cd /app && PUPPETEER_CACHE_DIR=/home/hub/.cache/puppeteer npx puppeteer browsers install chrome"
 fi
 
 # better-sqlite3 (native module — breaks on Node.js version changes)
