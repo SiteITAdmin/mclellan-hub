@@ -468,7 +468,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
                   <option value="challenging" <%= day.preference.tone === 'challenging' ? 'selected' : '' %>>Challenging</option>
                   <option value="provocative" <%= day.preference.tone === 'provocative' ? 'selected' : '' %>>Provocative</option>
                 </select>
-                <button class="btn-sm" type="button" data-plan-research>Research</button>
+                <button class="btn-sm" type="button" data-plan-research title="Select a topic above, then click to research web sources for that day">Research</button>
               </div>
               <% if (!day.suggestions.length) { %>
                 <div class="topic-summary">No researched suggestions yet<%= day.preference.topic ? ` for ${day.preference.topic}` : '' %>.</div>
@@ -795,12 +795,21 @@ async function researchPlanDate(row) {
   const tone = row.querySelector('[data-plan-tone]')?.value || 'professional';
   const button = row.querySelector('[data-plan-research]');
   if (!topic) {
-    cadenceMsg.textContent = 'Choose a topic first';
+    const orig = button.textContent;
+    button.textContent = 'Pick a topic ↑';
+    button.style.color = '#dc2626';
+    button.style.borderColor = 'rgba(220,38,38,.4)';
+    topicPlanMsg.textContent = 'Select a topic from the dropdown above the Research button, then click Research again.';
+    setTimeout(() => {
+      button.textContent = orig;
+      button.style.color = '';
+      button.style.borderColor = '';
+    }, 2500);
     return;
   }
   button.disabled = true;
   button.textContent = 'Researching...';
-  cadenceMsg.textContent = 'Researching topic...';
+  topicPlanMsg.textContent = `Researching "${topic}"…`;
   try {
     const r = await fetch('/api/content/topic-plan/research', {
       method: 'POST',
@@ -809,10 +818,10 @@ async function researchPlanDate(row) {
     });
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || 'Research failed');
-    cadenceMsg.textContent = `Researched ${j.result.count || 0} suggestions`;
-    setTimeout(() => window.location.reload(), 500);
+    topicPlanMsg.textContent = `Found ${j.result.count || 0} suggestions — reloading…`;
+    setTimeout(() => window.location.reload(), 800);
   } catch (err) {
-    cadenceMsg.textContent = err.message;
+    topicPlanMsg.textContent = err.message;
     button.disabled = false;
     button.textContent = 'Research';
   }
