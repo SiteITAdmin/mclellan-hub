@@ -26,6 +26,7 @@ const {
   requireAuth, requireSameOrigin,
 } = require('./hub-shared');
 const { getWeekKey, weekKeyRange } = require('../lib/newsletter-pipeline');
+const { buildIngestionPackage } = require('../lib/heavy-file-ingestion');
 const newsletterRouter = require('./hub-newsletter');
 router.use('/newsletter', requireAuth, newsletterRouter);
 
@@ -864,16 +865,26 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
     ).get(req.hubUser, projectSlug);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
+    const docId = uuid();
+    const ingestion = await buildIngestionPackage({
+      id: docId,
+      user: req.hubUser,
+      filename: req.file.originalname,
+      mimetype: req.file.mimetype,
+      sizeBytes: req.file.size,
+      markdown: extracted.markdown,
+      project,
+    });
+
     const md = withProjectFrontmatter({
       project,
       filename: req.file.originalname,
-      markdown: extracted.markdown,
+      markdown: ingestion.markdown,
     });
-    const docId = uuid();
     hub.prepare(`
-      INSERT INTO documents (id, user, project_id, filename, mimetype, size_bytes, markdown)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(docId, req.hubUser, project.id, req.file.originalname, req.file.mimetype, req.file.size, md);
+      INSERT INTO documents (id, user, project_id, filename, mimetype, size_bytes, markdown, ingestion_package_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(docId, req.hubUser, project.id, req.file.originalname, req.file.mimetype, req.file.size, md, ingestion.indexPath);
 
     // Mirror to vault Projects/{slug}/raw_sources/ and queue for synthadoc
     try {
@@ -922,7 +933,13 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
 
     return res.json({
       ok: true,
-      document: { id: docId, filename: req.file.originalname, size: req.file.size, project: project.slug },
+      document: {
+        id: docId,
+        filename: req.file.originalname,
+        size: req.file.size,
+        project: project.slug,
+        ingestionPackage: ingestion.indexPath,
+      },
       wiki,
     });
   }
