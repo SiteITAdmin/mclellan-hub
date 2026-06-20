@@ -10,6 +10,9 @@ export PATH="/opt/homebrew/opt/node@24/bin:/opt/homebrew/bin:/usr/local/bin:/usr
 
 VPS_HOST="${WORKDAY_SYNC_HOST:-178.104.235.142}"
 VPS_USER="${WORKDAY_SYNC_USER:-root}"
+SSH_CONTROL="/tmp/mclellan-workday-$$"
+SSH_BASE_OPTS="-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPath=${SSH_CONTROL} -o ControlPersist=120"
+trap 'ssh -o ControlPath="${SSH_CONTROL}" -O exit "${VPS_USER}@${VPS_HOST}" 2>/dev/null || true' EXIT
 VAULT_ROOT="${WORKDAY_SYNC_LOCAL_DIR:-$ROOT/data/synthadoc/mclellan-hub-knowledge}"
 REMOTE_VAULT="${WORKDAY_SYNC_REMOTE_DIR:-/app/data/synthadoc/mclellan-hub-knowledge}"
 LOG_DIR="$ROOT/data/logs"
@@ -25,7 +28,7 @@ trap 'rmdir "$LOCK_DIR"' EXIT
 remove_remote_queue_file() {
   local rel_path="$1"
   local remote_path="${REMOTE_VAULT}/${rel_path}"
-  ssh -o StrictHostKeyChecking=accept-new "${VPS_USER}@${VPS_HOST}" "rm -f -- \"$remote_path\"" || true
+  ssh ${SSH_BASE_OPTS} "${VPS_USER}@${VPS_HOST}" "rm -f -- \"$remote_path\"" || true
 }
 
 # ── Synthadoc env ─────────────────────────────────────────────────────────────
@@ -50,7 +53,7 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
 
   # ── 1. Sync full vault from VPS (exclude compiled wiki and synthadoc internals) ──
   rsync -az \
-    -e "ssh -o StrictHostKeyChecking=accept-new" \
+    -e "ssh ${SSH_BASE_OPTS}" \
     --exclude='.synthadoc/' \
     --exclude='wiki/' \
     --filter='+ */' \
@@ -75,7 +78,7 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
   # ── 2. Pull web-created and web-edited wiki pages ────────────────────────
   mkdir -p "$VAULT_ROOT/wiki"
   rsync -az \
-    -e "ssh -o StrictHostKeyChecking=accept-new" \
+    -e "ssh ${SSH_BASE_OPTS}" \
     "${VPS_USER}@${VPS_HOST}:${REMOTE_VAULT}/wiki/" \
     "$VAULT_ROOT/wiki/"
   printf '[%s] wiki pull ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -158,10 +161,10 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
 
   # ── 6. Push compiled wiki pages back to VPS ──────────────────────────────
   rsync -az \
-    -e "ssh -o StrictHostKeyChecking=accept-new" \
+    -e "ssh ${SSH_BASE_OPTS}" \
     "$VAULT_ROOT/wiki/" \
     "${VPS_USER}@${VPS_HOST}:${REMOTE_VAULT}/wiki/"
-  ssh -o StrictHostKeyChecking=accept-new "${VPS_USER}@${VPS_HOST}" \
+  ssh ${SSH_BASE_OPTS} "${VPS_USER}@${VPS_HOST}" \
     "chown -R hub:hub \"$REMOTE_VAULT/wiki\" && chmod -R u+rwX \"$REMOTE_VAULT/wiki\""
   printf '[%s] wiki push ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
