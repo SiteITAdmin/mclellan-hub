@@ -7,6 +7,60 @@ If what you're adding changes the purpose, update this file first.
 
 ---
 
+## Infrastructure Dependencies
+
+These are the tools the system runs on. They are not features — they are the foundation everything else requires. Run `scripts/health-check.sh` after any of the following events:
+
+- `npm install` or `npm audit fix` that updates packages
+- Node.js version change on the VPS
+- Any deploy that touches `package.json` or `package-lock.json`
+- VPS restart or OS update
+
+### Puppeteer + Chrome
+- Renders LinkedIn carousel PDFs via headless Chrome.
+- Chrome binary is installed separately from the npm package via `npx puppeteer browsers install chrome`.
+- **After a puppeteer npm update**: the expected Chrome version changes. The cached binary at `/home/hub/.cache/puppeteer` will be wrong. Re-run the install command.
+- **Return type hazard**: `page.pdf()` returns `Uint8Array` in v21+, not `Buffer`. Code that calls `.toString('base64')` must wrap the result in `Buffer.from()` first.
+- **VPS flags required**: `--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu`
+- Health check: `scripts/health-check.sh` verifies the Chrome binary exists at the path puppeteer expects.
+
+### better-sqlite3
+- Native Node.js addon. Recompiles against the Node.js version it is installed with.
+- **After a Node.js version change**: run `npm rebuild` — the compiled binary will be wrong and the DB will fail to open with a cryptic ABI error.
+- Health check: `scripts/health-check.sh` opens the live DB with better-sqlite3 and confirms it works.
+
+### Google APIs (Drive, Sheets, Tasks, Calendar, Gmail)
+- OAuth2 tokens stored in the DB (`crm_context` table, key `google_tokens_{user}`).
+- Tokens auto-refresh while in use. If the Hub is down for an extended period, the refresh token may expire and require re-authorisation via `/auth/google`.
+- Health check: check the system report email — any Google API auth failure will surface as a module error there.
+
+### OpenRouter
+- All LLM and embedding calls go through OpenRouter. No direct Anthropic/Google/DeepSeek calls.
+- API key is `OPENROUTER_API_KEY` in `/app/.env`.
+- Health check: a successful email processing run (visible in `/admin/jobs`) confirms OpenRouter is reachable.
+
+### Synthadoc Python venv
+- Lives at `/app/.tools/synthadoc-venv/`. Used for vault ingest and wiki indexing.
+- Built once during setup. Does not rebuild automatically.
+- Health check: `scripts/health-check.sh` checks the Python binary exists.
+
+### Nginx
+- Reverse proxy for all Hub routes and subdomains.
+- Config at `/app/nginx/mclellan.conf`, deployed on every `scripts/deploy.sh` run.
+- Health check: `scripts/health-check.sh` checks `systemctl is-active nginx`.
+
+### Mac Cron Jobs
+- `pull-backup.sh` runs daily at 07:00 to pull VPS backups to Google Drive.
+- `sync-workday-vault.sh` runs on schedule to sync the Obsidian/Synthadoc vault.
+- Health check: `scripts/health-check.sh` verifies crontab entries are present.
+
+### SSH Access
+- All scripts that touch the VPS use SSH ControlMaster (`-o ControlMaster=auto`) so only one connection is opened per script run. **Never add a bare `ssh` or `rsync` call to a script without routing it through the shared ControlMaster socket** — multiple rapid connections trigger UFW rate limiting and lock out the Mac.
+- Mac IP `176.61.123.104` is whitelisted in UFW (`ufw allow from 176.61.123.104 to any port 22`) to prevent accidental lockout.
+- If locked out: connect via VPS provider console, then run `echo -<your-ip> > /proc/net/xt_recent/DEFAULT` to clear the rate limit table.
+
+---
+
 ## Email (Gmail)
 **Purpose:** Process incoming Gmail for Douglas, extract actions, and route intelligence into CRM, tasks, and contacts.
 
