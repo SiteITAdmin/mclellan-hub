@@ -8,6 +8,7 @@ const db = require('./../lib/db');
 const hub = db.hub();
 const reminders = require('./../lib/reminders');
 const content = require('./../lib/content-reminders');
+const { setContentCadencePolicy } = require('./../lib/content-cadence-policy');
 const { uuid } = require('./../lib/id');
 
 const USER = 'douglas';
@@ -23,6 +24,7 @@ function check(label, fn) {
 
 function cleanup() {
   hub.prepare("DELETE FROM reminders WHERE kind = 'content' AND user = ?").run(USER);
+  hub.prepare("DELETE FROM crm_context WHERE user = ? AND key = 'content_cadence_policy'").run(USER);
   for (const id of fakeTopicIds) hub.prepare('DELETE FROM intel_items WHERE id = ?').run(id);
   for (const id of fakeDocumentIds) hub.prepare('DELETE FROM intel_documents WHERE id = ?').run(id);
   for (const id of fakePostIds) hub.prepare('DELETE FROM linkedin_posts WHERE id = ?').run(id);
@@ -30,6 +32,10 @@ function cleanup() {
 }
 
 (async () => {
+  setContentCadencePolicy(USER, {
+    linkedin: { enabled: true, cadenceDays: 7, recur: 'daily:10:00' },
+    newsletter: { enabled: true, minTopics: 3, recur: 'weekly:wed:10:00' },
+  });
   console.log('1. Seeding is idempotent');
   content.seedContentReminders(USER);
   content.seedContentReminders(USER);
@@ -44,6 +50,33 @@ function cleanup() {
 
   const liRem = seeded.find(r => r.dedup_key.startsWith('content-linkedin'));
   const nlRem = seeded.find(r => r.dedup_key.startsWith('content-nl-midweek'));
+
+  console.log('1b. Policy disables and re-enables compiled reminders');
+  setContentCadencePolicy(USER, {
+    linkedin: { enabled: false, cadenceDays: 7, recur: 'daily:10:00' },
+    newsletter: { enabled: true, minTopics: 3, recur: 'weekly:wed:10:00' },
+  });
+  content.seedContentReminders(USER);
+  check('disabled LinkedIn policy cancels reminder row', () => {
+    const row = hub.prepare('SELECT status, next_fire_at FROM reminders WHERE dedup_key = ?').get(`content-linkedin:${USER}`);
+    assert.strictEqual(row.status, 'cancelled');
+    assert.strictEqual(row.next_fire_at, null);
+  });
+  setContentCadencePolicy(USER, {
+    linkedin: { enabled: true, cadenceDays: 14, recur: 'daily:11:00' },
+    newsletter: { enabled: true, minTopics: 4, recur: 'weekly:thu:10:00' },
+  });
+  content.seedContentReminders(USER);
+  check('re-enabled LinkedIn policy updates recurrence and status', () => {
+    const row = hub.prepare('SELECT status, recur FROM reminders WHERE dedup_key = ?').get(`content-linkedin:${USER}`);
+    assert.strictEqual(row.status, 'scheduled');
+    assert.strictEqual(row.recur, 'daily:11:00');
+  });
+  setContentCadencePolicy(USER, {
+    linkedin: { enabled: true, cadenceDays: 7, recur: 'daily:10:00' },
+    newsletter: { enabled: true, minTopics: 3, recur: 'weekly:wed:10:00' },
+  });
+  content.seedContentReminders(USER);
 
   console.log('2. LinkedIn check (linkedin_posts is empty locally → overdue message)');
   const liResult = content.evaluateCheck(liRem);

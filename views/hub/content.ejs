@@ -56,6 +56,123 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .progress-fill { height: 100%; background: var(--accent, #4648d4); border-radius: 2px; transition: width .5s ease; }
 .progress-msg { font-size: 12px; color: var(--text-dim); }
 
+/* Cadence policy */
+.cadence-box {
+  background: var(--bg, #fff);
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+.cadence-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.cadence-title { font-size: 14px; font-weight: 700; margin: 0; }
+.cadence-link { font-size: 12px; color: var(--accent, #4648d4); text-decoration: none; }
+.cadence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cadence-panel {
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface, #f4f3fb);
+}
+.cadence-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cadence-panel-title { font-size: 13px; font-weight: 700; }
+.cadence-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cadence-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cadence-field label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-dim);
+}
+.cadence-field input {
+  padding: 7px 9px;
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--bg, #fff);
+  color: var(--text, #15131e);
+}
+.recur-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.recur-controls select,
+.recur-controls input {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--bg, #fff);
+  color: var(--text, #15131e);
+}
+.cadence-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.switch input { width: 16px; height: 16px; accent-color: var(--accent, #4648d4); }
+.cadence-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.cadence-msg { font-size: 12px; color: var(--text-dim); }
+.topic-plan {
+  margin-top: 14px;
+  border-top: 1px solid var(--border, #e0ddf0);
+  padding-top: 14px;
+}
+.topic-plan-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.topic-plan-title { font-size: 13px; font-weight: 700; }
+.topic-plan-meta { font-size: 12px; color: var(--text-dim); }
+.topic-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.topic-day {
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 8px;
+  background: var(--surface, #f4f3fb);
+  padding: 10px;
+}
+.topic-day-title { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.topic-day-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.topic-day-controls select {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--bg, #fff);
+  color: var(--text, #15131e);
+}
+.topic-item {
+  background: var(--bg, #fff);
+  border: 1px solid var(--border, #e0ddf0);
+  border-radius: 7px;
+  padding: 8px;
+  margin-bottom: 6px;
+}
+.topic-item:last-child { margin-bottom: 0; }
+.topic-title { font-size: 12px; font-weight: 700; line-height: 1.35; margin-bottom: 5px; }
+.topic-summary { font-size: 11px; color: var(--text-dim); line-height: 1.45; margin-bottom: 7px; }
+.topic-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.topic-source { font-size: 10px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .cadence-grid { grid-template-columns: 1fr; }
+  .cadence-fields { grid-template-columns: 1fr; }
+  .recur-controls { grid-template-columns: 1fr; }
+}
+
 /* Stats */
 .stats-row { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .stat-pill { background: var(--surface, #f4f3fb); border: 1px solid var(--border, #e0ddf0); border-radius: 8px; padding: 8px 14px; font-size: 13px; }
@@ -126,6 +243,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   .row-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; vertical-align: middle; }
   .row-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .row-actions .btn-sm { flex: 1; justify-content: center; min-height: 40px; }
+  .cadence-head { display: block; }
   /* Toolbar */
   .toolbar-row { gap: 6px; }
   .sort-btn, .filter-chip { padding: 4px 10px; font-size: 11px; }
@@ -220,6 +338,125 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       <div class="progress-msg" id="progress-msg">Starting…</div>
     </div>
   </div>
+
+  <!-- Cadence policy -->
+  <section class="cadence-box">
+    <div class="cadence-head">
+      <h2 class="cadence-title">Cadence policy</h2>
+      <a href="/admin/models#sys-linkedin_planner" class="cadence-link">Models &amp; prompts</a>
+    </div>
+    <form id="cadence-form">
+      <div class="cadence-grid">
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">LinkedIn posting</div>
+            <label class="switch"><input type="checkbox" name="linkedinEnabled" <%= cadencePolicy.linkedin.enabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Cadence days</label>
+              <input type="number" min="1" max="60" name="linkedinCadenceDays" value="<%= cadencePolicy.linkedin.cadenceDays %>">
+            </div>
+            <div class="cadence-field">
+              <label>Reminder schedule</label>
+              <input type="hidden" name="linkedinRecur" id="linkedinRecur" value="<%= cadencePolicy.linkedin.recur %>">
+              <div class="recur-controls" data-field="linkedinRecur" data-value="<%= cadencePolicy.linkedin.recur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.linkedin.recur) %></span>
+            <% const liRow = cadenceRows.find(r => r.dedup_key && r.dedup_key.startsWith('content-linkedin:')); %>
+            <% if (liRow) { %>
+              <span class="badge badge-<%= liRow.status %>"><%= liRow.status %></span>
+              <% if (liRow.due_label) { %><span class="badge badge-date"><%= liRow.due_label %></span><% } %>
+              <% if (liRow.needs_action) { %><span class="badge badge-processing">needs action</span><% } %>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">Newsletter topics</div>
+            <label class="switch"><input type="checkbox" name="newsletterEnabled" <%= cadencePolicy.newsletter.enabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Minimum topics</label>
+              <input type="number" min="1" max="25" name="newsletterMinTopics" value="<%= cadencePolicy.newsletter.minTopics %>">
+            </div>
+            <div class="cadence-field">
+              <label>Reminder schedule</label>
+              <input type="hidden" name="newsletterRecur" id="newsletterRecur" value="<%= cadencePolicy.newsletter.recur %>">
+              <div class="recur-controls" data-field="newsletterRecur" data-value="<%= cadencePolicy.newsletter.recur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.newsletter.recur) %></span>
+            <% const nlRow = cadenceRows.find(r => r.dedup_key && r.dedup_key.startsWith('content-nl-midweek:')); %>
+            <% if (nlRow) { %>
+              <span class="badge badge-<%= nlRow.status %>"><%= nlRow.status %></span>
+              <% if (nlRow.due_label) { %><span class="badge badge-date"><%= nlRow.due_label %></span><% } %>
+              <% if (nlRow.needs_action) { %><span class="badge badge-processing">needs action</span><% } %>
+            <% } %>
+          </div>
+        </div>
+      </div>
+      <div class="cadence-actions">
+        <button class="btn-sm primary" type="submit">Save cadence</button>
+        <span class="cadence-msg" id="cadence-msg"></span>
+      </div>
+      <div class="topic-plan">
+        <div class="topic-plan-head">
+          <div class="topic-plan-title">Topic plan</div>
+          <div class="topic-plan-meta"><%= topicPlan.available %>/<%= topicPlan.requested %> available from selected intel</div>
+        </div>
+        <div class="cadence-fields" style="max-width:420px;margin-bottom:12px;">
+          <div class="cadence-field">
+            <label>Plan days</label>
+            <input type="number" min="1" max="30" name="topicPlanDays" value="<%= cadencePolicy.topicPlan.days %>">
+          </div>
+          <div class="cadence-field">
+            <label>Suggestions per day</label>
+            <input type="number" min="1" max="10" name="topicPlanSuggestionsPerDay" value="<%= cadencePolicy.topicPlan.suggestionsPerDay %>">
+          </div>
+        </div>
+        <div class="topic-days">
+          <input type="hidden" name="topicPlanDayPrefs" id="topicPlanDayPrefs" value="">
+          <% for (const day of topicPlan.days) { %>
+            <div class="topic-day">
+              <div class="topic-day-title"><%= day.label %></div>
+              <div class="topic-day-controls" data-plan-date="<%= day.date %>">
+                <select data-plan-topic aria-label="Topic for <%= day.label %>">
+                  <option value="">Any topic</option>
+                  <% for (const t of contentTypes) { %>
+                    <option value="<%= t %>" <%= day.preference.topic === t ? 'selected' : '' %>><%= t %></option>
+                  <% } %>
+                </select>
+                <select data-plan-tone aria-label="Tone for <%= day.label %>">
+                  <option value="professional" <%= day.preference.tone === 'professional' ? 'selected' : '' %>>Professional</option>
+                  <option value="challenging" <%= day.preference.tone === 'challenging' ? 'selected' : '' %>>Challenging</option>
+                  <option value="provocative" <%= day.preference.tone === 'provocative' ? 'selected' : '' %>>Provocative</option>
+                </select>
+              </div>
+              <% if (!day.suggestions.length) { %>
+                <div class="topic-summary">No unused selected topics available<%= day.preference.topic ? ` for ${day.preference.topic}` : '' %>.</div>
+              <% } %>
+              <% for (const topic of day.suggestions) { %>
+                <div class="topic-item">
+                  <div class="topic-title"><%= topic.title %></div>
+                  <% if (topic.summary) { %><div class="topic-summary"><%= String(topic.summary).slice(0, 180) %></div><% } %>
+                  <div class="topic-foot">
+                    <span class="topic-source"><%= topic.category || topic.source_name || topic.item_type || 'intel' %> · <%= day.preference.tone %></span>
+                    <button class="btn-sm" type="button" data-topic="<%= topic.title %>" data-tone="<%= day.preference.tone %>" onclick="useTopic(this.dataset.topic, this.dataset.tone)">Use</button>
+                  </div>
+                </div>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </form>
+  </section>
 
   <!-- Stats -->
   <%
@@ -408,6 +645,108 @@ const genProgress = document.getElementById('gen-progress');
 const progressFill = document.getElementById('progress-fill');
 const progressMsg = document.getElementById('progress-msg');
 let pollTimer = null;
+
+// ── Cadence policy ───────────────────────────────────────────────────────────
+const cadenceForm = document.getElementById('cadence-form');
+const cadenceMsg = document.getElementById('cadence-msg');
+
+function parseRecurSpec(spec) {
+  const parts = String(spec || '').split(':');
+  if (parts[0] === 'weekly') return { frequency: 'weekly', day: parts[1] || 'wed', time: `${parts[2] || '10'}:${parts[3] || '00'}` };
+  return { frequency: 'daily', day: 'wed', time: `${parts[1] || '10'}:${parts[2] || '00'}` };
+}
+
+function composeRecurSpec(control) {
+  const frequency = control.querySelector('[data-recur-frequency]')?.value || 'daily';
+  const day = control.querySelector('[data-recur-day]')?.value || 'wed';
+  const time = control.querySelector('[data-recur-time]')?.value || '10:00';
+  return frequency === 'weekly' ? `weekly:${day}:${time}` : `daily:${time}`;
+}
+
+function syncRecurFields() {
+  document.querySelectorAll('.recur-controls').forEach(control => {
+    const hidden = document.getElementById(control.dataset.field);
+    if (hidden) hidden.value = composeRecurSpec(control);
+  });
+}
+
+function syncTopicPlanPrefs() {
+  const prefs = {};
+  document.querySelectorAll('[data-plan-date]').forEach(row => {
+    prefs[row.dataset.planDate] = {
+      topic: row.querySelector('[data-plan-topic]')?.value || '',
+      tone: row.querySelector('[data-plan-tone]')?.value || 'professional',
+    };
+  });
+  const input = document.getElementById('topicPlanDayPrefs');
+  if (input) input.value = JSON.stringify(prefs);
+}
+
+document.querySelectorAll('[data-plan-date]').forEach(row => {
+  row.addEventListener('change', syncTopicPlanPrefs);
+});
+syncTopicPlanPrefs();
+
+document.querySelectorAll('.recur-controls').forEach(control => {
+  const current = parseRecurSpec(control.dataset.value);
+  control.innerHTML = `
+    <select data-recur-frequency aria-label="Frequency">
+      <option value="daily">Daily</option>
+      <option value="weekly">Weekly</option>
+    </select>
+    <select data-recur-day aria-label="Day">
+      <option value="mon">Mon</option>
+      <option value="tue">Tue</option>
+      <option value="wed">Wed</option>
+      <option value="thu">Thu</option>
+      <option value="fri">Fri</option>
+      <option value="sat">Sat</option>
+      <option value="sun">Sun</option>
+    </select>
+    <input type="time" data-recur-time aria-label="Time">
+  `;
+  control.querySelector('[data-recur-frequency]').value = current.frequency;
+  control.querySelector('[data-recur-day]').value = current.day;
+  control.querySelector('[data-recur-time]').value = current.time;
+  const daySelect = control.querySelector('[data-recur-day]');
+  const updateDayVisibility = () => { daySelect.style.visibility = control.querySelector('[data-recur-frequency]').value === 'weekly' ? 'visible' : 'hidden'; };
+  control.addEventListener('change', () => { updateDayVisibility(); syncRecurFields(); });
+  updateDayVisibility();
+});
+syncRecurFields();
+
+cadenceForm?.addEventListener('submit', async e => {
+  e.preventDefault();
+  syncRecurFields();
+  syncTopicPlanPrefs();
+  const data = Object.fromEntries(new FormData(cadenceForm));
+  data.linkedinEnabled = cadenceForm.elements.linkedinEnabled.checked;
+  data.newsletterEnabled = cadenceForm.elements.newsletterEnabled.checked;
+  cadenceMsg.textContent = 'Saving...';
+  try {
+    const r = await fetch('/api/content/cadence-policy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not save cadence');
+    cadenceMsg.textContent = 'Saved';
+    setTimeout(() => window.location.reload(), 500);
+  } catch (err) {
+    cadenceMsg.textContent = err.message;
+  }
+});
+
+window.useTopic = function(title, tone) {
+  genInput.value = title;
+  if (tone) {
+    const btn = document.querySelector(`.spicy-btn[data-spicy="${tone}"]`);
+    if (btn) btn.click();
+  }
+  genInput.focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 
 // Spiciness picker
 let activeSpiciness = 'professional';

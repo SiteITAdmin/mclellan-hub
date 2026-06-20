@@ -156,6 +156,36 @@
   .summary-stat { display: flex; flex-direction: column; gap: 2px; }
   .summary-stat-val { font-size: 22px; font-weight: 700; color: var(--text); }
   .summary-stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
+
+  .topic-admin-list { display: flex; flex-direction: column; gap: 8px; }
+  .topic-admin-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 260px) minmax(260px, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    padding: 10px;
+  }
+  .topic-admin-row input,
+  .topic-admin-row textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 9px;
+    border: 1px solid var(--outline, #c7c4d7);
+    border-radius: 6px;
+    background: var(--bg, #fff);
+    color: var(--text, #15131e);
+    font-family: inherit;
+    font-size: 12px;
+  }
+  .topic-admin-row textarea { min-height: 54px; resize: vertical; line-height: 1.4; }
+  .topic-admin-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  @media (max-width: 760px) {
+    .topic-admin-row { grid-template-columns: 1fr; }
+    .topic-admin-actions { justify-content: flex-start; }
+  }
 </style>
 </head>
 <body class="admin-page">
@@ -379,6 +409,33 @@
 
   </div>
   <% } %>
+  </div>
+</section>
+
+<section class="admin-section" id="topics">
+  <h2>Content topics</h2>
+  <p style="font-size:13px;color:var(--text-dim);margin:0 0 14px;">
+    These labels power the Content screen filters and the content type picker. The description is the working meaning of the topic, so future prompts and planning can use the same taxonomy.
+  </p>
+  <div class="topic-admin-list">
+    <% for (const topic of contentTopics) { %>
+    <form method="POST" action="/admin/linkedin/topics/update" class="topic-admin-row">
+      <input type="hidden" name="old_name" value="<%= topic.name %>">
+      <input name="name" value="<%= topic.name %>" required>
+      <textarea name="description" placeholder="What this topic means"><%= topic.description || '' %></textarea>
+      <div class="topic-admin-actions">
+        <button type="submit" class="btn-sm primary">Save</button>
+        <button type="submit" class="btn-sm danger" formaction="/admin/linkedin/topics/delete" onclick="return confirm('Remove this topic from the taxonomy? Existing posts keep their saved label.')">Remove</button>
+      </div>
+    </form>
+    <% } %>
+    <form method="POST" action="/admin/linkedin/topics/add" class="topic-admin-row">
+      <input name="name" placeholder="New topic" required>
+      <textarea name="description" placeholder="What this topic means"></textarea>
+      <div class="topic-admin-actions">
+        <button type="submit" class="btn-sm primary">Add topic</button>
+      </div>
+    </form>
   </div>
 </section>
 
