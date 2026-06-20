@@ -417,6 +417,16 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
             <span class="badge badge-type"><%= describeRecur(cadencePolicy.topicPlan.researchRecur) %></span>
           </div>
         </div>
+
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">Suggestion sources</div>
+            <label class="switch"><input type="checkbox" name="topicPlanShowIntelFallback" <%= cadencePolicy.topicPlan.showIntelFallback ? 'checked' : '' %>> Intel fallback</label>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= cadencePolicy.topicPlan.showIntelFallback ? 'Research + selected intel' : 'Research only' %></span>
+          </div>
+        </div>
       </div>
       <div class="cadence-actions">
         <button class="btn-sm primary" type="submit">Save cadence</button>
@@ -425,7 +435,11 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       <div class="topic-plan">
         <div class="topic-plan-head">
           <div class="topic-plan-title">Topic plan</div>
-          <div class="topic-plan-meta"><%= topicPlan.available %>/<%= topicPlan.requested %> available from research and selected intel</div>
+          <div class="topic-plan-meta"><%= topicPlan.available %>/<%= topicPlan.requested %> available from <%= cadencePolicy.topicPlan.showIntelFallback ? 'research and selected intel' : 'research' %></div>
+        </div>
+        <div class="cadence-actions" style="margin:0 0 12px;">
+          <button class="btn-sm" type="button" id="clear-topic-suggestions">Clear suggestions</button>
+          <span class="cadence-msg" id="topic-plan-msg"></span>
         </div>
         <div class="cadence-fields" style="max-width:420px;margin-bottom:12px;">
           <div class="cadence-field">
@@ -457,7 +471,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
                 <button class="btn-sm" type="button" data-plan-research>Research</button>
               </div>
               <% if (!day.suggestions.length) { %>
-                <div class="topic-summary">No unused selected topics available<%= day.preference.topic ? ` for ${day.preference.topic}` : '' %>.</div>
+                <div class="topic-summary">No researched suggestions yet<%= day.preference.topic ? ` for ${day.preference.topic}` : '' %>.</div>
               <% } %>
               <% for (const topic of day.suggestions) { %>
                 <div class="topic-item">
@@ -667,6 +681,8 @@ let pollTimer = null;
 // ── Cadence policy ───────────────────────────────────────────────────────────
 const cadenceForm = document.getElementById('cadence-form');
 const cadenceMsg = document.getElementById('cadence-msg');
+const topicPlanMsg = document.getElementById('topic-plan-msg');
+const clearTopicSuggestionsBtn = document.getElementById('clear-topic-suggestions');
 
 function parseRecurSpec(spec) {
   const parts = String(spec || '').split(':');
@@ -742,6 +758,7 @@ cadenceForm?.addEventListener('submit', async e => {
   data.linkedinEnabled = cadenceForm.elements.linkedinEnabled.checked;
   data.newsletterEnabled = cadenceForm.elements.newsletterEnabled.checked;
   data.topicPlanResearchEnabled = cadenceForm.elements.topicPlanResearchEnabled.checked;
+  data.topicPlanShowIntelFallback = cadenceForm.elements.topicPlanShowIntelFallback.checked;
   cadenceMsg.textContent = 'Saving...';
   try {
     const r = await fetch('/api/content/cadence-policy', {
@@ -755,6 +772,21 @@ cadenceForm?.addEventListener('submit', async e => {
     setTimeout(() => window.location.reload(), 500);
   } catch (err) {
     cadenceMsg.textContent = err.message;
+  }
+});
+
+clearTopicSuggestionsBtn?.addEventListener('click', async () => {
+  clearTopicSuggestionsBtn.disabled = true;
+  topicPlanMsg.textContent = 'Clearing...';
+  try {
+    const r = await fetch('/api/content/topic-plan/suggestions/clear', { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not clear suggestions');
+    topicPlanMsg.textContent = `Cleared ${j.deleted || 0}`;
+    setTimeout(() => window.location.reload(), 500);
+  } catch (err) {
+    topicPlanMsg.textContent = err.message;
+    clearTopicSuggestionsBtn.disabled = false;
   }
 });
 
