@@ -299,3 +299,18 @@ These are the tools the system runs on. They are not features — they are the f
 **Purpose:** Index project documents and chat outputs for retrieval. Should feed back into the system as context for email classification, briefing enrichment, and regulatory matching.
 
 **Current limitation:** Synthadoc indexes documents but the hub does not yet query it as a retrieval source during email processing or briefings. This is a known gap — the path from wiki → other modules does not yet exist.
+
+---
+
+## URL Watchlist
+**Purpose:** Monitor any URL for new content on a user-specified schedule. Fetches pages using a provider cascade (Firecrawl → Exa → Brave → direct HTTP), extracts new stories/links, and displays them in a tab-based admin view.
+
+**Healthy looks like:**
+- `watchlist_feeds` has enabled feeds with recent `last_fetched_at` values
+- `watchlist_stories` has entries from the last 24h for active feeds
+- Feeds with 3+ consecutive errors are auto-disabled and visible in the UI with error badges
+- `watchlist_poll` always has a pending job in `system_jobs`
+
+**Does not own:** RSS feed processing (that's the RSS module), regulatory monitoring (that's the Regulatory Monitor), newsletter content
+
+**Health check:** `watchlist_poll` has a pending job. No enabled feed has `error_count >= 3` — if it does, the auto-disable trigger failed.
