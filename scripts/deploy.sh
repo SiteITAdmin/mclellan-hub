@@ -5,7 +5,8 @@ set -euo pipefail
 VPS_IP="${1:-178.104.235.142}"
 VPS_USER="root"
 APP_DIR="/Users/dm_mini/Documents/mclellan hub"
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new)
+SSH_CONTROL="/tmp/mclellan-deploy-$$"
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o "ControlPath=${SSH_CONTROL}" -o ControlPersist=120)
 
 usage() {
   cat <<'EOF'
@@ -16,6 +17,8 @@ Defaults to SSH key authentication. Pass --password to prompt for or use
 VPS_PASSWORD when you need a temporary password-based deploy.
 EOF
 }
+
+trap 'ssh -o ControlPath="${SSH_CONTROL}" -O exit "${VPS_USER}@${VPS_IP}" 2>/dev/null || true' EXIT
 
 USE_PASSWORD=0
 
