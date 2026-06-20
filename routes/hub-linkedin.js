@@ -56,6 +56,7 @@ router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, write
       suggestionsPerDay: req.body?.topicPlanSuggestionsPerDay,
       researchEnabled: bool(req.body?.topicPlanResearchEnabled),
       researchRecur: req.body?.topicPlanResearchRecur,
+      showIntelFallback: bool(req.body?.topicPlanShowIntelFallback),
       dayPrefs: req.body?.topicPlanDayPrefs,
     },
   });
@@ -65,6 +66,11 @@ router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, write
     console.warn('[content] cadence policy saved but reminder sync failed:', err.message);
   }
   res.json({ ok: true, policy });
+});
+
+router.post('/api/content/topic-plan/suggestions/clear', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const result = db.hub().prepare('DELETE FROM content_research_suggestions WHERE user = ?').run(req.hubUser);
+  res.json({ ok: true, deleted: result.changes });
 });
 
 router.post('/api/content/topic-plan/research', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
