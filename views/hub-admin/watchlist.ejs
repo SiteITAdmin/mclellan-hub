@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>URL Watchlist — Admin</title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+.wrap { max-width: var(--max-w); }
+h1 { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+.sub { font-size: 13px; color: var(--text-dim); margin: 0 0 24px; }
+.msg-bar { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); padding: 0 12px 8px 0; border-bottom: 1px solid var(--border, #dddaf0); }
+td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--border, #dddaf0); vertical-align: middle; }
+.badge { border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.badge-on { background: #e8f5e9; color: #2e7d32; }
+.badge-off { background: #fce4ec; color: #c62828; }
+.btn { padding: 5px 10px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border, #dddaf0); background: transparent; color: inherit; font-family: inherit; font-weight: 600; }
+.btn-primary { background: var(--primary, #7c6af5); color: #fff; border-color: transparent; }
+.btn-danger { color: #c62828; border-color: #e57373; }
+.add-form { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 10px; padding: 20px; margin-bottom: 24px; display: none; }
+.form-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: end; }
+@media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+.form-grid input, .form-grid select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; background: var(--input-bg, #fff); color: inherit; width: 100%; box-sizing: border-box; }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border, #dddaf0); margin-bottom: 20px; }
+.tab-btn { padding: 8px 18px; font-size: 13px; font-weight: 600; border: none; background: transparent; color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; font-family: inherit; }
+.tab-btn.active { color: var(--primary, #7c6af5); border-bottom-color: var(--primary, #7c6af5); }
+.tab-pane { display: none; }
+.story-card { border-bottom: 1px solid var(--border, #dddaf0); padding: 16px 0; transition: background .15s; }
+.story-card:hover { background: var(--bg, #faf9fb); }
+.story-card h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+.story-card h3 a { color: inherit; text-decoration: none; }
+.story-card h3 a:hover { text-decoration: underline; }
+.story-card .meta { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+.story-card .snippet { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.story-card .read-btn { font-size: 11px; font-weight: 600; color: var(--primary, #7c6af5); background: none; border: none; cursor: pointer; padding: 0; font-family: inherit; }
+.story-card .full-content { display: none; margin-top: 10px; font-size: 13px; line-height: 1.7; border-left: 3px solid var(--border, #dddaf0); padding-left: 14px; color: var(--text, inherit); white-space: pre-wrap; word-break: break-word; max-height: 500px; overflow-y: auto; }
+.feed-tag { display: inline-block; background: #ede7f6; color: #5e35b1; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600; }
+.provider-badge { display: inline-block; background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 10px; padding: 1px 7px; font-size: 10px; font-weight: 600; color: var(--text-dim); }
+.error-badge { color: #c62828; font-size: 11px; font-weight: 600; }
+</style>
+</head>
+<body class="admin-page">
+<%- include('partials/admin-header', { title: `URL Watchlist — ${user}` }) %>
+<section class="admin-section wrap">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+    <h1>URL Watchlist</h1>
+    <a href="/admin" style="font-size:13px;color:var(--text-dim);">← Admin</a>
+  </div>
+  <p class="sub">Monitor any URL for new content. Fetches on your schedule using the best available provider.</p>
+
+  <% if (msg) { %>
+    <div class="msg-bar"><%= msg %></div>
+  <% } %>
+
+  <div class="tabs">
+    <button class="tab-btn" data-tab="feeds" onclick="switchTab('feeds')">Feeds</button>
+    <button class="tab-btn" data-tab="stories" onclick="switchTab('stories')">Stories</button>
+  </div>
+
+  <!-- ============ FEEDS TAB ============ -->
+  <div class="tab-pane" id="tab-feeds">
+    <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-primary" onclick="toggleAdd()">+ Add URL</button>
+      <form method="POST" action="/admin/watchlist/fetch-all" style="display:inline;">
+        <button class="btn" type="submit">↻ Fetch all</button>
+      </form>
+    </div>
+
+    <div class="add-form" id="add-form">
+      <strong style="font-size:14px;display:block;margin-bottom:14px;">Add URL</strong>
+      <form method="POST" action="/admin/watchlist">
+        <div class="form-grid">
+          <input name="url" placeholder="https://example.com/page" required>
+          <input name="label" placeholder="Label (optional)">
+          <select name="interval_mins">
+            <option value="15">15 min</option>
+            <option value="60" selected>1 hour</option>
+            <option value="360">6 hours</option>
+            <option value="720">12 hours</option>
+            <option value="1440">24 hours</option>
+          </select>
+          <select name="provider">
+            <option value="auto" selected>auto</option>
+            <option value="firecrawl">firecrawl</option>
+            <option value="exa">exa</option>
+            <option value="brave">brave</option>
+            <option value="direct">direct</option>
+          </select>
+          <button class="btn btn-primary" type="submit">Add</button>
+        </div>
+      </form>
+    </div>
+
+    <% if (feeds.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Label</th>
+          <th>URL</th>
+          <th>Provider</th>
+          <th>Interval</th>
+          <th>Stories</th>
+          <th>Last Fetched</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      <% for (const f of feeds) { %>
+        <tr>
+          <td style="font-weight:600;"><%= f.label || '—' %></td>
+          <td style="color:var(--text-dim);" title="<%= f.url %>"><%= f.url.length > 40 ? f.url.slice(0, 40) + '…' : f.url %></td>
+          <td><span class="provider-badge"><%= f.provider %></span></td>
+          <td><%= f.interval_mins %>m</td>
+          <td><%= f.story_count || 0 %></td>
+          <td style="color:var(--text-dim);">
+            <% if (f.last_fetched_at) { %>
+              <%= new Date(f.last_fetched_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %>
+            <% } else { %>
+              Never
+            <% } %>
+          </td>
+          <td>
+            <span class="badge <%= f.enabled ? 'badge-on' : 'badge-off' %>"><%= f.enabled ? 'enabled' : 'disabled' %></span>
+            <% if (f.error_count >= 3) { %>
+              <span class="error-badge" <% if (f.last_error) { %>title="<%= f.last_error %>"<% } %>>⚠ auto-disabled</span>
+            <% } %>
+          </td>
+          <td style="white-space:nowrap;display:flex;gap:6px;">
+            <form method="POST" action="/admin/watchlist/<%= f.id %>/fetch" style="display:inline;">
+              <button class="btn" type="submit">Fetch</button>
+            </form>
+            <form method="POST" action="/admin/watchlist/<%= f.id %>/toggle" style="display:inline;">
+              <button class="btn" type="submit"><%= f.enabled ? 'Disable' : 'Enable' %></button>
+            </form>
+            <form method="POST" action="/admin/watchlist/<%= f.id %>/delete" style="display:inline;" onsubmit="return confirm('Delete this feed and all its stories?')">
+              <button class="btn btn-danger" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      <% } %>
+      </tbody>
+    </table>
+    <% } else { %>
+      <p style="color:var(--text-dim);font-size:13px;">No feeds yet.</p>
+    <% } %>
+  </div>
+
+  <!-- ============ STORIES TAB ============ -->
+  <div class="tab-pane" id="tab-stories">
+    <% if (stories.length) { %>
+      <% for (const s of stories) { %>
+        <div class="story-card">
+          <h3><a href="<%= s.url %>" target="_blank"><%= s.title || '(untitled)' %></a></h3>
+          <div class="meta">
+            <span class="feed-tag"><%= s.feed_label || 'feed ' + s.feed_id %></span>
+            <span class="time-ago" data-epoch="<%= s.fetched_at %>"></span>
+            <span class="provider-badge"><%= s.provider_used %></span>
+          </div>
+          <div class="snippet"><%= s.snippet ? (s.snippet.length > 200 ? s.snippet.slice(0, 200) + '…' : s.snippet) : '' %></div>
+          <% if (s.content_markdown) { %>
+            <button class="read-btn" onclick="toggleContent(this)">Read full article ▼</button>
+            <div class="full-content"><%= s.content_markdown %></div>
+          <% } %>
+        </div>
+      <% } %>
+    <% } else { %>
+      <p style="color:var(--text-dim);font-size:13px;">No stories fetched yet.</p>
+    <% } %>
+  </div>
+</section>
+<script>
+'use strict';
+function toggleAdd() {
+  var f = document.getElementById('add-form');
+  f.style.display = f.style.display === 'block' ? 'none' : 'block';
+  if (f.style.display === 'block') f.querySelector('input').focus();
+}
+function switchTab(name) {
+  document.querySelectorAll('.tab-pane').forEach(function(p) { p.style.display = 'none'; });
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + name).style.display = 'block';
+  document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+}
+function toggleContent(btn) {
+  var content = btn.nextElementSibling;
+  var open = content.style.display === 'block';
+  content.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? 'Read full article ▼' : 'Hide ▲';
+}
+function timeAgo(epoch) {
+  if (!epoch) return 'never';
+  var secs = Math.floor(Date.now() / 1000) - epoch;
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+  if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+  return Math.floor(secs / 86400) + 'd ago';
+}
+switchTab('<%= tab || "feeds" %>');
+document.querySelectorAll('.time-ago').forEach(function(el) {
+  el.textContent = timeAgo(Number(el.dataset.epoch));
+});
+<% if (msg) { %>
+window.scrollTo(0, 0);
+<% } %>
+</script>
+</body>
+</html>
