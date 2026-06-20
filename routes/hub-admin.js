@@ -1727,6 +1727,7 @@ router.post('/admin/linkedin/topics/add', requireHubAdmin, (req, res) => {
   addContentTopic(req.hubUser, {
     name: req.body.name,
     description: req.body.description,
+    searchQuery: req.body.searchQuery,
   });
   res.redirect('/admin/linkedin#topics');
 });
@@ -1736,6 +1737,7 @@ router.post('/admin/linkedin/topics/update', requireHubAdmin, (req, res) => {
   updateContentTopic(req.hubUser, req.body.old_name, {
     name: req.body.name,
     description: req.body.description,
+    searchQuery: req.body.searchQuery,
   });
   res.redirect('/admin/linkedin#topics');
 });
