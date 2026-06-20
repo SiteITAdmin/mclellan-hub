@@ -14,7 +14,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SNAPSHOT_ROOT="${SNAPSHOT_ROOT:-${ROOT}/data/prod-snapshots}"
 DEST="${SNAPSHOT_ROOT}/${STAMP}"
 REMOTE_TMP="/tmp/mclellan-prod-snapshot-${STAMP}"
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes)
+SSH_CONTROL="/tmp/mclellan-snapshot-$$"
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=${SSH_CONTROL}" -o ControlPersist=120)
+trap 'ssh -o ControlPath="${SSH_CONTROL}" -O exit "${VPS}" 2>/dev/null || true' EXIT
 
 mkdir -p "${DEST}"
 

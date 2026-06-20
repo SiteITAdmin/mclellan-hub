@@ -9,13 +9,18 @@ DASHBOARD_DIR="$APP_DIR/token-burn-dashboard"
 REMOTE_DIR="/app/token-burn-dashboard/deploy-data"
 NODE_BIN="${NODE_BIN:-/opt/homebrew/opt/node@24/bin/node}"
 LOCK_DIR="${TMPDIR:-/tmp}/mclellan-token-burn-refresh.lock"
+SSH_CONTROL="/tmp/mclellan-tokenburn-$$"
 SSH_OPTS=(
   -o BatchMode=yes
   -o ConnectTimeout=15
   -o ServerAliveInterval=15
   -o ServerAliveCountMax=2
   -o StrictHostKeyChecking=accept-new
+  -o ControlMaster=auto
+  -o "ControlPath=${SSH_CONTROL}"
+  -o ControlPersist=120
 )
+trap 'ssh -o ControlPath="${SSH_CONTROL}" -O exit "${VPS_USER}@${VPS_IP}" 2>/dev/null || true' EXIT
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "Token-burn refresh already running; skipping."
