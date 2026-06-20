@@ -400,6 +400,23 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
             <% } %>
           </div>
         </div>
+
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">Topic research</div>
+            <label class="switch"><input type="checkbox" name="topicPlanResearchEnabled" <%= cadencePolicy.topicPlan.researchEnabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Research schedule</label>
+              <input type="hidden" name="topicPlanResearchRecur" id="topicPlanResearchRecur" value="<%= cadencePolicy.topicPlan.researchRecur %>">
+              <div class="recur-controls" data-field="topicPlanResearchRecur" data-value="<%= cadencePolicy.topicPlan.researchRecur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.topicPlan.researchRecur) %></span>
+          </div>
+        </div>
       </div>
       <div class="cadence-actions">
         <button class="btn-sm primary" type="submit">Save cadence</button>
@@ -408,7 +425,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       <div class="topic-plan">
         <div class="topic-plan-head">
           <div class="topic-plan-title">Topic plan</div>
-          <div class="topic-plan-meta"><%= topicPlan.available %>/<%= topicPlan.requested %> available from selected intel</div>
+          <div class="topic-plan-meta"><%= topicPlan.available %>/<%= topicPlan.requested %> available from research and selected intel</div>
         </div>
         <div class="cadence-fields" style="max-width:420px;margin-bottom:12px;">
           <div class="cadence-field">
@@ -437,6 +454,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
                   <option value="challenging" <%= day.preference.tone === 'challenging' ? 'selected' : '' %>>Challenging</option>
                   <option value="provocative" <%= day.preference.tone === 'provocative' ? 'selected' : '' %>>Provocative</option>
                 </select>
+                <button class="btn-sm" type="button" data-plan-research>Research</button>
               </div>
               <% if (!day.suggestions.length) { %>
                 <div class="topic-summary">No unused selected topics available<%= day.preference.topic ? ` for ${day.preference.topic}` : '' %>.</div>
@@ -446,8 +464,8 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
                   <div class="topic-title"><%= topic.title %></div>
                   <% if (topic.summary) { %><div class="topic-summary"><%= String(topic.summary).slice(0, 180) %></div><% } %>
                   <div class="topic-foot">
-                    <span class="topic-source"><%= topic.category || topic.source_name || topic.item_type || 'intel' %> · <%= day.preference.tone %></span>
-                    <button class="btn-sm" type="button" data-topic="<%= topic.title %>" data-tone="<%= day.preference.tone %>" onclick="useTopic(this.dataset.topic, this.dataset.tone)">Use</button>
+                    <span class="topic-source"><%= topic.source_kind || topic.category || topic.source_name || topic.item_type || 'intel' %> · <%= day.preference.tone %></span>
+                    <button class="btn-sm" type="button" data-topic="<%= topic.title %>" data-tone="<%= day.preference.tone %>" data-source-url="<%= topic.source_url || '' %>" onclick="useTopic(this.dataset.topic, this.dataset.tone, this.dataset.sourceUrl)">Use</button>
                   </div>
                 </div>
               <% } %>
@@ -684,6 +702,7 @@ function syncTopicPlanPrefs() {
 
 document.querySelectorAll('[data-plan-date]').forEach(row => {
   row.addEventListener('change', syncTopicPlanPrefs);
+  row.querySelector('[data-plan-research]')?.addEventListener('click', () => researchPlanDate(row));
 });
 syncTopicPlanPrefs();
 
@@ -722,6 +741,7 @@ cadenceForm?.addEventListener('submit', async e => {
   const data = Object.fromEntries(new FormData(cadenceForm));
   data.linkedinEnabled = cadenceForm.elements.linkedinEnabled.checked;
   data.newsletterEnabled = cadenceForm.elements.newsletterEnabled.checked;
+  data.topicPlanResearchEnabled = cadenceForm.elements.topicPlanResearchEnabled.checked;
   cadenceMsg.textContent = 'Saving...';
   try {
     const r = await fetch('/api/content/cadence-policy', {
@@ -738,8 +758,37 @@ cadenceForm?.addEventListener('submit', async e => {
   }
 });
 
-window.useTopic = function(title, tone) {
+async function researchPlanDate(row) {
+  const topic = row.querySelector('[data-plan-topic]')?.value || '';
+  const tone = row.querySelector('[data-plan-tone]')?.value || 'professional';
+  const button = row.querySelector('[data-plan-research]');
+  if (!topic) {
+    cadenceMsg.textContent = 'Choose a topic first';
+    return;
+  }
+  button.disabled = true;
+  button.textContent = 'Researching...';
+  cadenceMsg.textContent = 'Researching topic...';
+  try {
+    const r = await fetch('/api/content/topic-plan/research', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: row.dataset.planDate, topic, tone }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Research failed');
+    cadenceMsg.textContent = `Researched ${j.result.count || 0} suggestions`;
+    setTimeout(() => window.location.reload(), 500);
+  } catch (err) {
+    cadenceMsg.textContent = err.message;
+    button.disabled = false;
+    button.textContent = 'Research';
+  }
+}
+
+window.useTopic = function(title, tone, sourceUrl) {
   genInput.value = title;
+  genSourceUrl.value = sourceUrl || '';
   if (tone) {
     const btn = document.querySelector(`.spicy-btn[data-spicy="${tone}"]`);
     if (btn) btn.click();
