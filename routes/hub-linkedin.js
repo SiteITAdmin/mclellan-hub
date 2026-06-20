@@ -6,14 +6,24 @@ const {
   writeLimiter, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
 
-// ── LinkedIn Content (hub) ────────────────────────────────────────────────────
-const CONTENT_TYPES_HUB = [
-  'AI & Technology', 'M365 & Microsoft', 'Healthcare IT', 'Digital Transformation',
-  'EU Policy & Regulation', 'Leadership & Management', 'Industry Analysis',
-  'Product Review', 'Case Study', 'Career & Development',
-];
-
 router.get('/lin', requireAuth, (req, res) => {
+  const { getContentCadencePolicy, describeRecur } = require('../lib/content-cadence-policy');
+  const { buildContentTopicPlan } = require('../lib/content-topic-plan');
+  const { listContentTopicNames } = require('../lib/content-taxonomy');
+  const { evaluateCheck } = require('../lib/content-reminders');
+  const policy = getContentCadencePolicy(req.hubUser);
+  const topicPlan = buildContentTopicPlan(req.hubUser, policy.topicPlan);
+  const cadenceRows = db.hub().prepare(`
+    SELECT * FROM reminders
+    WHERE user = ? AND kind = 'content'
+    ORDER BY dedup_key
+  `).all(req.hubUser).map(r => ({
+    ...r,
+    due_label: r.next_fire_at
+      ? new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Dublin' })
+      : '',
+    needs_action: Boolean(evaluateCheck(r).message),
+  }));
   const posts = db.hub().prepare(
     `SELECT id, topic, content_type, spiciness, score_json, carousel_url, sheet_url,
             scheduled_date, status, created_at, published_at,
@@ -24,7 +34,35 @@ router.get('/lin', requireAuth, (req, res) => {
     ...p,
     score: (() => { try { return JSON.parse(p.score_json || '{}'); } catch { return {}; } })(),
   }));
-  res.render('hub/content', { user: req.hubUser, posts: parsed, contentTypes: CONTENT_TYPES_HUB });
+  res.render('hub/content', { user: req.hubUser, posts: parsed, contentTypes: listContentTopicNames(req.hubUser), cadencePolicy: policy, cadenceRows, topicPlan, describeRecur });
+});
+
+router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const { setContentCadencePolicy } = require('../lib/content-cadence-policy');
+  const bool = (value) => value === true || value === 'true' || value === 'on' || value === '1';
+  const policy = setContentCadencePolicy(req.hubUser, {
+    linkedin: {
+      enabled: bool(req.body?.linkedinEnabled),
+      cadenceDays: req.body?.linkedinCadenceDays,
+      recur: req.body?.linkedinRecur,
+    },
+    newsletter: {
+      enabled: bool(req.body?.newsletterEnabled),
+      minTopics: req.body?.newsletterMinTopics,
+      recur: req.body?.newsletterRecur,
+    },
+    topicPlan: {
+      days: req.body?.topicPlanDays,
+      suggestionsPerDay: req.body?.topicPlanSuggestionsPerDay,
+      dayPrefs: req.body?.topicPlanDayPrefs,
+    },
+  });
+  try {
+    require('../lib/content-reminders').seedContentReminders(req.hubUser);
+  } catch (err) {
+    console.warn('[content] cadence policy saved but reminder sync failed:', err.message);
+  }
+  res.json({ ok: true, policy });
 });
 
 router.post('/api/content/generate', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
@@ -68,7 +106,8 @@ router.get('/api/content/posts/:id', requireAuth, (req, res) => {
 
 router.post('/api/content/posts/:id/type', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const type = String(req.body?.type || '').trim();
-  if (type && !CONTENT_TYPES_HUB.includes(type)) return res.status(400).json({ error: 'Invalid type' });
+  const { listContentTopicNames } = require('../lib/content-taxonomy');
+  if (type && !listContentTopicNames(req.hubUser).includes(type)) return res.status(400).json({ error: 'Invalid type' });
   const result = db.hub().prepare(
     `UPDATE linkedin_posts SET content_type = ? WHERE id = ? AND user = ?`
   ).run(type, req.params.id, req.hubUser);

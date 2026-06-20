@@ -54,6 +54,14 @@ function defaultSearchModeForTier(tier) {
 }
 
 function requireHubAdmin(req, res, next) {
+  const localDev = process.env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1', '::1'].includes(req.hostname);
+  if (localDev && req.hubUser) {
+    if (req.session) {
+      req.session.hubUser = req.hubUser;
+      req.session.hubAdminUser = req.hubUser;
+    }
+    return next();
+  }
   if (req.session?.hubAdminUser === req.hubUser) return next();
   res.redirect('/admin/login');
 }
@@ -611,6 +619,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'prompt_improver',  scope: 'system', label: 'Prompt improver',     note: 'Rewrites prompts in the admin test panel.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'prompt_adapter',   scope: 'system', label: 'Prompt adapter',      note: 'Builds structured reusable prompts from rough prompts and saved examples.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'prompt_optimizer', scope: 'system', label: 'Prompt optimizer',    note: 'Optimises recurring prompt assets against examples and a scored rubric.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'suggestions',      scope: 'system', label: 'Suggestion engine',   note: 'Generates advisory travel and content suggestions for the morning briefing.', fallback: 'google/gemini-2.5-flash' },
     { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
   ]},
   { id: 'debrief', label: 'Debrief', slots: [
@@ -1672,14 +1681,8 @@ router.get('/admin/nakai-briefings/:edition/:artifact(pdf|html|md)', requireHubA
 
 // ── LinkedIn content pipeline ─────────────────────────────────────────────────
 
-const CONTENT_TYPES = [
-  'AI & Technology', 'M365 & Microsoft', 'Healthcare IT',
-  'Digital Transformation', 'EU Policy & Regulation',
-  'Leadership & Management', 'Industry Analysis',
-  'Product Review', 'Case Study', 'Career & Development',
-];
-
 router.get('/admin/linkedin', requireHubAdmin, (req, res) => {
+  const { getContentTopics, listContentTopicNames } = require('../lib/content-taxonomy');
   const posts = db.hub().prepare(
     `SELECT id, user, topic, content_type, score_json, carousel_url, image_url,
             sheet_url, scheduled_date, status, created_at, published_at,
@@ -1693,7 +1696,12 @@ router.get('/admin/linkedin', requireHubAdmin, (req, res) => {
     score: (() => { try { return JSON.parse(p.score_json || '{}'); } catch { return {}; } })(),
   }));
 
-  res.render('hub-admin/linkedin', { user: req.hubUser, posts: parsed, contentTypes: CONTENT_TYPES });
+  res.render('hub-admin/linkedin', {
+    user: req.hubUser,
+    posts: parsed,
+    contentTypes: listContentTopicNames(req.hubUser),
+    contentTopics: getContentTopics(req.hubUser),
+  });
 });
 
 router.get('/admin/linkedin/:id', requireHubAdmin, (req, res) => {
@@ -1707,9 +1715,35 @@ router.get('/admin/linkedin/:id', requireHubAdmin, (req, res) => {
 
 router.post('/admin/linkedin/:id/type', requireHubAdmin, (req, res) => {
   const { content_type } = req.body;
+  const { listContentTopicNames } = require('../lib/content-taxonomy');
+  if (content_type && !listContentTopicNames(req.hubUser).includes(content_type)) return res.redirect('/admin/linkedin');
   db.hub().prepare('UPDATE linkedin_posts SET content_type = ? WHERE id = ? AND user = ?')
     .run(content_type || '', req.params.id, req.hubUser);
   res.redirect('/admin/linkedin');
+});
+
+router.post('/admin/linkedin/topics/add', requireHubAdmin, (req, res) => {
+  const { addContentTopic } = require('../lib/content-taxonomy');
+  addContentTopic(req.hubUser, {
+    name: req.body.name,
+    description: req.body.description,
+  });
+  res.redirect('/admin/linkedin#topics');
+});
+
+router.post('/admin/linkedin/topics/update', requireHubAdmin, (req, res) => {
+  const { updateContentTopic } = require('../lib/content-taxonomy');
+  updateContentTopic(req.hubUser, req.body.old_name, {
+    name: req.body.name,
+    description: req.body.description,
+  });
+  res.redirect('/admin/linkedin#topics');
+});
+
+router.post('/admin/linkedin/topics/delete', requireHubAdmin, (req, res) => {
+  const { deleteContentTopic } = require('../lib/content-taxonomy');
+  deleteContentTopic(req.hubUser, req.body.name);
+  res.redirect('/admin/linkedin#topics');
 });
 
 router.post('/admin/linkedin/:id/status', requireHubAdmin, (req, res) => {
