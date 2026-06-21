@@ -132,6 +132,28 @@ test('buildAuditAgentPack creates stage-specific Goose and reviewer prompts', ()
   assert.match(pack.markdown, /unsupported, overstated, duplicated, or inconsistent/i);
 });
 
+test('buildAuditAgentPack maps pasted team folders to canonical project room labels', () => {
+  const pack = buildAuditAgentPack('nakai', {
+    audit_name: 'Consumer Duty review',
+    stage: 'fieldwork',
+    source_folders: [
+      '00_source_evidence: https://drive.example/source-evidence',
+      '01_inventory: https://drive.example/inventory',
+      'https://drive.example/extra-policy-folder',
+      '05_outputs: https://drive.example/outputs',
+    ].join('\n'),
+    harnesses: ['goose'],
+  });
+
+  assert.match(pack.markdown, /PROJECT ROOM MAP/);
+  assert.match(pack.markdown, /00_source_evidence: https:\/\/drive\.example\/source-evidence/);
+  assert.match(pack.markdown, /01_inventory: https:\/\/drive\.example\/inventory/);
+  assert.match(pack.markdown, /source_01: https:\/\/drive\.example\/extra-policy-folder/);
+  assert.match(pack.markdown, /05_outputs: https:\/\/drive\.example\/outputs/);
+  assert.match(pack.markdown, /Use these canonical labels in all plans, workpapers, evidence references, and handoffs/);
+  assert.match(pack.markdown, /Write or instruct outputs to be saved under: https:\/\/drive\.example\/outputs/);
+});
+
 test('parsePromptKitMarkdown splits Nate-style prompt kits into prompts', () => {
   const kit = parsePromptKitMarkdown(`---
 title: "Example Kit"
