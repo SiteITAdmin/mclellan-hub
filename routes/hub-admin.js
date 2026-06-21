@@ -29,6 +29,7 @@ const {
   sendStoredBriefing: resendNakaiBriefing,
   buildNakaiDailyBriefing,
 } = require('../scripts/build-nakai-daily-briefing');
+const { resendBriefingFromRequest } = require('../lib/nakai-briefing-resolver');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -1679,7 +1680,40 @@ router.get('/admin/nakai-briefings/:edition/:artifact(pdf|html|md)', requireHubA
   }
 });
 
-// ── LinkedIn content pipeline ─────────────────────────────────────────────────
+// ── Nakai briefing resend resolver ───────────────────────────────────────────
+// Called by email webhooks or manually with a natural-language text request.
+// e.g. POST /admin/nakai-briefings/request  { text: "send me briefing 002" }
+// The `from` field is validated against NAKAI_GOOGLE_EMAILS to prevent abuse.
+router.post('/admin/nakai-briefings/request', requireHubAdmin, async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ ok: false, reason: 'No request text provided.' });
+    const result = await resendBriefingFromRequest(text);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ ok: false, type: 'error', reason: err.message });
+  }
+});
+
+// Nakai-facing endpoint — authenticated by token in NAKAI_BRIEFING_REQUEST_TOKEN env var.
+// Nakai emails the hub or hits this URL directly. No Hub session required.
+router.post('/nakai/briefing-request', async (req, res) => {
+  try {
+    const token = process.env.NAKAI_BRIEFING_REQUEST_TOKEN || '';
+    const provided = String(req.headers['x-briefing-token'] || req.body?.token || '').trim();
+    if (!token || provided !== token) {
+      return res.status(403).json({ ok: false, reason: 'Unauthorised.' });
+    }
+    const text = String(req.body?.text || req.body?.message || '').trim();
+    if (!text) return res.status(400).json({ ok: false, reason: 'No request text provided.' });
+    const result = await resendBriefingFromRequest(text);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ ok: false, type: 'error', reason: err.message });
+  }
+});
+
+
 
 router.get('/admin/linkedin', requireHubAdmin, (req, res) => {
   const { getContentTopics, listContentTopicNames } = require('../lib/content-taxonomy');
