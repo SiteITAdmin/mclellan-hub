@@ -83,7 +83,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <div class="burn-card"><span class="burn-label">Imported burn</span><strong class="burn-value"><%= tokenBurn.antigravityEstimated ? '~' : '' %><%= formatTokens(tokenBurn.importedExact) %></strong><p class="burn-note"><%= tokenBurn.firstDate || 'n/a' %> to <%= tokenBurn.lastDate || 'n/a' %></p></div>
     <div class="burn-card"><span class="burn-label">Codex</span><strong class="burn-value"><%= formatTokens(tokenBurn.codex) %></strong><p class="burn-note">Local session token counters</p></div>
     <div class="burn-card"><span class="burn-label">Claude Code</span><strong class="burn-value"><%= formatTokens(tokenBurn.claudeCode) %></strong><p class="burn-note">Message usage, including cache tokens</p></div>
-    <div class="burn-card"><span class="burn-label">Antigravity</span><strong class="burn-value"><%= tokenBurn.antigravityEstimated ? '~' : '' %><%= formatTokens(tokenBurn.antigravity) %></strong><p class="burn-note">Status-line telemetry + rough backfill</p></div>
+    <div class="burn-card"><span class="burn-label">Antigravity</span><strong class="burn-value"><%= tokenBurn.antigravityEstimated ? '~' : '' %><%= formatTokens(tokenBurn.antigravity) %></strong><p class="burn-note">Status-line telemetry + rough backfill. A mix of models.</p></div>
     <div class="burn-card"><span class="burn-label">Hub OpenRouter live</span><strong class="burn-value"><%= formatTokens(tokenBurn.liveExact) %></strong><p class="burn-note"><%= formatUsd(tokenBurn.liveCost) %> logged in current hub DB</p></div>
   </section>
 
