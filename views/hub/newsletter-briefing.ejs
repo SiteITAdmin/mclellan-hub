@@ -36,7 +36,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <% } %>
 
   <div class="action-row">
-    <button class="btn btn-primary" onclick="downloadPdf('/newsletter/briefing/<%= briefing.id %>/pdf')">Download PDF</button>
+    <button class="btn btn-primary" onclick="downloadPdf('/newsletter/briefing/<%= briefing.id %>/pdf', this)">Download PDF</button>
     <button class="btn" id="wiki-btn" onclick="exportWiki()">Export to wiki</button>
     <% if (!briefing.published_at) { %>
       <button class="btn" onclick="publishBriefing()">Publish</button>
@@ -50,21 +50,28 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <div class="content-card"><%= briefing.text_content || '(No content)' %></div>
 </div>
 <script>
-async function downloadPdf(url) {
+async function downloadPdf(url, btn) {
+  const orig = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error('Server returned ' + r.status);
+    const disposition = r.headers.get('content-disposition') || '';
+    const nameMatch = disposition.match(/filename="([^"]+)"/);
+    const filename = nameMatch?.[1] || 'briefing.pdf';
     const blob = await r.blob();
     const objUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = objUrl;
-    a.download = url.split('/').pop() + '.pdf';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(objUrl), 2000);
   } catch (e) {
     alert('PDF download failed: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
   }
 }
 async function exportWiki() {
