@@ -5,7 +5,7 @@ const users = require('../config/users');
 const db = require('../lib/db');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { createRateLimiter, requireSameOrigin } = require('../lib/security');
-const { exaSearch, braveSearch, WEB_SEARCH_TOOL } = require('../lib/router');
+const { exaSearch, braveSearch, WEB_SEARCH_PLUGIN, WEB_SEARCH_TOOL } = require('../lib/router');
 const multer = require('multer');
 const { fileToMarkdown: extractFileToMarkdown } = require('../lib/extract');
 const {
@@ -886,8 +886,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
       body: JSON.stringify({
         model: m.model_id,
         messages: [{ role: 'user', content: prompt }],
-        tools: [WEB_SEARCH_TOOL],
-        tool_choice: 'auto',
+        plugins: [WEB_SEARCH_PLUGIN],
         stream: false,
       }),
     });
@@ -1370,7 +1369,7 @@ async function runComboInternal(question, model, search) {
   if (search === 'web-plugin' && model.endpoint !== 'custom-openai') {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: orHeaders,
-      body: JSON.stringify({ model: model.model_id, messages, stream: true, tools: [WEB_SEARCH_TOOL], tool_choice: 'auto' }),
+      body: JSON.stringify({ model: model.model_id, messages, stream: true, plugins: [WEB_SEARCH_PLUGIN] }),
     });
     if (!r.ok) {
       const t = await r.text();
