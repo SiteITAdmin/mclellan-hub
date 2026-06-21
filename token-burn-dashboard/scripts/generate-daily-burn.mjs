@@ -26,6 +26,7 @@ const openRouterSummary = {
 const sources = {
   codex: join(home, ".codex", "sessions"),
   claudeCode: join(home, ".claude", "projects"),
+  antigravity: join(home, ".agy-usage", "statusline-events.jsonl"),
   downloads: join(home, "Downloads"),
   hubImportDb: join(hubRoot, "data", "dchat-import", "db", "hub.db"),
   hubCurrentDb: join(hubRoot, "data", "hub.db"),
@@ -48,12 +49,22 @@ const sources = {
 };
 
 const rows = new Map();
+const manualBackfills = [
+  {
+    date: "2026-06-20",
+    antigravity_tokens: 3_000_000,
+    antigravity_estimated: true,
+    evidence: "Antigravity rough estimate from local watchlist build transcripts, generation metadata, and step count",
+  },
+];
 
 collectCodex();
 collectClaudeCode();
+collectAntigravity();
 const openRouterExportRows = collectOpenRouterExports();
 if (openRouterExportRows === 0) collectHubApi();
 collectSynthadocApi();
+applyManualBackfills();
 
 const normalized = Array.from(rows.values())
   .map((row) => ({
@@ -61,6 +72,9 @@ const normalized = Array.from(rows.values())
     codex_tokens: row.codex_tokens,
     claude_code_tokens: row.claude_code_tokens,
     claude_code_calls: row.claude_code_calls,
+    antigravity_tokens: row.antigravity_tokens,
+    antigravity_events: row.antigravity_events,
+    antigravity_estimated: row.antigravity_estimated,
     api_tokens: row.api_tokens,
     chatgpt_conversations: 0,
     chatgpt_messages: 0,
@@ -69,11 +83,11 @@ const normalized = Array.from(rows.values())
     claude_chat_messages: 0,
     chat_tokens_low: 0,
     chat_tokens_high: 0,
-    confidence: "measured",
+    confidence: row.antigravity_estimated ? "rough" : "measured",
     driver: inferDriver(row),
     evidence: buildEvidence(row),
   }))
-  .filter((row) => row.codex_tokens + row.claude_code_tokens + row.api_tokens > 0)
+  .filter((row) => row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens + row.api_tokens > 0)
   .sort((a, b) => a.date.localeCompare(b.date));
 
 const dailyJson = `${JSON.stringify(normalized, null, 2)}\n`;
@@ -85,14 +99,14 @@ writeFileSync(deployOutputPath, dailyJson);
 writeFileSync(deployOpenRouterSummaryPath, openRouterJson);
 
 const exactTotal = normalized.reduce(
-  (sum, row) => sum + row.codex_tokens + row.claude_code_tokens + row.api_tokens,
+  (sum, row) => sum + row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens + row.api_tokens,
   0,
 );
 
 console.log(`Wrote ${normalized.length} rows to ${outputPath}`);
 console.log(`Wrote OpenRouter summary to ${openRouterSummaryPath}`);
 console.log(`Wrote deploy-safe scrubbed copies to ${deployDataDir}`);
-console.log(`Exact measured tokens: ${exactTotal}`);
+console.log(`Imported burn tokens: ${exactTotal}`);
 console.log("Chat activity and estimate lanes are intentionally empty until exports/interview answers are added.");
 
 function collectCodex() {
@@ -123,6 +137,15 @@ function collectCodex() {
       row.codex_tokens += total;
       row.codex_sessions += 1;
     }
+  }
+}
+
+function applyManualBackfills() {
+  for (const backfill of manualBackfills) {
+    const row = rowFor(backfill.date);
+    row.antigravity_tokens += Number(backfill.antigravity_tokens || 0);
+    row.antigravity_estimated = Boolean(backfill.antigravity_estimated);
+    if (backfill.evidence) row.manual_evidence.push(backfill.evidence);
   }
 }
 
@@ -159,6 +182,32 @@ function collectClaudeCode() {
     const row = rowFor(date);
     row.claude_code_tokens += total;
     row.claude_code_calls += 1;
+  }
+}
+
+function collectAntigravity() {
+  if (!existsSync(sources.antigravity)) return;
+
+  const events = new Map();
+
+  for (const event of readJsonLines(sources.antigravity)) {
+    const date = toLocalDate(findTimestamp(event));
+    if (!date) continue;
+
+    const total = extractAntigravityTokens(event);
+    if (total <= 0) continue;
+
+    const key = `${date}:${findEventKey(event) || events.size}`;
+    const current = events.get(key);
+    if (!current || total > current.total) {
+      events.set(key, { date, total });
+    }
+  }
+
+  for (const { date, total } of events.values()) {
+    const row = rowFor(date);
+    row.antigravity_tokens += total;
+    row.antigravity_events += 1;
   }
 }
 
@@ -299,19 +348,25 @@ function rowFor(date) {
       codex_sessions: 0,
       claude_code_tokens: 0,
       claude_code_calls: 0,
+      antigravity_tokens: 0,
+      antigravity_events: 0,
+      antigravity_estimated: false,
       api_tokens: 0,
       hub_api_days: 0,
       openrouter_export_rows: 0,
       openrouter_cost_usd: 0,
       synthadoc_days: 0,
+      manual_evidence: [],
     });
   }
   return rows.get(date);
 }
 
 function inferDriver(row) {
-  const total = row.codex_tokens + row.claude_code_tokens + row.api_tokens;
-  if (row.api_tokens > row.codex_tokens + row.claude_code_tokens) return "hub ingestion";
+  const codeAgentTokens = row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens;
+  const total = codeAgentTokens + row.api_tokens;
+  if (row.api_tokens > codeAgentTokens) return "hub ingestion";
+  if (row.antigravity_tokens >= row.codex_tokens && row.antigravity_tokens >= row.claude_code_tokens && row.antigravity_tokens > 0) return "Antigravity development";
   if (row.codex_tokens >= row.claude_code_tokens && row.codex_tokens > 0) return "shipping";
   if (row.claude_code_tokens > 0 && total >= 100_000) return "Hub Development";
   if (row.claude_code_tokens > 0) return "review";
@@ -322,10 +377,119 @@ function buildEvidence(row) {
   const parts = [];
   if (row.codex_tokens > 0) parts.push("Codex session token counters");
   if (row.claude_code_tokens > 0) parts.push("Claude Code message usage");
+  if (row.antigravity_events > 0) parts.push("Antigravity status line telemetry");
+  if (row.manual_evidence.length) parts.push(...row.manual_evidence);
   if (row.hub_api_days > 0) parts.push("McLellan hub request logs");
   if (row.openrouter_export_rows > 0) parts.push("OpenRouter activity export");
   if (row.synthadoc_days > 0) parts.push("Synthadoc audit logs");
   return parts.join("; ");
+}
+
+function extractAntigravityTokens(event) {
+  const usage = findUsageObject(event);
+  if (!usage) return 0;
+
+  const directTotal = firstNumber(
+    usage.total_tokens,
+    usage.totalTokens,
+    usage.tokens_total,
+    usage.tokensTotal,
+    usage.total,
+    usage.cumulative_total_tokens,
+    usage.cumulativeTotalTokens,
+  );
+  if (directTotal > 0) return directTotal;
+
+  const contextTotal =
+    firstNumber(usage.total_input_tokens, usage.totalInputTokens) +
+    firstNumber(usage.total_output_tokens, usage.totalOutputTokens);
+  if (contextTotal > 0) return contextTotal;
+
+  return (
+    firstNumber(usage.prompt_tokens, usage.input_tokens, usage.inputTokens, usage.tokens_prompt) +
+    firstNumber(usage.completion_tokens, usage.output_tokens, usage.outputTokens, usage.candidate_tokens, usage.tokens_completion) +
+    firstNumber(usage.reasoning_tokens, usage.thinking_tokens, usage.thinkingTokens, usage.tokens_reasoning) +
+    firstNumber(usage.cached_tokens, usage.cache_read_input_tokens, usage.cache_creation_input_tokens, usage.tokens_cached)
+  );
+}
+
+function findUsageObject(event) {
+  return (
+    firstObject(event?.token_usage) ||
+    firstObject(event?.usage) ||
+    firstObject(event?.usage_metadata) ||
+    firstObject(event?.usageMetadata) ||
+    firstObject(event?.model?.usage) ||
+    firstObject(event?.agent?.usage) ||
+    firstObject(event?.session?.usage) ||
+    firstObject(event?.turn?.usage) ||
+    firstObject(event?.metadata?.token_usage) ||
+    firstObject(event?.metadata?.usage) ||
+    firstObject(event?.payload?.token_usage) ||
+    firstObject(event?.payload?.usage) ||
+    firstObject(event?.payload?.usage_metadata) ||
+    firstObject(event?.context_window) ||
+    firstObject(event?.contextWindow) ||
+    firstObject(event?.payload?.context_window) ||
+    firstObject(event?.payload?.contextWindow)
+  );
+}
+
+function findTimestamp(event) {
+  return (
+    event?.timestamp ||
+    event?.logged_at ||
+    event?.loggedAt ||
+    event?.created_at ||
+    event?.createdAt ||
+    event?.time ||
+    event?.ts ||
+    event?.payload?.timestamp ||
+    event?.payload?.logged_at ||
+    event?.payload?.loggedAt ||
+    event?.metadata?.timestamp ||
+    ""
+  );
+}
+
+function findEventKey(event) {
+  return (
+    event?.turn_id ||
+    event?.turnId ||
+    event?.message_id ||
+    event?.messageId ||
+    event?.generation_id ||
+    event?.generationId ||
+    event?.session_id ||
+    event?.sessionId ||
+    event?.conversation_id ||
+    event?.conversationId ||
+    event?.id ||
+    event?.payload?.turn_id ||
+    event?.payload?.turnId ||
+    event?.payload?.message_id ||
+    event?.payload?.messageId ||
+    event?.payload?.generation_id ||
+    event?.payload?.generationId ||
+    event?.payload?.session_id ||
+    event?.payload?.sessionId ||
+    event?.payload?.conversation_id ||
+    event?.payload?.conversationId ||
+    event?.payload?.id ||
+    ""
+  );
+}
+
+function firstObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function firstNumber(...values) {
+  for (const value of values) {
+    const number = Number(value || 0);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return 0;
 }
 
 function parseCsv(text) {

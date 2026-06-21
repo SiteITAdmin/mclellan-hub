@@ -59,7 +59,7 @@ export default function TokenBurnDashboard() {
           <p className="eyebrow">Token burn dashboard</p>
           <h1>AI usage by day, source, and work driver.</h1>
           <p className="lead">
-            Exact Codex, Claude Code, and OpenRouter usage in one operational view.
+            Exact Codex, Claude Code, Antigravity, and OpenRouter usage in one operational view.
             No raw prompts, no private paths, and no chat estimates mixed into measured totals.
           </p>
         </div>
@@ -202,10 +202,11 @@ export default function TokenBurnDashboard() {
             {exactColumns.map((col) => {
               const value = sumExact(selectedRows, col.key);
               const share = exactTotal ? Math.round((value / exactTotal) * 100) : 0;
+              const rough = col.key === "antigravity_tokens" && selectedRows.some((row) => row.antigravity_estimated);
               return (
                 <div key={col.key} className="source">
-                  <span className="pill exact">exact</span>
-                  <strong>{formatTokens(value)}</strong>
+                  <span className={`pill ${rough ? "rough" : "exact"}`}>{rough ? "rough" : "exact"}</span>
+                  <strong>{rough ? "~" : ""}{formatTokens(value)}</strong>
                   <span className="muted">
                     {col.label} / {share}%
                   </span>
@@ -292,6 +293,11 @@ export default function TokenBurnDashboard() {
               <Metric label="API" value={formatTokens(today.api)} note="measured" />
               <Metric label="Codex" value={formatTokens(today.codex)} note="exact" />
               <Metric label="Claude Code" value={formatTokens(today.claudeCode)} note="exact" />
+              <Metric
+                label="Antigravity"
+                value={`${today.antigravityEstimated ? "~" : ""}${formatTokens(today.antigravity)}`}
+                note={today.antigravityEstimated ? "rough" : "exact"}
+              />
             </div>
           ) : (
             <EmptyExact />
@@ -305,7 +311,7 @@ export default function TokenBurnDashboard() {
             <p className="label">Moving-average table</p>
             <h2>Last 30 days</h2>
           </div>
-          <p>Exact Codex, Claude Code, API, and OpenRouter export totals by day.</p>
+          <p>Exact Codex, Claude Code, Antigravity, API, and OpenRouter export totals by day.</p>
         </div>
         <div className="tableWrap">
           <table className="table">
@@ -316,6 +322,7 @@ export default function TokenBurnDashboard() {
                 <th>7d avg</th>
                 <th>Codex</th>
                 <th>Claude Code</th>
+                <th>Antigravity</th>
                 <th>API</th>
                 <th>OpenRouter</th>
                 <th>Driver</th>
@@ -346,6 +353,11 @@ export default function TokenBurnDashboard() {
                       <span className="pill exact">{formatTokens(row.claude_code_tokens)}</span>
                     </td>
                     <td>
+                      <span className={`pill ${row.antigravity_estimated ? "rough" : "exact"}`}>
+                        {row.antigravity_estimated ? "~" : ""}{formatTokens(row.antigravity_tokens)}
+                      </span>
+                    </td>
+                    <td>
                       <span className="pill exact">{formatTokens(row.api_tokens)}</span>
                     </td>
                     <td>
@@ -366,7 +378,7 @@ export default function TokenBurnDashboard() {
 
       <p className="footerNote">
         Replace <code>data/daily-burn.sample.json</code> with your normalized daily rows.
-        Exact tokens come from logs and OpenRouter exports. Keep raw exports, prompts,
+        Exact tokens come from logs, Antigravity status telemetry, and OpenRouter exports. Keep raw exports, prompts,
         private paths, client names, and project names out of anything deployed or shared.
       </p>
     </main>
@@ -496,6 +508,7 @@ function buildNextActions(selectedRows: BurnRow[]) {
   );
   const recentClaude = selectedRows.slice(-7).reduce((sum, row) => sum + row.claude_code_tokens, 0);
   const recentCodex = selectedRows.slice(-7).reduce((sum, row) => sum + row.codex_tokens, 0);
+  const recentAntigravity = selectedRows.slice(-7).reduce((sum, row) => sum + row.antigravity_tokens, 0);
   const recentApi = selectedRows.slice(-7).reduce((sum, row) => sum + row.api_tokens, 0);
 
   const actions = [
@@ -513,6 +526,14 @@ function buildNextActions(selectedRows: BurnRow[]) {
       fidelity: "exact",
       title: "Audit Claude Code cache-heavy sessions",
       body: "Recent exact burn is dominated by Claude Code. Review long-running sessions and split future work into smaller context windows where practical.",
+    });
+  }
+
+  if (recentAntigravity > recentCodex + recentClaude && recentAntigravity > 0) {
+    actions.push({
+      fidelity: "exact",
+      title: "Watch Antigravity workspace scans",
+      body: "Recent exact burn is dominated by Antigravity. Keep the status-line log enabled and split agent work before context gets bulky.",
     });
   }
 

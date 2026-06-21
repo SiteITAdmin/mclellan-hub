@@ -62,6 +62,8 @@ export function sameDayActivity(rows: BurnRow[], targetDate: string) {
     driver: today.driver,
     codex: today.codex_tokens,
     claudeCode: today.claude_code_tokens,
+    antigravity: today.antigravity_tokens,
+    antigravityEstimated: today.antigravity_estimated,
     api: today.api_tokens,
     convos: today.chatgpt_conversations + today.claude_chat_conversations,
     messages: today.chatgpt_messages + today.claude_chat_messages,

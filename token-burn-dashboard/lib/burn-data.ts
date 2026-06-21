@@ -1,12 +1,13 @@
 import { formatTokens } from "./token-math";
 
 // Three-lane data model.
-// EXACT = measured token logs only (Codex, Claude Code, API).
+// EXACT = measured token logs only (Codex, Claude Code, Antigravity, API).
 // ACTIVITY = measured counts from chat exports (NOT tokens).
 // ESTIMATE = an optional token band, never a point value.
 export const exactColumns = [
   { key: "codex_tokens", label: "Codex", source: "codex" },
   { key: "claude_code_tokens", label: "Claude Code", source: "claude_code" },
+  { key: "antigravity_tokens", label: "Antigravity", source: "antigravity" },
   { key: "api_tokens", label: "API usage", source: "api" },
 ] as const;
 
@@ -34,6 +35,9 @@ export type RawBurnRow = {
   codex_tokens?: number;
   claude_code_tokens?: number;
   claude_code_calls?: number;
+  antigravity_tokens?: number;
+  antigravity_events?: number;
+  antigravity_estimated?: boolean;
   api_tokens?: number;
   // ACTIVITY lane (measured from exports, NOT tokens)
   chatgpt_conversations?: number;
@@ -60,6 +64,9 @@ export type BurnRow = {
   codex_tokens: number;
   claude_code_tokens: number;
   claude_code_calls: number;
+  antigravity_tokens: number;
+  antigravity_events: number;
+  antigravity_estimated: boolean;
   api_tokens: number;
   exact_total: number; // sum of measured columns ONLY, never estimates
   // ACTIVITY lane
@@ -82,8 +89,9 @@ export function normalizeRows(rows: RawBurnRow[]): BurnRow[] {
     .map((row) => {
       const codex = asNumber(row.codex_tokens);
       const claudeCode = asNumber(row.claude_code_tokens);
+      const antigravity = asNumber(row.antigravity_tokens);
       const api = asNumber(row.api_tokens);
-      const exact_total = codex + claudeCode + api;
+      const exact_total = codex + claudeCode + antigravity + api;
 
       // Backward compat: migrate deprecated point estimates into a band.
       const legacyEst = asNumber(row.claude_chat_est) + asNumber(row.chatgpt_est);
@@ -106,6 +114,9 @@ export function normalizeRows(rows: RawBurnRow[]): BurnRow[] {
         codex_tokens: codex,
         claude_code_tokens: claudeCode,
         claude_code_calls: asNumber(row.claude_code_calls),
+        antigravity_tokens: antigravity,
+        antigravity_events: asNumber(row.antigravity_events),
+        antigravity_estimated: Boolean(row.antigravity_estimated),
         api_tokens: api,
         exact_total,
         chatgpt_conversations: asNumber(row.chatgpt_conversations),

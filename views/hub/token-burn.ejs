@@ -14,7 +14,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .burn-kicker { color: var(--accent); background: var(--accent-light); border-radius: 999px; padding: 5px 10px; font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; display:inline-flex; margin-bottom: 10px; }
 .burn-title { font-size: clamp(32px, 6vw, 58px); line-height: .95; margin:0; }
 .burn-lead { color: var(--text-dim); max-width: 760px; margin-top: 14px; font-size: 15px; line-height: 1.6; }
-.burn-grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-bottom: 18px; }
+.burn-grid { display:grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 14px; margin-bottom: 18px; }
 .burn-card, .burn-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); }
 .burn-card { padding: 16px; min-height: 112px; }
 .burn-label { color: var(--text-muted); font-size: 11px; font-family: var(--mono); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
@@ -68,7 +68,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       <a class="back-link" href="/">← Back to hub</a>
       <div style="margin-top:18px"><span class="burn-kicker">Measured AI usage</span></div>
       <h1 class="burn-title">Token burn</h1>
-      <p class="burn-lead">Exact Codex, Claude Code, and API logs are kept separate from chat estimates. McLellan hub OpenRouter usage comes from the live request log table so daily usage can build from here.</p>
+      <p class="burn-lead">Exact Codex, Claude Code, Antigravity, and API logs are kept separate from chat estimates. McLellan hub OpenRouter usage comes from the live request log table so daily usage can build from here.</p>
     </div>
   </div>
 
@@ -76,13 +76,14 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <span class="pill exact">measured</span>
     <span class="pill floor">activity floor</span>
     <span class="pill rough">not populated</span>
-    <span class="burn-note">Consumer chat estimates are intentionally absent. Current totals use measured logs and OpenRouter exports.</span>
+    <span class="burn-note">Consumer chat estimates are intentionally absent. Antigravity may include one rough backfill where exact telemetry was not available.</span>
   </div>
 
   <section class="burn-grid">
-    <div class="burn-card"><span class="burn-label">Imported exact</span><strong class="burn-value"><%= formatTokens(tokenBurn.importedExact) %></strong><p class="burn-note"><%= tokenBurn.firstDate || 'n/a' %> to <%= tokenBurn.lastDate || 'n/a' %></p></div>
+    <div class="burn-card"><span class="burn-label">Imported burn</span><strong class="burn-value"><%= tokenBurn.antigravityEstimated ? '~' : '' %><%= formatTokens(tokenBurn.importedExact) %></strong><p class="burn-note"><%= tokenBurn.firstDate || 'n/a' %> to <%= tokenBurn.lastDate || 'n/a' %></p></div>
     <div class="burn-card"><span class="burn-label">Codex</span><strong class="burn-value"><%= formatTokens(tokenBurn.codex) %></strong><p class="burn-note">Local session token counters</p></div>
     <div class="burn-card"><span class="burn-label">Claude Code</span><strong class="burn-value"><%= formatTokens(tokenBurn.claudeCode) %></strong><p class="burn-note">Message usage, including cache tokens</p></div>
+    <div class="burn-card"><span class="burn-label">Antigravity</span><strong class="burn-value"><%= tokenBurn.antigravityEstimated ? '~' : '' %><%= formatTokens(tokenBurn.antigravity) %></strong><p class="burn-note">Status-line telemetry + rough backfill</p></div>
     <div class="burn-card"><span class="burn-label">Hub OpenRouter live</span><strong class="burn-value"><%= formatTokens(tokenBurn.liveExact) %></strong><p class="burn-note"><%= formatUsd(tokenBurn.liveCost) %> logged in current hub DB</p></div>
   </section>
 
@@ -107,6 +108,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
       <div class="source-grid">
         <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.codex) %></strong><p class="burn-note">Codex</p></div>
         <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.claudeCode) %></strong><p class="burn-note">Claude Code</p></div>
+        <div class="source-box"><span class="pill <%= tokenBurn.antigravityEstimated ? 'rough' : 'exact' %>"><%= tokenBurn.antigravityEstimated ? 'rough' : 'exact' %></span><strong><%= tokenBurn.antigravityEstimated ? '~' : '' %><%= formatTokens(tokenBurn.antigravity) %></strong><p class="burn-note">Antigravity</p></div>
         <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.api) %></strong><p class="burn-note">Historical hub + Synthadoc API</p></div>
         <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.openRouter.tokens) %></strong><p class="burn-note">OpenRouter export detail below</p></div>
       </div>
@@ -209,11 +211,11 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <section class="burn-panel">
     <div class="burn-panel-head">
       <div><span class="burn-label">Moving average</span><h2>Last 30 imported days</h2></div>
-      <p>Exact Codex, Claude Code, API, and OpenRouter export markers by day.</p>
+      <p>Exact Codex, Claude Code, Antigravity, API, and OpenRouter export markers by day.</p>
     </div>
     <div class="table-wrap">
       <table class="row-list">
-        <thead><tr><th>Date</th><th>Exact</th><th>Codex</th><th>Claude Code</th><th>API</th><th>OpenRouter</th><th>Driver</th></tr></thead>
+        <thead><tr><th>Date</th><th>Exact</th><th>Codex</th><th>Claude Code</th><th>Antigravity</th><th>API</th><th>OpenRouter</th><th>Driver</th></tr></thead>
         <tbody>
           <% for (const row of tokenBurn.recentDays) { %>
             <tr>
@@ -221,6 +223,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
               <td><span class="pill exact"><%= formatTokens(row.exact_total) %></span></td>
               <td><%= formatTokens(row.codex_tokens) %></td>
               <td><%= formatTokens(row.claude_code_tokens) %></td>
+              <td><%= row.antigravity_estimated ? '~' : '' %><%= formatTokens(row.antigravity_tokens) %></td>
               <td><%= formatTokens(row.api_tokens) %></td>
               <td><% if ((row.evidence || '').includes('OpenRouter activity export')) { %><span class="pill exact">export</span><% } else { %>none<% } %></td>
               <td><%= row.driver %></td>
