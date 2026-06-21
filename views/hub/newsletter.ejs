@@ -238,7 +238,7 @@ details[open] > summary span[style*="18px"] { transform: rotate(90deg); display:
           <% if (!b.sent_at) { %>
           <button class="btn-sm" onclick="resendBriefing('<%= b.id %>')">Send</button>
           <% } %>
-          <button class="btn-sm" onclick="downloadPdf('/newsletter/briefing/<%= b.id %>/pdf')">PDF</button>
+          <button class="btn-sm" onclick="downloadPdf('/newsletter/briefing/<%= b.id %>/pdf', this)">PDF</button>
           <button class="btn-sm" onclick="exportToWiki('<%= b.id %>', this)" title="<%= b.wiki_slug ? 'Exported: ' + b.wiki_slug : 'Export to wiki' %>"><%= b.wiki_slug ? '✓ Wiki' : 'Wiki' %></button>
           <button class="btn-sm" onclick="togglePublish('<%= b.id %>', <%= b.published_at ? 'true' : 'false' %>, this)" style="<%= b.published_at ? 'background:var(--accent);color:#fff' : '' %>"><%= b.published_at ? 'Published' : 'Publish' %></button>
           <button class="btn-sm" onclick="deleteBriefing('<%= b.id %>', this)" style="color:#c0392b">Delete</button>
@@ -597,21 +597,28 @@ details[open] > summary span[style*="18px"] { transform: rotate(90deg); display:
 </main>
 
 <script>
-async function downloadPdf(url) {
+async function downloadPdf(url, btn) {
+  const orig = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error('Server returned ' + r.status);
+    const disposition = r.headers.get('content-disposition') || '';
+    const nameMatch = disposition.match(/filename="([^"]+)"/);
+    const filename = nameMatch?.[1] || 'briefing.pdf';
     const blob = await r.blob();
     const objUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = objUrl;
-    a.download = url.split('/').pop() + '.pdf';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(objUrl), 2000);
   } catch (e) {
     alert('PDF download failed: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
   }
 }
 (function () {
