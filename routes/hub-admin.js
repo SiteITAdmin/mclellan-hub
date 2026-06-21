@@ -1066,12 +1066,20 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
       );
     }
 
-    const passed = citations.length > 0;
-    log(`result: ${passed ? 'PASS' : 'FAIL'} (${citations.length} citations)`);
+    // Some models (e.g. Mistral) return inline markdown links rather than url_citation annotations
+    const inlineLinks = [...content.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g)]
+      .map(m => ({ title: m[1], url: m[2] }))
+      .filter(l => !l.url.includes('bbc.com') === false || l.url.includes('bbc.') || /sky|guardian|itv|reuters|ap\.|bbc\.|news/i.test(l.url));
+    const passedByAnnotation = citations.length > 0;
+    const passedByInline = inlineLinks.length >= 2;
+    const passed = passedByAnnotation || passedByInline;
+    log(`result: ${passed ? 'PASS' : 'FAIL'} (${citations.length} annotations, ${inlineLinks.length} inline links)`);
 
     const sourceList = citations.length
       ? citations.map(a => `• ${a.url_citation.title || a.url_citation.url}`).join('\n')
-      : 'No web citations returned.';
+      : inlineLinks.length
+        ? inlineLinks.map(l => `• ${l.title} — ${l.url}`).join('\n') + '\n(inline markdown links, not url_citation annotations)'
+        : 'No web citations returned.';
 
     const preview = [
       '── BRAVE API (ground truth) ──────────────────',

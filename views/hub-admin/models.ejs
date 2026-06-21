@@ -848,7 +848,7 @@ window.testBrave = async function(key, safeKey, btn) {
     } else {
       if (badgeEl) { badgeEl.className = 'badge badge-brave-fail'; badgeEl.textContent = 'Not Suitable'; }
       if (statusEl) { statusEl.className = 'brave-result-status-fail'; statusEl.textContent = 'Not suitable for Brave search'; }
-      if (bodyEl) bodyEl.textContent = d.error || 'No response received from model.';
+      if (bodyEl) bodyEl.textContent = d.preview || d.error || 'No response received from model.';
     }
     if (dateEl) dateEl.textContent = dateStr;
     if (cardEl) cardEl.style.display = '';
