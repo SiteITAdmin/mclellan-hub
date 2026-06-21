@@ -930,13 +930,21 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
     // finish_reason=tool_calls means the model invoked web search but didn't write its final response —
     // it's waiting for us to feed the tool result back. Attempt a two-turn agentic loop to coax output.
     if (finishReason === 'tool_calls' || (content.length === 0 && (msg.tool_calls?.length ?? 0) > 0)) {
-      log(`finish_reason=tool_calls — attempting two-turn agentic retry`);
+      log(`finish_reason=tool_calls — executing real search then two-turn retry`);
       const toolCalls = msg.tool_calls || [];
-      // Build synthetic tool results for every tool call the model emitted
-      const toolMessages = toolCalls.map(tc => ({
-        role: 'tool',
-        tool_call_id: tc.id,
-        content: 'Web search completed. Please now write your response using the search results.',
+      // Actually execute the search so the model gets real results, not a placeholder
+      const toolMessages = await Promise.all(toolCalls.map(async tc => {
+        let resultContent = 'No results found.';
+        try {
+          const args = JSON.parse(tc.function?.arguments || '{}');
+          const query = args.query || args.q || 'BBC news top stories today';
+          log(`executing tool call: ${tc.function?.name} query="${query}"`);
+          const { content: srContent, sources } = await braveSearch(query);
+          resultContent = srContent || sources.map(s => `${s.title}\n${s.url}\n${s.snippet}`).join('\n\n') || 'No results.';
+        } catch (te) {
+          log(`tool execution error: ${te.message}`);
+        }
+        return { role: 'tool', tool_call_id: tc.id, content: resultContent };
       }));
 
       let turn2Data;
@@ -951,8 +959,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
               { role: 'assistant', content: content || null, tool_calls: toolCalls },
               ...toolMessages,
             ],
-            tools: [WEB_SEARCH_TOOL],
-            tool_choice: 'auto',
+            // No tools in turn 2 — force the model to write its response, not loop again
             stream: false,
           }),
         });
