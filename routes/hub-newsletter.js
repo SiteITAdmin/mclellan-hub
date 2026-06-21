@@ -78,19 +78,30 @@ router.get('/', (req, res) => {
   // Formats and interests for management sections
   const formats = hub.prepare('SELECT * FROM nl_formats WHERE user = ? ORDER BY is_default DESC, name').all(user);
   const interests = hub.prepare('SELECT * FROM nl_interests WHERE user = ? AND gmail_label IS NULL ORDER BY display_order').all(user);
-  const sources = hub.prepare(`
-    SELECT s.*, COUNT(d.id) AS document_count
-    FROM intel_sources s LEFT JOIN intel_documents d ON d.source_id = s.id
-    WHERE s.user = ?
-    GROUP BY s.id ORDER BY s.name
-  `).all(user);
+  const sourcesSummary = hub.prepare(`
+    SELECT COUNT(*) AS total,
+           SUM(CASE WHEN briefing_priority >= 3 THEN 1 ELSE 0 END) AS active,
+           SUM(CASE WHEN briefing_priority = 2 THEN 1 ELSE 0 END) AS monitoring,
+           SUM(CASE WHEN briefing_priority = 1 THEN 1 ELSE 0 END) AS excluded
+    FROM intel_sources WHERE user = ?
+  `).get(user) || { total: 0, active: 0, monitoring: 0, excluded: 0 };
   const models = hub.prepare('SELECT key, label, model_id FROM model_config WHERE enabled = 1 ORDER BY display_order, label').all();
 
   // Recent briefings
   const briefings = hub.prepare(`
-    SELECT b.*, COALESCE(b.format_name, f.name) AS resolved_format_name FROM nl_briefings b
+    SELECT b.*, COALESCE(b.format_name, f.name) AS resolved_format_name,
+           s.name AS schedule_name
+    FROM nl_briefings b
     LEFT JOIN nl_formats f ON f.id = b.format_id
-    WHERE b.user = ? ORDER BY b.created_at DESC LIMIT 5
+    LEFT JOIN briefing_schedules s ON s.id = b.schedule_id
+    WHERE b.user = ? ORDER BY b.created_at DESC LIMIT 8
+  `).all(user);
+
+  const schedules = hub.prepare(`
+    SELECT bs.*, f.name AS format_name
+    FROM briefing_schedules bs
+    LEFT JOIN nl_formats f ON f.id = bs.format_id
+    WHERE bs.user = ? ORDER BY bs.created_at
   `).all(user);
 
   res.render('hub/newsletter', {
@@ -98,7 +109,7 @@ router.get('/', (req, res) => {
     defaultDateFrom: defaultRange.dateFrom,
     defaultDateTo: defaultRange.dateTo,
     briefingPeriodLabel,
-    weeks, grouped, formats, interests, sources, briefings, models,
+    weeks, grouped, formats, interests, sourcesSummary, schedules, briefings, models,
     briefingFormatName, briefingTitle, briefingProvenanceText,
     totalTopics: topics.length,
     selectedTopics: topics.filter(t => t.selected).length,
@@ -422,26 +433,27 @@ router.post('/formats/delete', (req, res) => {
 // ── Interests CRUD ────────────────────────────────────────────────────────────
 
 router.post('/interests', (req, res) => {
-  const { name, auto_include, gmail_label, mode, extraction_prompt, body_limit, extract_max_tokens } = req.body;
+  const { name, keywords, auto_include, gmail_label, mode, extraction_prompt, body_limit, extract_max_tokens } = req.body;
   if (!name) return res.redirect('/newsletter#interests');
   const hub = db.hub();
   const maxOrder = hub.prepare('SELECT MAX(display_order) as m FROM nl_interests WHERE user = ?').get(req.hubUser)?.m || 0;
-  hub.prepare(`INSERT INTO nl_interests (id, user, name, auto_include, display_order, gmail_label, mode, extraction_prompt, body_limit, extract_max_tokens)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(uuid(), req.hubUser, name.trim(), auto_include ? 1 : 0, maxOrder + 1,
+  hub.prepare(`INSERT INTO nl_interests (id, user, name, keywords, auto_include, display_order, gmail_label, mode, extraction_prompt, body_limit, extract_max_tokens)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(uuid(), req.hubUser, name.trim(), keywords?.trim() || null, auto_include ? 1 : 0, maxOrder + 1,
       gmail_label?.trim() || null, mode || 'selective',
       extraction_prompt?.trim() || null, parseInt(body_limit) || null, parseInt(extract_max_tokens) || null);
   res.redirect('/newsletter#interests');
 });
 
 router.post('/interests/update', (req, res) => {
-  const { id, name, gmail_label, mode, extraction_prompt, body_limit, extract_max_tokens } = req.body;
+  const { id, name, keywords, gmail_label, mode, extraction_prompt, body_limit, extract_max_tokens } = req.body;
   if (!id) return res.redirect('/newsletter#interests');
   db.hub().prepare(`UPDATE nl_interests
-    SET name = ?, gmail_label = ?, mode = ?, extraction_prompt = ?, body_limit = ?, extract_max_tokens = ?
+    SET name = ?, keywords = ?, gmail_label = ?, mode = ?, extraction_prompt = ?, body_limit = ?, extract_max_tokens = ?
     WHERE id = ? AND user = ?`)
     .run(
       name?.trim(),
+      keywords?.trim() || null,
       gmail_label?.trim() || null,
       mode || 'selective',
       extraction_prompt?.trim() || null,
@@ -485,6 +497,138 @@ router.post('/interests/toggle-auto', (req, res) => {
   const r = hub.prepare('SELECT auto_include FROM nl_interests WHERE id = ? AND user = ?').get(id, req.hubUser);
   if (r) hub.prepare('UPDATE nl_interests SET auto_include = ? WHERE id = ?').run(r.auto_include ? 0 : 1, id);
   res.redirect('/newsletter#interests');
+});
+
+// ── Interests: AI-suggest categories ─────────────────────────────────────────
+
+router.post('/interests/suggest', async (req, res) => {
+  try {
+    const hub = db.hub();
+    const { openRouterHeaders, TASK_CODES } = require('../lib/openrouter-attribution');
+    const { getSystemModelId } = require('../lib/settings');
+    const fetch = require('../lib/fetch');
+
+    const sources = hub.prepare(`
+      SELECT name, source_kind, COUNT(d.id) AS doc_count
+      FROM intel_sources s LEFT JOIN intel_documents d ON d.source_id = s.id
+      WHERE s.user = ? GROUP BY s.id ORDER BY doc_count DESC LIMIT 80
+    `).all(req.hubUser);
+
+    const recentCategories = hub.prepare(`
+      SELECT category, COUNT(*) AS n FROM intel_items
+      WHERE user = ? AND created_at > unixepoch() - 30 * 86400
+      GROUP BY category ORDER BY n DESC LIMIT 30
+    `).all(req.hubUser);
+
+    const existing = hub.prepare(
+      'SELECT name FROM nl_interests WHERE user = ? AND gmail_label IS NULL'
+    ).all(req.hubUser).map(r => r.name);
+
+    const modelId = getSystemModelId('newsletter_extractor', 'system', 'google/gemini-2.5-flash-lite');
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: openRouterHeaders(TASK_CODES.NEWSLETTER_INGEST),
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{
+          role: 'user',
+          content: `You are helping design a category taxonomy for an intelligence briefing system.
+The user subscribes to ${sources.length} newsletters and publications.
+
+Top sources by volume: ${sources.slice(0, 30).map(s => s.name).join(', ')}
+
+Categories currently assigned to recent items: ${recentCategories.map(r => `${r.category} (${r.n})`).join(', ')}
+
+Existing categories: ${existing.join(', ') || 'none yet'}
+
+Propose 15-20 clear, useful category names that cover the content well. For each, provide 4-8 keywords (comma-separated) that would help auto-classify items. Keep names concise (2-4 words). Prioritise specificity over breadth — "AI Policy & Regulation" is better than "AI".
+
+Return JSON only:
+{"categories":[{"name":"AI Policy & Regulation","keywords":"regulation,policy,legislation,governance,compliance,law,ban,rule"}]}`,
+        }],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+        max_tokens: 2000,
+      }),
+    });
+    if (!r.ok) throw new Error(`LLM ${r.status}`);
+    const data = await r.json();
+    const raw = data.choices[0].message.content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const parsed = JSON.parse(raw);
+    res.json({ ok: true, categories: parsed.categories || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Sources sub-page ──────────────────────────────────────────────────────────
+
+router.get('/sources', (req, res) => {
+  const hub = db.hub();
+  const q = (req.query.q || '').trim().toLowerCase();
+  const sources = hub.prepare(`
+    SELECT s.*,
+           COUNT(d.id) AS document_count,
+           MAX(d.published_at) AS last_seen_at
+    FROM intel_sources s
+    LEFT JOIN intel_documents d ON d.source_id = s.id
+    WHERE s.user = ?
+    GROUP BY s.id
+    ORDER BY s.name
+  `).all(req.hubUser);
+
+  const filtered = q
+    ? sources.filter(s => s.name.toLowerCase().includes(q) || s.match_value.toLowerCase().includes(q))
+    : sources;
+
+  const active = filtered.filter(s => s.briefing_priority >= 3);
+  const monitoring = filtered.filter(s => s.briefing_priority === 2);
+  const excluded = filtered.filter(s => s.briefing_priority <= 1);
+
+  res.render('hub/newsletter-sources', {
+    user: req.hubUser, q, active, monitoring, excluded,
+    total: sources.length, filteredTotal: filtered.length,
+  });
+});
+
+// ── Schedules CRUD ────────────────────────────────────────────────────────────
+
+router.post('/schedules', (req, res) => {
+  const { name, format_id, focus_query, recur_spec, date_window_days, auto_send } = req.body;
+  if (!name || !recur_spec) return res.redirect('/newsletter#schedules');
+  db.hub().prepare(`
+    INSERT INTO briefing_schedules (id, user, name, format_id, focus_query, recur_spec, date_window_days, auto_send)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(uuid(), req.hubUser, name.trim(), format_id || null, focus_query?.trim() || null,
+    recur_spec.trim(), parseInt(date_window_days) || 7, auto_send ? 1 : 0);
+  res.redirect('/newsletter#schedules');
+});
+
+router.post('/schedules/:id/update', (req, res) => {
+  const { name, format_id, focus_query, recur_spec, date_window_days, auto_send, enabled } = req.body;
+  db.hub().prepare(`
+    UPDATE briefing_schedules
+    SET name = ?, format_id = ?, focus_query = ?, recur_spec = ?,
+        date_window_days = ?, auto_send = ?, enabled = ?
+    WHERE id = ? AND user = ?
+  `).run(name?.trim(), format_id || null, focus_query?.trim() || null,
+    recur_spec?.trim() || 'daily:07:00', parseInt(date_window_days) || 7,
+    auto_send ? 1 : 0, enabled ? 1 : 0,
+    req.params.id, req.hubUser);
+  res.redirect('/newsletter#schedules');
+});
+
+router.post('/schedules/:id/delete', (req, res) => {
+  db.hub().prepare('DELETE FROM briefing_schedules WHERE id = ? AND user = ?')
+    .run(req.params.id, req.hubUser);
+  res.redirect('/newsletter#schedules');
+});
+
+router.post('/schedules/:id/toggle', (req, res) => {
+  const hub = db.hub();
+  const s = hub.prepare('SELECT enabled FROM briefing_schedules WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (s) hub.prepare('UPDATE briefing_schedules SET enabled = ? WHERE id = ?').run(s.enabled ? 0 : 1, req.params.id);
+  res.json({ ok: true, enabled: s ? !s.enabled : false });
 });
 
 // ── Creator RSS feeds ──────────────────────────────────────────────────────────

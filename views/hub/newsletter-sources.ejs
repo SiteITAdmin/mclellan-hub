@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sources — Intelligence — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 28px 16px 80px; }
+.page-heading { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+.page-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 24px; }
+.search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+.search-row input { padding: 8px 12px; font-size: 13px; border: 1px solid var(--border,#dddaf0); border-radius: 8px; background: var(--bg,#faf9fb); color: var(--text); font-family: inherit; width: 280px; }
+.search-row .stat { font-size: 13px; color: var(--text-dim); }
+.tier-heading { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin: 24px 0 10px; display: flex; align-items: center; gap: 8px; }
+.tier-heading .count { font-size: 12px; font-weight: 400; background: var(--bg,#faf9fb); border: 1px solid var(--border,#dddaf0); border-radius: 20px; padding: 1px 8px; }
+.source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.source-card { border: 1px solid var(--border,#dddaf0); border-radius: 10px; background: var(--bg,#faf9fb); padding: 12px 14px; }
+.source-card.excluded { opacity: 0.55; }
+.source-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.source-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+.source-meta span { white-space: nowrap; }
+.priority-row { display: flex; align-items: center; gap: 8px; }
+.priority-row label { font-size: 11px; font-weight: 600; color: var(--text-dim); }
+.priority-row select { padding: 4px 8px; font-size: 12px; border: 1px solid var(--border,#dddaf0); border-radius: 6px; background: var(--bg,#fcf8ff); color: var(--text); font-family: inherit; }
+.priority-status { font-size: 11px; color: var(--text-dim); }
+.empty { color: var(--text-dim); font-size: 13px; padding: 16px 0; }
+.back-link { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-dim); text-decoration: none; margin-bottom: 18px; }
+.back-link:hover { color: var(--text); }
+</style>
+</head>
+<body class="hub-page" style="background: var(--bg-page, #f4f3fb);">
+<%- include('partials/top-nav') %>
+<main>
+<div class="wrap">
+
+  <a href="/newsletter" class="back-link">← Intelligence</a>
+
+  <p class="page-heading">Approved sources</p>
+  <p class="page-sub">
+    <%= total %> sources total — set priority 5 to strongly prefer, 3 for normal, 2 for rarely, 1 to exclude.
+    Content is always ingested regardless of priority.
+  </p>
+
+  <div class="search-row">
+    <form method="GET" action="/newsletter/sources" style="display:flex;gap:8px;align-items:center">
+      <input name="q" value="<%= q %>" placeholder="Search by name or address…" autocomplete="off">
+      <button type="submit" style="padding:8px 14px;font-size:13px;border:1px solid var(--border,#dddaf0);border-radius:8px;background:transparent;color:var(--text);font-family:inherit;cursor:pointer">Search</button>
+      <% if (q) { %><a href="/newsletter/sources" style="font-size:13px;color:var(--text-dim)">Clear</a><% } %>
+    </form>
+    <% if (q) { %><span class="stat"><%= filteredTotal %> of <%= total %> shown</span><% } %>
+  </div>
+
+  <%
+    function renderGroup(title, sources, cls) {
+      if (!sources.length) return '';
+  %>
+  <div class="tier-heading">
+    <%= title %> <span class="count"><%= sources.length %></span>
+  </div>
+  <div class="source-grid">
+    <% for (const s of sources) { %>
+    <div class="source-card <%= cls %>">
+      <div class="source-name" title="<%= s.match_value %>"><%= s.name %></div>
+      <div class="source-meta">
+        <span><%= s.source_kind.toUpperCase() %></span>
+        <% if (s.document_count) { %><span><%= s.document_count %> docs</span><% } %>
+        <% if (s.last_seen_at) { %>
+        <span>Last: <%= new Date(s.last_seen_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %></span>
+        <% } %>
+      </div>
+      <div class="priority-row">
+        <label>Priority</label>
+        <select data-source-id="<%= s.id %>" data-saved="<%= s.briefing_priority %>" onchange="setPriority(this)">
+          <option value="5" <%= s.briefing_priority === 5 ? 'selected' : '' %>>5 — Strongly prioritise</option>
+          <option value="4" <%= s.briefing_priority === 4 ? 'selected' : '' %>>4 — Prefer</option>
+          <option value="3" <%= s.briefing_priority === 3 ? 'selected' : '' %>>3 — Normal</option>
+          <option value="2" <%= s.briefing_priority === 2 ? 'selected' : '' %>>2 — Rarely</option>
+          <option value="1" <%= s.briefing_priority <= 1 ? 'selected' : '' %>>1 — Exclude</option>
+        </select>
+        <span class="priority-status" id="ps-<%= s.id %>"></span>
+      </div>
+    </div>
+    <% } %>
+  </div>
+  <% } %>
+
+  <% if (active.length) { renderGroup('Active — priority 3–5', active, ''); } %>
+  <% if (monitoring.length) { renderGroup('Monitoring — priority 2', monitoring, ''); } %>
+  <% if (excluded.length) { renderGroup('Excluded — priority 1', excluded, 'excluded'); } %>
+  <% if (!active.length && !monitoring.length && !excluded.length) { %>
+  <div class="empty">No sources found<% if (q) { %> for "<%= q %>"<% } %>.</div>
+  <% } %>
+
+</div>
+</main>
+<script>
+async function setPriority(select) {
+  const id = select.dataset.sourceId;
+  const saved = select.dataset.saved;
+  const status = document.getElementById('ps-' + id);
+  select.disabled = true;
+  if (status) status.textContent = '…';
+  try {
+    const r = await fetch('/newsletter/sources/' + encodeURIComponent(id) + '/priority', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'priority=' + encodeURIComponent(select.value),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    select.dataset.saved = String(d.priority);
+    if (status) { status.textContent = 'Saved'; setTimeout(() => { if (status.textContent === 'Saved') status.textContent = ''; }, 1400); }
+  } catch (err) {
+    select.value = saved;
+    if (status) status.textContent = err.message;
+  } finally {
+    select.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
