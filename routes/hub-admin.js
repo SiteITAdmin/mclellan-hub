@@ -927,82 +927,122 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
     log(`content preview: ${content.slice(0, 200).replace(/\n/g, ' ')}`);
     if (citations.length) citations.forEach((c, i) => log(`  cite${i + 1}: ${c.url_citation?.url}`));
 
-    // finish_reason=tool_calls means the model invoked web search but didn't write its final response —
-    // it's waiting for us to feed the tool result back. Attempt a two-turn agentic loop to coax output.
+    // finish_reason=tool_calls means the model is running an agentic search loop —
+    // it may do web_search then web_fetch then write. Handle up to 3 turns.
     if (finishReason === 'tool_calls' || (content.length === 0 && (msg.tool_calls?.length ?? 0) > 0)) {
-      log(`finish_reason=tool_calls — executing real search then two-turn retry`);
-      const toolCalls = msg.tool_calls || [];
-      // Actually execute the search so the model gets real results, not a placeholder
-      const toolMessages = await Promise.all(toolCalls.map(async tc => {
-        let resultContent = 'No results found.';
-        try {
-          const args = JSON.parse(tc.function?.arguments || '{}');
-          const query = args.query || args.q || 'BBC news top stories today';
-          log(`executing tool call: ${tc.function?.name} query="${query}"`);
-          const { content: srContent, sources } = await braveSearch(query);
-          resultContent = srContent || sources.map(s => `${s.title}\n${s.url}\n${s.snippet}`).join('\n\n') || 'No results.';
-        } catch (te) {
-          log(`tool execution error: ${te.message}`);
-        }
-        return { role: 'tool', tool_call_id: tc.id, content: resultContent };
-      }));
+      log(`finish_reason=tool_calls — entering agentic tool loop (max 3 turns)`);
 
-      let turn2Data;
-      try {
-        const r2 = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: openRouterHeaders(TASK_CODES.TESTBENCH, { apiKey }),
-          body: JSON.stringify({
-            model: m.model_id,
-            messages: [
-              { role: 'user', content: prompt },
-              { role: 'assistant', content: content || null, tool_calls: toolCalls },
-              ...toolMessages,
-            ],
-            // No tools in turn 2 — force the model to write its response, not loop again
-            stream: false,
-          }),
-        });
-        const raw2 = await r2.text();
-        log(`turn-2 HTTP ${r2.status}, length=${raw2.length}`);
-        try { turn2Data = JSON.parse(raw2); } catch (_) { turn2Data = null; }
-        if (turn2Data) {
-          logUsageFromResponse({
-            user: req.hubUser,
-            feature: 'testbench-brave',
-            modelKey: m.key,
-            fallbackModelId: m.model_id,
-            data: turn2Data,
-            taskCode: TASK_CODES.TESTBENCH,
-          });
+      // Execute whatever tool the model called (web_search or web_fetch)
+      const executeTool = async (tc) => {
+        const name = tc.function?.name || '';
+        const args = JSON.parse(tc.function?.arguments || '{}');
+        log(`executing tool: ${name} args=${JSON.stringify(args).slice(0, 120)}`);
+        try {
+          if (name === 'web_fetch' || name === 'fetch' || args.url) {
+            const url = args.url || args.href;
+            const pr = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10000) });
+            const html = await pr.text();
+            // Strip tags and collapse whitespace; cap at 3000 chars so model has enough context
+            const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
+            return text || 'Page fetched but no readable content extracted.';
+          } else {
+            // web_search or similar
+            const query = args.query || args.q || args.search_query || 'BBC news top stories today';
+            const { content: srContent, sources } = await braveSearch(query);
+            return srContent || sources.map(s => `${s.title}\n${s.url}\n${s.snippet}`).join('\n\n') || 'No results.';
+          }
+        } catch (te) {
+          log(`tool execution error (${name}): ${te.message}`);
+          return `Tool error: ${te.message}`;
         }
-      } catch (e2) {
-        log(`turn-2 exception: ${e2.message}`);
+      };
+
+      // Agentic loop: up to 3 additional turns
+      const history = [
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: content || null, tool_calls: msg.tool_calls },
+      ];
+      let allAnnotations = [...annotations];
+      let finalContent = '';
+      let finalFinish = finishReason;
+      let turnCount = 0;
+
+      let currentTurnCalls = msg.tool_calls || [];
+
+      while (currentTurnCalls.length > 0 && turnCount < 3) {
+        turnCount++;
+        const isLastTurn = turnCount === 3;
+
+        // Execute all tool calls in this turn
+        const toolResults = await Promise.all(currentTurnCalls.map(async tc => ({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: await executeTool(tc),
+        })));
+        history.push(...toolResults);
+
+        // Call the model; on the last allowed turn remove tools to force final response
+        let nextData;
+        try {
+          const nextBody = {
+            model: m.model_id,
+            messages: history,
+            stream: false,
+          };
+          if (!isLastTurn) {
+            nextBody.tools = [WEB_SEARCH_TOOL];
+            nextBody.tool_choice = 'auto';
+          }
+          const rN = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: openRouterHeaders(TASK_CODES.TESTBENCH, { apiKey }),
+            body: JSON.stringify(nextBody),
+          });
+          const rawN = await rN.text();
+          log(`turn-${turnCount + 1} HTTP ${rN.status}, length=${rawN.length}`);
+          try { nextData = JSON.parse(rawN); } catch (_) { nextData = null; }
+          if (nextData) logUsageFromResponse({ user: req.hubUser, feature: 'testbench-brave', modelKey: m.key, fallbackModelId: m.model_id, data: nextData, taskCode: TASK_CODES.TESTBENCH });
+        } catch (eN) {
+          log(`turn-${turnCount + 1} exception: ${eN.message}`);
+          break;
+        }
+
+        const nextMsg    = nextData?.choices?.[0]?.message || {};
+        const nextContent = nextMsg.content || '';
+        finalFinish = nextData?.choices?.[0]?.finish_reason || 'unknown';
+        const nextAnnots = (nextMsg.annotations || []).filter(a => a.type === 'url_citation' && a.url_citation?.url);
+        allAnnotations = [...allAnnotations, ...nextAnnots];
+        log(`turn-${turnCount + 1}: finish_reason=${finalFinish} content_length=${nextContent.length} new_citations=${nextAnnots.length}`);
+
+        if (nextContent.length > 0) {
+          finalContent = nextContent;
+          history.push({ role: 'assistant', content: nextContent });
+          currentTurnCalls = [];
+        } else if ((nextMsg.tool_calls || []).length > 0 && !isLastTurn) {
+          history.push({ role: 'assistant', content: null, tool_calls: nextMsg.tool_calls });
+          currentTurnCalls = nextMsg.tool_calls;
+        } else {
+          currentTurnCalls = [];
+        }
       }
 
-      const turn2Msg     = turn2Data?.choices?.[0]?.message || {};
-      const turn2Content = turn2Msg.content || '';
-      const turn2Finish  = turn2Data?.choices?.[0]?.finish_reason || 'unknown';
-      const turn2Annots  = turn2Msg.annotations || [];
-      const turn2Cites   = turn2Annots.filter(a => a.type === 'url_citation' && a.url_citation?.url);
-      log(`turn-2: finish_reason=${turn2Finish} content_length=${turn2Content.length} citations=${turn2Cites.length}`);
-
-      if (turn2Content.length > 0) {
-        // Model can produce output but needs two turns — mark pass with note
-        log(`turn-2 PASS — model works with two-turn loop`);
-        const allCites = [...citations, ...turn2Cites];
+      if (finalContent.length > 0) {
+        log(`agentic loop PASS after ${turnCount + 1} turns`);
+        const allCites = allAnnotations.filter(a => a.type === 'url_citation' && a.url_citation?.url);
         const passed2 = allCites.length > 0;
         const sourceList2 = allCites.length
           ? allCites.map(a => `• ${a.url_citation.title || a.url_citation.url}`).join('\n')
           : 'No web citations returned.';
         const preview2 = [
-          '── NOTE: Required two-turn agentic loop (finish_reason=tool_calls on turn 1) ──',
+          `── NOTE: Required ${turnCount + 1}-turn agentic loop ──`,
           '',
           '── BRAVE API (ground truth) ──────────────────',
           groundTruth || '(no results)',
           '',
-          '── MODEL OUTPUT (turn 2) ─────────────────────',
-          turn2Content,
+          `── MODEL OUTPUT (turn ${turnCount + 1}) ─────────────────────`,
+          finalContent,
           '',
           '── CITATIONS ─────────────────────────────────',
           sourceList2,
@@ -1012,11 +1052,9 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
         return res.json({ ok: passed2, citations: allCites.length, twoTurn: true, testedAt, preview: preview2 });
       }
 
-      // Two-turn retry also failed — genuine incompatibility
-      const citeSample = citations.slice(0, 5).map(c => `• ${c.url_citation?.url}`).join('\n');
       return fail(
-        `Model stopped at tool call stage and produced no output even after two-turn retry (turn1=${finishReason}, turn2=${turn2Finish})`,
-        `Model invoked web search (${citations.length} citations) but finish_reason=${finishReason} with no text output.\nTwo-turn retry also failed (finish_reason=${turn2Finish}).\nUser would see a blank response in chat.\n\nCitations found:\n${citeSample}`
+        `Model stopped at tool call stage (finish_reason=tool_calls) — searched but produced no output`,
+        `Model made tool calls across ${turnCount + 1} turns but never produced a text response.\nFinal finish_reason: ${finalFinish}\n\n── BRAVE API (ground truth) ──\n${groundTruth || '(none)'}`
       );
     }
 
