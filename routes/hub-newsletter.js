@@ -8,7 +8,7 @@ const {
   getWeekKey, weekKeyLabel,
   weekKeyRange, briefingPeriodLabel, briefingFormatName, briefingTitle, briefingPdfFilename,
   briefingProvenanceText,
-  backfillFromLabels, previewBriefing, generateBriefing, generateCreatorBriefing, buildBriefingPdf, sendBriefing,
+  previewBriefing, generateBriefing, generateCreatorBriefing, buildBriefingPdf, sendBriefing,
 } = require('../lib/newsletter-pipeline');
 const { ingestFeed } = require('../lib/rss-ingest');
 const { listUserLabels } = require('../lib/gmail');
@@ -158,34 +158,6 @@ router.post('/sources/:id/priority', (req, res) => {
   res.json({ ok: true, priority });
 });
 
-// ── Gmail label list ──────────────────────────────────────────────────────────
-
-router.get('/gmail-labels', async (req, res) => {
-  try {
-    const labels = await listUserLabels(req.hubUser);
-    res.json({ labels });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Backfill from Gmail labels ────────────────────────────────────────────────
-
-router.post('/backfill', async (req, res) => {
-  const { labels, days } = req.body;
-  const labelList = (labels || '').split(',').map(l => l.trim()).filter(Boolean);
-  if (!labelList.length) return res.status(400).json({ error: 'labels required' });
-
-  const sinceTs = Math.floor(Date.now() / 1000) - (parseInt(days) || 7) * 86400;
-
-  try {
-    const results = await backfillFromLabels(req.hubUser, labelList, sinceTs);
-    res.json({ ok: true, results });
-  } catch (err) {
-    console.error('[newsletter] backfill error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ── Generate briefing ─────────────────────────────────────────────────────────
 

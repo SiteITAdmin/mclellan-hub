@@ -78,9 +78,6 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .badge-off { background: rgba(0,0,0,0.06); color: #666; }
 .badge-default { background: rgba(124,106,245,0.12); color: #5b4ac4; }
 
-.backfill-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 8px; }
-.backfill-row .field { flex: 1; min-width: 160px; }
-#backfill-status { font-size: 13px; color: var(--text-dim); margin-top: 8px; }
 
 .back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); text-decoration: none; margin-bottom: 20px; }
 .back-link:hover { color: var(--text); }
@@ -252,28 +249,6 @@ details[open] > summary span[style*="18px"] { transform: rotate(90deg); display:
     <% } %>
   </div>
 
-  <!-- ── Import from Gmail ─────────────────────────────────────────────────── -->
-  <div class="section-card" id="backfill">
-    <p class="section-title">Import from Gmail</p>
-    <p class="section-desc">Fetch emails from Gmail labels and extract topics. Useful for catching up on emails that arrived before the pipeline was running.</p>
-    <div class="backfill-row">
-      <div class="field">
-        <label>Gmail labels (comma-separated)</label>
-        <input id="bf-labels" type="text" value="Resources/Newsletters, Resources/Research" placeholder="Resources/Newsletters, Resources/Research">
-      </div>
-      <div class="field" style="flex:0 0 80px">
-        <label>Days back</label>
-        <input id="bf-days" type="number" value="7" min="1" max="30">
-      </div>
-      <button class="btn" onclick="runBackfill()">Import</button>
-      <button class="btn" type="button" onclick="browseLabels()">Browse labels</button>
-    </div>
-    <div id="label-list" style="display:none;margin-top:10px;display:none">
-      <p style="font-size:12px;color:var(--text-dim);margin-bottom:6px">Click a label to add it:</p>
-      <div id="label-chips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
-    </div>
-    <div id="backfill-status"></div>
-  </div>
 
   <!-- ── Sources summary ───────────────────────────────────────────────────── -->
   <div class="section-card" id="sources" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
@@ -912,60 +887,7 @@ details[open] > summary span[style*="18px"] { transform: rotate(90deg); display:
     }
   };
 
-  window.browseLabels = async function() {
-    const wrap = document.getElementById('label-list');
-    const chips = document.getElementById('label-chips');
-    chips.textContent = 'Loading…';
-    wrap.style.display = 'block';
-    try {
-      const r = await fetch('/newsletter/gmail-labels');
-      const data = await r.json();
-      if (!r.ok) { chips.textContent = '⚠ ' + (data.error || 'Failed'); return; }
-      chips.innerHTML = '';
-      for (const label of data.labels) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn-sm';
-        btn.style.cssText = 'cursor:pointer;font-size:12px';
-        btn.textContent = label;
-        btn.onclick = () => {
-          const inp = document.getElementById('bf-labels');
-          const current = inp.value.split(',').map(s => s.trim()).filter(Boolean);
-          if (!current.includes(label)) {
-            inp.value = [...current, label].join(', ');
-          }
-          btn.style.background = 'rgba(124,106,245,0.15)';
-          btn.style.borderColor = 'var(--accent)';
-        };
-        chips.appendChild(btn);
-      }
-    } catch (err) {
-      chips.textContent = '⚠ ' + err.message;
-    }
-  };
 
-  window.runBackfill = async function() {
-    const labels = document.getElementById('bf-labels').value;
-    const days = document.getElementById('bf-days').value;
-    const status = document.getElementById('backfill-status');
-    status.textContent = 'Importing… this may take a minute.';
-    try {
-      const r = await fetch('/newsletter/backfill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `labels=${encodeURIComponent(labels)}&days=${encodeURIComponent(days)}`,
-      });
-      const data = await r.json();
-      if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); return; }
-      const lines = Object.entries(data.results).map(([label, r]) =>
-        r.error ? `${label}: ⚠ ${r.error}` : `${label}: ${r.emails} emails → ${r.topics} topics`
-      ).join(' · ');
-      status.textContent = '✓ ' + lines;
-      setTimeout(() => location.reload(), 1500);
-    } catch (err) {
-      status.textContent = '⚠ ' + err.message;
-    }
-  };
 })();
 </script>
 </body>
