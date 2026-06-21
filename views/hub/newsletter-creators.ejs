@@ -43,6 +43,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .action-toggle { background: transparent; color: var(--text-dim); border: 1px solid var(--border, #dddaf0); }
 .action-delete { background: transparent; color: #e55; border: 1px solid #e55; }
 .error-note { font-size: 11px; color: #e55; margin-top: 6px; }
+.group-select { padding: 2px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; border: 1px solid var(--border,#dddaf0); background: var(--bg,#faf9fb); color: var(--text); font-family: inherit; cursor: pointer; }
 </style>
 </head>
 <body class="hub-page">
@@ -126,7 +127,12 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
         <a href="/newsletter/creator/<%= feed.creator_slug %>"><%= feed.name %></a>
       </h3>
       <div class="feed-meta">
-        <span class="badge badge-<%= feed.feed_group || 'personal' %>"><%= feed.feed_group || 'personal' %></span>
+        <select class="group-select" data-slug="<%= feed.creator_slug %>" onchange="changeGroup(this)">
+          <option value="personal" <%= (feed.feed_group||'personal')==='personal'?'selected':'' %>>Personal</option>
+          <option value="work" <%= feed.feed_group==='work'?'selected':'' %>>Work</option>
+          <option value="research" <%= feed.feed_group==='research'?'selected':'' %>>Research</option>
+          <option value="regulatory" <%= feed.feed_group==='regulatory'?'selected':'' %>>Regulatory</option>
+        </select>
         <% if (feed.provider && feed.provider !== 'auto') { %><span class="badge badge-provider"><%= feed.provider %></span><% } %>
         <span><%= feed.article_count || 0 %> articles</span>
         <% if (feed.latest_article_at) { %><span>Latest <%= new Date(feed.latest_article_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %></span><% } %>
@@ -155,6 +161,24 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <% } %>
 </div>
 <script>
+async function changeGroup(select) {
+  const slug = select.dataset.slug;
+  const group = select.value;
+  const prev = [...select.options].find(o => o.selected && o.value !== group)?.value;
+  try {
+    const r = await fetch(`/newsletter/creator/${slug}/group`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'feed_group=' + encodeURIComponent(group),
+    });
+    if (!r.ok) throw new Error('Failed');
+    // Move the card to the new group section without full reload
+    window.location.reload();
+  } catch {
+    if (prev) select.value = prev;
+    alert('Could not save group change');
+  }
+}
 const toggleBtn = document.getElementById('toggle-add');
 const addForm   = document.getElementById('add-form');
 const cancelBtn = document.getElementById('cancel-add');

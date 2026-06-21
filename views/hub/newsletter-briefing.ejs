@@ -36,7 +36,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <% } %>
 
   <div class="action-row">
-    <a class="btn btn-primary" href="/newsletter/briefing/<%= briefing.id %>/pdf" download>Download PDF</a>
+    <button class="btn btn-primary" onclick="downloadPdf('/newsletter/briefing/<%= briefing.id %>/pdf')">Download PDF</button>
     <button class="btn" id="wiki-btn" onclick="exportWiki()">Export to wiki</button>
     <% if (!briefing.published_at) { %>
       <button class="btn" onclick="publishBriefing()">Publish</button>
@@ -50,6 +50,23 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <div class="content-card"><%= briefing.text_content || '(No content)' %></div>
 </div>
 <script>
+async function downloadPdf(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('Server returned ' + r.status);
+    const blob = await r.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = url.split('/').pop() + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(objUrl), 2000);
+  } catch (e) {
+    alert('PDF download failed: ' + e.message);
+  }
+}
 async function exportWiki() {
   const btn = document.getElementById('wiki-btn');
   const msg = document.getElementById('status-msg');

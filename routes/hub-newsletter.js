@@ -719,6 +719,13 @@ router.post('/creator/:slug/fetch', async (req, res) => {
   }
 });
 
+router.post('/creator/:slug/group', (req, res) => {
+  const hub = db.hub();
+  const group = ['personal', 'work', 'research', 'regulatory'].includes(req.body.feed_group) ? req.body.feed_group : 'personal';
+  hub.prepare('UPDATE rss_feeds SET feed_group = ? WHERE user = ? AND creator_slug = ?').run(group, req.hubUser, req.params.slug);
+  res.json({ ok: true, feed_group: group });
+});
+
 router.post('/creator/:slug/delete', (req, res) => {
   const hub = db.hub();
   hub.prepare('DELETE FROM rss_feeds WHERE user = ? AND creator_slug = ?').run(req.hubUser, req.params.slug);
