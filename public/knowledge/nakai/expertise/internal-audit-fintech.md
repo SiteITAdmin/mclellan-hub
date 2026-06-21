@@ -28,9 +28,8 @@ Nakai maintains a private daily intelligence briefing practice covering emerging
 - FCA (Financial Conduct Authority)
 - Central Bank of Ireland
 - BNPL (Buy Now, Pay Later) / Deferred Payment Credit
-- Block Inc. (Square, Cash App, Afterpay/Clearpay)
+- Global fintech payments platforms and embedded finance providers
 - Financial crime, AML, and scam controls
-- Virtual assets and stablecoins
 - EU AI Act and financial-services technology regulation
 - Consumer Duty and customer harm frameworks
 - Merchant acquiring and payment facilitation risk
@@ -40,12 +39,8 @@ Nakai maintains a private daily intelligence briefing practice covering emerging
 - FCA
 - Central Bank of Ireland
 - BNPL
-- Block
-- Cash App
-- Square
-- Afterpay/Clearpay
+- Global payments platforms
 - financial crime
-- virtual assets
 
 ## Canonical Profile
 - https://nakai.mclellan.scot/
