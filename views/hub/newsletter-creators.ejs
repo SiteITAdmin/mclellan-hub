@@ -4,86 +4,167 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Creators — McLellan Hub</title>
+<title>Feeds — McLellan Hub</title>
 <link rel="stylesheet" href="/hub.css">
 <style>
 body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
-.nl-wrap { max-width: 900px; margin: 0 auto; padding: 32px 16px 80px; }
+.nl-wrap { max-width: 960px; margin: 0 auto; padding: 32px 16px 80px; }
 .nl-heading { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
 .nl-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 28px; }
-.creator-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-bottom: 32px; }
-.creator-card { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 12px; padding: 20px; text-decoration: none; color: inherit; display: block; transition: border-color .15s; }
-.creator-card:hover { border-color: var(--primary, #7c6af5); }
-.creator-card h3 { margin: 0 0 6px; font-size: 15px; }
-.creator-meta { font-size: 12px; color: var(--text-dim); display: flex; gap: 12px; flex-wrap: wrap; }
-.creator-badge { background: var(--primary-light, #ede9fd); color: var(--primary, #7c6af5); border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
-.add-form { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 12px; padding: 20px; margin-bottom: 32px; display: none; }
-.add-form h3 { margin: 0 0 16px; font-size: 15px; }
-.form-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.form-row input { flex: 1; min-width: 140px; padding: 8px 10px; border: 1px solid var(--border, #dddaf0); border-radius: 8px; font-size: 13px; background: var(--input-bg, #fff); color: inherit; }
+.add-form { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 12px; padding: 20px; margin-bottom: 28px; display: none; }
+.add-form h3 { margin: 0 0 16px; font-size: 15px; font-weight: 700; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.form-grid input, .form-grid select { padding: 8px 10px; border: 1px solid var(--border, #dddaf0); border-radius: 8px; font-size: 13px; background: var(--input-bg, #fff); color: inherit; font-family: inherit; width: 100%; box-sizing: border-box; }
+.form-grid .span2 { grid-column: span 2; }
+.form-hint { font-size: 11px; color: var(--text-dim); margin: 2px 0 0; }
 .btn { padding: 8px 16px; background: var(--primary, #7c6af5); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
 .btn-subtle { background: transparent; color: var(--text-dim); border: 1px solid var(--border, #dddaf0); }
-.msg { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+.btn-danger { background: transparent; color: #e55; border: 1px solid #e55; }
+.msg { font-size: 12px; color: var(--text-dim); margin: 0 0 16px; }
+.group-heading { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin: 28px 0 12px; display: flex; align-items: center; gap: 8px; }
+.group-heading .count { font-size: 12px; font-weight: 400; background: var(--bg,#faf9fb); border: 1px solid var(--border,#dddaf0); border-radius: 20px; padding: 1px 8px; }
+.feed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.feed-card { background: var(--bg, #faf9fb); border: 1px solid var(--border, #dddaf0); border-radius: 12px; padding: 16px; }
+.feed-card.disabled { opacity: 0.55; }
+.feed-card h3 { margin: 0 0 6px; font-size: 14px; font-weight: 700; }
+.feed-card h3 a { color: inherit; text-decoration: none; }
+.feed-card h3 a:hover { text-decoration: underline; }
+.feed-meta { font-size: 12px; color: var(--text-dim); display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.badge { border-radius: 6px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
+.badge-work { background: #e8f0fe; color: #3c6bc4; }
+.badge-personal { background: var(--primary-light, #ede9fd); color: var(--primary, #7c6af5); }
+.badge-research { background: #e6f7f0; color: #2a7a54; }
+.badge-regulatory { background: #fff3e0; color: #b35c00; }
+.badge-provider { background: var(--bg, #f0eef9); color: var(--text-dim); }
+.feed-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.feed-actions form { display: inline; }
+.feed-actions button { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.action-fetch { background: transparent; color: var(--primary, #7c6af5); border: 1px solid var(--primary, #7c6af5); }
+.action-toggle { background: transparent; color: var(--text-dim); border: 1px solid var(--border, #dddaf0); }
+.action-delete { background: transparent; color: #e55; border: 1px solid #e55; }
+.error-note { font-size: 11px; color: #e55; margin-top: 6px; }
 </style>
 </head>
 <body class="hub-page">
 <%- include('partials/top-nav') %>
 <div class="nl-wrap">
   <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-    <h1 class="nl-heading">Creator Feeds</h1>
+    <h1 class="nl-heading">Feeds</h1>
     <a href="/newsletter" style="font-size:13px;color:var(--text-dim);">← Intelligence</a>
   </div>
-  <p class="nl-sub">RSS feeds from creators — full articles ingested to the wiki, briefings on demand.</p>
+  <p class="nl-sub">All external subscriptions — RSS, newsletters, sites. Content goes into the knowledge pipeline and briefings.</p>
   <% if (msg) { %><p class="msg"><%= msg %></p><% } %>
 
-  <div style="margin-bottom:16px;display:flex;gap:8px;">
+  <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
     <button class="btn btn-subtle" id="toggle-add">+ Add feed</button>
-    <% if (feeds.length) { %>
-      <form method="POST" action="/admin/rss-feeds/fetch-all" style="display:inline;">
-        <button class="btn btn-subtle" type="submit">↻ Fetch all</button>
-      </form>
-    <% } %>
-    <a class="btn btn-subtle" href="/admin/rss-feeds">Manage feeds →</a>
   </div>
 
   <div class="add-form" id="add-form">
-    <h3>Add creator feed</h3>
+    <h3>Add feed</h3>
     <form method="POST" action="/newsletter/creators/add">
-      <div class="form-row">
-        <input name="name" placeholder="Creator name (e.g. Nate's Newsletter)" required>
-        <input name="creator_slug" placeholder="Slug (e.g. nate)" required>
-        <input name="url" placeholder="RSS feed URL" required style="flex:2;">
-        <button class="btn" type="submit">Add</button>
+      <div class="form-grid">
+        <div>
+          <input name="name" placeholder="Name (e.g. Entra News)" required>
+          <p class="form-hint">Display name</p>
+        </div>
+        <div>
+          <input name="url" placeholder="URL or RSS feed" required>
+          <p class="form-hint">Any URL — RSS auto-detected, or uses smart scraping</p>
+        </div>
+        <div>
+          <select name="feed_group">
+            <option value="personal">Personal</option>
+            <option value="work">Work</option>
+            <option value="research">Research</option>
+            <option value="regulatory">Regulatory</option>
+          </select>
+          <p class="form-hint">Group (for briefing filters)</p>
+        </div>
+        <div>
+          <select name="provider">
+            <option value="auto">Auto (RSS first, then cascade)</option>
+            <option value="rss">RSS only</option>
+            <option value="firecrawl">Firecrawl</option>
+            <option value="exa">Exa</option>
+            <option value="brave">Brave Search</option>
+            <option value="direct">Direct scrape</option>
+          </select>
+          <p class="form-hint">Fetch method override</p>
+        </div>
+        <div>
+          <input name="interval_mins" type="number" placeholder="Fetch interval (mins, default 1440)" min="60">
+          <p class="form-hint">How often to check (minutes)</p>
+        </div>
+        <div>
+          <input name="creator_slug" placeholder="Slug (optional — auto-generated)">
+          <p class="form-hint">URL key for reading list</p>
+        </div>
+        <div class="span2" style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+          <button type="button" class="btn btn-subtle" id="cancel-add">Cancel</button>
+          <button class="btn" type="submit">Add feed</button>
+        </div>
       </div>
     </form>
   </div>
 
-  <div class="creator-grid">
-    <% for (const feed of feeds) { %>
-      <a class="creator-card" href="/newsletter/creator/<%= feed.creator_slug %>">
-        <h3><%= feed.name %></h3>
-        <div class="creator-meta">
-          <span class="creator-badge"><%= feed.creator_slug %></span>
-          <span><%= feed.article_count || 0 %> article<%= feed.article_count !== 1 ? 's' : '' %></span>
-          <% if (feed.latest_article_at) { %><span>Latest <%= new Date(feed.latest_article_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %></span><% } %>
-          <% if (!feed.enabled) { %><span style="color:#e55;">disabled</span><% } %>
-        </div>
-      </a>
-    <% } %>
-    <% if (!feeds.length) { %>
-      <p style="color:var(--text-dim);font-size:13px;">No creator feeds yet. Add one above.</p>
+  <%
+    const groups = ['personal', 'work', 'research', 'regulatory'];
+    const groupLabels = { personal: 'Personal', work: 'Work', research: 'Research', regulatory: 'Regulatory' };
+    const byGroup = {};
+    for (const g of groups) byGroup[g] = feeds.filter(f => (f.feed_group || 'personal') === g);
+    const ungrouped = feeds.filter(f => !groups.includes(f.feed_group));
+    if (ungrouped.length) byGroup['personal'] = [...byGroup['personal'], ...ungrouped];
+  %>
+
+  <% for (const g of groups) { %>
+  <% if (byGroup[g].length) { %>
+  <div class="group-heading"><%= groupLabels[g] %> <span class="count"><%= byGroup[g].length %></span></div>
+  <div class="feed-grid">
+    <% for (const feed of byGroup[g]) { %>
+    <div class="feed-card <%= !feed.enabled ? 'disabled' : '' %>">
+      <h3>
+        <a href="/newsletter/creator/<%= feed.creator_slug %>"><%= feed.name %></a>
+      </h3>
+      <div class="feed-meta">
+        <span class="badge badge-<%= feed.feed_group || 'personal' %>"><%= feed.feed_group || 'personal' %></span>
+        <% if (feed.provider && feed.provider !== 'auto') { %><span class="badge badge-provider"><%= feed.provider %></span><% } %>
+        <span><%= feed.article_count || 0 %> articles</span>
+        <% if (feed.latest_article_at) { %><span>Latest <%= new Date(feed.latest_article_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %></span><% } %>
+        <% if (!feed.enabled) { %><span style="color:#e55;">disabled</span><% } %>
+      </div>
+      <div class="feed-actions">
+        <form method="POST" action="/newsletter/creator/<%= feed.creator_slug %>/fetch">
+          <button type="submit" class="action-fetch">↻ Fetch</button>
+        </form>
+        <form method="POST" action="/newsletter/creator/<%= feed.creator_slug %>/toggle">
+          <button type="submit" class="action-toggle"><%= feed.enabled ? 'Disable' : 'Enable' %></button>
+        </form>
+        <form method="POST" action="/newsletter/creator/<%= feed.creator_slug %>/delete" onsubmit="return confirm('Delete feed and all its articles?')">
+          <button type="submit" class="action-delete">Delete</button>
+        </form>
+      </div>
+      <% if (feed.last_error) { %><div class="error-note"><%= feed.last_error.slice(0, 80) %></div><% } %>
+    </div>
     <% } %>
   </div>
+  <% } %>
+  <% } %>
+
+  <% if (!feeds.length) { %>
+  <p style="color:var(--text-dim);font-size:13px;margin-top:32px;">No feeds yet. Add one above.</p>
+  <% } %>
 </div>
 <script>
-document.getElementById('toggle-add').addEventListener('click', () => {
-  const form = document.getElementById('add-form');
-  const btn = document.getElementById('toggle-add');
-  const open = form.style.display === 'none' || !form.style.display;
-  form.style.display = open ? 'block' : 'none';
-  btn.textContent = open ? '− Cancel' : '+ Add feed';
-  if (open) form.querySelector('input').focus();
-});
+const toggleBtn = document.getElementById('toggle-add');
+const addForm   = document.getElementById('add-form');
+const cancelBtn = document.getElementById('cancel-add');
+function openForm(open) {
+  addForm.style.display = open ? 'block' : 'none';
+  toggleBtn.textContent = open ? '− Cancel' : '+ Add feed';
+  if (open) addForm.querySelector('input').focus();
+}
+toggleBtn.addEventListener('click', () => openForm(addForm.style.display !== 'block'));
+cancelBtn.addEventListener('click', () => openForm(false));
 </script>
 </body>
 </html>

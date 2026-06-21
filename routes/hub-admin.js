@@ -1831,15 +1831,7 @@ router.post('/admin/linkedin/:id/delete', requireHubAdmin, (req, res) => {
 
 // ── RSS feed management ────────────────────────────────────────────────────────
 
-router.get('/admin/rss-feeds', requireHubAdmin, (req, res) => {
-  const hub = db.hub();
-  const feeds = hub.prepare(`
-    SELECT f.*, COUNT(a.id) AS article_count, MAX(a.published_at) AS latest_at
-    FROM rss_feeds f LEFT JOIN rss_articles a ON a.feed_id = f.id
-    WHERE f.user = ? GROUP BY f.id ORDER BY f.name
-  `).all(req.hubUser);
-  res.render('hub-admin/rss-feeds', { user: req.hubUser, feeds, msg: req.query.msg || null });
-});
+router.get('/admin/rss-feeds', requireHubAdmin, (req, res) => res.redirect('/newsletter/creators'));
 
 router.post('/admin/rss-feeds', requireHubAdmin, async (req, res) => {
   const { name, url, creator_slug } = req.body;
@@ -1884,101 +1876,16 @@ router.post('/admin/rss-feeds/fetch-all', requireHubAdmin, async (req, res) => {
   }
 });
 
-// ── URL Watchlist management ──────────────────────────────────────────────────
+// ── Watchlist — merged into /newsletter/creators ──────────────────────────────
+// All routes redirect; feeds are now managed via rss_feeds + the Creators page.
 
-const { fetchWatchlistUrl, processAllDueFeeds } = require('../lib/watchlist');
-
-router.get('/admin/watchlist', requireHubAdmin, (req, res) => {
-  const hub = db.hub();
-  const feeds = hub.prepare(`
-    SELECT f.*, COUNT(s.id) AS story_count, MAX(s.fetched_at) AS latest_story_at
-    FROM watchlist_feeds f LEFT JOIN watchlist_stories s ON s.feed_id = f.id
-    WHERE f.user = ? GROUP BY f.id ORDER BY f.created_at DESC
-  `).all(req.hubUser);
-  const stories = hub.prepare(`
-    SELECT s.*, wf.label AS feed_label
-    FROM watchlist_stories s
-    JOIN watchlist_feeds wf ON wf.id = s.feed_id
-    WHERE s.user = ?
-    ORDER BY s.fetched_at DESC
-    LIMIT 100
-  `).all(req.hubUser);
-  const tab = req.query.tab || 'feeds';
-  res.render('hub-admin/watchlist', { user: req.hubUser, feeds, stories, tab, msg: req.query.msg || null });
-});
-
-router.post('/admin/watchlist', requireHubAdmin, async (req, res) => {
-  const { url, label, interval_mins, provider } = req.body;
-  if (!url) return res.redirect('/admin/watchlist?msg=' + encodeURIComponent('URL is required'));
-  let feedLabel = (label || '').trim();
-  if (!feedLabel) {
-    try { feedLabel = new URL(url).hostname.replace(/^www\./, ''); } catch { feedLabel = url.slice(0, 40); }
-  }
-  const interval = parseInt(interval_mins) || 360;
-  const prov = ['auto', 'firecrawl', 'exa', 'brave', 'direct'].includes(provider) ? provider : 'auto';
-  const result = db.hub().prepare(`
-    INSERT OR IGNORE INTO watchlist_feeds (id, user, url, label, provider, interval_mins)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(uuid(), req.hubUser, url.trim(), feedLabel, prov, interval);
-  const msg = result.changes ? 'URL added to watchlist' : 'That URL is already being watched';
-  res.redirect('/admin/watchlist?msg=' + encodeURIComponent(msg));
-});
-
-router.post('/admin/watchlist/:id/toggle', requireHubAdmin, (req, res) => {
-  const hub = db.hub();
-  const feed = hub.prepare('SELECT enabled FROM watchlist_feeds WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
-  if (feed) {
-    hub.prepare('UPDATE watchlist_feeds SET enabled = ?, error_count = 0, last_error = NULL WHERE id = ?')
-      .run(feed.enabled ? 0 : 1, req.params.id);
-  }
-  res.redirect('/admin/watchlist');
-});
-
-router.post('/admin/watchlist/:id/fetch', requireHubAdmin, async (req, res) => {
-  const feed = db.hub().prepare('SELECT * FROM watchlist_feeds WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
-  if (!feed) return res.redirect('/admin/watchlist');
-  try {
-    const result = await fetchWatchlistUrl(feed);
-    const msg = result.error
-      ? `Error: ${result.error}`
-      : `Fetched: ${result.new} new stories (${result.provider})`;
-    res.redirect('/admin/watchlist?msg=' + encodeURIComponent(msg));
-  } catch (err) {
-    res.redirect('/admin/watchlist?msg=' + encodeURIComponent('Error: ' + err.message));
-  }
-});
-
-router.post('/admin/watchlist/:id/delete', requireHubAdmin, (req, res) => {
-  const hub = db.hub();
-  hub.prepare('DELETE FROM watchlist_stories WHERE feed_id = ? AND user = ?').run(req.params.id, req.hubUser);
-  hub.prepare('DELETE FROM watchlist_feeds WHERE id = ? AND user = ?').run(req.params.id, req.hubUser);
-  res.redirect('/admin/watchlist');
-});
-
-router.post('/admin/watchlist/fetch-all', requireHubAdmin, async (req, res) => {
-  try {
-    const result = await processAllDueFeeds(req.hubUser);
-    res.redirect('/admin/watchlist?msg=' + encodeURIComponent(`Processed ${result.processed} feeds: ${result.totalNew} new stories`));
-  } catch (err) {
-    res.redirect('/admin/watchlist?msg=' + encodeURIComponent('Error: ' + err.message));
-  }
-});
-
-router.get('/admin/watchlist/:id/stories', requireHubAdmin, (req, res) => {
-  const hub = db.hub();
-  const feed = hub.prepare('SELECT * FROM watchlist_feeds WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
-  if (!feed) return res.redirect('/admin/watchlist');
-  const feeds = [feed];
-  feeds[0].story_count = hub.prepare('SELECT COUNT(*) AS c FROM watchlist_stories WHERE feed_id = ?').get(feed.id).c;
-  const stories = hub.prepare(`
-    SELECT s.*, ? AS feed_label
-    FROM watchlist_stories s
-    WHERE s.feed_id = ?
-    ORDER BY s.fetched_at DESC
-    LIMIT 100
-  `).all(feed.label, req.params.id);
-  res.render('hub-admin/watchlist', { user: req.hubUser, feeds, stories, tab: 'stories', msg: null });
-});
+router.get('/admin/watchlist', requireHubAdmin, (req, res) => res.redirect('/newsletter/creators'));
+router.get('/admin/watchlist/:id/stories', requireHubAdmin, (req, res) => res.redirect('/newsletter/creators'));
+router.post('/admin/watchlist', requireHubAdmin, (req, res) => res.redirect('/newsletter/creators'));
+router.post('/admin/watchlist/fetch-all', requireHubAdmin, (req, res) => res.redirect('/newsletter/creators'));
+router.post('/admin/watchlist/:id/toggle', requireHubAdmin, (req, res) => res.redirect('/newsletter/creators'));
+router.post('/admin/watchlist/:id/fetch', requireHubAdmin, (req, res) => res.redirect('/newsletter/creators'));
+router.post('/admin/watchlist/:id/delete', requireHubAdmin, (req, res) => res.redirect('/newsletter/creators'));
 
 // ── Job queue admin ───────────────────────────────────────────────────────────
 

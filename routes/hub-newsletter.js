@@ -606,12 +606,21 @@ router.post('/schedules/:id/toggle', (req, res) => {
 // ── Creator RSS feeds ──────────────────────────────────────────────────────────
 
 router.post('/creators/add', (req, res) => {
-  const { name, url, creator_slug } = req.body;
-  if (!name || !url || !creator_slug) return res.redirect('/newsletter/creators');
-  const slug = creator_slug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const result = db.hub().prepare(`
-    INSERT OR IGNORE INTO rss_feeds (id, user, name, creator_slug, url) VALUES (?, ?, ?, ?, ?)
-  `).run(uuid(), req.hubUser, name.trim(), slug, url.trim());
+  const { name, url, creator_slug, feed_group, provider, interval_mins } = req.body;
+  if (!name || !url) return res.redirect('/newsletter/creators?msg=' + encodeURIComponent('Name and URL are required'));
+  const hub = db.hub();
+  const trimmedUrl = url.trim();
+  // Auto-generate slug from provided slug or name; suffix with short id if collision
+  let slug = (creator_slug || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  const existing = hub.prepare('SELECT id FROM rss_feeds WHERE user = ? AND creator_slug = ?').get(req.hubUser, slug);
+  if (existing) slug = slug.slice(0, 35) + '-' + uuid().slice(0, 4);
+  const group = ['personal', 'work', 'research', 'regulatory'].includes(feed_group) ? feed_group : 'personal';
+  const prov = ['auto', 'rss', 'firecrawl', 'exa', 'brave', 'direct'].includes(provider) ? provider : 'auto';
+  const interval = Math.max(60, parseInt(interval_mins) || 1440);
+  const result = hub.prepare(`
+    INSERT OR IGNORE INTO rss_feeds (id, user, name, creator_slug, url, feed_group, provider, interval_mins)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(uuid(), req.hubUser, name.trim(), slug, trimmedUrl, group, prov, interval);
   res.redirect('/newsletter/creators' + (result.changes ? '' : '?msg=' + encodeURIComponent('That feed URL is already subscribed')));
 });
 
@@ -623,7 +632,7 @@ router.get('/creators', (req, res) => {
     FROM rss_feeds f
     LEFT JOIN rss_articles a ON a.feed_id = f.id
     WHERE f.user = ?
-    GROUP BY f.id ORDER BY f.name
+    GROUP BY f.id ORDER BY f.feed_group, f.name
   `).all(req.hubUser);
   res.render('hub/newsletter-creators', {
     user: req.hubUser,
@@ -708,6 +717,19 @@ router.post('/creator/:slug/fetch', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+router.post('/creator/:slug/delete', (req, res) => {
+  const hub = db.hub();
+  hub.prepare('DELETE FROM rss_feeds WHERE user = ? AND creator_slug = ?').run(req.hubUser, req.params.slug);
+  res.redirect('/newsletter/creators?msg=' + encodeURIComponent('Feed removed'));
+});
+
+router.post('/creator/:slug/toggle', (req, res) => {
+  const hub = db.hub();
+  const feed = hub.prepare('SELECT enabled FROM rss_feeds WHERE user = ? AND creator_slug = ?').get(req.hubUser, req.params.slug);
+  if (feed) hub.prepare('UPDATE rss_feeds SET enabled = ?, error_count = 0, last_error = NULL WHERE user = ? AND creator_slug = ?').run(feed.enabled ? 0 : 1, req.hubUser, req.params.slug);
+  res.redirect('/newsletter/creators');
 });
 
 module.exports = router;
