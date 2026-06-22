@@ -68,7 +68,7 @@ async function taskAction(id, action) {
               <span style="font-size:13px;"><%= a.value %><% if (a.status === 'proposed') { %> <span style="font-size:10px;opacity:.6;">· proposed</span><% } %></span>
               <span style="font-size:11px;white-space:nowrap;display:inline-flex;gap:6px;align-items:baseline;">
                 <span style="opacity:.5;" title="confidence <%= a.confidence.toFixed(2) %>"><%= Math.round(a.confidence*100) %>%</span>
-                <% a.sources.forEach(function(s){ %><a href="/crm/source/<%= s.kind %>/<%= encodeURIComponent(s.id) %>" style="opacity:.65;" title="open source: <%= s.kind.replace(/_/g,' ') %>"><%= ({document:'doc',email_summary:'email',meeting_intake:'meeting',crm_fact:'fact'})[s.kind] || s.kind %></a><% }); %>
+                <% a.sources.forEach(function(s){ %><a href="/crm/source/<%= s.kind %>/<%= encodeURIComponent(s.id) %>" style="opacity:.65;" title="open source: <%= s.kind.replace(/_/g,' ') %>"><%= ({document:'doc',email_summary:'email',meeting_intake:'meeting',crm_fact:'fact',completed_task:'task'})[s.kind] || s.kind %></a><% }); %>
               </span>
             </div>
           <% } %>
@@ -177,7 +177,7 @@ async function taskAction(id, action) {
 
     <section class="section-card">
       <h2>Timeline</h2>
-      <% if (!projectFacts.length && !recentEmails.length) { %>
+      <% if (!projectFacts.length && !recentEmails.length && !(projectKnowledgeEvents || []).length) { %>
         <p class="crm-muted">No activity yet. Link people to this project to see their facts here.</p>
       <% } %>
       <div class="crm-timeline">
@@ -187,6 +187,7 @@ async function taskAction(id, action) {
           // Merge facts + emails into one sorted list
           const timelineItems = [
             ...projectFacts.map(f => ({ _kind: 'fact', ts: f.created_at, ...f })),
+            ...(projectKnowledgeEvents || []),
             ...recentEmails.map(e => ({ _kind: 'email', ts: e.received_at, ...e })),
           ].sort((a, b) => b.ts - a.ts).slice(0, 60);
         %>
@@ -200,6 +201,19 @@ async function taskAction(id, action) {
             <span style="display:flex;justify-content:space-between;align-items:center;">
               <span><a href="/crm/contact/<%= item.contact_id %>"><%= item.contact_name %></a><% if (SOURCE_BADGE[item.source]) { %> · <span style="font-size:11px;opacity:.6;"><%= SOURCE_BADGE[item.source] %></span><% } %></span>
               <button class="crm-fact-archive" style="color:var(--crm-danger,#c0392b);opacity:.7;flex-shrink:0;" data-fact-id="<%= item.id %>" title="Mark as wrong — AI won't repeat this error">Wrong</button>
+            </span>
+          </div>
+          <% } else if (item._kind === 'knowledge_event') { %>
+          <div class="crm-timeline-item">
+            <time><%= new Date(item.ts * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %>
+              <span class="crm-type action" style="margin-left:6px;"><%= item.predicate.replace(/_/g, ' ') %></span>
+            </time>
+            <strong><%= item.value %></strong>
+            <span style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;opacity:.6;">derived from completed task · <%= Math.round(item.confidence * 100) %>%</span>
+              <span style="display:inline-flex;gap:6px;">
+                <% item.sources.forEach(function(s){ %><a href="/crm/source/<%= s.kind %>/<%= encodeURIComponent(s.id) %>" style="opacity:.65;font-size:11px;" title="open source: <%= s.kind.replace(/_/g,' ') %>"><%= ({document:'doc',email_summary:'email',meeting_intake:'meeting',crm_fact:'fact',completed_task:'task'})[s.kind] || s.kind %></a><% }); %>
+              </span>
             </span>
           </div>
           <% } else { %>
