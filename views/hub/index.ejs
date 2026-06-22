@@ -24,7 +24,7 @@
   </div>
 
   <div class="sidebar-section">
-    <h3>Projects <button type="button" class="sidebar-new-btn" id="new-project-btn" title="New project">+</button></h3>
+    <h3>Chat workspaces <button type="button" class="sidebar-new-btn" id="new-project-btn" title="New chat workspace">+</button></h3>
     <ul class="project-list">
       <% for (const p of projects) { %>
       <li><a href="/p/<%= p.slug %>">/<%= p.slug %></a></li>
@@ -57,14 +57,14 @@
   <div class="hub-home">
     <section class="welcome welcome-panel">
       <div class="welcome-copy">
-        <span class="welcome-kicker">Project workspace</span>
+        <span class="welcome-kicker">Chat workspace</span>
         <h2>Good to have you back, <%= user.charAt(0).toUpperCase() + user.slice(1) %>.</h2>
-        <p>Use this space like a launcher, not a blank page. Start a focused chat, add source material to a project, or jump in with <code>/slug message</code> when you already know where you want to work.</p>
+        <p>Use this space like a launcher, not a blank page. Start a focused chat, add source material to a chat workspace, or jump in with <code>/slug message</code> when you already know where you want to work.</p>
       </div>
       <div class="welcome-stats">
         <div class="welcome-stat">
           <strong><%= projects.length %></strong>
-          <span>Projects ready</span>
+          <span>Workspaces ready</span>
         </div>
         <div class="welcome-stat">
           <strong><%= recentConvs.length %></strong>
@@ -81,7 +81,7 @@
       <div class="section-heading">
         <div>
           <span class="section-kicker">Quick start</span>
-          <h3>Chat about a project</h3>
+          <h3>Chat in a workspace</h3>
         </div>
         <a href="/c" class="section-link">Open a blank conversation</a>
       </div>
@@ -98,10 +98,10 @@
     <section class="home-section">
       <div class="section-heading">
         <div>
-          <span class="section-kicker">Project intake</span>
+          <span class="section-kicker">Workspace intake</span>
           <h3>Add source material</h3>
         </div>
-        <p class="section-note">Upload files to a project, convert them to markdown, and make them available in future chats.</p>
+        <p class="section-note">Upload files to a chat workspace, convert them to markdown, and make them available in future chats.</p>
       </div>
       <div class="project-grid">
         <% for (const p of projects) { %>
@@ -113,10 +113,10 @@
             </div>
             <span class="project-doc-count"><%= p.document_count %> docs</span>
           </div>
-          <p>Use this project as a working folder for briefs, PDFs, notes, spreadsheets, and anything you want analysed in context.</p>
+          <p>Use this workspace as a working folder for briefs, PDFs, notes, spreadsheets, and anything you want analysed in context.</p>
           <div class="project-card-actions">
-            <a href="/p/<%= p.slug %>?new=1" class="project-card-btn project-card-btn-primary">Open project chat</a>
-            <button type="button" class="project-card-btn project-card-btn-secondary upload-project-trigger" data-project-slug="<%= p.slug %>" data-project-name="<%= p.name %>">Add files to project</button>
+            <a href="/p/<%= p.slug %>?new=1" class="project-card-btn project-card-btn-primary">Open workspace chat</a>
+            <button type="button" class="project-card-btn project-card-btn-secondary upload-project-trigger" data-project-slug="<%= p.slug %>" data-project-name="<%= p.name %>">Add files to workspace</button>
           </div>
         </article>
         <% } %>
@@ -127,12 +127,12 @@
       <div class="section-heading">
         <div>
           <span class="section-kicker">Recent material</span>
-          <h3>Latest project documents</h3>
+          <h3>Latest workspace documents</h3>
         </div>
       </div>
       <% if (recentDocuments.length === 0) { %>
       <div class="empty-state">
-        <p>No project documents yet. Start with a CV, brief, PDF, spreadsheet, or notes file and attach it to the right project.</p>
+        <p>No workspace documents yet. Start with a CV, brief, PDF, spreadsheet, or notes file and attach it to the right workspace.</p>
       </div>
       <% } else { %>
       <div class="recent-docs">
@@ -153,9 +153,9 @@
 
 <div class="upload-modal-backdrop" id="upload-modal-backdrop"></div>
 <div class="upload-modal" id="upload-modal" role="dialog" aria-hidden="true">
-  <h3>Add source material to a project</h3>
-  <p style="color:var(--text-dim);font-size:13px;">Uploads are converted to markdown and stored with the project so they can be referenced later in chat.</p>
-  <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">Project</label>
+  <h3>Add source material to a chat workspace</h3>
+  <p style="color:var(--text-dim);font-size:13px;">Uploads are converted to markdown and stored with the workspace so they can be referenced later in chat.</p>
+  <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">Workspace</label>
   <select id="upload-project-select">
     <% for (const p of projects) { %>
       <option value="<%= p.slug %>">/<%= p.slug %> — <%= p.name %></option>
@@ -175,12 +175,12 @@
   </div>
 </div>
 
-<!-- New project modal -->
+<!-- New workspace modal -->
 <div class="upload-modal-backdrop" id="np-backdrop"></div>
 <div class="upload-modal" id="np-modal" role="dialog" aria-hidden="true">
-  <h3>New project</h3>
+  <h3>New chat workspace</h3>
   <p style="color:var(--text-dim);font-size:13px;">Give it a name — the slug is generated automatically. You can refine settings in Admin later.</p>
-  <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">Project name</label>
+  <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;">Workspace name</label>
   <input type="text" id="np-name" placeholder="e.g. Client Research" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--font);background:var(--bg);color:var(--text);">
   <div id="np-status" style="font-size:13px;color:var(--text-dim);margin-top:8px;min-height:18px;"></div>
   <div class="upload-modal-actions">

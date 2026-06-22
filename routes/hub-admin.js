@@ -658,6 +658,9 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'completed_task_atom_extractor', scope: 'system', label: 'Completed task extractor', note: 'Nightly synthesis — promotes only durable completed tasks into project/contact knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'entity_linker', scope: 'system', label: 'Entity linker', note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
+  { id: 'crm-reports', label: 'CRM reports', slots: [
+    { feature: 'project_report', scope: 'system', label: 'Project report writer', note: 'Generates the CRM Project Report page from project meetings, tasks, emails, documents and knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
+  ]},
   { id: 'wiki', label: 'Wiki', slots: [
     { feature: 'wiki_page_writer', scope: 'system', label: 'Page writer',     note: 'Converts documents and Q&A into structured wiki pages.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'wiki_image_vision',scope: 'system', label: 'Image vision',    note: 'Describes uploaded images before converting them to wiki pages. Cheap vision model recommended.', fallback: 'google/gemini-2.0-flash-001' },

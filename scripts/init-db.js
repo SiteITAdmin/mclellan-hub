@@ -30,6 +30,7 @@ hub.exec(`
     slug TEXT NOT NULL,
     is_cv_context INTEGER DEFAULT 0,
     context_depth INTEGER DEFAULT 20,
+    project_kind TEXT DEFAULT 'workspace',
     created_at INTEGER DEFAULT (unixepoch()),
     UNIQUE(user, slug)
   );

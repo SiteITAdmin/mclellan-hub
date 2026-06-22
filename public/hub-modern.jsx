@@ -114,14 +114,14 @@ const Icon = ({ name, size = 18 }) => (
   </svg>
 );
 
-// ── New Project Modal ──────────────────────────────────────────────────────
+// ── New Workspace Modal ────────────────────────────────────────────────────
 function NewProjectModal({ onClose }) {
   const [name, setName] = React.useState('');
   const [status, setStatus] = React.useState('');
   const [busy, setBusy] = React.useState(false);
 
   const submit = async () => {
-    if (!name.trim()) { setStatus('Enter a project name.'); return; }
+    if (!name.trim()) { setStatus('Enter a workspace name.'); return; }
     setBusy(true);
     setStatus('Creating…');
     try {
@@ -142,7 +142,7 @@ function NewProjectModal({ onClose }) {
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 16, padding: 24, width: 360, maxWidth: '90vw' }}>
-        <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 600 }}>New project</h3>
+        <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 600 }}>New chat workspace</h3>
         <p style={{ color: 'var(--text-3)', fontSize: 13, margin: '0 0 16px' }}>Give it a name — slug is generated automatically.</p>
         <input
           autoFocus
@@ -281,7 +281,7 @@ function ProjectDocs({ slug }) {
   return (
     <div className="sb-docs">
       <div className="sb-section-head">
-        <span>Project docs</span>
+        <span>Workspace docs</span>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <button
             title={toWiki ? 'Also adding to wiki — click to toggle off' : 'Click to also add to wiki on upload'}
@@ -401,9 +401,9 @@ function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
           {expanded && projects.length > 0 && (
             <>
               <div className="sb-section-head sb-section-toggle" onClick={() => setProjectsOpen(o => !o)} style={{ cursor: 'pointer' }}>
-                <span>Projects</span>
+                <span>Chat workspaces</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button title="New project" onClick={e => { e.stopPropagation(); setShowNewProj(true); }}><Icon name="plus" size={14} /></button>
+                  <button title="New chat workspace" onClick={e => { e.stopPropagation(); setShowNewProj(true); }}><Icon name="plus" size={14} /></button>
                   <span style={{ display: 'inline-flex', transition: 'transform 0.15s', transform: projectsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}><Icon name="chevron" size={14} /></span>
                 </div>
               </div>
@@ -718,7 +718,7 @@ function SaveToProject({ msgId }) {
   return (
     <div className="save-proj-wrap" ref={ref}>
       <button className="save-proj-btn" onClick={() => setOpen(o => !o)} disabled={saving}>
-        {saving ? '…' : '+ project'}
+        {saving ? '…' : '+ workspace'}
       </button>
       {open && (
         <div className="save-proj-pop">
@@ -1114,7 +1114,7 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
     if (!files.length) return;
     const label = files.length === 1 ? files[0].name : `${files.length} files`;
 
-    // Project context: backend project path is single-file, so loop one at a time.
+    // Workspace context: backend scoped-chat path is single-file, so loop one at a time.
     if (window.PROJECT_SLUG) {
       for (const file of files) {
         setUploadStatus(`Uploading ${file.name}…`);

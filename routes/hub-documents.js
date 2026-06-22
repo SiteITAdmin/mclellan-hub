@@ -276,8 +276,8 @@ router.post('/api/projects', requireAuth, requireSameOrigin, writeLimiter, (req,
   try {
     const id = Buffer.from(require('crypto').randomBytes(8)).toString('hex');
     hub.prepare(
-      'INSERT INTO projects (id, user, name, slug, context_depth) VALUES (?, ?, ?, ?, ?)'
-    ).run(id, req.hubUser, name.trim(), finalSlug, contextDepth || 20);
+      'INSERT INTO projects (id, user, name, slug, context_depth, project_kind) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(id, req.hubUser, name.trim(), finalSlug, contextDepth || 20, 'workspace');
     res.json({ ok: true, project: { id, name: name.trim(), slug: finalSlug } });
   } catch (err) {
     res.status(400).json({ error: 'Slug already exists' });
