@@ -1221,11 +1221,11 @@
   },
   {
     "date": "2026-06-21",
-    "codex_tokens": 10271436,
-    "claude_code_tokens": 0,
-    "claude_code_calls": 0,
-    "antigravity_tokens": 31538,
-    "antigravity_events": 1,
+    "codex_tokens": 23288986,
+    "claude_code_tokens": 36780173,
+    "claude_code_calls": 336,
+    "antigravity_tokens": 239925,
+    "antigravity_events": 2,
     "antigravity_estimated": false,
     "api_tokens": 0,
     "chatgpt_conversations": 0,
@@ -1236,7 +1236,7 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "shipping",
-    "evidence": "Codex session token counters; Antigravity status line telemetry"
+    "driver": "Hub Development",
+    "evidence": "Codex session token counters; Claude Code message usage; Antigravity status line telemetry"
   }
 ]
