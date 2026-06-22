@@ -1,0 +1,171 @@
+<%- include('partials/crm-head', { title: 'Project Report', active: 'project-report' }) %>
+
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Projects</p>
+    <h1>Project Report</h1>
+    <p>Current synthesis across meetings, tasks, documents, emails, and derived knowledge.</p>
+  </div>
+</section>
+
+<section class="section-card" style="margin-bottom:18px;">
+  <form class="crm-form-grid" method="GET" action="/crm/project-report">
+    <label>Project
+      <select name="project" required>
+        <option value="">Choose a project...</option>
+        <% if ((crmProjects || []).length) { %>
+          <optgroup label="CRM projects">
+            <% for (const p of crmProjects) { %>
+              <option value="<%= p.slug %>" <%= selectedSlug === p.slug ? 'selected' : '' %>><%= p.name %></option>
+            <% } %>
+          </optgroup>
+        <% } %>
+        <% if ((workspaceProjects || []).length) { %>
+          <optgroup label="Chat workspaces">
+            <% for (const p of workspaceProjects) { %>
+              <option value="<%= p.slug %>" <%= selectedSlug === p.slug ? 'selected' : '' %>><%= p.name %> (workspace)</option>
+            <% } %>
+          </optgroup>
+        <% } %>
+      </select>
+    </label>
+    <label>Window
+      <select name="days">
+        <% [30, 60, 90, 180, 365].forEach(function(n){ %>
+          <option value="<%= n %>" <%= days === n ? 'selected' : '' %>><%= n %> days</option>
+        <% }); %>
+      </select>
+    </label>
+    <button class="btn" type="submit">Generate report</button>
+  </form>
+  <% if (error && !report) { %>
+    <p class="crm-muted" style="color:var(--crm-danger,#c0392b);margin-top:10px;"><%= error %></p>
+  <% } %>
+</section>
+
+<% if (!project) { %>
+  <section class="section-card">
+    <p class="crm-muted" style="margin:0;"><%= projects.length ? 'Pick a CRM project or chat workspace to generate a report. Workspaces are labelled separately because they are not CRM projects yet.' : 'No projects or chat workspaces are available for reporting yet.' %></p>
+  </section>
+<% } %>
+
+<% if (project && evidence) { %>
+  <section class="section-card" style="margin-bottom:18px;">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+      <div>
+        <p class="crm-eyebrow" style="margin-bottom:4px;">/<%= project.slug %></p>
+        <h2 style="margin:0;"><%= project.name %></h2>
+        <% if (project.project_kind !== 'crm' && !(crmProjects || []).some(p => p.slug === project.slug)) { %>
+          <p class="crm-muted" style="font-size:12px;margin:6px 0 0;">This is a chat workspace. The report may be thin until tasks, meetings, emails, or knowledge are linked to it.</p>
+        <% } %>
+        <% if (model) { %><p class="crm-muted" style="font-size:12px;margin:6px 0 0;">Generated with <%= model %><%= fallback ? ' — AI unavailable, showing evidence summary' : '' %></p><% } %>
+        <% if (error && report) { %><p class="crm-muted" style="font-size:12px;color:var(--crm-danger,#c0392b);margin:6px 0 0;"><%= error %></p><% } %>
+      </div>
+      <div class="crm-badges">
+        <span class="crm-badge subtle"><%= evidence.meetings.length %> meetings</span>
+        <span class="crm-badge subtle"><%= evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at).length %> open tasks</span>
+        <span class="crm-badge subtle"><%= evidence.tasks.filter(t => t.status === 'completed' && !t.deleted_at).length %> completed</span>
+        <span class="crm-badge subtle"><%= evidence.atoms.length %> knowledge claims</span>
+      </div>
+    </div>
+  </section>
+<% } %>
+
+<% if (report) { %>
+  <%/* ── Narrative — the main story ──────────────────────────────────── */%>
+  <section class="section-card" style="margin-bottom:18px;">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap;margin-bottom:16px;">
+      <h2 style="margin:0;"><%= report.headline || project.name %></h2>
+      <span class="crm-badge"><%= report.status || 'unclear' %></span>
+    </div>
+    <% if (report.narrative) { %>
+      <div style="font-size:15px;line-height:1.75;color:var(--crm-text,inherit);">
+        <% report.narrative.split(/\n\n+/).filter(p => p.trim()).forEach(function(para) { %>
+          <p style="margin:0 0 1em;"><%= para.trim() %></p>
+        <% }); %>
+      </div>
+    <% } else if (report.summary) { %>
+      <p style="font-size:15px;line-height:1.75;margin:0;"><%= report.summary %></p>
+    <% } %>
+  </section>
+
+  <%/* ── Next actions — surfaced prominently ─────────────────────────── */%>
+  <% const actions = report.next_actions || []; %>
+  <% if (actions.length) { %>
+  <section class="section-card" style="margin-bottom:18px;">
+    <h2 style="margin-bottom:12px;">Next actions</h2>
+    <% for (const item of actions) { %>
+      <div class="crm-action" style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--crm-border,#eee);">
+        <span style="color:var(--crm-accent,#0070c9);font-size:14px;margin-top:2px;">→</span>
+        <span style="font-size:14px;line-height:1.5;"><%= item %></span>
+      </div>
+    <% } %>
+  </section>
+  <% } %>
+
+  <%/* ── Supporting detail grid ───────────────────────────────────────── */%>
+  <div class="crm-two-col">
+    <div class="crm-stack">
+      <section class="section-card">
+        <h2>Tasks</h2>
+        <% const tasks = report.tasks || []; %>
+        <% if (!tasks.length) { %><p class="crm-muted">No task signal in the report.</p><% } %>
+        <% for (const item of tasks) { %><div class="crm-action" style="padding:6px 0;border-bottom:1px solid var(--crm-border,#eee);"><span style="font-size:13px;"><%= item %></span></div><% } %>
+      </section>
+
+      <section class="section-card">
+        <h2>Meetings</h2>
+        <% const meetings = report.meetings || []; %>
+        <% if (!meetings.length) { %><p class="crm-muted">No meeting signal in the report.</p><% } %>
+        <% for (const item of meetings) { %><div class="crm-action" style="padding:6px 0;border-bottom:1px solid var(--crm-border,#eee);"><span style="font-size:13px;"><%= item %></span></div><% } %>
+      </section>
+    </div>
+
+    <div class="crm-stack">
+      <section class="section-card">
+        <h2>Timeline</h2>
+        <% const timeline = report.timeline || []; %>
+        <% if (!timeline.length) { %><p class="crm-muted">No timeline signal in the report.</p><% } %>
+        <% for (const item of timeline) { %><div class="crm-action" style="padding:6px 0;border-bottom:1px solid var(--crm-border,#eee);"><span style="font-size:13px;"><%= item %></span></div><% } %>
+      </section>
+
+      <section class="section-card">
+        <h2>Risks & gaps</h2>
+        <% const risks = report.risks || []; %>
+        <% if (!risks.length) { %><p class="crm-muted">No specific risks identified.</p><% } %>
+        <% for (const item of risks) { %><div class="crm-action" style="padding:6px 0;border-bottom:1px solid var(--crm-border,#eee);"><span style="font-size:13px;"><%= item %></span></div><% } %>
+      </section>
+    </div>
+  </div>
+<% } %>
+
+<% if (evidence) { %>
+  <section class="section-card" style="margin-top:18px;">
+    <h2>Evidence read</h2>
+    <div class="crm-card-grid">
+      <div class="mgmt-card">
+        <div class="crm-card-title">Recent meetings</div>
+        <% for (const m of evidence.meetings.slice(0, 5)) { %>
+          <p class="crm-muted" style="margin:8px 0 0;font-size:12px;"><%= m.meeting_date %> · <%= m.title %></p>
+        <% } %>
+        <% if (!evidence.meetings.length) { %><p class="crm-muted">None found.</p><% } %>
+      </div>
+      <div class="mgmt-card">
+        <div class="crm-card-title">Open tasks</div>
+        <% for (const t of evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at).slice(0, 5)) { %>
+          <p class="crm-muted" style="margin:8px 0 0;font-size:12px;"><%= t.title %><%= t.due ? ' · due ' + t.due : '' %></p>
+        <% } %>
+        <% if (!evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at).length) { %><p class="crm-muted">None found.</p><% } %>
+      </div>
+      <div class="mgmt-card">
+        <div class="crm-card-title">Knowledge claims (<%= evidence.atoms.length %>)</div>
+        <% for (const a of evidence.atoms.filter(a => a.status === 'active').slice(0, 5)) { %>
+          <p class="crm-muted" style="margin:8px 0 0;font-size:12px;"><%= a.predicate.replace(/_/g, ' ') %>: <%= a.value %></p>
+        <% } %>
+        <% if (!evidence.atoms.length) { %><p class="crm-muted">None found — run a synthesis job to build knowledge for this project.</p><% } %>
+      </div>
+    </div>
+  </section>
+<% } %>
+
+<%- include('partials/crm-foot') %>
