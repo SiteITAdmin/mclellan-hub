@@ -1109,12 +1109,40 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  const handleFile = async (file) => {
-    if (!file) return;
-    setUploadStatus(`Uploading ${file.name}…`);
+  const handleFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const label = files.length === 1 ? files[0].name : `${files.length} files`;
+
+    // Project context: backend project path is single-file, so loop one at a time.
+    if (window.PROJECT_SLUG) {
+      for (const file of files) {
+        setUploadStatus(`Uploading ${file.name}…`);
+        const fd = new FormData();
+        fd.append('files', file);
+        fd.append('projectSlug', window.PROJECT_SLUG);
+        if (window.CONV_ID) fd.append('convId', window.CONV_ID);
+        fd.append('model', model?.key || '');
+        fd.append('autoAnalyse', '0');
+        try {
+          const res = await fetch('/api/upload', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (!res.ok) { setUploadStatus('✖ ' + (data.error || 'Upload failed')); return; }
+        } catch (err) {
+          setUploadStatus('✖ ' + err.message);
+          return;
+        }
+      }
+      setUploadStatus(`✓ ${label} attached`);
+      setTimeout(() => setUploadStatus(''), 3000);
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+
+    // Chat context: send all files in one request; backend applies context budget.
+    setUploadStatus(`Uploading ${label}…`);
     const fd = new FormData();
-    fd.append('file', file);
-    if (window.PROJECT_SLUG) fd.append('projectSlug', window.PROJECT_SLUG);
+    for (const file of files) fd.append('files', file);
     if (window.CONV_ID) fd.append('convId', window.CONV_ID);
     fd.append('model', model?.key || '');
     fd.append('autoAnalyse', '0');
@@ -1126,7 +1154,7 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
         window.CONV_ID = data.convId;
         history.replaceState(null, '', `/c/${data.convId}`);
       }
-      setUploadStatus(`✓ ${file.name} attached`);
+      setUploadStatus(`✓ ${label} attached`);
       setTimeout(() => setUploadStatus(''), 3000);
     } catch (err) {
       setUploadStatus('✖ ' + err.message);
@@ -1204,9 +1232,10 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
           <input
             ref={fileRef}
             type="file"
+            multiple
             accept=".docx,.pdf,.txt,.md,.csv"
             style={{ display: 'none' }}
-            onChange={e => handleFile(e.target.files?.[0])}
+            onChange={e => handleFiles(e.target.files)}
           />
 
           <button
