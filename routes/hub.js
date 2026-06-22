@@ -31,6 +31,7 @@ const newsletterRouter = require('./hub-newsletter');
 router.use('/newsletter', requireAuth, newsletterRouter);
 
 const MAX_CHAT_MESSAGE_CHARS = 100000;
+const MAX_DOC_CONTEXT_CHARS = 100_000;
 
 function buildHubMsg(researchMode = false) {
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -837,29 +838,31 @@ router.post('/api/export', requireAuth, requireSameOrigin, writeLimiter, async (
 // - In a project: store as a document with YAML frontmatter. Documents are
 //   injected as system context on every subsequent /slug query.
 router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, res, next) => {
-  upload.single('file')(req, res, err => {
+  upload.array('files', 5)(req, res, err => {
     if (err) return res.status(413).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File too large (max 10 MB)' : err.message });
     next();
   });
 }, async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file' });
+  if (!req.files?.length) return res.status(400).json({ error: 'No files' });
 
   const { projectSlug, convId: existingConvId, model, autoAnalyse, analysisPrompt, toWiki } = req.body;
   const hub = db.hub();
 
   const { IMAGE_EXTS } = require('../lib/extract');
-  const fileExt = require('path').extname(req.file.originalname || '').toLowerCase();
-  const isImage = IMAGE_EXTS.includes(fileExt);
 
-  let extracted;
-  try {
-    extracted = await fileToMarkdown(req.file.originalname, req.file.buffer);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  // Project upload: store and return — do not post as chat message.
+  // Project upload: single file, existing behaviour.
   if (projectSlug) {
+    const file = req.files[0];
+    const fileExt = require('path').extname(file.originalname || '').toLowerCase();
+    const isImage = IMAGE_EXTS.includes(fileExt);
+
+    let extracted;
+    try {
+      extracted = await fileToMarkdown(file.originalname, file.buffer);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
     const project = hub.prepare(
       'SELECT * FROM projects WHERE user = ? AND slug = ?'
     ).get(req.hubUser, projectSlug);
@@ -869,35 +872,33 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
     const ingestion = await buildIngestionPackage({
       id: docId,
       user: req.hubUser,
-      filename: req.file.originalname,
-      mimetype: req.file.mimetype,
-      sizeBytes: req.file.size,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      sizeBytes: file.size,
       markdown: extracted.markdown,
       project,
     });
 
     const md = withProjectFrontmatter({
       project,
-      filename: req.file.originalname,
+      filename: file.originalname,
       markdown: ingestion.markdown,
     });
     hub.prepare(`
       INSERT INTO documents (id, user, project_id, filename, mimetype, size_bytes, markdown, ingestion_package_path)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(docId, req.hubUser, project.id, req.file.originalname, req.file.mimetype, req.file.size, md, ingestion.indexPath);
+    `).run(docId, req.hubUser, project.id, file.originalname, file.mimetype, file.size, md, ingestion.indexPath);
 
-    // Mirror to vault Projects/{slug}/raw_sources/ and queue for synthadoc
     try {
       const fs = require('fs');
       const vaultBase = vaultRoot();
       const rawDir = require('path').join(vaultBase, 'Projects', project.slug, 'raw_sources');
       fs.mkdirSync(rawDir, { recursive: true });
-      const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
       if (isImage) {
-        // Store the raw image file alongside the MD stub
-        fs.writeFileSync(require('path').join(rawDir, safeName), req.file.buffer);
+        fs.writeFileSync(require('path').join(rawDir, safeName), file.buffer);
       }
-      const vaultFile = require('path').join(rawDir, safeName + (isImage ? '.md' : '.md'));
+      const vaultFile = require('path').join(rawDir, safeName + '.md');
       fs.writeFileSync(vaultFile, md, 'utf8');
       const queueDir = require('path').join(vaultBase, 'raw_sources', 'ingest-queue');
       fs.mkdirSync(queueDir, { recursive: true });
@@ -906,16 +907,15 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
       console.warn('[upload] vault mirror failed:', vaultErr.message);
     }
 
-    // Optionally also send to wiki
     let wiki = null;
     if (toWiki === '1' || toWiki === true) {
       try {
         const { documentToWiki, imageToWiki, writeWikiPage } = require('../lib/wiki-engine');
         let generated;
         if (isImage) {
-          generated = await imageToWiki({ filename: req.file.originalname, buffer: req.file.buffer, mimetype: req.file.mimetype, projectName: project.name });
+          generated = await imageToWiki({ filename: file.originalname, buffer: file.buffer, mimetype: file.mimetype, projectName: project.name });
         } else {
-          generated = await documentToWiki({ filename: req.file.originalname, markdown: extracted.markdown, projectName: project.name });
+          generated = await documentToWiki({ filename: file.originalname, markdown: extracted.markdown, projectName: project.name });
         }
         const { slug, title } = writeWikiPage(generated);
         wiki = { slug, title, url: `https://wiki.mclellan.scot/page/${slug}` };
@@ -925,7 +925,6 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
       }
     }
 
-    // Schedule immediate task extraction and contact linking for this document
     if (!isImage) {
       const { scheduleJob } = require('../lib/job-queue');
       scheduleJob('mycelium_doc', { user: req.hubUser }, null, 'doc-upload');
@@ -935,8 +934,8 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
       ok: true,
       document: {
         id: docId,
-        filename: req.file.originalname,
-        size: req.file.size,
+        filename: file.originalname,
+        size: file.size,
         project: project.slug,
         ingestionPackage: ingestion.indexPath,
       },
@@ -944,16 +943,52 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
     });
   }
 
-  // Chat upload: auto-send as a user message with the extracted markdown.
-  const header = `📎 **${req.file.originalname}**`;
-  const messageContent = `${header}\n\n${extracted.markdown}`;
+  // Chat upload: extract all files, apply context budget, save as one combined message.
+  const extractions = [];
+  for (const file of req.files) {
+    const ext = require('path').extname(file.originalname || '').toLowerCase();
+    if (IMAGE_EXTS.includes(ext)) {
+      extractions.push({ file, markdown: `(image: ${file.originalname})` });
+      continue;
+    }
+    try {
+      const result = await fileToMarkdown(file.originalname, file.buffer);
+      extractions.push({ file, markdown: result.markdown || '' });
+    } catch (err) {
+      return res.status(400).json({ error: `${file.originalname}: ${err.message}` });
+    }
+  }
+
+  // Proportional truncation: if total chars across all files exceeds budget, trim each equally.
+  const totalChars = extractions.reduce((sum, e) => sum + e.markdown.length, 0);
+  const perDocBudget = totalChars > MAX_DOC_CONTEXT_CHARS
+    ? Math.floor(MAX_DOC_CONTEXT_CHARS / extractions.length)
+    : Infinity;
+
+  const parts = extractions.map(({ file, markdown }) => {
+    let md = markdown;
+    let note = '';
+    if (md.length > perDocBudget) {
+      const orig = md.length;
+      md = md.slice(0, perDocBudget);
+      // Trim to last paragraph or sentence break to avoid mid-word cuts
+      const br = Math.max(md.lastIndexOf('\n\n'), md.lastIndexOf('. '));
+      if (br > perDocBudget * 0.7) md = md.slice(0, br + 1);
+      note = ` _(showing ${md.length.toLocaleString()} of ${orig.toLocaleString()} chars — document too large for full context)_`;
+    }
+    return `📎 **${file.originalname}**${note}\n\n${md.trim()}`;
+  });
+
+  const messageContent = extractions.length === 1
+    ? parts[0]
+    : parts.join('\n\n---\n\n');
 
   let convId = existingConvId;
   if (!convId) {
     convId = uuid();
     hub.prepare(
       'INSERT INTO conversations (id, user, title) VALUES (?, ?, ?)'
-    ).run(convId, req.hubUser, req.file.originalname.slice(0, 60));
+    ).run(convId, req.hubUser, (req.files.length === 1 ? req.files[0].originalname : `${req.files.length} documents`).slice(0, 60));
   }
 
   const userMsgId = uuid();
@@ -975,7 +1010,10 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const prompt = analysisPrompt?.trim() || 'Please read and analyse the document I just attached. Summarise what it contains and flag anything notable.';
+  const defaultPrompt = req.files.length === 1
+    ? 'Please read and analyse the document I just attached. Summarise what it contains and flag anything notable.'
+    : `Please read and analyse the ${req.files.length} documents I just attached. Summarise each and flag anything notable.`;
+  const prompt = analysisPrompt?.trim() || defaultPrompt;
 
   // Send the user-message content back first so the UI can render it
   res.write(`data: ${JSON.stringify({ userMessage: messageContent, userMsgId })}\n\n`);

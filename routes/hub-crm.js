@@ -275,6 +275,25 @@ router.get('/crm/source/:kind/:id', requireAuth, (req, res) => {
     if (!m) return res.status(404).send('Source not found');
     title = m.title || 'Meeting';
     body = (m.summary ? m.summary + '\n\n' : '') + (m.transcript || '');
+  } else if (kind === 'completed_task') {
+    const t = hub.prepare(`
+      SELECT t.*, c.name AS contact_name, co.name AS company_name, p.name AS project_name
+        FROM google_tasks t
+        LEFT JOIN contacts c ON c.id = t.contact_id
+        LEFT JOIN companies co ON co.id = t.company_id
+        LEFT JOIN projects p ON p.user = t.user AND p.slug = t.project_slug
+       WHERE t.id = ? AND t.user = ?
+    `).get(id, req.hubUser);
+    if (!t) return res.status(404).send('Source not found');
+    title = t.title || 'Completed task';
+    meta = [
+      t.completed_at ? `Completed ${new Date(t.completed_at * 1000).toLocaleString('en-GB', { timeZone: 'Europe/Dublin' })}` : null,
+      t.source ? `source: ${t.source}` : null,
+      t.contact_name ? `person: ${t.contact_name}` : null,
+      t.company_name ? `company: ${t.company_name}` : null,
+      t.project_name ? `project: ${t.project_name}` : null,
+    ].filter(Boolean).join(' · ');
+    body = t.notes || '';
   } else {
     return res.status(404).send('Unknown source kind');
   }
@@ -1341,7 +1360,11 @@ router.post('/api/tasks/:id/complete', requireAuth, requireSameOrigin, writeLimi
   } catch (err) {
     console.error('[tasks] complete error', err);
     // Fall back to local-only complete if Google API fails
-    hub.prepare("UPDATE google_tasks SET status = 'completed' WHERE id = ?").run(row.id);
+    hub.prepare(`
+      UPDATE google_tasks
+         SET status = 'completed', completed_at = COALESCE(completed_at, unixepoch())
+       WHERE id = ?
+    `).run(row.id);
     res.json({ ok: true, localOnly: true });
   }
 });
@@ -1626,20 +1649,36 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
   // Knowledge layer (L2): claims compiled about this project.
   const { atomsForEntity: atomsForProject } = require('../lib/atoms');
   const knowledgeByPredicate = {};
+  const projectKnowledgeEvents = [];
   for (const a of atomsForProject(req.hubUser, 'project', project.id, { includeProposed: true })) {
     let refs = [];
     try { refs = JSON.parse(a.source_refs || '[]'); } catch { refs = []; }
+    const sources = refs.filter(r => r && r.kind && r.id);
     (knowledgeByPredicate[a.predicate] ||= []).push({
       value: a.value, confidence: a.confidence, status: a.status,
-      sources: refs.filter(r => r && r.kind && r.id),
+      sources,
     });
+    if (a.status === 'active' && ['milestone', 'completed_action', 'commitment_fulfilled', 'document_sent', 'document_received', 'booking_made', 'payment_made', 'cancellation_completed', 'review_completed', 'care_action_completed', 'interaction_completed', 'decision'].includes(a.predicate)) {
+      const taskRef = sources.find(s => s.kind === 'completed_task');
+      if (taskRef) {
+        const task = hub.prepare('SELECT title, completed_at, created_at FROM google_tasks WHERE id = ? AND user = ?').get(taskRef.id, req.hubUser);
+        projectKnowledgeEvents.push({
+          _kind: 'knowledge_event',
+          ts: task?.completed_at || task?.created_at || a.updated_at || a.first_seen,
+          predicate: a.predicate,
+          value: a.value,
+          confidence: a.confidence,
+          sources,
+        });
+      }
+    }
   }
 
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),
     project, tasks, contacts, directContactIds: [...directContactIds],
     availableContacts, linkedCompanies, linkedCompanyIds: [...linkedCompanyIds],
-    availableCompanies, recentEmails, projectFacts, recentMessages, showHistory, todayIsoStr,
+    availableCompanies, recentEmails, projectFacts, projectKnowledgeEvents, recentMessages, showHistory, todayIsoStr,
     projectDocs, knowledgeByPredicate,
   });
 });
