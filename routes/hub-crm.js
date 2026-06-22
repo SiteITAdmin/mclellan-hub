@@ -24,6 +24,8 @@ const {
 } = require('../lib/google-tasks');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
+const { PROMPTS } = require('../lib/prompts');
+const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 
 
 function todayIso() {
@@ -196,8 +198,42 @@ function crmPageData(user) {
       { href: '/crm/tasks', label: 'Tasks' },
       { href: '/crm/reminders', label: 'Reminders' },
       { href: '/crm/projects', label: 'Projects' },
+      { href: '/crm/project-report', label: 'Project Report' },
     ],
   };
+}
+
+function crmProjectsForUser(user) {
+  return db.hub().prepare(`
+    SELECT p.*
+      FROM projects p
+     WHERE p.user = ?
+       AND (
+         p.project_kind = 'crm'
+         OR
+         EXISTS (SELECT 1 FROM contact_projects cp WHERE cp.project_id = p.id)
+         OR EXISTS (SELECT 1 FROM company_projects cop WHERE cop.project_id = p.id)
+         OR EXISTS (SELECT 1 FROM google_tasks t WHERE t.user = p.user AND t.project_slug = p.slug)
+         OR EXISTS (SELECT 1 FROM email_summaries e WHERE e.user = p.user AND e.project_slug = p.slug)
+         OR EXISTS (SELECT 1 FROM meeting_intakes mi WHERE mi.user = p.user AND mi.project_slug = p.slug)
+         OR EXISTS (
+           SELECT 1 FROM knowledge_atoms a
+            WHERE a.user = p.user AND a.subject_kind = 'project' AND a.subject_id = p.id
+         )
+       )
+     ORDER BY p.name
+  `).all(user);
+}
+
+function reportableWorkspacesForUser(user, crmProjects = crmProjectsForUser(user)) {
+  const crmIds = new Set(crmProjects.map(p => p.id));
+  return db.hub().prepare(`
+    SELECT p.*
+      FROM projects p
+     WHERE p.user = ?
+       AND COALESCE(p.project_kind, 'workspace') != 'crm'
+     ORDER BY p.name
+  `).all(user).filter(p => !crmIds.has(p.id));
 }
 
 function safeBack(req, fallback) {
@@ -1521,6 +1557,217 @@ router.post('/api/reminders/:id/:action(done|snooze|cancel|ack)', requireAuth, r
   res.json(result);
 });
 
+// ── Project Report ───────────────────────────────────────────────────────────
+
+function parseModelJson(raw, defaults) {
+  const text = String(raw || '').trim();
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return defaults;
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    return { ...defaults, ...parsed };
+  } catch (_) {
+    return defaults;
+  }
+}
+
+function sourceLabel(kind) {
+  return ({
+    document: 'doc',
+    email_summary: 'email',
+    meeting_intake: 'meeting',
+    crm_fact: 'fact',
+    completed_task: 'task',
+  })[kind] || kind;
+}
+
+function atomRowsForProject(user, projectId) {
+  const { atomsForEntity } = require('../lib/atoms');
+  return atomsForEntity(user, 'project', projectId, { includeProposed: true }).map(a => {
+    let refs = [];
+    try { refs = JSON.parse(a.source_refs || '[]'); } catch (_) { refs = []; }
+    return {
+      predicate: a.predicate,
+      value: a.value,
+      confidence: a.confidence,
+      status: a.status,
+      sources: refs.filter(r => r && r.kind && r.id).map(r => ({ ...r, label: sourceLabel(r.kind) })),
+    };
+  });
+}
+
+function buildProjectReportEvidence(user, project, { days = 90 } = {}) {
+  const hub = db.hub();
+  const since = new Date(Date.now() - days * 86400 * 1000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+  const tasks = getCachedTasks(user, { projectSlug: project.slug }, true).slice(0, 60);
+
+  const meetings = hub.prepare(`
+    SELECT DISTINCT m.id, m.title, m.meeting_date, m.meeting_time, m.notes, co.name AS company_name,
+           mi.summary AS intake_summary, mi.project_slug AS intake_project_slug
+      FROM meetings m
+      LEFT JOIN companies co ON co.id = m.company_id
+      LEFT JOIN meeting_intakes mi ON mi.meeting_id = m.id AND mi.user = m.user
+      LEFT JOIN meeting_attendees ma ON ma.meeting_id = m.id
+      LEFT JOIN contact_projects cp ON cp.contact_id = ma.contact_id AND cp.project_id = ?
+      LEFT JOIN company_projects cop ON cop.company_id = m.company_id AND cop.project_id = ?
+     WHERE m.user = ?
+       AND m.meeting_date >= ?
+       AND (mi.project_slug = ? OR cp.project_id IS NOT NULL OR cop.project_id IS NOT NULL)
+     ORDER BY m.meeting_date DESC, COALESCE(m.meeting_time,'') DESC
+     LIMIT 20
+  `).all(project.id, project.id, user, since, project.slug);
+
+  const emails = hub.prepare(`
+    SELECT subject, from_name, from_email, summary, received_at
+      FROM email_summaries
+     WHERE user = ? AND project_slug = ?
+     ORDER BY received_at DESC
+     LIMIT 12
+  `).all(user, project.slug);
+
+  const docs = hub.prepare(`
+    SELECT filename, uploaded_at
+      FROM documents
+     WHERE user = ? AND project_id = ?
+     ORDER BY uploaded_at DESC
+     LIMIT 12
+  `).all(user, project.id);
+
+  const atoms = atomRowsForProject(user, project.id).slice(0, 40);
+
+  return { project, days, since, tasks, meetings, emails, docs, atoms };
+}
+
+function evidenceText(evidence) {
+  const fmtTs = ts => ts ? new Date(ts * 1000).toLocaleDateString('en-GB', { timeZone: 'Europe/Dublin', day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const taskLines = evidence.tasks.map(t => {
+    const state = t.deleted_at ? 'deleted' : t.status === 'completed' ? 'completed' : 'open';
+    const due = t.due ? ` due ${t.due}` : '';
+    const done = t.completed_at ? ` completed ${fmtTs(t.completed_at)}` : '';
+    return `- [${state}] ${t.title}${due}${done}${t.notes ? ` — ${String(t.notes).slice(0, 180)}` : ''}`;
+  }).join('\n') || '- none';
+  const meetingLines = evidence.meetings.map(m =>
+    `- ${m.meeting_date}${m.meeting_time ? ` ${m.meeting_time}` : ''}: ${m.title}${m.company_name ? ` (${m.company_name})` : ''}${m.intake_summary || m.notes ? ` — ${String(m.intake_summary || m.notes).slice(0, 220)}` : ''}`
+  ).join('\n') || '- none';
+  const emailLines = evidence.emails.map(e =>
+    `- ${fmtTs(e.received_at)}: ${e.subject} from ${e.from_name || e.from_email || 'unknown'}${e.summary ? ` — ${String(e.summary).slice(0, 220)}` : ''}`
+  ).join('\n') || '- none';
+  const atomLines = evidence.atoms.map(a =>
+    `- ${a.predicate}: ${a.value} (${a.status}, ${Math.round(a.confidence * 100)}%, sources: ${a.sources.map(s => s.label).join(', ') || 'none'})`
+  ).join('\n') || '- none';
+  const docLines = evidence.docs.map(d => `- ${fmtTs(d.uploaded_at)}: ${d.filename}`).join('\n') || '- none';
+
+  return [
+    `Project: ${evidence.project.name} /${evidence.project.slug}`,
+    `Evidence window: last ${evidence.days} days, since ${evidence.since}`,
+    '',
+    'TASKS',
+    taskLines,
+    '',
+    'MEETINGS',
+    meetingLines,
+    '',
+    'EMAILS',
+    emailLines,
+    '',
+    'DOCUMENTS',
+    docLines,
+    '',
+    'DERIVED KNOWLEDGE',
+    atomLines,
+  ].join('\n');
+}
+
+function fallbackProjectReport(evidence, error = null) {
+  const open = evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at);
+  const completed = evidence.tasks.filter(t => t.status === 'completed' && !t.deleted_at);
+  const activeAtoms = evidence.atoms.filter(a => a.status === 'active');
+  const narrativeParts = [];
+  if (completed.length)
+    narrativeParts.push(`${completed.length} task(s) have been completed, including: ${completed.slice(0, 3).map(t => t.title).join('; ')}.`);
+  if (evidence.meetings.length)
+    narrativeParts.push(`There ${evidence.meetings.length === 1 ? 'was' : 'were'} ${evidence.meetings.length} relevant meeting(s) in the evidence window, most recently ${evidence.meetings[0].meeting_date}: ${evidence.meetings[0].title}.`);
+  if (activeAtoms.length)
+    narrativeParts.push(`The knowledge layer has ${activeAtoms.length} active claim(s) about this project, including: ${activeAtoms.slice(0, 2).map(a => `${a.predicate.replace(/_/g, ' ')}: ${a.value}`).join('; ')}.`);
+  if (open.length)
+    narrativeParts.push(`Currently open: ${open.slice(0, 4).map(t => `${t.title}${t.due ? ` (due ${t.due})` : ''}`).join('; ')}.`);
+  if (error)
+    narrativeParts.push(`AI synthesis was unavailable: ${error}`);
+  return {
+    headline: `${evidence.project.name}: evidence summary`,
+    status: evidence.meetings.length || open.length || completed.length ? 'active' : 'unclear',
+    narrative: narrativeParts.join('\n\n') || 'No project activity was found in the selected evidence window.',
+    summary: `${evidence.meetings.length} meeting(s), ${open.length} open task(s), ${completed.length} completed, ${evidence.emails.length} email(s), ${evidence.atoms.length} knowledge claim(s).`,
+    meetings: evidence.meetings.slice(0, 6).map(m => `${m.meeting_date}: ${m.title}`),
+    tasks: [
+      ...open.slice(0, 6).map(t => `Open: ${t.title}${t.due ? ` due ${t.due}` : ''}`),
+      ...completed.slice(0, 4).map(t => `Completed: ${t.title}`),
+    ],
+    timeline: activeAtoms.slice(0, 8).map(a => `${a.predicate.replace(/_/g, ' ')}: ${a.value}`),
+    risks: evidence.meetings.length || evidence.tasks.length ? [] : ['No recent project meetings or tasks were found in the selected evidence window.'],
+    next_actions: open.slice(0, 5).map(t => t.title),
+  };
+}
+
+async function generateProjectReport(user, evidence) {
+  const defaults = fallbackProjectReport(evidence);
+  if (!process.env.OPENROUTER_API_KEY) return { report: defaults, model: null, fallback: true, error: 'OPENROUTER_API_KEY is not set' };
+  const modelId = getSystemModelId('project_report', 'system', 'anthropic/claude-haiku-4-5');
+  const started = Date.now();
+  const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: openRouterHeaders(TASK_CODES.CRM),
+    body: JSON.stringify({
+      model: modelId,
+      messages: [
+        { role: 'system', content: getSystemPrompt('project_report', 'system', PROMPTS.project_report) },
+        { role: 'user', content: evidenceText(evidence).slice(0, 16000) },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+    }),
+  });
+  if (!resp.ok) throw new Error(`OpenRouter ${resp.status}`);
+  const data = await resp.json();
+  logUsageFromResponse({
+    user, feature: 'project-report', modelKey: 'project_report', fallbackModelId: modelId,
+    data, durationMs: Date.now() - started, taskCode: TASK_CODES.CRM,
+  });
+  const raw = data.choices?.[0]?.message?.content || '';
+  return { report: parseModelJson(raw, defaults), model: modelId, fallback: false, error: null };
+}
+
+router.get('/crm/project-report', requireAuth, async (req, res) => {
+  const crmProjects = crmProjectsForUser(req.hubUser);
+  const workspaceProjects = reportableWorkspacesForUser(req.hubUser, crmProjects);
+  const projects = [...crmProjects, ...workspaceProjects];
+  const selectedSlug = String(req.query.project || '').trim();
+  const days = Math.max(14, Math.min(365, parseInt(req.query.days, 10) || 90));
+  const project = selectedSlug ? projects.find(p => p.slug === selectedSlug) : null;
+  let evidence = null, report = null, model = null, error = null, fallback = false;
+
+  if (selectedSlug && !project) {
+    error = 'Project not found.';
+  } else if (project) {
+    evidence = buildProjectReportEvidence(req.hubUser, project, { days });
+    try {
+      const generated = await generateProjectReport(req.hubUser, evidence);
+      ({ report, model, error, fallback } = generated);
+    } catch (err) {
+      error = err.message;
+      fallback = true;
+      report = fallbackProjectReport(evidence, error);
+    }
+  }
+
+  res.render('hub/crm-project-report', {
+    ...crmPageData(req.hubUser),
+    projects, crmProjects, workspaceProjects,
+    selectedSlug, days, project, evidence, report, model, error, fallback,
+  });
+});
+
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 router.post('/crm/projects', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
@@ -1529,8 +1776,8 @@ router.post('/crm/projects', requireAuth, requireSameOrigin, writeLimiter, (req,
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   try {
     db.hub().prepare(
-      'INSERT INTO projects (id, user, name, slug) VALUES (lower(hex(randomblob(8))), ?, ?, ?)'
-    ).run(req.hubUser, name, slug);
+      'INSERT INTO projects (id, user, name, slug, project_kind) VALUES (lower(hex(randomblob(8))), ?, ?, ?, ?)'
+    ).run(req.hubUser, name, slug, 'crm');
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(400).send('A project with that name already exists');
     throw err;
@@ -1540,7 +1787,7 @@ router.post('/crm/projects', requireAuth, requireSameOrigin, writeLimiter, (req,
 
 router.get('/crm/projects', requireAuth, (req, res) => {
   const hub = db.hub();
-  const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  const projects = crmProjectsForUser(req.hubUser);
 
   // Annotate each project with open task count and last activity
   const annotated = projects.map(p => {
