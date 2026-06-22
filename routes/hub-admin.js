@@ -655,6 +655,7 @@ const SYSTEM_MODEL_GROUPS = [
   { id: 'knowledge', label: 'Knowledge layer', slots: [
     { feature: 'embeddings', scope: 'system', label: 'Embeddings model', note: 'Embeds documents, emails, CRM facts and meetings for semantic retrieval. Must be an OpenRouter embeddings model; query and corpus share one model, so changing it re-indexes over time.', fallback: 'openai/text-embedding-3-small' },
     { feature: 'atom_extractor', scope: 'system', label: 'Atom extractor', note: 'Nightly synthesis — extracts durable claims (atoms) from raw documents, emails and meetings.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'completed_task_atom_extractor', scope: 'system', label: 'Completed task extractor', note: 'Nightly synthesis — promotes only durable completed tasks into project/contact knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'entity_linker', scope: 'system', label: 'Entity linker', note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
   { id: 'wiki', label: 'Wiki', slots: [
@@ -878,7 +879,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
   const prompt = `You are a BBC radio newsreader. Search bbc.com/news right now for the current top stories and write a 20-second headline bulletin — the kind read at the top of the hour on BBC Radio 4. Cover 3 stories. Be specific: include real names, places, and details from what you find. Start with "Here are today's headlines."`;
 
   try {
-    const apiKey = m.api_key || process.env.OPENROUTER_API_KEY;
+    const apiKey = (m.endpoint !== 'openrouter' && m.api_key) ? m.api_key : process.env.OPENROUTER_API_KEY;
     log(`calling OpenRouter stream=false`);
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
