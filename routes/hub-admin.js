@@ -835,7 +835,7 @@ router.post('/admin/models/_delete', requireHubAdmin, (req, res) => {
 router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
   const { key } = req.body;
   const hub = db.hub();
-  const m = hub.prepare('SELECT key, model_id, api_key FROM model_config WHERE key = ?').get(key);
+  const m = hub.prepare('SELECT key, model_id, api_key, endpoint FROM model_config WHERE key = ?').get(key);
   if (!m) return res.status(404).json({ ok: false, error: 'Model not found' });
 
   // Internal tool-call syntax leaking as text — model never actually surfaced search results to user
