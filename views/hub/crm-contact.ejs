@@ -133,7 +133,7 @@ async function taskAction(id, action) {
               <span style="font-size:13px;"><%= a.value %><% if (a.status === 'proposed') { %> <span title="awaiting review" style="font-size:10px;opacity:.6;">· proposed</span><% } %></span>
               <span style="font-size:11px;white-space:nowrap;display:inline-flex;gap:6px;align-items:baseline;">
                 <span style="opacity:.5;" title="confidence <%= a.confidence.toFixed(2) %>"><%= Math.round(a.confidence*100) %>%</span>
-                <% a.sources.forEach(function(s){ %><a href="/crm/source/<%= s.kind %>/<%= encodeURIComponent(s.id) %>" style="opacity:.65;" title="open source: <%= s.kind.replace(/_/g,' ') %>"><%= ({document:'doc',email_summary:'email',meeting_intake:'meeting',crm_fact:'fact'})[s.kind] || s.kind %></a><% }); %>
+                <% a.sources.forEach(function(s){ %><a href="/crm/source/<%= s.kind %>/<%= encodeURIComponent(s.id) %>" style="opacity:.65;" title="open source: <%= s.kind.replace(/_/g,' ') %>"><%= ({document:'doc',email_summary:'email',meeting_intake:'meeting',crm_fact:'fact',completed_task:'task'})[s.kind] || s.kind %></a><% }); %>
               </span>
             </div>
           <% } %>
