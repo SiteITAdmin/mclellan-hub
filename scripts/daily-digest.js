@@ -9,7 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+const fetch = require('../lib/fetch');
 
 const ROOT = path.join(__dirname, '..');
 require('dotenv').config({ path: path.join(ROOT, '.env') });
