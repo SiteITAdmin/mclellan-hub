@@ -1738,6 +1738,181 @@ async function generateProjectReport(user, evidence) {
   return { report: parseModelJson(raw, defaults), model: modelId, fallback: false, error: null };
 }
 
+// ── Project report PDF + email ─────────────────────────────────────────────
+
+const PUR = '#7c6af5';
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function buildProjectReportPdfHtml(report, project, evidence) {
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Dublin' });
+  const statusColour = { on_track: '#22c55e', active: PUR, blocked: '#ef4444', quiet: '#94a3b8', unclear: '#94a3b8' };
+  const statusBg = { on_track: '#f0fdf4', active: '#f5f3ff', blocked: '#fef2f2', quiet: '#f8fafc', unclear: '#f8fafc' };
+  const st = report.status || 'unclear';
+
+  const narrativeHtml = (report.narrative || report.summary || '')
+    .split(/\n\n+/).filter(p => p.trim())
+    .map(p => `<p class="rpt-p">${escHtml(p.trim())}</p>`)
+    .join('');
+
+  const listSection = (title, items) => {
+    if (!items || !items.length) return '';
+    return `<h3 class="rpt-h3">${escHtml(title)}</h3><ul class="rpt-ul">${items.map(i => `<li class="rpt-li">${escHtml(i)}</li>`).join('')}</ul>`;
+  };
+
+  const statsHtml = [
+    `${evidence.meetings.length} meeting${evidence.meetings.length === 1 ? '' : 's'}`,
+    `${evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at).length} open task${evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at).length === 1 ? '' : 's'}`,
+    `${evidence.tasks.filter(t => t.status === 'completed' && !t.deleted_at).length} completed`,
+    `${evidence.atoms.length} knowledge claim${evidence.atoms.length === 1 ? '' : 's'}`,
+  ].map(s => `<span class="stat">${escHtml(s)}</span>`).join('');
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;0,800;1,700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#272432}
+@page cover{size:A4;margin:0}
+@page report{size:A4;margin:25mm 19mm 23mm}
+.cover{page:cover;width:210mm;height:297mm;display:flex;flex-direction:column;position:relative;overflow:hidden;background:#fff;break-after:page}
+.cover-bar{height:2.5mm;background:${PUR};flex-shrink:0}
+.cover-orbit{position:absolute;width:112mm;height:112mm;border:1px solid #ded8ff;border-radius:50%;right:-43mm;top:24mm}
+.cover-orbit::before,.cover-orbit::after{content:'';position:absolute;border-radius:50%;border:1px solid #eeeaff}
+.cover-orbit::before{inset:13mm}.cover-orbit::after{inset:27mm}
+.cover-block{position:absolute;width:21mm;height:21mm;background:${PUR};right:17mm;top:69.5mm;border-radius:4mm;transform:rotate(12deg);box-shadow:0 8mm 20mm rgba(124,106,245,.18)}
+.cover-body{flex:1;padding:21mm 21mm 17mm;display:flex;flex-direction:column;position:relative;z-index:1}
+.cover-label{font-size:8pt;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:${PUR};margin-bottom:28mm}
+.cover-title{font-family:'Playfair Display',Georgia,serif;font-size:46pt;font-weight:800;line-height:1.05;color:#15131e;margin-bottom:8mm;max-width:155mm}
+.cover-rule{width:15mm;height:1.2mm;background:${PUR};border-radius:2mm;margin-bottom:6mm}
+.cover-status{display:inline-block;font-size:10pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2mm 5mm;border-radius:2mm;background:${statusBg[st]};color:${statusColour[st]};margin-bottom:5mm}
+.cover-date{font-size:10pt;color:#8a8693;margin-bottom:3mm}
+.cover-window{font-size:9pt;color:#aaa6b5}
+.cover-stats{display:flex;flex-wrap:wrap;gap:4mm;margin-top:6mm}
+.stat{font-size:8.5pt;font-weight:600;color:#5f4bd8;background:#f5f3ff;padding:1.5mm 3.5mm;border-radius:1.5mm}
+.cover-spacer{flex:1}
+.cover-footer{padding-top:6mm;border-top:1px solid #e9e6ee;display:flex;justify-content:space-between}
+.cover-footer span{font-size:8.5pt;color:#777381}
+.report{page:report}
+.report-masthead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12mm;padding-bottom:4mm;border-bottom:1px solid #e9e6ee;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a8693}
+.report-masthead .brand{color:${PUR}}
+.report-end{display:flex;justify-content:space-between;align-items:flex-end;margin-top:12mm;padding-top:4mm;border-top:1px solid #e9e6ee;break-inside:avoid;font-size:7.5pt;color:#8a8693}
+.rpt-h2{font-family:'Playfair Display',Georgia,serif;font-size:20pt;font-weight:700;line-height:1.15;color:#15131e;margin:10mm 0 4mm;padding-bottom:3mm;border-bottom:1.2mm solid ${PUR};break-after:avoid}
+.rpt-h2:first-child{margin-top:0}
+.rpt-h3{font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:${PUR};margin:7mm 0 2.5mm;break-after:avoid}
+.rpt-p{font-size:10.5pt;line-height:1.72;color:#3d3b46;margin-bottom:4.2mm;orphans:3;widows:3}
+.rpt-ul{list-style:none;padding-left:0;margin:2mm 0 5mm}
+.rpt-li{font-size:10pt;line-height:1.6;color:#3d3b46;margin-bottom:2.5mm;padding-left:6mm;position:relative;break-inside:avoid}
+.rpt-li::before{content:'';position:absolute;left:0;top:2.5mm;width:1.8mm;height:1.8mm;background:${PUR};border-radius:50%}
+</style></head><body>
+
+<section class="cover">
+  <div class="cover-bar"></div>
+  <div class="cover-orbit"></div>
+  <div class="cover-block"></div>
+  <div class="cover-body">
+    <div class="cover-label">McLellan Hub · Project Report</div>
+    <div class="cover-title">${escHtml(project.name)}</div>
+    <div class="cover-rule"></div>
+    <div class="cover-status">${escHtml(st.replace('_', ' '))}</div>
+    <div class="cover-date">Generated ${dateStr}</div>
+    <div class="cover-window">Evidence window: last ${evidence.days} days</div>
+    <div class="cover-stats">${statsHtml}</div>
+    <div class="cover-spacer"></div>
+    <div class="cover-footer">
+      <span>Douglas McLellan</span>
+      <span>mclellan.scot</span>
+    </div>
+  </div>
+</section>
+
+<main class="report">
+  <div class="report-masthead">
+    <span class="brand">McLellan Hub · CRM</span>
+    <span>${escHtml(dateStr)}</span>
+  </div>
+  <h2 class="rpt-h2">${escHtml(report.headline || project.name)}</h2>
+  ${narrativeHtml}
+  ${listSection('Next actions', report.next_actions)}
+  ${listSection('Tasks', report.tasks)}
+  ${listSection('Meetings', report.meetings)}
+  ${listSection('Timeline', report.timeline)}
+  ${listSection('Risks & gaps', report.risks)}
+  <div class="report-end">
+    <span>Douglas McLellan · McLellan Hub</span>
+    <span>${escHtml(project.slug)} · ${dateStr}</span>
+  </div>
+</main>
+
+</body></html>`;
+}
+
+async function renderProjectReportPdf(report, project, evidence) {
+  const puppeteer = require('puppeteer');
+  const html = buildProjectReportPdfHtml(report, project, evidence);
+  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+    return await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+  } finally {
+    await browser.close();
+  }
+}
+
+function getGmailTransport() {
+  const user = process.env.GMAIL_SMTP_USER;
+  const pass = String(process.env.GMAIL_SMTP_APP_PASSWORD || '').replace(/\s+/g, '');
+  if (!user || !pass) return null;
+  const nodemailer = require('nodemailer');
+  return nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+}
+
+router.post('/crm/project-report/email', requireAuth, requireSameOrigin, async (req, res) => {
+  const selectedSlug = String(req.body.project || '').trim();
+  const days = Math.max(14, Math.min(365, parseInt(req.body.days, 10) || 90));
+  const to = process.env.HUB_REPORT_EMAIL || 'douglas@mclellan.scot';
+
+  if (!selectedSlug) return res.json({ ok: false, error: 'No project selected.' });
+
+  const projects = [...crmProjectsForUser(req.hubUser), ...reportableWorkspacesForUser(req.hubUser)];
+  const project = projects.find(p => p.slug === selectedSlug);
+  if (!project) return res.json({ ok: false, error: 'Project not found.' });
+
+  const transport = getGmailTransport();
+  if (!transport) return res.json({ ok: false, error: 'Email is not configured (GMAIL_SMTP_USER / GMAIL_SMTP_APP_PASSWORD missing).' });
+
+  let report, pdfBuffer;
+  try {
+    const evidence = buildProjectReportEvidence(req.hubUser, project, { days });
+    const generated = await generateProjectReport(req.hubUser, evidence);
+    report = generated.report;
+    pdfBuffer = await renderProjectReportPdf(report, project, evidence);
+
+    const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Dublin' });
+    const filename = `Project Report — ${project.name} — ${dateStr}.pdf`.replace(/[\\/:*?"<>|]+/g, '-');
+
+    await transport.sendMail({
+      to,
+      from: `"McLellan Hub" <${process.env.GMAIL_SMTP_USER}>`,
+      subject: `Project Report: ${project.name} — ${dateStr}`,
+      html: `<p style="font-family:sans-serif;font-size:14px;color:#272432;">Your project report for <strong>${escHtml(project.name)}</strong> is attached.</p>
+<p style="font-family:sans-serif;font-size:14px;color:#272432;margin-top:8px;"><strong>Status:</strong> ${escHtml(report.status || 'unclear')}</p>
+<p style="font-family:sans-serif;font-size:13px;color:#666;margin-top:8px;">${escHtml(report.summary || '')}</p>
+<p style="font-family:sans-serif;font-size:12px;color:#999;margin-top:16px;">Evidence window: last ${days} days · Generated by McLellan Hub</p>`,
+      attachments: [{ filename, content: pdfBuffer, contentType: 'application/pdf' }],
+    });
+
+    res.json({ ok: true, message: `Report sent to ${to}` });
+  } catch (err) {
+    console.error('[project-report-email]', err);
+    res.json({ ok: false, error: err.message });
+  }
+});
+
 router.get('/crm/project-report', requireAuth, async (req, res) => {
   const crmProjects = crmProjectsForUser(req.hubUser);
   const workspaceProjects = reportableWorkspacesForUser(req.hubUser, crmProjects);

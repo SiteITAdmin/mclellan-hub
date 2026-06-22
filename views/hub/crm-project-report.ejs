@@ -74,9 +74,12 @@
 <% if (report) { %>
   <%/* ── Narrative — the main story ──────────────────────────────────── */%>
   <section class="section-card" style="margin-bottom:18px;">
-    <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap;margin-bottom:16px;">
-      <h2 style="margin:0;"><%= report.headline || project.name %></h2>
-      <span class="crm-badge"><%= report.status || 'unclear' %></span>
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:16px;">
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
+        <h2 style="margin:0;"><%= report.headline || project.name %></h2>
+        <span class="crm-badge"><%= report.status || 'unclear' %></span>
+      </div>
+      <button id="email-pdf-btn" class="btn" style="font-size:13px;padding:6px 14px;white-space:nowrap;" onclick="emailReport(this)">Email PDF</button>
     </div>
     <% if (report.narrative) { %>
       <div style="font-size:15px;line-height:1.75;color:var(--crm-text,inherit);">
@@ -166,6 +169,34 @@
       </div>
     </div>
   </section>
+<% } %>
+
+<% if (project && report) { %>
+<script>
+async function emailReport(btn) {
+  btn.disabled = true;
+  btn.textContent = 'Generating PDF…';
+  try {
+    const resp = await fetch('/crm/project-report/email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ project: '<%= selectedSlug %>', days: '<%= days %>' }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      btn.textContent = '✓ Sent';
+      btn.style.background = 'var(--crm-success, #22c55e)';
+    } else {
+      btn.textContent = 'Failed';
+      btn.style.background = 'var(--crm-danger, #ef4444)';
+      alert('Could not send: ' + data.error);
+    }
+  } catch (err) {
+    btn.textContent = 'Error';
+    alert(err.message);
+  }
+}
+</script>
 <% } %>
 
 <%- include('partials/crm-foot') %>
