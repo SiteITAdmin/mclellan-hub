@@ -656,10 +656,12 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'embeddings', scope: 'system', label: 'Embeddings model', note: 'Embeds documents, emails, CRM facts and meetings for semantic retrieval. Must be an OpenRouter embeddings model; query and corpus share one model, so changing it re-indexes over time.', fallback: 'openai/text-embedding-3-small' },
     { feature: 'atom_extractor', scope: 'system', label: 'Atom extractor', note: 'Nightly synthesis — extracts durable claims (atoms) from raw documents, emails and meetings.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'completed_task_atom_extractor', scope: 'system', label: 'Completed task extractor', note: 'Nightly synthesis — promotes only durable completed tasks into project/contact knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
-    { feature: 'entity_linker', scope: 'system', label: 'Entity linker', note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'entity_linker',           scope: 'system', label: 'Entity linker',           note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'cross_entity_synthesis',  scope: 'system', label: 'Cross-entity synthesis',  note: 'Nightly synthesis — reads all active atoms and writes insight atoms: patterns, workflow opportunities, connections, and gaps spanning multiple entities.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
   { id: 'crm-reports', label: 'CRM reports', slots: [
-    { feature: 'project_report', scope: 'system', label: 'Project report writer', note: 'Generates the CRM Project Report page from project meetings, tasks, emails, documents and knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'project_report',  scope: 'system', label: 'Project report writer',    note: 'Generates the CRM Project Report page from project meetings, tasks, emails, documents and knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'knowledge_query', scope: 'system', label: 'Knowledge query answerer', note: 'Answers free-form questions on the /crm/knowledge page using atoms, insight atoms, and semantic search results.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
   { id: 'wiki', label: 'Wiki', slots: [
     { feature: 'wiki_page_writer', scope: 'system', label: 'Page writer',     note: 'Converts documents and Q&A into structured wiki pages.', fallback: 'google/gemini-2.5-pro-preview' },
