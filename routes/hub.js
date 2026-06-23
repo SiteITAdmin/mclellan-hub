@@ -32,6 +32,9 @@ router.use('/newsletter', requireAuth, newsletterRouter);
 
 const MAX_CHAT_MESSAGE_CHARS = 100000;
 const MAX_DOC_CONTEXT_CHARS = 100_000;
+const LONG_DOC_THRESHOLD   = 150_000;   // single-doc uploads above this get routed to a long-context model
+const LONG_DOC_BUDGET      = 200_000;   // chars allowed for long-doc single uploads
+const LONG_DOC_MODEL_KEY   = 'google-gemini-2-5-flash-lite'; // 1M context, cheap input
 
 function buildHubMsg(researchMode = false) {
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -959,10 +962,13 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
     }
   }
 
-  // Proportional truncation: if total chars across all files exceeds budget, trim each equally.
+  // Single large docs get a higher budget and are routed to a long-context model.
+  // Multi-doc uploads split the standard 100k budget proportionally.
   const totalChars = extractions.reduce((sum, e) => sum + e.markdown.length, 0);
-  const perDocBudget = totalChars > MAX_DOC_CONTEXT_CHARS
-    ? Math.floor(MAX_DOC_CONTEXT_CHARS / extractions.length)
+  const isLongDoc  = extractions.length === 1 && totalChars > LONG_DOC_THRESHOLD;
+  const effectiveBudget = isLongDoc ? LONG_DOC_BUDGET : MAX_DOC_CONTEXT_CHARS;
+  const perDocBudget = totalChars > effectiveBudget
+    ? Math.floor(effectiveBudget / extractions.length)
     : Infinity;
 
   const parts = extractions.map(({ file, markdown }) => {
@@ -1001,9 +1007,29 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
     'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY ts ASC LIMIT 40'
   ).all(convId);
 
+  // Large single docs: queue knowledge ingestion so the synthesis layer picks them up.
+  if (isLongDoc) {
+    setImmediate(async () => {
+      try {
+        const { scheduleJob } = require('../lib/job-queue');
+        await buildIngestionPackage({
+          id: userMsgId,
+          user: req.hubUser,
+          filename: req.files[0].originalname,
+          mimetype: req.files[0].mimetype,
+          sizeBytes: req.files[0].size,
+          markdown: extractions[0].markdown,
+        });
+        scheduleJob('mycelium_doc', { user: req.hubUser }, null, 'large-doc-chat-upload');
+      } catch (e) {
+        console.warn('[upload] long-doc ingestion failed:', e.message);
+      }
+    });
+  }
+
   // No auto-analyse: return JSON so the UI just shows the file message
   if (autoAnalyse === '0') {
-    return res.json({ ok: true, userMessage: messageContent, convId });
+    return res.json({ ok: true, userMessage: messageContent, convId, longDoc: isLongDoc || undefined, suggestedModel: isLongDoc ? LONG_DOC_MODEL_KEY : undefined });
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -1020,7 +1046,7 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
 
   try {
     const result = await routeMessage({
-      model,
+      model: isLongDoc ? LONG_DOC_MODEL_KEY : model,
       messages: [
         { role: 'system', content: buildHubMsg() },
         ...rows,
