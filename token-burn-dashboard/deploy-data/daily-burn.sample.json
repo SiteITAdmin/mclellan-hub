@@ -462,8 +462,8 @@
   {
     "date": "2026-05-14",
     "codex_tokens": 17978862,
-    "claude_code_tokens": 12611966,
-    "claude_code_calls": 120,
+    "claude_code_tokens": 4489788,
+    "claude_code_calls": 44,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -482,8 +482,8 @@
   {
     "date": "2026-05-15",
     "codex_tokens": 4677849,
-    "claude_code_tokens": 44875789,
-    "claude_code_calls": 448,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -496,14 +496,14 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export; Synthadoc audit logs"
+    "driver": "shipping",
+    "evidence": "Codex session token counters; OpenRouter activity export; Synthadoc audit logs"
   },
   {
     "date": "2026-05-16",
     "codex_tokens": 30594477,
-    "claude_code_tokens": 36910725,
-    "claude_code_calls": 381,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -516,14 +516,14 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export"
+    "driver": "shipping",
+    "evidence": "Codex session token counters; OpenRouter activity export"
   },
   {
     "date": "2026-05-17",
     "codex_tokens": 169593,
-    "claude_code_tokens": 35739979,
-    "claude_code_calls": 362,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -536,14 +536,14 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Codex session token counters; Claude Code message usage; OpenRouter activity export"
+    "driver": "hub ingestion",
+    "evidence": "Codex session token counters; OpenRouter activity export"
   },
   {
     "date": "2026-05-18",
     "codex_tokens": 0,
-    "claude_code_tokens": 25294425,
-    "claude_code_calls": 222,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -556,14 +556,14 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Claude Code message usage; OpenRouter activity export"
+    "driver": "hub ingestion",
+    "evidence": "OpenRouter activity export"
   },
   {
     "date": "2026-05-19",
     "codex_tokens": 0,
-    "claude_code_tokens": 7180846,
-    "claude_code_calls": 88,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -576,14 +576,14 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Claude Code message usage; OpenRouter activity export"
+    "driver": "hub ingestion",
+    "evidence": "OpenRouter activity export"
   },
   {
     "date": "2026-05-20",
     "codex_tokens": 0,
-    "claude_code_tokens": 135923,
-    "claude_code_calls": 1,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -596,14 +596,14 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Claude Code message usage; OpenRouter activity export"
+    "driver": "hub ingestion",
+    "evidence": "OpenRouter activity export"
   },
   {
     "date": "2026-05-21",
     "codex_tokens": 0,
-    "claude_code_tokens": 22807546,
-    "claude_code_calls": 218,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -616,14 +616,14 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Claude Code message usage; OpenRouter activity export"
+    "driver": "hub ingestion",
+    "evidence": "OpenRouter activity export"
   },
   {
     "date": "2026-05-22",
     "codex_tokens": 0,
-    "claude_code_tokens": 6913744,
-    "claude_code_calls": 60,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -636,14 +636,14 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Claude Code message usage; OpenRouter activity export"
+    "driver": "hub ingestion",
+    "evidence": "OpenRouter activity export"
   },
   {
     "date": "2026-05-23",
     "codex_tokens": 0,
-    "claude_code_tokens": 82559,
-    "claude_code_calls": 4,
+    "claude_code_tokens": 0,
+    "claude_code_calls": 0,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -656,8 +656,8 @@
     "chat_tokens_low": 0,
     "chat_tokens_high": 0,
     "confidence": "measured",
-    "driver": "Hub Development",
-    "evidence": "Claude Code message usage; OpenRouter activity export"
+    "driver": "hub ingestion",
+    "evidence": "OpenRouter activity export"
   },
   {
     "date": "2026-05-24",
@@ -1237,6 +1237,26 @@
     "chat_tokens_high": 0,
     "confidence": "measured",
     "driver": "Hub Development",
+    "evidence": "Codex session token counters; Claude Code message usage; Antigravity status line telemetry"
+  },
+  {
+    "date": "2026-06-22",
+    "codex_tokens": 25299462,
+    "claude_code_tokens": 10638906,
+    "claude_code_calls": 158,
+    "antigravity_tokens": 190494,
+    "antigravity_events": 1,
+    "antigravity_estimated": false,
+    "api_tokens": 0,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; Antigravity status line telemetry"
   }
 ]
