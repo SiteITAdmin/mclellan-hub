@@ -934,7 +934,11 @@ function EmptyState({ onSelectModel, onSelectShortcut }) {
 // ── Composer ──────────────────────────────────────────────────────────────
 const PHASE_LABELS = { thinking: 'Thinking…', searching: 'Searching…', drafting: 'Drafting…', writing: 'Writing…' };
 
-function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: externalRef, searchOverride, clearSearchOverride }) {
+function fmtElapsed(s) {
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function Composer({ onSend, onStop, model, streaming, streamPhase, elapsed, onModelSuggest, textareaRef: externalRef, searchOverride, clearSearchOverride }) {
   const [val, setVal] = React.useState('');
   const [more, setMore] = React.useState(false);
   const [uploadStatus, setUploadStatus] = React.useState('');
@@ -1154,8 +1158,18 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
         window.CONV_ID = data.convId;
         history.replaceState(null, '', `/c/${data.convId}`);
       }
-      setUploadStatus(`✓ ${label} attached`);
-      setTimeout(() => setUploadStatus(''), 3000);
+      if (data.longDoc && data.suggestedModel) {
+        const m = ALL_MODELS_FLAT.find(x => x.key === data.suggestedModel);
+        if (m) {
+          onModelSuggest?.(m);
+          setUploadStatus(`✓ ${label} attached — large document, switched to ${m.label} for full analysis`);
+        } else {
+          setUploadStatus(`✓ ${label} attached — large document, consider a long-context model`);
+        }
+      } else {
+        setUploadStatus(`✓ ${label} attached`);
+      }
+      setTimeout(() => setUploadStatus(''), 5000);
     } catch (err) {
       setUploadStatus('✖ ' + err.message);
     } finally {
@@ -1270,7 +1284,9 @@ function Composer({ onSend, onStop, model, streaming, streamPhase, textareaRef: 
             <>
               <span className="comp-phase-label">
                 <span className="comp-phase-dot" />
-                {PHASE_LABELS[streamPhase] || 'Working…'}
+                {streamPhase === 'thinking'
+                  ? (elapsed > 4 ? `Waiting… ${fmtElapsed(elapsed)}` : 'Waiting…')
+                  : `${PHASE_LABELS[streamPhase] || 'Working…'} ${fmtElapsed(elapsed)}`}
               </span>
               <button className="comp-stop-inline" onClick={onStop} title="Stop generating">
                 <Icon name="stop" size={14} /> Stop
@@ -1390,6 +1406,20 @@ function ChatApp() {
   // streamingMsg: null | { content, thinking, error }
   const [streamingMsg, setStreamingMsg] = React.useState(null);
   const [streaming, setStreaming] = React.useState(false);
+
+  const [elapsed, setElapsed] = React.useState(0);
+  const elapsedTimerRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (streaming) {
+      setElapsed(0);
+      elapsedTimerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
+    } else {
+      clearInterval(elapsedTimerRef.current);
+      setElapsed(0);
+    }
+    return () => clearInterval(elapsedTimerRef.current);
+  }, [streaming]);
 
   const scrollRef = React.useRef(null);
   const activeReaderRef = React.useRef(null);
@@ -1719,7 +1749,7 @@ function ChatApp() {
         </div>
 
         <div className="hub-composer-mount">
-          <Composer onSend={send} onStop={stop} model={model} streaming={streaming} streamPhase={streamPhase} textareaRef={composerRef} searchOverride={pendingSearchOverride} clearSearchOverride={() => setPendingSearchOverride(null)} />
+          <Composer onSend={send} onStop={stop} model={model} streaming={streaming} streamPhase={streamPhase} elapsed={elapsed} onModelSuggest={selectModel} textareaRef={composerRef} searchOverride={pendingSearchOverride} clearSearchOverride={() => setPendingSearchOverride(null)} />
         </div>
       </main>
 
