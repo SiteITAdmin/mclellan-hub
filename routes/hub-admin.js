@@ -1616,6 +1616,7 @@ router.get('/admin/openrouter-models', requireHubAdmin, async (req, res) => {
         outputPer1M: m.pricing?.completion  ? (parseFloat(m.pricing.completion)  * 1_000_000).toFixed(4) : null,
         supportsTools: Array.isArray(m.supported_parameters) && m.supported_parameters.includes('tools'),
         nativeSearch:  Array.isArray(m.supported_parameters) && m.supported_parameters.includes('web_search_options'),
+        modality: m.architecture?.modality || null,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     res.json(models);
@@ -1623,6 +1624,42 @@ router.get('/admin/openrouter-models', requireHubAdmin, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── OpenRouter embedding model probe ─────────────────────────────────────────
+// Embedding models are not listed in OpenRouter's /api/v1/models catalogue;
+// they use a separate /api/v1/embeddings endpoint.
+// This route live-tests any model ID the user provides and returns real metadata
+// if OpenRouter accepts it — no hardcoded list, works for any model they add.
+router.post('/admin/openrouter-probe-embedding', requireHubAdmin, async (req, res) => {
+  const modelId = String(req.body?.model_id || '').trim();
+  if (!modelId) return res.status(400).json({ ok: false, error: 'model_id is required' });
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const r = await fetch('https://openrouter.ai/api/v1/embeddings', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelId, input: 'probe' }),
+      timeout: 12_000,
+    });
+    const data = await r.json();
+    if (!r.ok || data.error) {
+      return res.json({ ok: false, error: data.error?.message || `HTTP ${r.status}` });
+    }
+    const dimensions = data.data?.[0]?.embedding?.length || null;
+    const inputTokens = data.usage?.prompt_tokens || null;
+    // OpenRouter may return pricing in the response or we can estimate from usage
+    return res.json({
+      ok: true,
+      model_id: modelId,
+      dimensions,
+      input_tokens_used: inputTokens,
+      // Pricing not available from the response — user sets it manually or leaves blank
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 
 // ── MCP-friendly JSON API ─────────────────────────────────────────────────────
 // Stable schema for a future MCP server to consume.
