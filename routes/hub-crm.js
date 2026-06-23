@@ -200,6 +200,7 @@ function crmPageData(user) {
       { href: '/crm/reminders', label: 'Reminders' },
       { href: '/crm/projects', label: 'Projects' },
       { href: '/crm/project-report', label: 'Project Report' },
+      { href: '/crm/knowledge', label: 'Ask the Hub' },
     ],
   };
 }
@@ -1933,6 +1934,29 @@ router.get('/crm/project-report', requireAuth, async (req, res) => {
     ...crmPageData(req.hubUser),
     projects, crmProjects, workspaceProjects,
     selectedSlug, days, project, evidence, report, model, error, fallback,
+  });
+});
+
+// ── Knowledge query ───────────────────────────────────────────────────────────
+
+router.get('/crm/knowledge', requireAuth, async (req, res) => {
+  const { getInsightAtoms } = require('../lib/knowledge-synthesis');
+  const query    = String(req.query.q || '').trim();
+  const insights = getInsightAtoms(req.hubUser);
+  let result = null, error = null;
+
+  if (query) {
+    try {
+      const { answerKnowledgeQuery } = require('../lib/knowledge-synthesis');
+      result = await answerKnowledgeQuery(req.hubUser, query);
+    } catch (err) {
+      error = err.message;
+    }
+  }
+
+  res.render('hub/crm-knowledge', {
+    ...crmPageData(req.hubUser),
+    query, result, error, insights,
   });
 });
 

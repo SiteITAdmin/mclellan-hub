@@ -1,0 +1,98 @@
+<%- include('partials/crm-head', { title: 'Ask the Hub', active: 'ask-the-hub' }) %>
+
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Knowledge</p>
+    <h1>Ask the Hub</h1>
+    <p>Free-form questions answered from atoms, patterns, and derived knowledge across every entity.</p>
+  </div>
+</section>
+
+<section class="section-card" style="margin-bottom:18px;">
+  <form method="GET" action="/crm/knowledge" style="display:flex;gap:10px;align-items:flex-start;">
+    <input
+      type="text"
+      name="q"
+      value="<%= query %>"
+      placeholder="e.g. How many tasks came via meetings with H30? What patterns keep recurring across projects?"
+      style="flex:1;padding:10px 14px;font-size:14px;border:1px solid var(--crm-border,#ddd);border-radius:6px;background:var(--crm-input-bg,#fff);color:var(--crm-text,inherit);"
+      autofocus
+    />
+    <button class="btn" type="submit" style="white-space:nowrap;">Ask</button>
+  </form>
+  <% if (error) { %>
+    <p class="crm-muted" style="color:var(--crm-danger,#c0392b);margin-top:10px;font-size:13px;"><%= error %></p>
+  <% } %>
+</section>
+
+<% if (result) { %>
+  <section class="section-card" style="margin-bottom:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <h2 style="margin:0;font-size:16px;color:var(--crm-muted-text,#666);">Answer</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <% if (result.atomsUsed) { %><span class="crm-badge subtle"><%= result.atomsUsed %> atoms</span><% } %>
+        <% if (result.semanticHits) { %><span class="crm-badge subtle"><%= result.semanticHits %> semantic hits</span><% } %>
+        <% if (result.insightsUsed) { %><span class="crm-badge subtle"><%= result.insightsUsed %> insights</span><% } %>
+        <% if (result.model) { %><span class="crm-badge subtle"><%= result.model %></span><% } %>
+      </div>
+    </div>
+    <div style="font-size:15px;line-height:1.75;color:var(--crm-text,inherit);">
+      <% (result.answer || '').split(/\n\n+/).filter(p => p.trim()).forEach(function(para) { %>
+        <p style="margin:0 0 1em;"><%= para.trim() %></p>
+      <% }); %>
+    </div>
+  </section>
+<% } %>
+
+<% if (!query) { %>
+  <%/* ── Show insight atoms when no query is active ── */%>
+  <% if (insights.length) { %>
+    <section class="section-card" style="margin-bottom:18px;">
+      <h2 style="margin-bottom:14px;">Cross-entity insights</h2>
+      <p class="crm-muted" style="font-size:13px;margin-bottom:16px;">Patterns, workflow opportunities, and connections spotted across the full knowledge graph by the nightly synthesis job.</p>
+      <div class="crm-stack">
+        <% for (const ins of insights) { %>
+          <div style="padding:12px 0;border-bottom:1px solid var(--crm-border,#eee);">
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--crm-accent,#7c6af5);"><%= ins.predicate %></span>
+              <span style="font-size:14px;font-weight:600;"><%= ins.subject_label %></span>
+              <span class="crm-badge subtle" style="font-size:11px;"><%= Math.round(ins.confidence * 100) %>%</span>
+            </div>
+            <p style="font-size:13px;line-height:1.6;color:var(--crm-text,inherit);margin:0;"><%= ins.value %></p>
+          </div>
+        <% } %>
+      </div>
+    </section>
+  <% } else { %>
+    <section class="section-card">
+      <h2 style="margin-bottom:10px;">Cross-entity insights</h2>
+      <p class="crm-muted">No insights yet — the cross-entity synthesis job runs nightly and will populate patterns here once it has run. You can trigger it manually from the admin jobs queue.</p>
+    </section>
+  <% } %>
+
+  <section class="section-card" style="margin-top:18px;">
+    <h2 style="margin-bottom:10px;">What can you ask?</h2>
+    <div class="crm-card-grid">
+      <div class="mgmt-card">
+        <div class="crm-card-title">Across entities</div>
+        <p class="crm-muted" style="font-size:12px;margin-top:6px;">How many tasks came via meetings with H30?</p>
+        <p class="crm-muted" style="font-size:12px;margin-top:4px;">Which contacts appear in both CRM projects and care context?</p>
+        <p class="crm-muted" style="font-size:12px;margin-top:4px;">What topics keep recurring across different projects?</p>
+      </div>
+      <div class="mgmt-card">
+        <div class="crm-card-title">Patterns & workflows</div>
+        <p class="crm-muted" style="font-size:12px;margin-top:6px;">What repetitive tasks could be systemised?</p>
+        <p class="crm-muted" style="font-size:12px;margin-top:4px;">What are the most common blockers across projects?</p>
+        <p class="crm-muted" style="font-size:12px;margin-top:4px;">Where is knowledge thin and needs more ingest?</p>
+      </div>
+      <div class="mgmt-card">
+        <div class="crm-card-title">Connections</div>
+        <p class="crm-muted" style="font-size:12px;margin-top:6px;">What does the system know about [person or company]?</p>
+        <p class="crm-muted" style="font-size:12px;margin-top:4px;">How is [contact] connected to [project]?</p>
+        <p class="crm-muted" style="font-size:12px;margin-top:4px;">What happened with [topic] across all contexts?</p>
+      </div>
+    </div>
+  </section>
+<% } %>
+
+<%- include('partials/crm-foot') %>
