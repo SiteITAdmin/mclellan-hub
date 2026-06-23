@@ -164,6 +164,10 @@
   .or-result-name { font-weight: 600; }
   .or-result-id { font-family: monospace; font-size: 11px; color: var(--text-dim); margin-top: 1px; }
   .or-result-meta { text-align: right; white-space: nowrap; font-size: 11px; color: var(--text-dim); }
+  .or-result-badge { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .03em;
+    background: rgba(124,106,245,0.12); color: var(--accent); border-radius: 4px;
+    padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
+  .or-result-badge-muted { font-size: 11px; color: var(--text-dim); font-style: italic; }
 
   #or-status { font-size: 12px; color: var(--text-dim); margin-top: 5px; }
 
@@ -549,6 +553,24 @@
       <div id="or-status"></div>
     </div>
 
+    <div class="or-picker" id="embed-probe-panel">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px">
+        Test an embedding model ID — checks OpenRouter live
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="embed-probe-input" type="text" placeholder="e.g. openai/text-embedding-3-small"
+          style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text)">
+        <button type="button" id="embed-probe-btn"
+          style="padding:7px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap">
+          Test &amp; fill form
+        </button>
+      </div>
+      <div id="embed-probe-status" style="font-size:12px;color:var(--text-dim);margin-top:5px">
+        OpenRouter embedding models aren't in their public catalogue.
+        Paste any model ID above to test if it's supported.
+      </div>
+    </div>
+
     <form method="POST" action="/admin/models" class="model-form" id="add-model-form">
       <div class="form-row">
         <div class="field">
@@ -570,6 +592,7 @@
           <label>Endpoint</label>
           <select id="f-endpoint" name="endpoint" required>
             <option value="openrouter">openrouter</option>
+            <option value="openrouter-embeddings">openrouter-embeddings (embedding models)</option>
             <option value="multi-search">multi-search (orchestrated workflow)</option>
             <option value="custom-openai">custom-openai (OpenAI-compatible)</option>
             <option value="google-ai">google-ai (image)</option>
@@ -714,21 +737,19 @@
   }
 
   // Detect search mode using OR's supportsTools field + model ID patterns
-  function detectSearch(modelId, modelName, supportsTools) {
+  function detectSearch(modelId, modelName, supportsTools, modality) {
+    if (modality === 'text->embedding') return 'none';
     const id = (modelId || '').toLowerCase();
-    // Native: Perplexity Sonar always searches internally
     if (id.includes('perplexity') || id.includes('sonar')) return 'native';
-    // No search: image/video generation, code-only models
     if (id.includes('flux') || id.includes('dall-e') || id.includes('midjourney')) return 'none';
     if (id.includes('image') && !id.includes('gemini')) return 'none';
-    // Web plugin (Firecrawl): OR can inject search as a tool call
     if (supportsTools) return 'web-plugin';
-    // No tool support: can still benefit from Exa/Brave pre-injection, but not OR plugin
     return 'none';
   }
 
   // Detect tier from model ID
-  function detectTier(modelId) {
+  function detectTier(modelId, modality) {
+    if (modality === 'text->embedding') return 'embedding';
     const id = (modelId || '').toLowerCase();
     if (id.includes('sonar-deep') || id.includes('deep-research')) return 'deep-research';
     if (id.includes('sonar')) return 'news-research';
@@ -736,6 +757,54 @@
     if (id.includes('code') || id.includes('codestral')) return 'coding';
     return 'everyday';
   }
+
+  // ── Embedding probe ──────────────────────────────────────────────────────
+  const embedInput  = document.getElementById('embed-probe-input');
+  const embedBtn    = document.getElementById('embed-probe-btn');
+  const embedStatus = document.getElementById('embed-probe-status');
+
+  embedBtn.addEventListener('click', async () => {
+    const modelId = embedInput.value.trim();
+    if (!modelId) { embedStatus.textContent = 'Enter a model ID first.'; return; }
+    embedBtn.disabled = true;
+    embedBtn.textContent = 'Testing…';
+    embedStatus.textContent = `Probing ${modelId} against OpenRouter…`;
+    try {
+      const r = await fetch('/admin/openrouter-probe-embedding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId }),
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        embedStatus.textContent = `✗ Not supported: ${d.error}`;
+        embedStatus.style.color = 'var(--danger, #e55)';
+      } else {
+        // Auto-fill the add-model form
+        fModelId.value  = modelId;
+        fLabel.value    = modelId.split('/').pop().replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        fKey.value      = slugify(modelId);
+        fEndpoint.value = 'openrouter-embeddings';
+        fSearch.value   = 'none';
+        fTier.value     = detectTier(modelId, 'text->embedding');
+        fCostIn.value   = '';
+        fCostOut.value  = '';
+        fContext.value  = '8191';
+        const dimNote = d.dimensions ? ` · ${d.dimensions} dimensions` : '';
+        embedStatus.textContent = `✓ Supported${dimNote} — form filled. Set cost and click Add model.`;
+        embedStatus.style.color = 'var(--success, #3a3)';
+        document.getElementById('f-cost-in').focus();
+      }
+    } catch (e) {
+      embedStatus.textContent = `✗ Request failed: ${e.message}`;
+      embedStatus.style.color = 'var(--danger, #e55)';
+    } finally {
+      embedBtn.disabled = false;
+      embedBtn.textContent = 'Test & fill form';
+    }
+  });
+
+  embedInput.addEventListener('keydown', e => { if (e.key === 'Enter') embedBtn.click(); });
 
   function loadModels() {
     if (loadPromise) return loadPromise;
@@ -765,43 +834,55 @@
     if (!hits.length) { resultsEl.style.display = 'none'; return; }
 
     resultsEl.style.display = 'block';
-    resultsEl.innerHTML = hits.map(m => `
+    resultsEl.innerHTML = hits.map(m => {
+      const isEmbedding = m.modality === 'text->embedding';
+      const dimBadge = isEmbedding && m.dimensions ? `<div class="or-result-badge">embedding · ${m.dimensions}d</div>` : '';
+      const priceLine = isEmbedding
+        ? `<div>in ${formatPrice(m.inputPer1M)}/M</div><div class="or-result-badge-muted">no output price</div>`
+        : `<div>in ${formatPrice(m.inputPer1M)}/M</div><div>out ${formatPrice(m.outputPer1M)}/M</div>`;
+      return `
       <div class="or-result" data-id="${m.id}" data-name="${m.name.replace(/"/g,'&quot;')}"
         data-in="${m.inputPer1M || ''}" data-out="${m.outputPer1M || ''}" data-ctx="${m.context || ''}"
-        data-tools="${m.supportsTools ? 'true' : 'false'}">
+        data-tools="${m.supportsTools ? 'true' : 'false'}"
+        data-modality="${m.modality || ''}" data-dimensions="${m.dimensions || ''}">
         <div>
-          <div class="or-result-name">${m.name}</div>
+          <div class="or-result-name">${m.name}${dimBadge}</div>
           <div class="or-result-id">${m.id}</div>
         </div>
         <div class="or-result-meta">
-          <div>in ${formatPrice(m.inputPer1M)}/M</div>
-          <div>out ${formatPrice(m.outputPer1M)}/M</div>
+          ${priceLine}
           ${m.context ? '<div>' + Math.round(m.context/1000) + 'k ctx</div>' : ''}
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     resultsEl.querySelectorAll('.or-result').forEach(el => {
       el.addEventListener('click', () => {
-        const id     = el.dataset.id;
-        const name   = el.dataset.name;
-        const costIn  = el.dataset.in;
-        const costOut = el.dataset.out;
-        const ctx     = el.dataset.ctx;
+        const id       = el.dataset.id;
+        const name     = el.dataset.name;
+        const costIn   = el.dataset.in;
+        const costOut  = el.dataset.out;
+        const ctx      = el.dataset.ctx;
+        const modality = el.dataset.modality || '';
+        const isEmbedding = modality === 'text->embedding';
 
         const supportsTools = el.dataset.tools === 'true';
         fModelId.value  = id;
         fLabel.value    = name;
         fKey.value      = slugify(id);
-        fEndpoint.value = 'openrouter';
-        fSearch.value   = detectSearch(id, name, supportsTools);
-        fTier.value     = detectTier(id);
+        fEndpoint.value = isEmbedding ? 'openrouter-embeddings' : 'openrouter';
+        fSearch.value   = detectSearch(id, name, supportsTools, modality);
+        fTier.value     = detectTier(id, modality);
         if (costIn)  fCostIn.value  = parseFloat(costIn).toFixed(6);
         if (costOut) fCostOut.value = parseFloat(costOut).toFixed(6);
         if (ctx)     fContext.value = ctx;
 
         resultsEl.style.display = 'none';
         searchEl.value = '';
-        statusEl.textContent = '✓ Filled in — set Category and click Add model';
+        const hint = isEmbedding
+          ? '✓ Embedding model — endpoint set to openrouter-embeddings, search set to none'
+          : '✓ Filled in — set Category and click Add model';
+        statusEl.textContent = hint;
         document.getElementById('f-category').focus();
       });
     });
