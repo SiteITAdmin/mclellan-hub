@@ -662,8 +662,8 @@
   {
     "date": "2026-05-24",
     "codex_tokens": 0,
-    "claude_code_tokens": 23350178,
-    "claude_code_calls": 274,
+    "claude_code_tokens": 22959485,
+    "claude_code_calls": 262,
     "antigravity_tokens": 0,
     "antigravity_events": 0,
     "antigravity_estimated": false,
@@ -1258,5 +1258,25 @@
     "confidence": "measured",
     "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage; Antigravity status line telemetry"
+  },
+  {
+    "date": "2026-06-23",
+    "codex_tokens": 0,
+    "claude_code_tokens": 19174865,
+    "claude_code_calls": 194,
+    "antigravity_tokens": 215697,
+    "antigravity_events": 1,
+    "antigravity_estimated": false,
+    "api_tokens": 0,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "Hub Development",
+    "evidence": "Claude Code message usage; Antigravity status line telemetry"
   }
 ]

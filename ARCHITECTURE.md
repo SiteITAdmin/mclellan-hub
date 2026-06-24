@@ -76,13 +76,14 @@ Do not write a separate notification loop. Add reminder rows and let the ladder 
 // lib/settings.js  getSystemModelId(feature, userScope, fallbackModelId)
 ```
 
-Every call **must** include attribution headers:
+**Every call must pass through the attribution gate.** `fetch.js:79–100` validates that every OpenRouter request carries the correct headers and logs a violation if they are missing. A call that skips `openRouterHeaders()` will be flagged — it is not a soft convention.
+
 ```js
 // lib/openrouter-attribution.js
 openRouterHeaders(taskCode, options)
 // taskCode: one of the 60+ codes defined in that file (AT-EmailClassification, etc.)
 ```
-Adding a new feature → add a task code to `openrouter-attribution.js` first.
+Adding a new feature → add a task code to `openrouter-attribution.js` first, then pass the result into every call.
 
 ### Model selection
 - User default: `crm_context` key `hub_default_model`
