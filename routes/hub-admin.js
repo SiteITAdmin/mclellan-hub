@@ -21,6 +21,7 @@ const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution
 const { logOpenRouterUsage, logUsageFromResponse } = require('../lib/openrouter-usage');
 const { reviewQueue: knowledgeReviewQueue } = require('../lib/knowledge-lint');
 const { setStatus: setAtomStatus, dedupAtoms } = require('../lib/atoms');
+const { backfillDueDates } = require('../lib/google-tasks');
 const {
   START_DATE: NAKAI_BRIEFING_START_DATE,
   briefingMeta: nakaiBriefingMeta,
@@ -751,6 +752,20 @@ router.get('/admin/knowledge', requireHubAdmin, (req, res) => {
 router.post('/admin/knowledge/dedup', requireHubAdmin, (req, res) => {
   try {
     const result = dedupAtoms(req.hubUser);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Set a due date on every open task that has none. One-shot backfill.
+router.post('/admin/tasks/_backfill-due', requireHubAdmin, async (req, res) => {
+  const { due_date } = req.body;
+  if (!due_date || !/^\d{4}-\d{2}-\d{2}$/.test(due_date)) {
+    return res.status(400).json({ ok: false, error: 'due_date required (YYYY-MM-DD)' });
+  }
+  try {
+    const result = await backfillDueDates(req.hubUser, due_date);
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
