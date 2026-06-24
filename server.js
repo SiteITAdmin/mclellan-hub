@@ -19,6 +19,7 @@ const { ingestAllFeeds } = require('./lib/rss-ingest');
 const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
 const { sendTodayNakaiDailyBriefing } = require('./scripts/build-nakai-daily-briefing');
+const { sendWorkDailyBrief } = require('./lib/work-daily-brief');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -160,6 +161,18 @@ setInterval(() => {
   for (const user of BRIEFING_USERS) {
     syncCalendarMeetings(user).catch(err => console.error(`[crm] calendar sync error for ${user}:`, err));
   }
+}, 60 * 1000);
+
+// ── Work Daily Brief (07:00 Europe/Dublin, Mon–Fri) ──────────────────────────
+const WORK_BRIEF_HOUR   = parseInt(process.env.WORK_BRIEF_HOUR   || '7');
+const WORK_BRIEF_MINUTE = parseInt(process.env.WORK_BRIEF_MINUTE || '0');
+
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  const day = now.getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return;
+  if (now.getHours() !== WORK_BRIEF_HOUR || now.getMinutes() !== WORK_BRIEF_MINUTE) return;
+  sendWorkDailyBrief('douglas').catch(err => console.error('[work-brief] error:', err));
 }, 60 * 1000);
 
 // ── rholdsworthconsulting.com daily stats (07:00 Europe/Dublin) ──────────────
