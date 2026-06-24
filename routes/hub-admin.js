@@ -20,7 +20,7 @@ const { listIngestionAudit, getIngestionAudit } = require('../lib/intelligence-a
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logOpenRouterUsage, logUsageFromResponse } = require('../lib/openrouter-usage');
 const { reviewQueue: knowledgeReviewQueue } = require('../lib/knowledge-lint');
-const { setStatus: setAtomStatus } = require('../lib/atoms');
+const { setStatus: setAtomStatus, dedupAtoms } = require('../lib/atoms');
 const {
   START_DATE: NAKAI_BRIEFING_START_DATE,
   briefingMeta: nakaiBriefingMeta,
@@ -744,6 +744,17 @@ router.post('/admin/system-models/_set-prompt', requireHubAdmin, (req, res) => {
 router.get('/admin/knowledge', requireHubAdmin, (req, res) => {
   const queue = knowledgeReviewQueue(req.hubUser);
   res.render('hub-admin/knowledge', { user: req.hubUser, queue });
+});
+
+// Retroactive dedup: find and merge atoms where one value is a substring of another
+// within the same (subject_label, predicate) group. Safe to run multiple times.
+router.post('/admin/knowledge/dedup', requireHubAdmin, (req, res) => {
+  try {
+    const result = dedupAtoms(req.hubUser);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // Approve (→active) or reject (→retired) a proposed/stale atom.

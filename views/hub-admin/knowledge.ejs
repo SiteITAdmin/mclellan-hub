@@ -85,6 +85,16 @@
     <% }); %>
   <% } %>
 
+  <div class="section-head">Maintenance</div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px">
+    <button id="dedup-btn" onclick="runDedup()" style="padding:7px 16px;background:var(--accent,#7c6af5);color:#fff;border:none;border-radius:7px;font-size:13px;cursor:pointer;font-family:inherit">
+      Deduplicate atoms
+    </button>
+    <span id="dedup-status" style="font-size:13px;color:var(--text-dim)">
+      Merges atoms where one value is a substring of another within the same entity+predicate group.
+    </span>
+  </div>
+
   <div class="section-head">Stale claims (<span class="count"><%= queue.stale.length %></span>)</div>
   <% if (!queue.stale.length) { %>
     <div class="empty">Nothing stale.</div>
@@ -103,5 +113,32 @@
     <% }); %>
   <% } %>
 </section>
+
+<script>
+async function runDedup() {
+  const btn = document.getElementById('dedup-btn');
+  const status = document.getElementById('dedup-status');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  status.textContent = 'Scanning atom groups…';
+  try {
+    const r = await fetch('/admin/knowledge/dedup', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = `Done — scanned ${d.scanned} atoms, merged ${d.merged} duplicates.`;
+      status.style.color = d.merged > 0 ? '#3a7c5f' : 'var(--text-dim)';
+    } else {
+      status.textContent = `Error: ${d.error}`;
+      status.style.color = '#e06c6c';
+    }
+  } catch(e) {
+    status.textContent = `Request failed: ${e.message}`;
+    status.style.color = '#e06c6c';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Deduplicate atoms';
+  }
+}
+</script>
 </body>
 </html>
