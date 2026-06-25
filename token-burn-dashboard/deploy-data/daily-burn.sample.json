@@ -1278,5 +1278,25 @@
     "confidence": "measured",
     "driver": "Hub Development",
     "evidence": "Claude Code message usage; Antigravity status line telemetry"
+  },
+  {
+    "date": "2026-06-24",
+    "codex_tokens": 0,
+    "claude_code_tokens": 21025497,
+    "claude_code_calls": 205,
+    "antigravity_tokens": 0,
+    "antigravity_events": 0,
+    "antigravity_estimated": false,
+    "api_tokens": 300,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "Hub Development",
+    "evidence": "Claude Code message usage; Synthadoc audit logs"
   }
 ]
