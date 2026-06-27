@@ -8,6 +8,7 @@ const {
   normalizePurpose,
   buildAuditAgentPack,
   parsePromptKitMarkdown,
+  parsePromptKitHtml,
   inferPromptTitleFromText,
   extractNotionPageId,
   notionRecordMapToMarkdown,
@@ -249,6 +250,49 @@ You are an organizational psychologist and AI strategist.
 
   assert.equal(kit.title, 'Prompt Kit: Map Your AI Difficulty Axes and Build a Smarter Workflow');
   assert.equal(kit.prompts[0].title, 'Prompt 1: Problem Difficulty Decomposition');
+});
+
+test('parsePromptKitHtml extracts Unlock AI guide pre blocks as separate prompts', () => {
+  const kit = parsePromptKitHtml(`<!DOCTYPE html>
+<html><head>
+  <title>Open Engine | Unlock AI</title>
+  <meta name="description" content="A practical guide to building an agent loop."/>
+</head><body>
+  <article class="openEngineInlineTemplate">
+    <div><h3>Linear connection verification prompt</h3><button>Copy prompt</button></div>
+    <pre class="promptCodeWrap">Verify my Linear connection before we continue.
+
+Do these checks in order:
+1. List the Linear workspaces.
+2. Do not touch any real work issues.</pre>
+  </article>
+  <article class="openEngineInlineTemplate">
+    <div><h3>Basic smoke-test issue body</h3><button>Copy prompt</button></div>
+    <pre class="promptCodeWrap">## Requester
+&lt;your name&gt;.
+
+## Acceptance criteria
+- Issue has AGENT CLAIMED from &lt;your-agent-code&gt;.
+- Issue has AGENT DONE.</pre>
+  </article>
+  <article class="openEngineInlineTemplate">
+    <div><h3>Duplicated smoke-test issue body</h3></div>
+    <pre class="promptCodeWrap">## Requester
+&lt;your name&gt;.
+
+## Acceptance criteria
+- Issue has AGENT CLAIMED from &lt;your-agent-code&gt;.
+- Issue has AGENT DONE.</pre>
+  </article>
+</body></html>`, 'https://unlock-ai.natebjones.com/open-engine');
+
+  assert.equal(kit.title, 'Open Engine');
+  assert.equal(kit.label, 'HTML Prompt Guide');
+  assert.equal(kit.prompts.length, 2);
+  assert.equal(kit.prompts[0].title, 'Linear connection verification prompt');
+  assert.equal(kit.prompts[1].title, 'Basic smoke-test issue body');
+  assert.match(kit.prompts[1].raw_prompt, /<your-agent-code>/);
+  assert.doesNotMatch(kit.prompts[1].raw_prompt, /&lt;/);
 });
 
 test('inferPromptTitleFromText falls back to a useful source title', () => {
