@@ -124,7 +124,7 @@ async function taskAction(id, action) {
     <% if (predicates.length) { %>
     <section class="section-card">
       <h2 style="margin-bottom:4px;">Knowledge</h2>
-      <p class="crm-muted" style="font-size:12px;margin:0 0 12px;">Compiled from your documents, emails and meetings by the nightly synthesis job — each claim links back to its source.</p>
+      <p class="crm-muted" style="font-size:12px;margin:0 0 12px;">Compiled from source evidence by the CRM knowledge engine and nightly synthesis — each claim links back to what produced it.</p>
       <% for (const pred of predicates) { %>
         <div style="margin-bottom:10px;">
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;opacity:.55;margin-bottom:3px;"><%= pred.replace(/_/g,' ') %></div>

@@ -660,6 +660,11 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'entity_linker',           scope: 'system', label: 'Entity linker',           note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'cross_entity_synthesis',  scope: 'system', label: 'Cross-entity synthesis',  note: 'Nightly synthesis — reads all active atoms and writes insight atoms: patterns, workflow opportunities, connections, and gaps spanning multiple entities.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
+  { id: 'crm-engine', label: 'CRM knowledge engine', slots: [
+    { feature: 'crm_source_triage', scope: 'system', label: 'Source triage', note: 'First prompt in the CRM operating loop: decides whether a new email, meeting, document, task, or fact deserves synthesis.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'crm_duplicate_review', scope: 'system', label: 'Duplicate/supersession review', note: 'Prompt contract for semantic duplicate and supersession decisions before creating parallel CRM knowledge.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'crm_action_projection', scope: 'system', label: 'Action projection', note: 'Prompt contract for deciding whether source-backed candidate actions should become tasks or reminders.', fallback: 'anthropic/claude-haiku-4-5' },
+  ]},
   { id: 'crm-reports', label: 'CRM reports', slots: [
     { feature: 'project_report',  scope: 'system', label: 'Project report writer',    note: 'Generates the CRM Project Report page from project meetings, tasks, emails, documents and knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'knowledge_query', scope: 'system', label: 'Knowledge query answerer', note: 'Answers free-form questions on the /crm/knowledge page using atoms, insight atoms, and semantic search results.', fallback: 'anthropic/claude-haiku-4-5' },
@@ -744,7 +749,18 @@ router.post('/admin/system-models/_set-prompt', requireHubAdmin, (req, res) => {
 // ── Knowledge layer review queue ────────────────────────────────────────────
 router.get('/admin/knowledge', requireHubAdmin, (req, res) => {
   const queue = knowledgeReviewQueue(req.hubUser);
-  res.render('hub-admin/knowledge', { user: req.hubUser, queue });
+  const receipts = db.hub().prepare(`
+    SELECT *
+    FROM knowledge_receipts
+    WHERE user = ?
+    ORDER BY created_at DESC
+    LIMIT 40
+  `).all(req.hubUser).map(row => {
+    let payload = {};
+    try { payload = JSON.parse(row.payload || '{}'); } catch (_) {}
+    return { ...row, payload };
+  });
+  res.render('hub-admin/knowledge', { user: req.hubUser, queue, receipts });
 });
 
 // Retroactive dedup: find and merge atoms where one value is a substring of another

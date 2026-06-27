@@ -33,6 +33,39 @@ function todayIso() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
 }
 
+function rootEmailSubject(subject) {
+  let cleaned = String(subject || '').trim();
+  let previous;
+  do {
+    previous = cleaned;
+    cleaned = cleaned.replace(/^\s*(re|fw|fwd)\s*:\s*/i, '').trim();
+  } while (cleaned && cleaned !== previous);
+  return cleaned || '(no subject)';
+}
+
+function subjectFromFactProjection(projection) {
+  const match = String(projection || '').match(/\[[^\]]+\]\s+(.+?)\s+—/);
+  return match ? rootEmailSubject(match[1]) : null;
+}
+
+function dedupeProjectFacts(facts) {
+  const seen = new Set();
+  const result = [];
+  for (const fact of facts) {
+    const subject = subjectFromFactProjection(fact.vault_projection);
+    const key = subject && ['agentmail', 'email', 'email_sent'].includes(fact.source)
+      ? `${fact.source}:${fact.contact_id}:${subject.toLowerCase()}`
+      : null;
+    if (key) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    result.push(fact);
+    if (result.length >= 50) break;
+  }
+  return result;
+}
+
 
 // ── CRM endpoints ─────────────────────────────────────────────────────────────
 router.get('/api/crm/contacts', requireAuth, (req, res) => {
@@ -400,19 +433,9 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
   const allCompanies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const availableCompanies = allCompanies.filter(c => !linkedCompanyIds.has(c.id));
 
-  // Knowledge layer (L2): claims the synthesis loop compiled about this contact,
-  // grouped by predicate, each carrying its provenance. This is the view reading
-  // from the knowledge substrate rather than only flat crm_facts.
-  const { atomsForEntity } = require('../lib/atoms');
-  const knowledgeByPredicate = {};
-  for (const a of atomsForEntity(req.hubUser, 'contact', contact.id, { includeProposed: true })) {
-    let refs = [];
-    try { refs = JSON.parse(a.source_refs || '[]'); } catch { refs = []; }
-    (knowledgeByPredicate[a.predicate] ||= []).push({
-      value: a.value, confidence: a.confidence, status: a.status,
-      sources: refs.filter(r => r && r.kind && r.id),
-    });
-  }
+  // Knowledge layer (compiled): claims the synthesis loop derived about this
+  // contact. Legacy facts still render in the timeline during the migration.
+  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'contact', contact.id);
 
   res.render('hub/crm-contact', {
     ...crmPageData(req.hubUser), contact, companies,
@@ -485,11 +508,12 @@ router.get('/crm/company/:id', requireAuth, (req, res) => {
   const availableContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   const showHistory = req.query.show_history === '1';
   const tasks = getCachedTasks(req.hubUser, { companyId: company.id }, showHistory);
+  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'company', company.id);
 
   res.render('hub/crm-company', {
     ...crmPageData(req.hubUser), company, contacts,
     meetings, upcomingMeetings, pastMeetings,
-    facts, availableContacts, tasks, showHistory,
+    facts, availableContacts, tasks, showHistory, knowledgeByPredicate,
   });
 });
 
@@ -1584,11 +1608,75 @@ function sourceLabel(kind) {
   })[kind] || kind;
 }
 
+function parseSourceRefs(json) {
+  try {
+    const refs = JSON.parse(json || '[]');
+    return Array.isArray(refs) ? refs.filter(r => r && r.kind && r.id) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function knowledgeGroupsForEntity(user, subjectKind, subjectId, { includeEvents = false } = {}) {
+  const { atomsForEntity } = require('../lib/atoms');
+  const hub = db.hub();
+  const knowledgeByPredicate = {};
+  const events = [];
+  for (const a of atomsForEntity(user, subjectKind, subjectId, { includeProposed: true })) {
+    const sources = parseSourceRefs(a.source_refs);
+    const view = {
+      id: a.id,
+      predicate: a.predicate,
+      value: a.value,
+      confidence: a.confidence,
+      status: a.status,
+      sources,
+    };
+    (knowledgeByPredicate[a.predicate] ||= []).push(view);
+    if (includeEvents && a.status === 'active') {
+      events.push({
+        _kind: 'knowledge_event',
+        ts: sourceEventTimestamp(hub, user, sources) || a.updated_at || a.first_seen,
+        predicate: a.predicate,
+        value: a.value,
+        confidence: a.confidence,
+        sources,
+      });
+    }
+  }
+  return { knowledgeByPredicate, events };
+}
+
+function sourceEventTimestamp(hub, user, sources) {
+  for (const s of sources || []) {
+    if (s.kind === 'completed_task') {
+      const row = hub.prepare('SELECT completed_at, synced_at, created_at FROM google_tasks WHERE id = ? AND user = ?').get(s.id, user);
+      if (row) return row.completed_at || row.synced_at || row.created_at;
+    }
+    if (s.kind === 'email_summary') {
+      const row = hub.prepare('SELECT received_at, processed_at FROM email_summaries WHERE id = ? AND user = ?').get(s.id, user);
+      if (row) return row.received_at || row.processed_at;
+    }
+    if (s.kind === 'meeting_intake') {
+      const row = hub.prepare('SELECT created_at FROM meeting_intakes WHERE id = ? AND user = ?').get(s.id, user);
+      if (row) return row.created_at;
+    }
+    if (s.kind === 'document') {
+      const row = hub.prepare('SELECT uploaded_at FROM documents WHERE id = ? AND user = ?').get(s.id, user);
+      if (row) return row.uploaded_at;
+    }
+    if (s.kind === 'crm_fact') {
+      const row = hub.prepare('SELECT created_at FROM crm_facts WHERE id = ? AND user = ?').get(s.id, user);
+      if (row) return row.created_at;
+    }
+  }
+  return null;
+}
+
 function atomRowsForProject(user, projectId) {
   const { atomsForEntity } = require('../lib/atoms');
   return atomsForEntity(user, 'project', projectId, { includeProposed: true }).map(a => {
-    let refs = [];
-    try { refs = JSON.parse(a.source_refs || '[]'); } catch (_) { refs = []; }
+    const refs = parseSourceRefs(a.source_refs);
     return {
       predicate: a.predicate,
       value: a.value,
@@ -2061,18 +2149,21 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
     LIMIT 10
   `).all(req.hubUser, project.slug);
 
-  // Facts timeline: all facts from contacts linked to this project
-  const allProjectContactIds = [...directContactIds];
-  const projectFacts = allProjectContactIds.length ? hub.prepare(`
-    SELECT f.id, f.fact, f.fact_type, f.source, f.created_at,
+  // Facts timeline: facts explicitly routed to this project.
+  // Older versions showed every fact for every linked contact, which leaked
+  // unrelated Douglas/work-admin facts into broad projects.
+  const projectFacts = hub.prepare(`
+    SELECT f.id, f.fact, f.fact_type, f.source, f.created_at, f.vault_projection,
            c.id AS contact_id, c.name AS contact_name
     FROM crm_facts f
     JOIN contacts c ON c.id = f.contact_id
-    WHERE f.contact_id IN (${allProjectContactIds.map(() => '?').join(',')})
-      AND f.status != 'archived'
+    WHERE f.user = ?
+      AND f.project_slug = ?
+      AND f.status NOT IN ('archived', 'wrong')
     ORDER BY f.created_at DESC
-    LIMIT 50
-  `).all(...allProjectContactIds) : [];
+    LIMIT 200
+  `).all(req.hubUser, project.slug);
+  const dedupedProjectFacts = dedupeProjectFacts(projectFacts);
 
   // Recent messages in the project chat (for last-activity context)
   const recentMessages = hub.prepare(`
@@ -2085,39 +2176,16 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
     'SELECT id, filename, size_bytes, uploaded_at FROM documents WHERE project_id = ? ORDER BY uploaded_at DESC'
   ).all(project.id);
 
-  // Knowledge layer (L2): claims compiled about this project.
-  const { atomsForEntity: atomsForProject } = require('../lib/atoms');
-  const knowledgeByPredicate = {};
-  const projectKnowledgeEvents = [];
-  for (const a of atomsForProject(req.hubUser, 'project', project.id, { includeProposed: true })) {
-    let refs = [];
-    try { refs = JSON.parse(a.source_refs || '[]'); } catch { refs = []; }
-    const sources = refs.filter(r => r && r.kind && r.id);
-    (knowledgeByPredicate[a.predicate] ||= []).push({
-      value: a.value, confidence: a.confidence, status: a.status,
-      sources,
-    });
-    if (a.status === 'active' && ['milestone', 'completed_action', 'commitment_fulfilled', 'document_sent', 'document_received', 'booking_made', 'payment_made', 'cancellation_completed', 'review_completed', 'care_action_completed', 'interaction_completed', 'decision'].includes(a.predicate)) {
-      const taskRef = sources.find(s => s.kind === 'completed_task');
-      if (taskRef) {
-        const task = hub.prepare('SELECT title, completed_at, created_at FROM google_tasks WHERE id = ? AND user = ?').get(taskRef.id, req.hubUser);
-        projectKnowledgeEvents.push({
-          _kind: 'knowledge_event',
-          ts: task?.completed_at || task?.created_at || a.updated_at || a.first_seen,
-          predicate: a.predicate,
-          value: a.value,
-          confidence: a.confidence,
-          sources,
-        });
-      }
-    }
-  }
+  // Knowledge layer (compiled): claims and events about this project. Legacy
+  // projectFacts remain visible while CRM views migrate to compiled knowledge.
+  const { knowledgeByPredicate, events: projectKnowledgeEvents } =
+    knowledgeGroupsForEntity(req.hubUser, 'project', project.id, { includeEvents: true });
 
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),
     project, tasks, contacts, directContactIds: [...directContactIds],
     availableContacts, linkedCompanies, linkedCompanyIds: [...linkedCompanyIds],
-    availableCompanies, recentEmails, projectFacts, projectKnowledgeEvents, recentMessages, showHistory, todayIsoStr,
+    availableCompanies, recentEmails, projectFacts: dedupedProjectFacts, projectKnowledgeEvents, recentMessages, showHistory, todayIsoStr,
     projectDocs, knowledgeByPredicate,
   });
 });
