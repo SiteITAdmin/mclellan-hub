@@ -8,6 +8,38 @@ consistent information model while retaining every email as reusable evidence.
 Gmail is not the database. It is the human navigation surface and source archive.
 McLellan Hub is the canonical relationship, classification, and automation layer.
 
+## Current Implementation (June 2026)
+
+Gmail and AgentMail are now evidence inputs to the CRM knowledge engine, not
+direct CRM writers.
+
+The implemented CRM path is:
+
+```text
+raw source -> crm_source_triage -> crm_duplicate_review -> synthesis/provenance merge -> crm_action_projection -> compiled atoms/events/tasks
+```
+
+What email processing does directly:
+
+- Fetch Gmail or AgentMail messages.
+- Apply/maintain the canonical Gmail label taxonomy where appropriate.
+- Store summaries and source records for later reasoning.
+- Detect special operational flows that genuinely belong outside CRM, such as
+  Ryanair itinerary extraction.
+- Feed email summaries to the CRM knowledge engine.
+
+What email processing should not do directly in normal operation:
+
+- Create CRM facts.
+- Attach messages to projects as durable relationship knowledge.
+- Create Google Tasks.
+- Decide that a repeated forwarded chain is a new action.
+
+Those decisions belong to `crm_source_triage`, `crm_duplicate_review`, synthesis,
+and `crm_action_projection`. The emergency rollback switch
+`CRM_LEGACY_DIRECT_WRITES=1` exists only to restore the old direct-write path
+temporarily if production needs it.
+
 ## Filing Model
 
 Each filed email gets one stable primary Gmail label:
