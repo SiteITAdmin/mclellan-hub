@@ -31,6 +31,7 @@ const {
   buildNakaiDailyBriefing,
 } = require('../scripts/build-nakai-daily-briefing');
 const { resendBriefingFromRequest } = require('../lib/nakai-briefing-resolver');
+const { synthesizeRefSources } = require('../lib/nakai-ref-synthesis');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -1837,11 +1838,35 @@ router.post('/admin/trigger-email-digest', requireHubAdmin, async (req, res) => 
 
 // ── Nakai daily briefing archive ─────────────────────────────────────────────
 router.get('/admin/nakai-briefings', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const monitorSites = hub.prepare(`
+    SELECT *, (
+      SELECT COUNT(*) FROM reg_monitor_items
+      WHERE site = s.id AND found_at >= unixepoch() - 7*86400
+    ) AS items_7d
+    FROM nakai_reg_monitor_sites s ORDER BY name
+  `).all();
+  const refSources = hub.prepare(`
+    SELECT s.*,
+      a.content AS atom_content,
+      a.is_bootstrap,
+      a.synthesized_at AS atom_synthesized_at
+    FROM nakai_ref_sources s
+    LEFT JOIN nakai_ref_atoms a ON a.source_key = s.source_key
+      AND a.id = (
+        SELECT id FROM nakai_ref_atoms WHERE source_key = s.source_key
+        ORDER BY synthesized_at DESC LIMIT 1
+      )
+    ORDER BY s.source_key
+  `).all();
   res.render('hub-admin/nakai-briefings', {
     user: req.hubUser,
     briefings: listNakaiBriefings(),
+    monitorSites,
+    refSources,
     message: req.query.msg || '',
     error: req.query.error || '',
+    tab: req.query.tab || 'briefings',
   });
 });
 
@@ -1905,6 +1930,113 @@ router.post('/admin/nakai-briefings/request', requireHubAdmin, async (req, res) 
     return res.json(result);
   } catch (err) {
     return res.status(500).json({ ok: false, type: 'error', reason: err.message });
+  }
+});
+
+// ── Nakai monitor sites ───────────────────────────────────────────────────────
+
+router.post('/admin/nakai-briefings/sites', requireHubAdmin, (req, res) => {
+  const { name, url, browser, cadence } = req.body || {};
+  if (!name?.trim() || !url?.trim()) {
+    return res.redirect('/admin/nakai-briefings?tab=sites&error=' + encodeURIComponent('Name and URL are required'));
+  }
+  try {
+    new URL(url.trim());
+  } catch {
+    return res.redirect('/admin/nakai-briefings?tab=sites&error=' + encodeURIComponent('Invalid URL'));
+  }
+  const { uuid: makeId } = require('../lib/id');
+  try {
+    db.hub().prepare(`
+      INSERT INTO nakai_reg_monitor_sites (id, name, url, browser, cadence)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(makeId(), name.trim(), url.trim(), browser === '1' ? 1 : 1, cadence || 'daily');
+    res.redirect('/admin/nakai-briefings?tab=sites&msg=' + encodeURIComponent(`Added ${name.trim()}`));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?tab=sites&error=' + encodeURIComponent(err.message));
+  }
+});
+
+router.post('/admin/nakai-briefings/sites/:id/toggle', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const site = hub.prepare('SELECT * FROM nakai_reg_monitor_sites WHERE id = ?').get(req.params.id);
+  if (!site) return res.redirect('/admin/nakai-briefings?tab=sites&error=Site+not+found');
+  hub.prepare('UPDATE nakai_reg_monitor_sites SET active = ? WHERE id = ?').run(site.active ? 0 : 1, site.id);
+  res.redirect('/admin/nakai-briefings?tab=sites&msg=' + encodeURIComponent(`${site.name} ${site.active ? 'paused' : 'activated'}`));
+});
+
+router.post('/admin/nakai-briefings/sites/:id/delete', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const site = hub.prepare('SELECT name FROM nakai_reg_monitor_sites WHERE id = ?').get(req.params.id);
+  if (!site) return res.redirect('/admin/nakai-briefings?tab=sites&error=Site+not+found');
+  hub.prepare('DELETE FROM nakai_reg_monitor_sites WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/nakai-briefings?tab=sites&msg=' + encodeURIComponent(`Removed ${site.name}`));
+});
+
+// ── Nakai reference sources ───────────────────────────────────────────────────
+
+router.post('/admin/nakai-briefings/ref-sources', requireHubAdmin, (req, res) => {
+  const { source_key, title, url, intent } = req.body || {};
+  if (!source_key?.trim() || !title?.trim() || !url?.trim()) {
+    return res.redirect('/admin/nakai-briefings?tab=sources&error=' + encodeURIComponent('Source key, title, and URL are required'));
+  }
+  try {
+    new URL(url.trim());
+  } catch {
+    return res.redirect('/admin/nakai-briefings?tab=sources&error=' + encodeURIComponent('Invalid URL'));
+  }
+  const { uuid: makeId } = require('../lib/id');
+  try {
+    db.hub().prepare(`
+      INSERT INTO nakai_ref_sources (id, source_key, title, url, intent)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(makeId(), source_key.trim().toUpperCase(), title.trim(), url.trim(), intent?.trim() || null);
+    res.redirect('/admin/nakai-briefings?tab=sources&msg=' + encodeURIComponent(`Added ${source_key.trim().toUpperCase()}`));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?tab=sources&error=' + encodeURIComponent(err.message));
+  }
+});
+
+router.post('/admin/nakai-briefings/ref-sources/:id/toggle', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const src = hub.prepare('SELECT * FROM nakai_ref_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.redirect('/admin/nakai-briefings?tab=sources&error=Source+not+found');
+  hub.prepare('UPDATE nakai_ref_sources SET active = ? WHERE id = ?').run(src.active ? 0 : 1, src.id);
+  res.redirect('/admin/nakai-briefings?tab=sources&msg=' + encodeURIComponent(`${src.source_key} ${src.active ? 'paused' : 'activated'}`));
+});
+
+router.post('/admin/nakai-briefings/ref-sources/:id/synthesize', requireHubAdmin, async (req, res) => {
+  const hub = db.hub();
+  const src = hub.prepare('SELECT * FROM nakai_ref_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.redirect('/admin/nakai-briefings?tab=sources&error=Source+not+found');
+  try {
+    const results = await synthesizeRefSources({ sourceKey: src.source_key });
+    const r = results[0];
+    if (r?.error) throw new Error(r.error);
+    res.redirect('/admin/nakai-briefings?tab=sources&msg=' + encodeURIComponent(`${src.source_key} synthesised (${r?.chars || 0} chars)`));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?tab=sources&error=' + encodeURIComponent(`${src.source_key}: ${err.message}`));
+  }
+});
+
+router.post('/admin/nakai-briefings/ref-sources/:id/delete', requireHubAdmin, (req, res) => {
+  const hub = db.hub();
+  const src = hub.prepare('SELECT source_key FROM nakai_ref_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.redirect('/admin/nakai-briefings?tab=sources&error=Source+not+found');
+  hub.prepare('DELETE FROM nakai_ref_atoms WHERE source_key = ?').run(src.source_key);
+  hub.prepare('DELETE FROM nakai_ref_sources WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/nakai-briefings?tab=sources&msg=' + encodeURIComponent(`Removed ${src.source_key}`));
+});
+
+router.post('/admin/nakai-briefings/ref-sources/synthesize-all', requireHubAdmin, async (req, res) => {
+  try {
+    const results = await synthesizeRefSources();
+    const ok = results.filter(r => !r.error).length;
+    const fail = results.filter(r => r.error).length;
+    const msg = fail ? `Synthesised ${ok}, failed ${fail}` : `All ${ok} sources synthesised`;
+    res.redirect('/admin/nakai-briefings?tab=sources&msg=' + encodeURIComponent(msg));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?tab=sources&error=' + encodeURIComponent(err.message));
   }
 });
 

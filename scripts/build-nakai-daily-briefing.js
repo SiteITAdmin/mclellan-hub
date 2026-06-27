@@ -10,6 +10,7 @@ const { buildBriefingPdfHtml } = require('../lib/newsletter-pipeline');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
 const { captureNakaiDailyBriefing } = require('../lib/knowledge-format');
+const { getRefAtoms } = require('../lib/nakai-ref-synthesis');
 
 const ROOT = path.join(__dirname, '..');
 const STORE_DIR = path.join(ROOT, 'data', 'nakai-briefings');
@@ -70,178 +71,21 @@ function loadDotEnv() {
   }
 }
 
-// Audit-horizon standing context only — evergreen FCA/CBI/PRA/EBA guidance
-// that defines the audit framework. NOT news. Live news comes from reg_monitor_items.
-const sources = [
-  {
-    id: 'S16',
-    title: 'FCA: Our Consumer Duty focus areas',
-    date: 'Published 30 September 2025, updated 7 May 2026',
-    url: 'https://www.fca.org.uk/publications/corporate-documents/consumer-duty-focus-areas',
-    notes: [
-      'The FCA says the Consumer Duty remains a priority under its 2025 to 2030 strategy to deepen trust, rebalance risk, support growth and improve lives.',
-      'The page sets out 2025 to 2026 priorities for embedding the Duty, support for firms and sector-specific focus areas.',
-      'This is a high-credibility audit-horizon source for Consumer Duty planning because it signals current FCA supervisory emphasis rather than only the original rules.',
-    ],
-  },
-  {
-    id: 'S17',
-    title: 'FCA: Year 2 Consumer Duty Board Reports - progress and what comes next',
-    date: 'April 2026',
-    url: 'https://www.fca.org.uk/news/blogs/year-2-consumer-duty-board-reports-progress-and-what-comes-next',
-    notes: [
-      'The FCA says firms increasingly set out comprehensive action plans, with clear responsibilities, timelines and progress updates.',
-      'The FCA says most reports now identify accountable owners for improvements and track delivery status so Boards can monitor progress more systematically.',
-      'Audit relevance: board reporting should evidence ownership, outcome monitoring, action tracking, governance challenge and closure discipline.',
-    ],
-  },
-  {
-    id: 'S18',
-    title: 'FCA: Consumer understanding - good practice and areas for improvement',
-    date: 'March 2026',
-    url: 'https://www.fca.org.uk/publications/good-and-poor-practice/consumer-understanding-good-practice-areas-improvement',
-    notes: [
-      'The FCA says firms should make communication design, testing, monitoring and governance a coherent end-to-end process.',
-      'This is directly relevant to Consumer Duty audits of customer journeys, disclosures, fees, product terms, complaints and support channels.',
-      'Audit relevance: test whether communications are designed, tested, monitored and escalated using evidence rather than assumed to be understandable.',
-    ],
-  },
-  {
-    id: 'S19',
-    title: "FCA blog: What do we mean when we say 'fair value'?",
-    date: 'February 2026',
-    url: 'https://www.fca.org.uk/news/blogs/what-do-we-mean-when-we-say-fair-value',
-    notes: [
-      'The FCA frames fair value as whether customers are paying a reasonable price for a product compared with the benefits they get in return.',
-      'The FCA says firms need evidence that customers are getting a fair deal; if they cannot provide it, they need to look again.',
-      'Audit relevance: fair value work should connect pricing, fees, customer cohorts, benefits, outcomes data, complaints and remedial action.',
-    ],
-  },
-  {
-    id: 'S20',
-    title: 'FCA: Operational resilience - insights and observations one year on',
-    date: '27 March 2026',
-    url: 'https://www.fca.org.uk/publications/good-and-poor-practice/operational-resilience-insights-observations-one-year',
-    notes: [
-      'The FCA tells firms to continue complying with operational resilience rules and to use observations from self-assessments to review and evolve their approach.',
-      'The FCA highlights important business services, impact tolerances and the need for clear shared understanding of each service and how disruption could cause intolerable harm to consumers or threaten market integrity.',
-      'Audit relevance: test service definitions, impact tolerances, mapping, scenario testing, vulnerabilities, remediation, self-assessment quality and senior ownership.',
-    ],
-  },
-  {
-    id: 'S21',
-    title: 'FCA: Operational resilience',
-    date: 'Updated June 2026',
-    url: 'https://www.fca.org.uk/firms/operational-resilience',
-    notes: [
-      'The FCA says firms in scope had until 31 March 2025 to ensure they could operate important business services within impact tolerances.',
-      'The page links the operational resilience regime to cyber resilience observations and incident reporting preparations.',
-      'Audit relevance: the post-transition question is no longer whether mapping exists, but whether the firm can evidence operation within tolerances under severe but plausible scenarios.',
-    ],
-  },
-  {
-    id: 'S22',
-    title: 'FCA: Reporting operational incidents',
-    date: '18 March 2026',
-    url: 'https://www.fca.org.uk/firms/operational-resilience/reporting-operational-incidents',
-    notes: [
-      'The FCA says firms should prepare for new reporting rules coming into force on 18 March 2027.',
-      'The page is relevant to material operational incident governance, escalation thresholds, data capture and regulatory reporting readiness.',
-      'Audit relevance: test whether incident taxonomy, escalation, MI, ownership and reporting playbooks are aligned to the forthcoming regime.',
-    ],
-  },
-  {
-    id: 'S23',
-    title: 'Bank of England/PRA: PS7/26 Operational incident and third-party reporting',
-    date: 'March 2026',
-    url: 'https://www.bankofengland.co.uk/prudential-regulation/publication/2026/march/operational-incident-and-third-party-reporting-policy-statement',
-    notes: [
-      'The PRA policy statement covers operational incident reporting and material third-party arrangement reporting.',
-      'The PRA says flexibility is important because the same operational incident may have varying impacts across firms depending on size, business model, services or customer base.',
-      'Audit relevance: test materiality judgements, third-party inventory completeness, incident severity assessment, governance challenge and reporting evidence.',
-    ],
-  },
-  {
-    id: 'S24',
-    title: 'PRA Business Plan 2026/27',
-    date: 'April 2026',
-    url: 'https://www.bankofengland.co.uk/prudential-regulation/publication/2026/april/pra-business-plan-2026-27',
-    notes: [
-      'The PRA says its operational resilience policy was fully implemented in March 2025.',
-      'During 2026/27 the PRA will continue robust supervisory standards through operational and cyber resilience assessments such as CBEST, working with the National Cyber Security Centre.',
-      'Audit relevance: UK operational resilience audit work should consider cyber resilience, testing, remediation and evidence of senior-level oversight.',
-    ],
-  },
-  {
-    id: 'S25',
-    title: 'Central Bank of Ireland: Digital Operational Resilience Act (DORA)',
-    date: 'Updated 2026',
-    url: 'https://www.centralbank.ie/regulation/digital-operational-resilience-act-dora',
-    notes: [
-      'The Central Bank says DORA has applied since 17 January 2025 and applies to a wide range of financial entities regulated by the Central Bank of Ireland.',
-      'The Central Bank says DORA brings together provisions addressing digital operational risk in the financial sector in a consistent manner.',
-      'Audit relevance: DORA audit work should cover ICT risk management, incident reporting, resilience testing, third-party ICT risk and governance ownership.',
-    ],
-  },
-  {
-    id: 'S26',
-    title: 'Central Bank of Ireland: Operational Resilience',
-    date: 'Updated July 2025',
-    url: 'https://www.centralbank.ie/financial-system/operational-resilience-and-cyber/operational-resilience',
-    notes: [
-      'The Central Bank says it updated and republished its operational resilience guidance in July 2025 to align with DORA and withdrew its 2016 IT and cybersecurity risk guidance.',
-      'The Central Bank says the guidance explains how to prepare for, respond to, recover and learn from operational disruptions affecting critical or important business services.',
-      'Audit relevance: Irish operational resilience audit work should bridge DORA minimum standards with Central Bank expectations on important services and disruption response.',
-    ],
-  },
-  {
-    id: 'S27',
-    title: 'Central Bank of Ireland: Reporting Registers of Information',
-    date: '2026',
-    url: 'https://www.centralbank.ie/regulation/digital-operational-resilience-act-dora/reporting-registers-of-information',
-    notes: [
-      'The Central Bank says financial entities subject to DORA must submit Registers of Information on contractual arrangements for ICT third-party services.',
-      'Audit relevance: test RoI completeness, data lineage, ownership, contract population, validation checks and reconciliation to vendor/outsourcing inventories.',
-    ],
-  },
-  {
-    id: 'S28',
-    title: 'Central Bank of Ireland: Reporting major ICT-related incidents and significant cyber threats',
-    date: '2026',
-    url: 'https://www.centralbank.ie/regulation/digital-operational-resilience-act-dora/reporting-major-ict-related-incidents-and-significant-cyber-threats',
-    notes: [
-      'The Central Bank says financial entities subject to DORA have been obliged since 17 January 2025 to submit major ICT-related incident reports where criteria and thresholds are met.',
-      'The page also covers significant cyber-threat submissions.',
-      'Audit relevance: test threshold assessment, reporting workflow, incident evidence, cyber-threat escalation and post-incident lessons learned.',
-    ],
-  },
-  {
-    id: 'S29',
-    title: 'Central Bank of Ireland: Regulatory and Supervisory Outlook 2026',
-    date: 'February 2026',
-    url: 'https://www.centralbank.ie/publication/regulatory---supervisory-outlook-report',
-    notes: [
-      'The Central Bank says its 2026 Outlook sets out key trends, risks and regulatory and supervisory priorities for the next two years.',
-      'Search-result excerpts from the report highlight DORA, ICT risk management, and maintaining resilient financial services to consumers and investors.',
-      'Audit relevance: use the Outlook to frame operational resilience as customer/investor service continuity, not only technology compliance.',
-    ],
-  },
-];
 
-// Standing audit-horizon context — evergreen FCA/CBI/PRA guidance that frames
-// audit criteria. These are NOT dated news; they are the reference baseline.
-const AUDIT_HORIZON_IDS = ['S16','S17','S18','S19','S20','S21','S22','S23','S24','S25','S26','S27','S28','S29'];
-
+// Standing audit-horizon context — compiled from nakai_ref_atoms (DB).
+// Bootstrap atoms are used immediately; synthesis job upgrades them to LLM-compiled versions.
 function standingContextMarkdown() {
-  return sources
-    .filter(s => AUDIT_HORIZON_IDS.includes(s.id))
-    .map(s => [
-      `[${s.id}] ${s.title}`,
-      `Date: ${s.date}`,
-      `URL: ${s.url}`,
-      'Evidence:',
-      ...s.notes.map(n => `- ${n}`),
-    ].join('\n')).join('\n\n---\n\n');
+  const atoms = getRefAtoms();
+  if (!atoms.length) return '';
+  return atoms.map(a => {
+    const lines = [
+      `[${a.source_key}] ${a.title}`,
+      `URL: ${a.url}`,
+    ];
+    if (a.is_bootstrap) lines.push('(Bootstrap context — pending live synthesis)');
+    lines.push(a.content || '');
+    return lines.join('\n');
+  }).join('\n\n---\n\n');
 }
 
 // Live source pack — reads from reg_monitor_items (last 72 hours) so the
