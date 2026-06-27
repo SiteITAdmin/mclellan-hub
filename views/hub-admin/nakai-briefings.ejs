@@ -9,74 +9,288 @@
 <style>
 .wrap { max-width: var(--max-w); }
 .notice { margin: 12px 0; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
-.notice.ok { background: rgba(76,175,133,.12); color: #287052; }
+.notice.ok  { background: rgba(76,175,133,.12); color: #287052; }
 .notice.err { background: rgba(224,108,108,.12); color: #a33b3b; }
-.top-actions { display:flex; gap:8px; align-items:center; margin: 16px 0 20px; flex-wrap:wrap; }
+.tabs { display:flex; gap:0; border-bottom: 2px solid var(--border); margin: 16px 0 20px; }
+.tab-btn {
+  padding: 8px 18px; font-size: 13px; font-family: inherit; cursor: pointer;
+  border: none; background: none; color: var(--text-dim); border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: color .15s;
+}
+.tab-btn.active { color: var(--text); border-bottom-color: var(--accent, #7c6af5); font-weight:600; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.top-actions { display:flex; gap:8px; align-items:center; margin-bottom: 16px; flex-wrap:wrap; }
 .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text); text-decoration:none; font-family:inherit; }
 .btn-sm.primary { background: var(--accent, #7c6af5); border-color: var(--accent, #7c6af5); color: #fff; }
-.btn-sm:hover { background: rgba(0,0,0,.05); }
+.btn-sm.danger  { border-color: #c55; color: #c55; }
+.btn-sm:hover   { opacity:.85; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { text-align:left; padding: 8px 10px; border-bottom: 2px solid var(--border); color: var(--text-dim); font-weight: 600; }
 td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .mono { font-family: var(--font-mono, monospace); }
-.dim { color: var(--text-dim); }
-.actions { display:flex; gap:6px; flex-wrap:wrap; }
+.dim  { color: var(--text-dim); }
+.tag  { display:inline-block; padding:2px 7px; border-radius:4px; font-size:11px; font-weight:600; margin-left:4px; }
+.tag.ok   { background: rgba(76,175,133,.15); color: #287052; }
+.tag.warn { background: rgba(230,160,30,.15); color: #8a6000; }
+.tag.dim  { background: rgba(120,120,120,.12); color: var(--text-dim); }
+.atom-preview { font-size:12px; color:var(--text-dim); max-width:380px; white-space:pre-wrap; word-break:break-word; }
+.actions { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
 .empty { color: var(--text-dim); padding: 28px 0; }
+.form-row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; padding: 16px 0 8px; border-top: 1px solid var(--border); margin-top:16px; }
+.form-row label { font-size:12px; color:var(--text-dim); display:block; margin-bottom:3px; }
+.form-row input, .form-row select, .form-row textarea {
+  font-family:inherit; font-size:13px; padding:5px 8px; border:1px solid var(--border);
+  border-radius:5px; background:var(--bg,#fff); color:var(--text); min-width:140px;
+}
+.form-row textarea { min-width:260px; min-height:60px; resize:vertical; }
+.url-cell { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 </head>
 <body class="admin-page">
 <%- include('partials/admin-header', { title: `Nakai daily briefings — ${user}` }) %>
 <section class="admin-section wrap">
-  <p class="dim" style="font-size:13px;">
-    Private stored editions for resend and continuity. Resend uses the stored PDF/HTML/Markdown and does not regenerate the briefing.
-  </p>
 
   <% if (message) { %><div class="notice ok"><%= message %></div><% } %>
-  <% if (error) { %><div class="notice err"><%= error %></div><% } %>
+  <% if (error)   { %><div class="notice err"><%= error %></div><% } %>
 
-  <div class="top-actions">
-    <form method="POST" action="/admin/nakai-briefings/build-test" style="display:inline">
-      <button class="btn-sm" type="submit">Build test edition</button>
+  <nav class="tabs">
+    <button class="tab-btn <%= tab === 'briefings' ? 'active' : '' %>" data-tab="briefings">Editions</button>
+    <button class="tab-btn <%= tab === 'sites'     ? 'active' : '' %>" data-tab="sites">Monitor sites</button>
+    <button class="tab-btn <%= tab === 'sources'   ? 'active' : '' %>" data-tab="sources">Reference sources</button>
+  </nav>
+
+  <%# ── TAB: Editions ──────────────────────────────────────────────────────── %>
+  <div class="tab-panel <%= tab === 'briefings' ? 'active' : '' %>" id="tab-briefings">
+    <p class="dim" style="font-size:13px;">
+      Stored editions for resend and continuity. Resend uses the stored PDF/HTML/Markdown and does not regenerate.
+    </p>
+    <div class="top-actions">
+      <form method="POST" action="/admin/nakai-briefings/build-test" style="display:inline">
+        <button class="btn-sm" type="submit">Build test edition</button>
+      </form>
+    </div>
+
+    <% if (!briefings.length) { %>
+      <div class="empty">No stored Nakai daily briefings yet. Edition 001 starts on 19 June 2026.</div>
+    <% } else { %>
+    <table>
+      <tr>
+        <th>Edition</th><th>Date</th><th>Status</th><th>Artifacts</th><th></th>
+      </tr>
+      <% briefings.forEach(b => { %>
+      <tr>
+        <td class="mono">Daily Briefing <%= b.edition %></td>
+        <td><%= b.label || b.date %>
+          <% if (b.previousEdition) { %><div class="dim">Previous: <%= b.previousEdition %></div><% } %>
+        </td>
+        <td>
+          <% if (b.sentAt) { %>
+            Sent <span class="dim"><%= new Date(b.sentAt).toLocaleString('en-GB', { timeZone: 'Europe/Dublin', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) %></span>
+            <% if (b.to) { %><div class="dim"><%= b.to %></div><% } %>
+          <% } else { %>
+            <span class="dim">Not sent</span>
+          <% } %>
+        </td>
+        <td class="actions">
+          <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/pdf">PDF</a>
+          <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/html">HTML</a>
+          <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/md">Markdown</a>
+        </td>
+        <td>
+          <form method="POST" action="/admin/nakai-briefings/<%= b.edition %>/resend" style="display:inline">
+            <button class="btn-sm primary" type="submit">Resend</button>
+          </form>
+        </td>
+      </tr>
+      <% }) %>
+    </table>
+    <% } %>
+  </div>
+
+  <%# ── TAB: Monitor sites ─────────────────────────────────────────────────── %>
+  <div class="tab-panel <%= tab === 'sites' ? 'active' : '' %>" id="tab-sites">
+    <p class="dim" style="font-size:13px;">
+      Sites the regulatory monitor scrapes for live news. Items found here flow into <code>reg_monitor_items</code> and become the live source pack for each briefing.
+    </p>
+
+    <table>
+      <tr>
+        <th>Name</th><th>URL</th><th>Cadence</th><th>Last checked</th><th>Items (7d)</th><th>Status</th><th></th>
+      </tr>
+      <% monitorSites.forEach(s => {
+           const checked = s.last_checked_at
+             ? new Date(s.last_checked_at * 1000).toLocaleString('en-GB', { timeZone: 'Europe/Dublin', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+             : 'Never';
+      %>
+      <tr>
+        <td><strong><%= s.name %></strong></td>
+        <td class="url-cell dim"><%= s.url %></td>
+        <td><%= s.cadence %></td>
+        <td class="dim mono" style="font-size:12px;"><%= checked %></td>
+        <td class="dim" style="text-align:center;"><%= s.items_7d || 0 %></td>
+        <td>
+          <% if (s.active) { %>
+            <span class="tag ok">Active</span>
+          <% } else { %>
+            <span class="tag dim">Paused</span>
+          <% } %>
+        </td>
+        <td class="actions">
+          <form method="POST" action="/admin/nakai-briefings/sites/<%= s.id %>/toggle" style="display:inline">
+            <button class="btn-sm" type="submit"><%= s.active ? 'Pause' : 'Activate' %></button>
+          </form>
+          <form method="POST" action="/admin/nakai-briefings/sites/<%= s.id %>/delete" style="display:inline"
+            onsubmit="return confirm('Remove <%= s.name %>?')">
+            <button class="btn-sm danger" type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      <% }) %>
+    </table>
+
+    <form method="POST" action="/admin/nakai-briefings/sites">
+      <div class="form-row">
+        <div>
+          <label>Name</label>
+          <input name="name" placeholder="e.g. PRA" required>
+        </div>
+        <div>
+          <label>URL (news listing page)</label>
+          <input name="url" type="url" placeholder="https://..." required style="min-width:280px;">
+        </div>
+        <div>
+          <label>Cadence</label>
+          <select name="cadence">
+            <option value="daily">Daily</option>
+            <option value="fortnightly">Fortnightly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div style="padding-bottom:1px;">
+          <button class="btn-sm primary" type="submit">Add site</button>
+        </div>
+      </div>
     </form>
   </div>
 
-  <% if (!briefings.length) { %>
-    <div class="empty">No stored Nakai daily briefings yet. Edition 001 starts on 19 June 2026.</div>
-  <% } else { %>
-  <table>
-    <tr>
-      <th>Edition</th>
-      <th>Date</th>
-      <th>Status</th>
-      <th>Artifacts</th>
-      <th></th>
-    </tr>
-    <% briefings.forEach(b => { %>
-    <tr>
-      <td class="mono">Daily Briefing <%= b.edition %></td>
-      <td><%= b.label || b.date %><% if (b.previousEdition) { %><div class="dim">Previous: <%= b.previousEdition %></div><% } %></td>
-      <td>
-        <% if (b.sentAt) { %>
-          Sent <span class="dim"><%= new Date(b.sentAt).toLocaleString('en-GB', { timeZone: 'Europe/Dublin', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) %></span>
-          <% if (b.to) { %><div class="dim"><%= b.to %></div><% } %>
-        <% } else { %>
-          <span class="dim">Not sent</span>
-        <% } %>
-      </td>
-      <td class="actions">
-        <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/pdf">PDF</a>
-        <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/html">HTML</a>
-        <a class="btn-sm" href="/admin/nakai-briefings/<%= b.edition %>/md">Markdown</a>
-      </td>
-      <td>
-        <form method="POST" action="/admin/nakai-briefings/<%= b.edition %>/resend" style="display:inline">
-          <button class="btn-sm primary" type="submit">Send to Nakai again</button>
-        </form>
-      </td>
-    </tr>
-    <% }) %>
-  </table>
-  <% } %>
+  <%# ── TAB: Reference sources ─────────────────────────────────────────────── %>
+  <div class="tab-panel <%= tab === 'sources' ? 'active' : '' %>" id="tab-sources">
+    <p class="dim" style="font-size:13px;">
+      Evergreen regulatory reference documents that define the audit horizon for Consumer Duty and Operational Resilience.
+      Each source is fetched, extracted, and synthesised into an atom that the briefing LLM reads as standing context.
+    </p>
+
+    <div class="top-actions">
+      <form method="POST" action="/admin/nakai-briefings/ref-sources/synthesize-all" style="display:inline"
+        onsubmit="return confirm('Re-synthesise all active sources? This will make LLM calls for each one.')">
+        <button class="btn-sm primary" type="submit">Synthesise all</button>
+      </form>
+    </div>
+
+    <table>
+      <tr>
+        <th>Key</th><th>Title</th><th>Last synthesised</th><th>Atom status</th><th>Preview</th><th></th>
+      </tr>
+      <% refSources.forEach(s => {
+           const synthDate = s.atom_synthesized_at
+             ? new Date(s.atom_synthesized_at * 1000).toLocaleString('en-GB', { timeZone: 'Europe/Dublin', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+             : null;
+           const preview = s.atom_content
+             ? s.atom_content.replace(/\*\*/g,'').slice(0, 120) + (s.atom_content.length > 120 ? '…' : '')
+             : null;
+      %>
+      <tr>
+        <td class="mono"><strong><%= s.source_key %></strong></td>
+        <td>
+          <a href="<%= s.url %>" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;">
+            <%= s.title %>
+          </a>
+          <% if (!s.active) { %><span class="tag dim">Paused</span><% } %>
+        </td>
+        <td class="dim mono" style="font-size:12px;">
+          <% if (synthDate) { %>
+            <%= synthDate %>
+          <% } else { %>
+            Never
+          <% } %>
+        </td>
+        <td>
+          <% if (!s.atom_content) { %>
+            <span class="tag dim">No atom</span>
+          <% } else if (s.is_bootstrap) { %>
+            <span class="tag warn">Bootstrap</span>
+          <% } else { %>
+            <span class="tag ok">LLM</span>
+          <% } %>
+        </td>
+        <td>
+          <% if (preview) { %>
+            <div class="atom-preview"><%= preview %></div>
+          <% } else { %>
+            <span class="dim">—</span>
+          <% } %>
+        </td>
+        <td class="actions">
+          <% if (s.active) { %>
+          <form method="POST" action="/admin/nakai-briefings/ref-sources/<%= s.id %>/synthesize" style="display:inline">
+            <button class="btn-sm" type="submit">Synthesise</button>
+          </form>
+          <% } %>
+          <form method="POST" action="/admin/nakai-briefings/ref-sources/<%= s.id %>/toggle" style="display:inline">
+            <button class="btn-sm" type="submit"><%= s.active ? 'Pause' : 'Activate' %></button>
+          </form>
+          <form method="POST" action="/admin/nakai-briefings/ref-sources/<%= s.id %>/delete" style="display:inline"
+            onsubmit="return confirm('Remove <%= s.source_key %>? This also deletes its atom.')">
+            <button class="btn-sm danger" type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      <% }) %>
+    </table>
+
+    <form method="POST" action="/admin/nakai-briefings/ref-sources">
+      <div class="form-row">
+        <div>
+          <label>Source key (e.g. S30)</label>
+          <input name="source_key" placeholder="S30" style="width:80px;" required>
+        </div>
+        <div>
+          <label>Title</label>
+          <input name="title" placeholder="Regulator: Document title" required style="min-width:260px;">
+        </div>
+        <div>
+          <label>URL</label>
+          <input name="url" type="url" placeholder="https://..." required style="min-width:280px;">
+        </div>
+      </div>
+      <div class="form-row" style="border-top:none; padding-top:0;">
+        <div style="flex:1;">
+          <label>Intent (why this source matters for Nakai's audit work)</label>
+          <textarea name="intent" placeholder="e.g. PRA guidance on third-party outsourcing — use to frame audit scope for vendor governance"></textarea>
+        </div>
+        <div style="padding-bottom:1px; align-self:flex-end;">
+          <button class="btn-sm primary" type="submit">Add source</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
 </section>
+
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + target).classList.add('active');
+    const url = new URL(window.location);
+    url.searchParams.set('tab', target);
+    history.replaceState({}, '', url);
+  });
+});
+</script>
 </body>
 </html>
