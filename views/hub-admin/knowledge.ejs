@@ -22,6 +22,13 @@
 .warn { border-left:3px solid #e06c6c; }
 .empty { padding:24px 0; color:var(--text-dim); font-size:13px; }
 .count { font-weight:700; }
+.receipt { padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface-2, rgba(255,255,255,0.03)); }
+.receipt-head { display:flex; justify-content:space-between; gap:10px; align-items:baseline; font-size:13px; }
+.receipt-stage { color:#7c6af5; font-family:monospace; font-size:12px; }
+.receipt-status { font-size:11px; border:1px solid var(--border); border-radius:999px; padding:1px 7px; color:var(--text-dim); }
+.receipt-status.error { color:#e06c6c; border-color:#e06c6c; }
+.receipt-status.skipped { color:#b9822b; border-color:#b9822b; }
+.receipt-body { font-size:12px; color:var(--text-dim); margin-top:4px; }
 </style>
 </head>
 <body class="admin-page">
@@ -94,6 +101,29 @@
       Merges atoms where one value is a substring of another within the same entity+predicate group.
     </span>
   </div>
+
+  <div class="section-head">CRM knowledge-engine receipts (<span class="count"><%= (receipts || []).length %></span>)</div>
+  <% if (!(receipts || []).length) { %>
+    <div class="empty">No CRM knowledge-engine receipts yet. The scheduled engine will start leaving source triage and synthesis decisions here.</div>
+  <% } else { %>
+    <% receipts.forEach(function(r){ %>
+      <div class="receipt">
+        <div class="receipt-head">
+          <div>
+            <span class="receipt-stage"><%= r.stage %></span>
+            <span class="atom-meta"> · <%= r.source_kind %>/<%= r.source_id %></span>
+          </div>
+          <span class="receipt-status <%= r.status %>"><%= r.status %></span>
+        </div>
+        <div class="receipt-body">
+          <%= r.summary || 'No summary.' %>
+          <% if (r.model_id) { %> · model <%= r.model_id %><% } %>
+          <% if (r.payload && r.payload.knowledge_value) { %> · value <%= r.payload.knowledge_value %><% } %>
+          <% if (typeof r.payload.confidence === 'number') { %> · confidence <%= r.payload.confidence.toFixed(2) %><% } %>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
 
   <div class="section-head">Stale claims (<span class="count"><%= queue.stale.length %></span>)</div>
   <% if (!queue.stale.length) { %>

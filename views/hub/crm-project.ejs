@@ -59,7 +59,7 @@ async function taskAction(id, action) {
     <% if (projPredicates.length) { %>
     <section class="section-card">
       <h2 style="margin-bottom:4px;">Knowledge</h2>
-      <p class="crm-muted" style="font-size:12px;margin:0 0 12px;">Compiled from documents, emails and meetings by the nightly synthesis job — each claim links back to its source.</p>
+      <p class="crm-muted" style="font-size:12px;margin:0 0 12px;">Compiled from source evidence by the CRM knowledge engine and nightly synthesis — each claim links back to what produced it.</p>
       <% for (const pred of projPredicates) { %>
         <div style="margin-bottom:10px;">
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;opacity:.55;margin-bottom:3px;"><%= pred.replace(/_/g,' ') %></div>
@@ -210,7 +210,7 @@ async function taskAction(id, action) {
             </time>
             <strong><%= item.value %></strong>
             <span style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:11px;opacity:.6;">derived from completed task · <%= Math.round(item.confidence * 100) %>%</span>
+              <span style="font-size:11px;opacity:.6;">compiled knowledge · <%= Math.round(item.confidence * 100) %>%</span>
               <span style="display:inline-flex;gap:6px;">
                 <% item.sources.forEach(function(s){ %><a href="/crm/source/<%= s.kind %>/<%= encodeURIComponent(s.id) %>" style="opacity:.65;font-size:11px;" title="open source: <%= s.kind.replace(/_/g,' ') %>"><%= ({document:'doc',email_summary:'email',meeting_intake:'meeting',crm_fact:'fact',completed_task:'task'})[s.kind] || s.kind %></a><% }); %>
               </span>
