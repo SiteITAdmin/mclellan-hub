@@ -72,6 +72,42 @@ Every model call runs through OpenRouter, and every model — including the
 embedding and extraction models — is mine to change in the admin tool. No
 hidden provider choices.
 
+## 27 June 2026 update — CRM prompt operating system
+
+The next failure mode was email and meeting intake still behaving like old
+table-writing code: classify a source, immediately create a CRM fact or task,
+and hope duplicate handling was good enough. That is what produced repeated
+"Follow up" tasks and project pages polluted by unrelated email statistics.
+
+The CRM path is now deliberately staged:
+
+```text
+raw source -> crm_source_triage -> crm_duplicate_review -> synthesis/provenance merge -> crm_action_projection -> compiled atoms/events/tasks
+```
+
+What changed:
+
+- Gmail and AgentMail still classify, label, detect Ryanair bookings, and store
+  summaries/source records, but they no longer create CRM facts or Google Tasks
+  directly by default.
+- Meeting intake stores the meeting evidence and document context, but its CRM
+  facts/actions now flow through the same knowledge engine.
+- The model first decides whether a source is actually CRM knowledge at all.
+  A daily website statistics email should be recognised as non-project CRM
+  knowledge instead of being dragged into the nearest project.
+- Duplicate and supersession review happens before projection, so a forwarded
+  chain or repeated source can confirm or update existing knowledge rather than
+  creating another identical action.
+- Action projection is its own model step. Only high-confidence required actions
+  become Google Tasks.
+- `knowledge_receipts` records each prompt decision so the admin view can show
+  what the model saw and why it acted.
+
+This still uses tables, but for the right things: raw source evidence,
+compiled/cacheable model outputs, operational tasks, and audit receipts. The
+relationship thinking is now in prompts and synthesis, not in deterministic
+"copy this row over there" glue.
+
 ## The proof
 
 Running live on real data, Alister now has 41 derived facts, including:

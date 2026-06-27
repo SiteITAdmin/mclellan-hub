@@ -74,6 +74,7 @@ The CRM, wiki, and project pages are no longer the knowledge — they are **view
 
 - **Embeddings (`embeddings`):** documents, email summaries, CRM facts, meeting transcripts and atoms are embedded (OpenRouter; model set in admin) for semantic retrieval.
 - **Atoms (`knowledge_atoms`):** derived `subject–predicate–value` claims, each with provenance (the source rows that justify it), confidence and status. Not authored by hand.
+- **CRM prompt engine (`crm_knowledge_engine`):** reviews raw CRM-bound sources through `crm_source_triage`, `crm_duplicate_review`, synthesis/provenance merge, and `crm_action_projection` before knowledge or tasks are compiled.
 - **Synthesis (nightly `synthesis_run`):** re-reads new sources *after* ingestion, extracts atoms and links them to the right contact/company/project from the whole corpus — so a care-plan address attaches to the person even though the email that first arrived knew nothing about them.
 - **Routing & lint:** `task_route_run` attaches free-text tasks to the entity their knowledge points to; `knowledge_lint_run` decays stale claims and surfaces contradictions/duplicates at `/admin/knowledge`.
 
@@ -84,9 +85,9 @@ A contact or project page renders the atoms about that entity, each claim click-
 | Source | What is captured | Where it becomes useful |
 |---|---|---|
 | Chat | Conversations, ratings, project messages, saved answers | Project context, recall, wiki |
-| Gmail/AgentMail | Summaries, contacts, facts, actions, labels | CRM, projects, Tasks, briefings |
+| Gmail/AgentMail | Summaries, source records, labels | CRM knowledge engine, projects, Tasks, briefings |
 | Calendar | Today’s events | Morning briefing, meeting preparation |
-| Meetings | Transcript, summary, people, projects, facts | Vault, CRM, wiki |
+| Meetings | Transcript, summary, source evidence | CRM knowledge engine, vault, wiki |
 | Daily Debrief | People, projects, decisions, actions | Vault, project notes, Google Tasks |
 | Workday Interview | Structured journal and project document | Workday Journal, vault, Synthadoc |
 | Newsletter mail | Topics and source material | Intelligence briefings, RSS, portfolio |
@@ -154,7 +155,8 @@ The model selected in AI Chat controls that conversation only. Background featur
 - Meetings and linked contacts.
 - Facts, decisions, actions, and notes.
 - Statuses such as active, follow-up, completed, or superseded.
-- Connections inferred from shared meetings and linked records.
+- Derived atoms and prompt receipts compiled from source evidence.
+- Connections inferred from synthesis, duplicate review, shared meetings, and linked records.
 - Google Tasks linked to people and companies.
 
 ### Before a meeting
@@ -166,7 +168,7 @@ The model selected in AI Chat controls that conversation only. Background featur
 
 ### Capturing CRM context
 
-Use the CRM note input or a natural-language CRM command in chat. The CRM classifier can identify a person, fact, action, or follow-up. Follow-ups become both CRM facts and linked Google Tasks.
+Use the CRM note input or a natural-language CRM command in chat. For source-driven material such as email, AgentMail, meetings, and documents, the CRM knowledge engine should decide whether the source is knowledge, a duplicate, a supersession, or an action before it becomes a fact or task.
 
 ### Good CRM facts
 
@@ -187,9 +189,8 @@ The contact and company pages are designed as briefing pages, not address books.
 - Manual entry on `/crm/tasks`.
 - Quick entry on a contact or company page.
 - `/tasks add` in AI Chat.
-- CRM follow-ups.
-- Email messages that clearly require an action.
-- Actions extracted from Daily Debrief.
+- Prompt-led CRM action projection from email, AgentMail, meetings, documents, completed tasks, and source evidence.
+- Direct reminders or manual operational commands where the user explicitly asks for a task.
 
 ### Task fields
 
@@ -237,9 +238,8 @@ The Calendar integration reads today’s events. The automated CRM briefing comb
 
 - Summarize a message.
 - Match a canonical Gmail taxonomy label.
-- Identify a contact and create a directly evidenced CRM fact.
-- Associate the message with a project.
-- Create a Google Task when the recipient clearly must act.
+- Store source evidence for the CRM knowledge engine.
+- Feed `crm_source_triage`, duplicate/supersession review, synthesis, and action projection.
 - Extract newsletters into intelligence topics.
 - Import Ryanair itinerary details into Flights.
 - Ignore passive notifications and automated messages when no action is required.
@@ -262,7 +262,7 @@ Rules are maintained in the email taxonomy configuration and admin page. Manual 
 
 ### Task-creation threshold
 
-Email should create a task only for a specific required action, such as replying, approving, paying, signing, deciding, or completing a form. Newsletters, alerts, FYI messages, and routine automated mail should not create tasks.
+Email should project a task only after the CRM knowledge engine identifies a specific required action, such as replying, approving, paying, signing, deciding, or completing a form, and duplicate review does not find an existing open action. Newsletters, alerts, FYI messages, and routine automated mail should not create tasks.
 
 ## 8. Intelligence Briefings
 
@@ -651,6 +651,7 @@ Pipeline slots separate background and specialist work from the interactive Chat
 |---|---|
 | Chat infrastructure | Recall tagger, multi-search planner, multi-search synthesiser |
 | Background processing | CRM intent parser, email classifier, regulatory synopsis, prompt improver, test synthesiser |
+| CRM knowledge engine | Source triage, duplicate/supersession review, action projection |
 | Debrief | Interviewer, extractor |
 | LinkedIn | Query planner, research synthesiser, post drafter, scorer, carousel generator, refiner/reviewer, image-prompt writer |
 | Workday | Narrative writer |
@@ -727,6 +728,7 @@ The queue is checked every minute. Jobs survive a Node restart, are visible at `
 |---|---|---|
 | `email_process` | Every 15 minutes | Fetches and classifies Gmail for configured users |
 | `agentmail_process` | Every 15 minutes | Processes the AI-facing AgentMail inbox |
+| `crm_knowledge_engine` | Recurring/background | Runs source triage, duplicate/supersession review, synthesis merge, and action projection for CRM-bound evidence |
 | `mycelium_run` | Every 6 hours | Connects flights, documents, meetings, contacts, tasks, and projects |
 | `mycelium_doc` | Event-driven | Extracts tasks and contact links after document upload |
 | `mycelium_flights` | Event-driven | Creates preparation/check-in tasks after flight creation |

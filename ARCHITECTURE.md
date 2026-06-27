@@ -38,7 +38,13 @@ Env: `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID`
 // lib/email-processor.js
 processNewEmails(user)
 ```
-Scheduled via job queue every 15 min. Classifies, extracts tasks, detects Ryanair bookings, stores summaries. Do not duplicate this logic elsewhere.
+Scheduled via job queue every 15 min. Classifies, labels, detects Ryanair bookings, stores source summaries, and keeps Gmail usable as a human navigation surface. It does **not** create CRM facts or Google Tasks directly in normal operation. CRM-facing interpretation is owned by the CRM knowledge engine below.
+
+```js
+// lib/agentmail-processor.js
+processAgentMail()
+```
+Scheduled via job queue every 15 min. Stores AgentMail records and summaries as source evidence for the same CRM knowledge engine. Do not add a separate AgentMail-to-CRM write path.
 
 ### Silent-filter list
 Subjects matching `SILENT_SUBJECT_RE` (email-processor.js:21) are dropped before processing. Add patterns there, not in calling code.
@@ -94,9 +100,14 @@ Adding a new feature → add a task code to `openrouter-attribution.js` first, t
 | Slot | Default model |
 |---|---|
 | embeddings | openai/text-embedding-3-small |
-| synthesis | anthropic/claude-haiku-4-5 |
-| linkage | anthropic/claude-haiku-4-5 |
-| briefing | google/gemini-2.5-pro-preview |
+| atom_extractor | anthropic/claude-haiku-4-5 |
+| entity_linker | anthropic/claude-haiku-4-5 |
+| cross_entity_synthesis | anthropic/claude-haiku-4-5 |
+| knowledge_query | google/gemini-2.5-pro-preview |
+| project_report | google/gemini-2.5-pro-preview |
+| crm_source_triage | anthropic/claude-haiku-4-5 |
+| crm_duplicate_review | anthropic/claude-haiku-4-5 |
+| crm_action_projection | anthropic/claude-haiku-4-5 |
 
 ---
 
@@ -110,6 +121,44 @@ searchSimilar(query, user, filters)  // cosine similarity against embeddings tab
 Chunks: max 1200 chars, 150-char overlap, sentence-boundary aware.  
 Storage: `embeddings` table (`source_kind`, `source_id`, `user`, `vector`, `chunk_text`).  
 Backfill: `embed_backfill` job — runs automatically. Do not call `embed()` in bulk inline; add source rows and let the job pick them up.
+
+---
+
+## CRM knowledge engine (prompt operating system)
+
+The CRM is not a write target for every ingester. It is a view over compiled knowledge plus operational tasks. The canonical CRM path is:
+
+```text
+raw source -> crm_source_triage -> crm_duplicate_review -> synthesis/provenance merge -> crm_action_projection -> compiled atoms/events/tasks
+```
+
+Entry point:
+```js
+// lib/crm-knowledge-engine.js
+runCrmKnowledgeEngine({ user, limit })
+```
+
+Scheduled via `crm_knowledge_engine` in `lib/job-queue.js`. The job reviews raw and intermediate source evidence, records prompt decisions in `knowledge_receipts`, merges provenance into existing atoms when the source confirms or supersedes known knowledge, and projects only high-confidence required actions into Google Tasks.
+
+Current CRM source kinds:
+
+| Source kind | Meaning |
+|---|---|
+| `email_summary` | Gmail and AgentMail summaries from email ingest |
+| `meeting_intake` | Meeting recordings/transcripts/summaries |
+| `document` | Uploaded or Drive-derived documents |
+| `open_task` | Current Google Tasks, used as operational evidence and duplicate context |
+| `completed_task` | Completed tasks, eligible for durable synthesis |
+| `crm_fact` | Existing curated facts, mostly legacy or manually entered context |
+
+Prompt/model slots are visible in `/admin/models`: `crm_source_triage`, `crm_duplicate_review`, and `crm_action_projection`. Receipts are visible in `/admin/knowledge`. These receipts are the audit trail for "what did the model decide, using what source, and why?"
+
+Important rules:
+
+- Ingest paths store faithful source evidence. They must not directly create `crm_facts`, `contact_projects`, `company_projects`, or Google Tasks as their normal output.
+- `lib/email-processor.js`, `lib/agentmail-processor.js`, and `lib/meeting-intake.js` have a rollback switch only: `CRM_LEGACY_DIRECT_WRITES=1`. Do not use it as the normal architecture.
+- Open tasks are operational state. They can inform triage and duplicate review, but durable knowledge should come from completed tasks or source evidence.
+- If a new CRM feature needs to connect people, projects, companies, tasks, documents, or emails, add a source kind or synthesis/projection step. Do not add a direct table copy path.
 
 ---
 
@@ -265,6 +314,9 @@ Route prefix: `/admin` — see `routes/hub-admin.js`.
 | `email_summaries` | Processed email metadata + summaries |
 | `embeddings` | Vector chunks for semantic search |
 | `knowledge_atoms` | Derived claims (subject, predicate, value, confidence) |
+| `knowledge_receipts` | Prompt decision receipts for CRM/source triage, duplicate review, and action projection |
+| `synthesis_state` | Checkpoints for synthesis/knowledge jobs |
+| `inbound_email_records` | AgentMail source messages and processing state |
 | `reminders` | Escalating reminders with fire count + status |
 | `suggestions` | Action suggestions (domain, title, body, status) |
 | `messages` | Chat history per user/project |
