@@ -11,6 +11,7 @@
   <p class="crm-notice">
     Processed transcript: <%= query.attendees || 0 %> attendee<%= query.attendees === '1' ? '' : 's' %>,
     <%= query.facts || 0 %> outcome<%= query.facts === '1' ? '' : 's' %>,
+    <%= query.actions || 0 %> action<%= query.actions === '1' ? '' : 's' %>,
     <%= query.tasks || 0 %> task<%= query.tasks === '1' ? '' : 's' %>,
     <%= query.docs || 0 %> project note<%= query.docs === '1' ? '' : 's' %>.
     <% if (query.meeting) { %><a href="/crm/meeting/<%= query.meeting %>">Open meeting</a><% } %>
@@ -99,7 +100,7 @@
               <%= new Date(item.created_at * 1000).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %>
               | <%= item.status %>
               <% if (item.status === 'processed') { %>
-                | <%= counts.facts || 0 %> outcomes | <%= counts.tasks || 0 %> tasks
+                | <%= counts.facts || 0 %> outcomes | <%= counts.actions || 0 %> actions | <%= counts.tasks || 0 %> tasks
               <% } else if (item.error) { %>
                 | <%= item.error.slice(0, 90) %>
               <% } %>

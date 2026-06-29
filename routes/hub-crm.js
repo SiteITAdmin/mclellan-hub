@@ -682,7 +682,7 @@ function queueMeetingIntakeProcessing({ user, intakeId, transcript, body = {}, s
         projectSlug: body.project_slug,
         sourceFilename,
       });
-      console.log(`[meeting-intake] processed ${intakeId}: meeting=${result.meetingId} facts=${result.counts.facts} tasks=${result.counts.tasks}`);
+      console.log(`[meeting-intake] processed ${intakeId}: meeting=${result.meetingId} facts=${result.counts.facts} actions=${result.counts.actions || 0} tasks=${result.counts.tasks}`);
     } catch (err) {
       console.error('[meeting-intake async]', err);
       try {

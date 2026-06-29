@@ -302,6 +302,14 @@ function readJson(filePath, fallback) {
   try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) { return fallback; }
 }
 
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf8');
@@ -398,15 +406,56 @@ function markSent(edition, to) {
   return updated;
 }
 
-function emailHtml(manifest) {
-  const html = fs.readFileSync(manifest.htmlPath, 'utf8');
+function assertStoredBriefingPdf(manifest) {
+  if (!manifest?.pdfPath) throw new Error(`Daily Briefing ${manifest?.edition || ''} has no stored PDF path`);
+  if (!fs.existsSync(manifest.pdfPath)) {
+    throw new Error(`Daily Briefing ${manifest.edition} PDF is missing: ${manifest.pdfPath}`);
+  }
+  const pdf = fs.readFileSync(manifest.pdfPath);
+  if (pdf.length < 1024 || pdf.slice(0, 4).toString('utf8') !== '%PDF') {
+    throw new Error(`Daily Briefing ${manifest.edition} PDF is not a valid PDF artifact`);
+  }
+  return pdf;
+}
+
+function buildStoredBriefingEmailPayload(manifest, pdfBuffer = assertStoredBriefingPdf(manifest)) {
+  const markdown = fs.readFileSync(manifest.mdPath, 'utf8');
   const link = resendUrl(manifest.edition);
-  const footer = `
-<div style="font:13px system-ui,-apple-system,Segoe UI,sans-serif;color:#666;margin:32px 0 0;padding-top:16px;border-top:1px solid #ddd;">
-  Daily Briefing ${manifest.edition} · stored private copy.
-  <a href="${link}" style="color:#5b4ac4;">Click here to send this briefing to Nakai again</a>.
-</div>`;
-  return html.includes('</body>') ? html.replace('</body>', `${footer}</body>`) : `${html}${footer}`;
+  const subject = `${manifest.title} - ${manifest.label}`;
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f7f5ff;">
+  <div style="max-width:560px;margin:0 auto;padding:28px 22px;font-family:Arial,sans-serif;color:#272432;">
+    <div style="height:5px;background:#7c6af5;border-radius:6px 6px 0 0;"></div>
+    <div style="background:#fff;border:1px solid #ece9fa;border-top:0;padding:24px 26px;border-radius:0 0 6px 6px;">
+      <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7c6af5;">McLellan Hub Intelligence</p>
+      <h1 style="margin:0 0 8px;font-family:Georgia,serif;font-size:28px;line-height:1.15;color:#15131e;">${escHtml(manifest.title)}</h1>
+      <p style="margin:0 0 18px;font-size:15px;color:#6b6879;">${escHtml(manifest.label)}</p>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">The PDF report is attached.</p>
+      <p style="margin:0;font-size:12px;color:#777381;">Stored private copy: Daily Briefing ${escHtml(manifest.edition)} · <a href="${link}" style="color:#5b4ac4;">resend</a></p>
+    </div>
+  </div>
+</body></html>`;
+
+  return {
+    subject,
+    text: [
+      `${manifest.title} - ${manifest.label}`,
+      '',
+      'The PDF report is attached.',
+      '',
+      `Stored copy: Daily Briefing ${manifest.edition}`,
+      `Resend: ${link}`,
+      '',
+      '---',
+      markdown,
+    ].join('\n'),
+    html,
+    attachments: [{
+      filename: `Daily Briefing ${manifest.edition}.pdf`,
+      content_type: 'application/pdf',
+      content: pdfBuffer.toString('base64'),
+    }],
+  };
 }
 
 async function sendStoredBriefing(edition, { force = false } = {}) {
@@ -417,18 +466,8 @@ async function sendStoredBriefing(edition, { force = false } = {}) {
   if (!to) throw new Error('No Nakai email configured. Set NAKAI_GOOGLE_EMAIL or NAKAI_GOOGLE_EMAILS.');
   const { sendEmail } = require('../lib/gmail');
   const fromUser = process.env.NAKAI_DAILY_BRIEFING_GMAIL_USER || 'douglas';
-  const pdf = fs.readFileSync(manifest.pdfPath);
-  const markdown = fs.readFileSync(manifest.mdPath, 'utf8');
-  const subject = `${manifest.title} - ${manifest.label}`;
-  await sendEmail(fromUser, to, subject, {
-    text: `${markdown}\n\n---\nStored copy: Daily Briefing ${manifest.edition}\nResend: ${resendUrl(manifest.edition)}`,
-    html: emailHtml(manifest),
-    attachments: [{
-      filename: `Daily Briefing ${manifest.edition}.pdf`,
-      content_type: 'application/pdf',
-      content: pdf.toString('base64'),
-    }],
-  });
+  const payload = buildStoredBriefingEmailPayload(manifest);
+  await sendEmail(fromUser, to, payload.subject, payload);
   return { ok: true, skipped: false, manifest: markSent(edition, to) };
 }
 
@@ -484,5 +523,7 @@ module.exports = {
   sendStoredBriefing,
   listStoredBriefings,
   getStoredBriefing,
+  assertStoredBriefingPdf,
+  buildStoredBriefingEmailPayload,
   resendUrl,
 };
