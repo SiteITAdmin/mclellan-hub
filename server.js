@@ -236,7 +236,6 @@ setInterval(() => {
   if (currentMinute < dueMinute || nakaiDailyBriefingAttemptDate === dateKey) return;
   nakaiDailyBriefingAttemptDate = dateKey;
   sendTodayNakaiDailyBriefing().catch(err => {
-    nakaiDailyBriefingAttemptDate = '';
     console.error('[nakai-briefing] scheduled send error:', err);
   });
 }, 60 * 1000);
