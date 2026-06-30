@@ -97,9 +97,10 @@ function liveSourcePackMarkdown() {
   // items regardless of age so the briefing is never built from nothing.
   const since48h = Math.floor(Date.now() / 1000) - 48 * 3600;
   let items = hub.prepare(`
-    SELECT site, title, url, synopsis, found_at
+    SELECT id, site, title, url, synopsis, found_at
     FROM reg_monitor_items
     WHERE found_at >= ?
+      AND is_relevant = 1
       AND title NOT LIKE '%View in Irish%'
       AND url NOT LIKE '%/ga/%'
     ORDER BY found_at DESC
@@ -109,9 +110,10 @@ function liveSourcePackMarkdown() {
   let staleFallback = false;
   if (!items.length) {
     items = hub.prepare(`
-      SELECT site, title, url, synopsis, found_at
+      SELECT id, site, title, url, synopsis, found_at
       FROM reg_monitor_items
-      WHERE title NOT LIKE '%View in Irish%'
+      WHERE is_relevant = 1
+        AND title NOT LIKE '%View in Irish%'
         AND url NOT LIKE '%/ga/%'
       ORDER BY found_at DESC
       LIMIT 80
@@ -119,7 +121,7 @@ function liveSourcePackMarkdown() {
     staleFallback = true;
   }
 
-  if (!items.length) return { text: '', staleFallback: false };
+  if (!items.length) return { text: '', staleFallback: false, ids: [] };
 
   const dateStr = d => new Date(d * 1000).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Dublin',
@@ -136,11 +138,13 @@ function liveSourcePackMarkdown() {
     return lines.join('\n');
   }).join('\n\n---\n\n');
 
-  return { text, staleFallback };
+  // ids[i] is the DB row id for citation [L{i+1}] — used after generation to
+  // mark which checked items actually made it into the briefing.
+  return { text, staleFallback, ids: items.map(item => item.id) };
 }
 
 function sourcePackMarkdown() {
-  const { text: live, staleFallback } = liveSourcePackMarkdown();
+  const { text: live, staleFallback, ids } = liveSourcePackMarkdown();
   const standing = standingContextMarkdown();
   const parts = [];
   if (live) {
@@ -152,7 +156,7 @@ function sourcePackMarkdown() {
     parts.push('## LIVE REGULATORY MONITOR OUTPUT\n\nNo items found in database.');
   }
   parts.push('## AUDIT HORIZON — STANDING CONTEXT (evergreen reference, not today\'s news)\n\n' + standing);
-  return parts.join('\n\n═══\n\n');
+  return { text: parts.join('\n\n═══\n\n'), liveIds: ids };
 }
 
 function fallbackBriefing(meta = briefingMeta()) {
@@ -175,7 +179,7 @@ Check OPENROUTER_API_KEY in the Hub environment and retry via the admin resend a
 async function generateMarkdown(meta = briefingMeta()) {
   loadDotEnv();
   if (process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD && fs.existsSync(process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD)) {
-    return fs.readFileSync(process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD, 'utf8');
+    return { text: fs.readFileSync(process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD, 'utf8'), liveIds: [] };
   }
   const prompt = getSystemPrompt('nakai_daily_briefing', 'system', PROMPTS.nakai_daily_briefing);
   const modelId = getSystemModelId('nakai_daily_briefing', 'system', 'anthropic/claude-sonnet-4-6');
@@ -183,12 +187,13 @@ async function generateMarkdown(meta = briefingMeta()) {
     ? `Briefing edition: ${meta.edition}\nPrevious edition: ${meta.previousEdition || 'none'}\nResend admin action: ${resendUrl(meta.edition)}\n`
     : '';
   const previousContext = previousEditionContext(meta);
-  const fullPrompt = `${prompt}\n\nCurrent date: ${meta.label}\n${editionContext}${previousContext}\nSource pack:\n\n${sourcePackMarkdown()}`;
+  const pack = sourcePackMarkdown();
+  const fullPrompt = `${prompt}\n\nCurrent date: ${meta.label}\n${editionContext}${previousContext}\nSource pack:\n\n${pack.text}`;
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.writeFileSync(path.join(OUT_DIR, 'nakai-daily-briefing-prompt.md'), fullPrompt, 'utf8');
 
-  if (process.env.NAKAI_DAILY_BRIEFING_FORCE_FALLBACK) return fallbackBriefing(meta);
+  if (process.env.NAKAI_DAILY_BRIEFING_FORCE_FALLBACK) return { text: fallbackBriefing(meta), liveIds: pack.liveIds };
   if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set');
 
   try {
@@ -202,7 +207,7 @@ async function generateMarkdown(meta = briefingMeta()) {
         temperature: 0.2,
         messages: [
           { role: 'system', content: prompt },
-          { role: 'user', content: `Current date: ${meta.label}\n${editionContext}${previousContext}\nSource pack:\n\n${sourcePackMarkdown()}` },
+          { role: 'user', content: `Current date: ${meta.label}\n${editionContext}${previousContext}\nSource pack:\n\n${pack.text}` },
         ],
       }),
     });
@@ -219,11 +224,11 @@ async function generateMarkdown(meta = briefingMeta()) {
     });
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text || !/^# Daily Briefing/m.test(text)) throw new Error('Model response did not contain a Daily Briefing');
-    return text;
+    return { text, liveIds: pack.liveIds };
   } catch (err) {
     if (process.env.NAKAI_DAILY_BRIEFING_ALLOW_STATIC_FALLBACK === '1') {
       console.warn(`[nakai-briefing] model generation failed, using fallback: ${err.message}`);
-      return fallbackBriefing(meta);
+      return { text: fallbackBriefing(meta), liveIds: pack.liveIds };
     }
     throw err;
   }
@@ -471,10 +476,28 @@ async function sendStoredBriefing(edition, { force = false } = {}) {
   return { ok: true, skipped: false, manifest: markSent(edition, to) };
 }
 
+// Marks which checked items actually made it into the generated briefing by
+// scanning for their [Lx] citation marker. Items that were relevant but not
+// cited are left alone (audit email reports them as "relevant, not selected").
+function markCitationInclusion(markdown, liveIds, edition) {
+  if (!liveIds.length || !edition) return [];
+  const hub = require('../lib/db').hub();
+  const included = [];
+  liveIds.forEach((id, i) => {
+    const marker = `[L${i + 1}]`;
+    if (markdown.includes(marker)) {
+      hub.prepare('UPDATE reg_monitor_items SET included_in_briefing = ? WHERE id = ?').run(edition, id);
+      included.push(id);
+    }
+  });
+  return included;
+}
+
 async function buildNakaiDailyBriefing({ date = new Date() } = {}) {
   const meta = briefingMeta(date);
-  const markdown = await generateMarkdown(meta);
+  const { text: markdown, liveIds } = await generateMarkdown(meta);
   const result = await renderPdf(markdown, meta);
+  result.includedItemIds = markCitationInclusion(markdown, liveIds, meta.edition);
   try {
     result.knowledgePath = captureNakaiDailyBriefing({
       markdown: fs.readFileSync(result.mdPath, 'utf8'),
