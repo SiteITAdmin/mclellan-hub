@@ -30,7 +30,11 @@ function briefingMeta(date = new Date()) {
   const edition = editionForDate(iso);
   const title = edition ? `Daily Briefing ${edition}` : 'Daily Briefing';
   const previousEdition = previousEditionFor(edition);
-  return { iso, label, edition, title, previousEdition };
+  // asOfEpoch is the exact moment this edition is being built — real "now"
+  // for the live daily run, or a historical instant when rebuilding a past
+  // edition. The source pack's 48h window is computed relative to this, not
+  // wall-clock now, so a rebuild can't leak later items into an earlier date.
+  return { iso, label, edition, title, previousEdition, asOfEpoch: Math.floor(now.getTime() / 1000) };
 }
 
 function editionForDate(isoDate) {
@@ -88,36 +92,41 @@ function standingContextMarkdown() {
   }).join('\n\n---\n\n');
 }
 
-// Live source pack — reads from reg_monitor_items (last 72 hours) so the
-// briefing reflects what the regulatory monitor actually found overnight.
-function liveSourcePackMarkdown() {
+// Live source pack — reads from reg_monitor_items (last 48 hours as of
+// asOfEpoch) so the briefing reflects what the regulatory monitor actually
+// found overnight. asOfEpoch defaults to now (the live daily run); a rebuild
+// of a past edition passes the historical cutoff so it doesn't pull in items
+// found after that edition's date.
+function liveSourcePackMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
   const db = require('../lib/db');
   const hub = db.hub();
   // Primary window: 48h. If monitor hasn't run recently, fall back to last 100
-  // items regardless of age so the briefing is never built from nothing.
-  const since48h = Math.floor(Date.now() / 1000) - 48 * 3600;
+  // items as of that cutoff regardless of age so the briefing is never built
+  // from nothing (and a historical rebuild never leaks future-dated items).
+  const since48h = asOfEpoch - 48 * 3600;
   let items = hub.prepare(`
     SELECT id, site, title, url, synopsis, found_at
     FROM reg_monitor_items
-    WHERE found_at >= ?
+    WHERE found_at >= ? AND found_at <= ?
       AND is_relevant = 1
       AND title NOT LIKE '%View in Irish%'
       AND url NOT LIKE '%/ga/%'
     ORDER BY found_at DESC
     LIMIT 80
-  `).all(since48h);
+  `).all(since48h, asOfEpoch);
 
   let staleFallback = false;
   if (!items.length) {
     items = hub.prepare(`
       SELECT id, site, title, url, synopsis, found_at
       FROM reg_monitor_items
-      WHERE is_relevant = 1
+      WHERE found_at <= ?
+        AND is_relevant = 1
         AND title NOT LIKE '%View in Irish%'
         AND url NOT LIKE '%/ga/%'
       ORDER BY found_at DESC
       LIMIT 80
-    `).all();
+    `).all(asOfEpoch);
     staleFallback = true;
   }
 
@@ -143,8 +152,8 @@ function liveSourcePackMarkdown() {
   return { text, staleFallback, ids: items.map(item => item.id) };
 }
 
-function sourcePackMarkdown() {
-  const { text: live, staleFallback, ids } = liveSourcePackMarkdown();
+function sourcePackMarkdown(asOfEpoch) {
+  const { text: live, staleFallback, ids } = liveSourcePackMarkdown(asOfEpoch);
   const standing = standingContextMarkdown();
   const parts = [];
   if (live) {
@@ -187,7 +196,7 @@ async function generateMarkdown(meta = briefingMeta()) {
     ? `Briefing edition: ${meta.edition}\nPrevious edition: ${meta.previousEdition || 'none'}\nResend admin action: ${resendUrl(meta.edition)}\n`
     : '';
   const previousContext = previousEditionContext(meta);
-  const pack = sourcePackMarkdown();
+  const pack = sourcePackMarkdown(meta.asOfEpoch);
   const fullPrompt = `${prompt}\n\nCurrent date: ${meta.label}\n${editionContext}${previousContext}\nSource pack:\n\n${pack.text}`;
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
