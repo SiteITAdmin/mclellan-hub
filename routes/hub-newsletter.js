@@ -9,6 +9,7 @@ const {
   weekKeyRange, briefingPeriodLabel, briefingFormatName, briefingTitle, briefingPdfFilename,
   briefingProvenanceText,
   previewBriefing, generateBriefing, generateCreatorBriefing, buildBriefingPdf, sendBriefing,
+  sendBriefingToNoteMax,
 } = require('../lib/newsletter-pipeline');
 const { ingestFeed } = require('../lib/rss-ingest');
 const { listUserLabels } = require('../lib/gmail');
@@ -317,6 +318,18 @@ router.post('/briefing/:id/wiki', (req, res) => {
   writeWikiPage(slug, frontmatter, b.text_content || '');
   hub.prepare('UPDATE nl_briefings SET wiki_slug = ? WHERE id = ?').run(slug, b.id);
   res.json({ ok: true, slug });
+});
+
+// ── Send briefing PDF to NoteMax (Google Drive) ────────────────────────────────
+
+router.post('/briefing/:id/notemax', async (req, res) => {
+  try {
+    const result = await sendBriefingToNoteMax(req.params.id, req.hubUser);
+    res.json(result);
+  } catch (err) {
+    console.error('[newsletter] notemax send error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Publish / unpublish briefing to public feed ───────────────────────────────
