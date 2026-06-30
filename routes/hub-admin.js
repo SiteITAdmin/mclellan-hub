@@ -130,7 +130,7 @@ router.get('/admin', requireHubAdmin, (req, res) => {
 });
 
 // ── Projects CRUD ─────────────────────────────────────────────────────────────
-router.post('/admin/projects', requireHubAdmin, (req, res) => {
+router.post('/admin/projects', requireHubAdmin, async (req, res) => {
   const { name, slug, context_depth, is_cv_context } = req.body;
   if (!name || !slug) return res.redirect('/admin');
   try {
@@ -146,6 +146,14 @@ router.post('/admin/projects', requireHubAdmin, (req, res) => {
     );
   } catch (err) {
     console.error('[hub-admin] add project:', err.message);
+  }
+  try {
+    const { getDriveClient, resolveFolderPath, getOrCreateFolder } = require('../lib/google-drive');
+    const drive = await getDriveClient(req.hubUser);
+    const notebooksId = await resolveFolderPath(drive, ['Onyx', 'NoteMax', 'Notebooks']);
+    await getOrCreateFolder(drive, name.trim(), notebooksId);
+  } catch (err) {
+    console.error('[hub-admin] create notebook folder:', err.message);
   }
   res.redirect('/admin');
 });
