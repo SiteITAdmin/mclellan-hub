@@ -38,6 +38,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <div class="action-row">
     <button class="btn btn-primary" onclick="downloadPdf('/newsletter/briefing/<%= briefing.id %>/pdf', this)">Download PDF</button>
     <button class="btn" id="wiki-btn" onclick="exportWiki()">Export to wiki</button>
+    <button class="btn" id="notemax-btn" onclick="sendToNoteMax()">Send to NoteMax</button>
     <% if (!briefing.published_at) { %>
       <button class="btn" onclick="publishBriefing()">Publish</button>
     <% } else { %>
@@ -84,6 +85,24 @@ async function exportWiki() {
     if (j.ok) msg.textContent = 'Exported to wiki: ' + j.slug;
     else msg.textContent = j.error || 'Error';
   } finally { btn.disabled = false; }
+}
+async function sendToNoteMax() {
+  const btn = document.getElementById('notemax-btn');
+  const msg = document.getElementById('status-msg');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    const r = await fetch('/newsletter/briefing/<%= briefing.id %>/notemax', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) msg.textContent = 'Sent to NoteMax: ' + j.filename;
+    else msg.textContent = j.error || 'Error';
+  } catch (e) {
+    msg.textContent = 'Send failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 async function publishBriefing() {
   await fetch('/newsletter/briefing/<%= briefing.id %>/publish', { method: 'POST' });
