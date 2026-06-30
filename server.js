@@ -11,14 +11,13 @@ const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
 const promptRouter = require('./routes/prompt');
 const { syncCalendarMeetings } = require('./lib/crm');
-const { runRegulatoryMonitor } = require('./lib/regulatory-monitor');
+const { runDailyIntelligencePipeline } = require('./lib/nakai-intelligence-pipeline');
 const { sendWeeklyDigest } = require('./lib/weekly-digest');
 const { sendRhStats } = require('./lib/rh-stats');
 const { sendWeeklyReminder } = require('./lib/newsletter-pipeline');
 const { ingestAllFeeds } = require('./lib/rss-ingest');
 const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
-const { sendTodayNakaiDailyBriefing } = require('./scripts/build-nakai-daily-briefing');
 const { sendWorkDailyBrief } = require('./lib/work-daily-brief');
 
 const app = express();
@@ -211,32 +210,28 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
-// ── Regulatory monitor (08:00 Europe/Dublin, daily) ───────────────────────────
+// ── Nakai Daily Intelligence Pipeline (07:00 Europe/Dublin, daily) ────────────
+// Single ordered run: regulatory monitor (scrape + assess + store) THEN the
+// daily briefing (builds from what the monitor just stored) THEN an audit
+// email to Douglas confirming what was checked, what was used, and why not
+// if it wasn't. Previously these were two independent, unordered triggers —
+// the monitor ran *after* the briefing it was meant to feed, and it sent its
+// own separate email whose findings were never persisted to the DB at all.
 const REG_MONITOR_ENABLED = process.env.REG_MONITOR_ENABLED === '1';
-const REG_MONITOR_HOUR   = parseInt(process.env.REG_MONITOR_HOUR   || '8');
-const REG_MONITOR_MINUTE = parseInt(process.env.REG_MONITOR_MINUTE || '0');
+const NAKAI_PIPELINE_HOUR   = parseInt(process.env.NAKAI_PIPELINE_HOUR   || '7');
+const NAKAI_PIPELINE_MINUTE = parseInt(process.env.NAKAI_PIPELINE_MINUTE || '0');
+let nakaiPipelineAttemptDate = '';
 
 setInterval(() => {
   if (!REG_MONITOR_ENABLED) return;
   const now = nowIn('Europe/Dublin');
-  if (now.getHours() !== REG_MONITOR_HOUR || now.getMinutes() !== REG_MONITOR_MINUTE) return;
-  runRegulatoryMonitor().catch(err => console.error('[reg-monitor] error:', err));
-}, 60 * 1000);
-
-// ── Nakai Daily Briefing (07:30 Europe/Dublin, daily; Edition 001 starts 2026-06-19) ──
-const NAKAI_DAILY_BRIEFING_HOUR = parseInt(process.env.NAKAI_DAILY_BRIEFING_HOUR || '7');
-const NAKAI_DAILY_BRIEFING_MINUTE = parseInt(process.env.NAKAI_DAILY_BRIEFING_MINUTE || '30');
-let nakaiDailyBriefingAttemptDate = '';
-
-setInterval(() => {
-  const now = nowIn('Europe/Dublin');
   const dateKey = now.toLocaleDateString('sv-SE');
-  const dueMinute = (NAKAI_DAILY_BRIEFING_HOUR * 60) + NAKAI_DAILY_BRIEFING_MINUTE;
+  const dueMinute = (NAKAI_PIPELINE_HOUR * 60) + NAKAI_PIPELINE_MINUTE;
   const currentMinute = (now.getHours() * 60) + now.getMinutes();
-  if (currentMinute < dueMinute || nakaiDailyBriefingAttemptDate === dateKey) return;
-  nakaiDailyBriefingAttemptDate = dateKey;
-  sendTodayNakaiDailyBriefing().catch(err => {
-    console.error('[nakai-briefing] scheduled send error:', err);
+  if (currentMinute < dueMinute || nakaiPipelineAttemptDate === dateKey) return;
+  nakaiPipelineAttemptDate = dateKey;
+  runDailyIntelligencePipeline().catch(err => {
+    console.error('[intelligence-pipeline] scheduled run error:', err);
   });
 }, 60 * 1000);
 
