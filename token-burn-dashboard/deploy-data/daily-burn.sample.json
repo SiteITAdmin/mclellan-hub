@@ -1358,5 +1358,25 @@
     "confidence": "measured",
     "driver": "shipping",
     "evidence": "Codex session token counters; Claude Code message usage"
+  },
+  {
+    "date": "2026-06-29",
+    "codex_tokens": 5410940,
+    "claude_code_tokens": 2325269,
+    "claude_code_calls": 38,
+    "antigravity_tokens": 0,
+    "antigravity_events": 0,
+    "antigravity_estimated": false,
+    "api_tokens": 0,
+    "chatgpt_conversations": 0,
+    "chatgpt_messages": 0,
+    "chatgpt_files": 0,
+    "claude_chat_conversations": 0,
+    "claude_chat_messages": 0,
+    "chat_tokens_low": 0,
+    "chat_tokens_high": 0,
+    "confidence": "measured",
+    "driver": "shipping",
+    "evidence": "Codex session token counters; Claude Code message usage"
   }
 ]
