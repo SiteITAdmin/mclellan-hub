@@ -9,3 +9,4 @@ exports
 output
 tmp
 config/google-service-account.json
+public/knowledge
