@@ -139,6 +139,25 @@ function getDouglasExperiences() {
   return VERIFIED_DOUGLAS_EMPLOYMENT.map(item => ({ ...item }));
 }
 
+function getPublishedThinkingBlock(user) {
+  let posts;
+  try {
+    posts = require('../lib/knowledge-format').publishedThinking(user);
+  } catch (err) {
+    console.warn('[portfolio] published thinking unavailable:', err.message);
+    return '';
+  }
+  if (!posts.length) return '';
+  return [
+    '## Published thinking (opinion and analysis — NOT work experience)',
+    'These are published LinkedIn articles. They are the candidate\'s ideas, analysis, and opinions — never present them as employment, roles, or hands-on work experience.',
+    'When a question is about a topic the candidate has written on but not worked in at that level (e.g. EU policy, AI regulation), answer in two parts: first state plainly, in a work capacity, that they have not worked at that level; then point to the relevant piece below with its link as where their thinking on it can be found.',
+    'Always include the link when referencing a piece.',
+    '',
+    ...posts.map(p => `- **${p.title}** (${p.date}${p.category ? ', ' + p.category : ''}): ${p.summary} — ${p.url}`),
+  ].join('\n');
+}
+
 function getPortfolioExperiences(pdb, user) {
   const rows = pdb.prepare(
     'SELECT role, company, start_date, end_date, description FROM experiences WHERE is_cv_context = 1 ORDER BY display_order ASC'
@@ -553,9 +572,9 @@ router.get('/llms.txt', (req, res) => {
   `).all();
 
   const linkedinPosts = hub.prepare(`
-    SELECT topic, refined_draft, draft, created_at
+    SELECT topic, refined_draft, draft, created_at, post_url
     FROM linkedin_posts WHERE user = 'douglas' AND status = 'published'
-    ORDER BY created_at DESC LIMIT 10
+    ORDER BY created_at DESC
   `).all();
 
   const lines = [
@@ -602,6 +621,10 @@ router.get('/llms.txt', (req, res) => {
       const date = new Date(p.created_at * 1000).toISOString().slice(0, 10);
       lines.push(`### ${p.topic} (${date})`);
       lines.push('');
+      if (p.post_url) {
+        lines.push(`Canonical: ${p.post_url}`);
+        lines.push('');
+      }
       lines.push((p.refined_draft || p.draft || '').trim());
       lines.push('');
     }
@@ -826,6 +849,7 @@ router.post('/api/chat', requireSameOrigin, publicAiLimiter, async (req, res) =>
     chatOnlyCandidates.length ? '## Emerging topics from CV context\n' + chatOnlyCandidates.map(c =>
       `- ${c.term}${c.evidence ? ` — evidence: ${String(c.evidence).split('\n')[0]}` : ''}`
     ).join('\n') : '',
+    getPublishedThinkingBlock(req.portfolioUser),
   ].filter(Boolean).join('\n\n');
 
   const douglasHonestNotes = req.portfolioUser === 'douglas' ? `\n## Honest notes (always use these when relevant)
@@ -929,6 +953,7 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
     getAiBuildsCvBlock(cvRows, req.portfolioUser),
     'Experience:\n' + expRows.map(e => `- ${e.role}, ${e.company} (${e.start_date || '?'} – ${e.end_date || 'Present'})${e.description ? ': ' + e.description : ''}`).join('\n'),
     'Skills:\n' + skillRows.map(s => `- ${s.name} (${s.level})`).join('\n'),
+    getPublishedThinkingBlock(req.portfolioUser),
   ].filter(Boolean).join('\n\n');
 
   const jdFullName = profile.full_name || (req.portfolioUser === 'douglas' ? 'Douglas McLellan' : 'Nakai McLellan');
@@ -938,7 +963,9 @@ router.post('/api/analyse-jd', requireSameOrigin, publicAiLimiter, async (req, r
     role: 'system',
     content: `${JD_ANALYSER_GUARD}\n\n${getSystemPrompt('jd_analyser', req.portfolioUser, PROMPTS.jd_analyser)}
 
-Company names, role titles, and employment dates in the CV Experience section are immutable verified facts. Never alter them or treat a project, client, vendor, technology, publication, or job description as employment.`,
+Company names, role titles, and employment dates in the CV Experience section are immutable verified facts. Never alter them or treat a project, client, vendor, technology, publication, or job description as employment.
+
+Items in the "Published thinking" section are published opinion and analysis. They may be cited (with their links) as evidence of domain thinking relevant to a role, but never as work experience — where a role requires hands-on experience the candidate lacks, say so plainly and reference the published thinking as a partial signal only.`,
   }, {
     role: 'user',
     content: `CV Context:

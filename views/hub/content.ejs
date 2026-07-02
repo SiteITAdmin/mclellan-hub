@@ -938,11 +938,18 @@ window.setType = async function(id, type) {
 
 // ── Status ────────────────────────────────────────────────────────────────────
 window.setStatus = async function(id, status) {
+  const body = { status };
+  if (status === 'published') {
+    const url = prompt('LinkedIn URL of the published post (leave blank to skip):', '');
+    if (url === null) return;
+    if (url.trim()) body.post_url = url.trim();
+  }
   const r = await fetch('/api/content/posts/' + id + '/status', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(body),
   });
   if (r.ok) window.location.reload();
+  else alert((await r.json().catch(() => ({}))).error || 'Failed to update status');
 };
 
 // ── Schedule ──────────────────────────────────────────────────────────────────

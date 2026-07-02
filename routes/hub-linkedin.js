@@ -146,15 +146,20 @@ router.post('/api/content/posts/:id/type', requireAuth, requireSameOrigin, write
 router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const status = String(req.body?.status || '').trim();
   if (!['draft', 'scheduled', 'published'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const postUrl = String(req.body?.post_url || '').trim();
+  if (postUrl && !/^https:\/\/(www\.)?linkedin\.com\//.test(postUrl)) {
+    return res.status(400).json({ error: 'post_url must be a linkedin.com URL' });
+  }
   const result = db.hub().prepare(
     `UPDATE linkedin_posts
        SET status = ?,
+           post_url = CASE WHEN ? != '' THEN ? ELSE post_url END,
            published_at = CASE
              WHEN ? = 'published' THEN COALESCE(published_at, unixepoch())
              ELSE NULL
            END
      WHERE id = ? AND user = ?`
-  ).run(status, status, req.params.id, req.hubUser);
+  ).run(status, postUrl, postUrl, status, req.params.id, req.hubUser);
   if (!result.changes) return res.status(404).json({ error: 'Not found' });
 
   if (status === 'published') {
