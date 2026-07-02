@@ -556,7 +556,8 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
     <div class="row-main">
       <span class="row-date"><%= dateStr %></span>
-      <span class="row-topic"><%= p.topic %></span>
+      <span class="row-topic" id="topic-<%= p.id %>" title="<%= p.display_title ? 'Original topic: ' + p.topic : '' %>"><%= p.display_title || p.topic %></span>
+      <% if (p.status === 'published') { %><button class="btn-sm" onclick="editTitle('<%= p.id %>')" title="Edit the public display title (llms.txt, knowledge bundle, portfolio chat)">✎ Title</button><% } %>
       <div class="row-badges">
         <span class="badge badge-<%= p.status %>"><%= statusLabel %></span>
         <% if (scoreVal) { %><span class="badge badge-score"><%= scoreVal %>/5</span><% } %>
@@ -950,6 +951,19 @@ window.setStatus = async function(id, status) {
   });
   if (r.ok) window.location.reload();
   else alert((await r.json().catch(() => ({}))).error || 'Failed to update status');
+};
+
+// ── Display title ─────────────────────────────────────────────────────────────
+window.editTitle = async function(id) {
+  const current = document.getElementById('topic-' + id)?.textContent?.trim() || '';
+  const title = prompt('Public display title (shown on llms.txt, knowledge bundle, portfolio chat):', current);
+  if (title === null || !title.trim()) return;
+  const r = await fetch('/api/content/posts/' + id + '/title', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ display_title: title.trim() }),
+  });
+  if (r.ok) window.location.reload();
+  else alert((await r.json().catch(() => ({}))).error || 'Failed to update title');
 };
 
 // ── Schedule ──────────────────────────────────────────────────────────────────

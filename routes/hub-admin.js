@@ -646,6 +646,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'linkedin_refiner',    scope: 'user', label: 'Draft refiner',           note: 'Makes targeted improvements to the teaser post.', fallback: 'mistralai/mistral-medium-3' },
     { feature: 'linkedin_carousel_reviewer', scope: 'user', label: 'Carousel reviewer', note: 'Reviews generated carousel JSON against the content rubric.', fallback: 'mistralai/mistral-medium-3' },
     { feature: 'linkedin_image',      scope: 'user', label: 'Image prompt writer',    note: 'Writes the prompt used for image generation.', fallback: 'deepseek/deepseek-chat' },
+    { feature: 'linkedin_title',      scope: 'user', label: 'Display title writer',   note: 'Derives a clean public display title when a post is published — used on llms.txt, the knowledge bundle, and portfolio chat context. Editable per post in the content tool.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
   { id: 'linkedin-tone', label: 'LinkedIn tone modifiers', slots: [
     { feature: 'spiciness_challenging_drafter',  scope: 'user', label: 'Challenging — post drafter',    note: 'Appended to the drafter prompt when Challenging tone is selected. Edit to adjust how direct/judgmental the post voice is.', fallback: 'prompt only' },
