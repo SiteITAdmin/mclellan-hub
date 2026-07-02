@@ -43,12 +43,15 @@ function mkContact(name, extra = {}) {
 (() => {
   const now = Math.floor(Date.now() / 1000);
   const dublinToday = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+  // crm-nudges parses meeting_date via strftime('%s', …) = midnight UTC, so build these in UTC
+  const daysAgoUtc = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const meetingDate = daysAgoUtc(11);
 
   console.log('1. last_contacted_at recompute');
   const cMeeting = mkContact('Synthnudge Meeting Person');
   const meetingId = uuid();
-  hub.prepare("INSERT INTO meetings (id, user, title, meeting_date, source) VALUES (?, ?, 'Synthnudge mtg', '2026-06-01', 'manual')")
-    .run(meetingId, USER);
+  hub.prepare("INSERT INTO meetings (id, user, title, meeting_date, source) VALUES (?, ?, 'Synthnudge mtg', ?, 'manual')")
+    .run(meetingId, USER, meetingDate);
   hub.prepare('INSERT INTO meeting_attendees (meeting_id, contact_id) VALUES (?, ?)').run(meetingId, cMeeting);
   ids.meetings.push(meetingId);
 
@@ -66,7 +69,7 @@ function mkContact(name, extra = {}) {
   const lcNever = hub.prepare('SELECT last_contacted_at FROM contacts WHERE id = ?').get(cNever).last_contacted_at;
   check('meeting attendee got last_contacted_at = meeting date', () => {
     assert(lcMeeting, 'null');
-    assert.strictEqual(new Date(lcMeeting * 1000).toISOString().slice(0, 10), '2026-06-01');
+    assert.strictEqual(new Date(lcMeeting * 1000).toISOString().slice(0, 10), meetingDate);
   });
   check('email contact got last_contacted_at ≈ 5 days ago', () => {
     assert(lcEmail);
@@ -75,7 +78,7 @@ function mkContact(name, extra = {}) {
   check('never-contacted contact stays NULL', () => assert.strictEqual(lcNever, null));
 
   console.log('2. Keep-warm cadence');
-  hub.prepare('UPDATE contacts SET keep_warm_days = 30 WHERE id = ?').run(cMeeting); // last contact 2026-06-01, 11 days ago — not due
+  hub.prepare('UPDATE contacts SET keep_warm_days = 30 WHERE id = ?').run(cMeeting); // last contact 11 days ago — not due
   const cCold = mkContact('Synthnudge Cold Person', { keepWarmDays: 30 });
   const cQuiet = mkContact('Synthnudge Quiet Person', { keepWarmDays: 30, curationFlags: ['quiet_nudges'] });
   const coldEmailId = uuid();
@@ -118,8 +121,8 @@ function mkContact(name, extra = {}) {
   console.log('5. Briefing nudge lines');
   const factId = uuid();
   hub.prepare(`INSERT INTO crm_facts (id, user, contact_id, fact, status, source, due_date)
-               VALUES (?, ?, ?, 'synthnudge chase invoice', 'follow_up', 'synthtest', '2026-06-01')`)
-    .run(factId, USER, cCold);
+               VALUES (?, ?, ?, 'synthnudge chase invoice', 'follow_up', 'synthtest', ?)`)
+    .run(factId, USER, cCold, daysAgoUtc(10));
   ids.facts.push(factId);
   const lines = nudges.buildNudgeLines(USER).join('\n');
   check('birthday section present', () => assert(lines.includes('Synthnudge Birthday Today — 🎂 today')));
