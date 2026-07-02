@@ -686,6 +686,9 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'newsletter_extractor', scope: 'system', label: 'Topic extractor', note: 'Extracts structured topics from newsletter emails. Runs on every newsletter received.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'newsletter_briefing',  scope: 'user',   label: 'Briefing writer',  note: 'Writes the weekly intelligence briefing from selected topics.', fallback: 'anthropic/claude-sonnet-4-6' },
   ]},
+  { id: 'writing', label: 'Writing tools', slots: [
+    { feature: 'ai_humanizer', scope: 'system', label: 'AI humanizer', note: 'Redrafts AI-generated prose to remove machine-writing tells. Prompt placeholders [FIELD], [AGGRESSIVENESS] and [SOURCE_TEXT] must be kept when editing.', fallback: 'anthropic/claude-sonnet-4-5' },
+  ]},
   { id: 'nakai', label: 'Nakai intelligence', slots: [
     { feature: 'nakai_daily_briefing',  scope: 'system', label: 'Nakai daily briefing', note: 'Writes the daily PDF briefing for Nakai from regulator, government, financial press, and Block product source packs.', fallback: 'anthropic/claude-sonnet-4-6' },
   ]},
