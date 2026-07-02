@@ -25,7 +25,7 @@ router.get('/lin', requireAuth, (req, res) => {
     needs_action: Boolean(evaluateCheck(r).message),
   }));
   const posts = db.hub().prepare(
-    `SELECT id, topic, content_type, spiciness, score_json, carousel_url, sheet_url,
+    `SELECT id, topic, display_title, content_type, spiciness, score_json, carousel_url, sheet_url,
             scheduled_date, status, created_at, published_at,
             substr(refined_draft, 1, 300) AS preview
      FROM linkedin_posts WHERE user = ? ORDER BY created_at DESC LIMIT 100`
@@ -143,7 +143,7 @@ router.post('/api/content/posts/:id/type', requireAuth, requireSameOrigin, write
   res.json({ ok: true });
 });
 
-router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   const status = String(req.body?.status || '').trim();
   if (!['draft', 'scheduled', 'published'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
   const postUrl = String(req.body?.post_url || '').trim();
@@ -169,6 +169,14 @@ router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, wri
       console.warn('[content] could not advance LinkedIn cadence reminder:', err.message);
     }
     try {
+      const existing = db.hub().prepare('SELECT display_title FROM linkedin_posts WHERE id = ?').get(req.params.id);
+      if (existing && !existing.display_title) {
+        await require('../lib/linkedin-pipeline').generateDisplayTitle(req.hubUser, req.params.id);
+      }
+    } catch (err) {
+      console.warn('[content] display title generation failed (topic used as-is):', err.message);
+    }
+    try {
       captureLinkedInPost(req.hubUser, req.params.id);
     } catch (err) {
       console.warn('[content] knowledge capture failed:', err.message);
@@ -176,20 +184,21 @@ router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, wri
     setImmediate(async () => {
       try {
         const post = db.hub().prepare(
-          `SELECT topic, content_type, research, draft, refined_draft, created_at FROM linkedin_posts WHERE id = ?`
+          `SELECT topic, display_title, content_type, research, draft, refined_draft, created_at FROM linkedin_posts WHERE id = ?`
         ).get(req.params.id);
         if (!post) return;
 
         const { writeNote, vaultRoot } = require('../lib/obsidian-vault');
         const path = require('path');
-        const slug = post.topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+        const noteTitle = post.display_title || post.topic;
+        const slug = noteTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
         const date = new Date(post.created_at * 1000).toISOString().slice(0, 10);
         const postText = (post.refined_draft || post.draft || '').trim();
         const research = (post.research || '').slice(0, 3000).trim();
         const category = post.content_type || '';
 
         const content = [
-          `# ${post.topic}`,
+          `# ${noteTitle}`,
           '',
           `**Published:** ${date}` + (category ? `  \n**Category:** ${category}` : ''),
           '',
@@ -223,6 +232,28 @@ router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, wri
   }
 
   res.json({ ok: true });
+});
+
+router.post('/api/content/posts/:id/title', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const title = String(req.body?.display_title || '').replace(/\s+/g, ' ').trim();
+  if (!title) return res.status(400).json({ error: 'display_title required' });
+  if (title.length > 120) return res.status(400).json({ error: 'display_title too long (max 120 chars)' });
+  const result = db.hub().prepare(
+    'UPDATE linkedin_posts SET display_title = ? WHERE id = ? AND user = ?'
+  ).run(title, req.params.id, req.hubUser);
+  if (!result.changes) return res.status(404).json({ error: 'Not found' });
+
+  // Regenerate the public knowledge bundle page — the slug is derived from the title
+  const post = db.hub().prepare('SELECT status FROM linkedin_posts WHERE id = ?').get(req.params.id);
+  if (post?.status === 'published') {
+    try {
+      removeKnowledgeBySourceId({ user: req.hubUser, public: true, sourceId: `linkedin:${req.params.id}` });
+      captureLinkedInPost(req.hubUser, req.params.id);
+    } catch (err) {
+      console.warn('[content] knowledge recapture after title edit failed:', err.message);
+    }
+  }
+  res.json({ ok: true, display_title: title });
 });
 
 router.post('/api/content/posts/:id/schedule', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {

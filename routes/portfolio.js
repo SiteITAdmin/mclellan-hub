@@ -572,7 +572,7 @@ router.get('/llms.txt', (req, res) => {
   `).all();
 
   const linkedinPosts = hub.prepare(`
-    SELECT topic, refined_draft, draft, created_at, post_url
+    SELECT topic, display_title, refined_draft, draft, created_at, post_url
     FROM linkedin_posts WHERE user = 'douglas' AND status = 'published'
     ORDER BY created_at DESC
   `).all();
@@ -619,7 +619,7 @@ router.get('/llms.txt', (req, res) => {
     lines.push('');
     for (const p of linkedinPosts) {
       const date = new Date(p.created_at * 1000).toISOString().slice(0, 10);
-      lines.push(`### ${p.topic} (${date})`);
+      lines.push(`### ${p.display_title || p.topic} (${date})`);
       lines.push('');
       if (p.post_url) {
         lines.push(`Canonical: ${p.post_url}`);
