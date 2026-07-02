@@ -5,7 +5,7 @@ const users = require('../config/users');
 const db = require('../lib/db');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { createRateLimiter, requireSameOrigin } = require('../lib/security');
-const { exaSearch, braveSearch, WEB_SEARCH_PLUGIN, WEB_SEARCH_TOOL } = require('../lib/router');
+const { exaSearch, braveSearch, WEB_SEARCH_PLUGIN, WEB_SEARCH_TOOL, DEFAULT_MODELS, getDefaultModel } = require('../lib/router');
 const multer = require('multer');
 const { fileToMarkdown: extractFileToMarkdown } = require('../lib/extract');
 const {
@@ -13,7 +13,7 @@ const {
   listEmailTaxonomy,
   normalizeRuleType,
 } = require('../lib/email-taxonomy');
-const { uuid } = require('../lib/id');
+const { uuid, uuid: uuidId } = require('../lib/id');
 const testUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const { ingestFeed, ingestAllFeeds } = require('../lib/rss-ingest');
 const { listIngestionAudit, getIngestionAudit } = require('../lib/intelligence-audit');
@@ -32,6 +32,9 @@ const {
 } = require('../scripts/build-nakai-daily-briefing');
 const { resendBriefingFromRequest } = require('../lib/nakai-briefing-resolver');
 const { synthesizeRefSources } = require('../lib/nakai-ref-synthesis');
+const { getAllWikiTags, getWikiPagesByTags } = require('../lib/wiki-tags');
+const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPromptOverride, setSystemPromptOverride } = require('../lib/settings');
+const { PROMPTS } = require('../lib/prompts');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -247,8 +250,6 @@ router.post('/admin/memories/:id/delete', requireHubAdmin, (req, res) => {
 });
 
 // ── Wiki tags API ─────────────────────────────────────────────────────────────
-const { getAllWikiTags, getWikiPagesByTags } = require('../lib/wiki-tags');
-
 function getCombinedTags(user) {
   const wikiTags = getAllWikiTags();
   return [...new Set(wikiTags)]
@@ -607,11 +608,6 @@ router.get('/admin/debrief/:id', requireHubAdmin, (req, res) => {
 });
 
 // ── Model management ──────────────────────────────────────────────────────────
-const { DEFAULT_MODELS, getDefaultModel } = require('../lib/router');
-const { uuid: uuidId } = require('../lib/id');
-const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPromptOverride, setSystemPromptOverride } = require('../lib/settings');
-const { PROMPTS } = require('../lib/prompts');
-
 // System model slots — displayed as configurable cards in /admin/models.
 // scope 'system' = shared across users; scope 'user' = per-user (stored under req.hubUser).
 const SYSTEM_MODEL_GROUPS = [
