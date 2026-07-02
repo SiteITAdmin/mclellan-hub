@@ -27,6 +27,7 @@ const {
 } = require('./hub-shared');
 const { getWeekKey, weekKeyRange } = require('../lib/newsletter-pipeline');
 const { buildIngestionPackage } = require('../lib/heavy-file-ingestion');
+const { humanizeText, MAX_INPUT_CHARS: HUMANIZER_MAX_CHARS } = require('../lib/ai-humanizer');
 const newsletterRouter = require('./hub-newsletter');
 router.use('/newsletter', requireAuth, newsletterRouter);
 
@@ -254,6 +255,33 @@ router.get('/token-burn', requireAuth, (req, res) => {
     formatUsd,
     heatLevel,
   });
+});
+
+// ── AI text humanizer ────────────────────────────────────────────────────────
+router.get('/humanizer', requireAuth, (req, res) => {
+  res.render('hub/humanizer', { user: req.hubUser, maxChars: HUMANIZER_MAX_CHARS });
+});
+
+router.post('/api/humanize', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const { text, field, aggressiveness } = req.body || {};
+  if (!text || !String(text).trim()) {
+    return res.status(400).json({ error: 'Paste some AI-generated text to humanize.' });
+  }
+  if (String(text).length > HUMANIZER_MAX_CHARS) {
+    return res.status(400).json({ error: `Text is too long. Limit is ${HUMANIZER_MAX_CHARS} characters.` });
+  }
+  try {
+    const result = await humanizeText({
+      text: String(text),
+      field: field ? String(field).slice(0, 200) : undefined,
+      aggressiveness: aggressiveness ? String(aggressiveness) : undefined,
+      user: req.hubUser,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[humanizer] failed:', err.message);
+    res.status(502).json({ error: err.message || 'Humanizer failed.' });
+  }
 });
 
 router.get('/_home', requireAuth, (req, res) => {

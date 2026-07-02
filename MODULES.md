@@ -314,3 +314,24 @@ These are the tools the system runs on. They are not features — they are the f
 **Does not own:** RSS feed processing (that's the RSS module), regulatory monitoring (that's the Regulatory Monitor), newsletter content
 
 **Health check:** `watchlist_poll` has a pending job. No enabled feed has `error_count >= 3` — if it does, the auto-disable trigger failed.
+
+---
+
+## AI Text Humanizer
+**Purpose:** Take AI-generated prose and redraft it so it reads as if a person in the field wrote it, by editing the six recurring statistical "tells" of machine writing (manual method after Andy Stapleton): the rule of three, low burstiness (uniform sentence length), predictable transitions ("However/Therefore/In conclusion"), flat/absolute tone, thesaurus-level vocabulary, and surface-level generality. An editing tool, not a paraphraser and not a fabricator.
+
+**Core capability (must be present):** Given pasted text, it returns a full rewritten draft plus a per-tell report of what changed and a before/after tell-scan (burstiness, triad count, transition openers, wordy terms). If it only reworded without addressing the six tells, it is not doing the thing its name says.
+
+**Honesty constraint:** It must never invent statistics, figures, dates, or citations to add "depth." Where a specific number would strengthen the text, it inserts an `[ADD SPECIFIC FIGURE: ...]` marker for the author to fill in. Fabricated data is a bug, not a feature.
+
+**Healthy looks like:**
+- `POST /api/humanize` returns `humanized_text`, `changes[]`, `scan_before`, `scan_after`, and honest risk estimates.
+- `scan_after` shows measurable movement on at least one tell (e.g. burstiness up, triad/transition counts down) versus `scan_before`.
+- Any `[ADD SPECIFIC FIGURE: ...]` markers the model leaves inline are surfaced in `added_data_markers` and highlighted in the UI.
+- Usage is logged to `request_logs` under task code `UT-Humanizer`.
+
+**Does not own:** Content drafting (that's the Content/LinkedIn pipeline), chat, or document ingestion. It edits text the user pastes in; it does not read from the knowledge layer.
+
+**Deliberately not built:** No automated AI-detector API integration. Detector scores are unreliable and paid; the tool shows its own heuristic tell-scan and an honest caveat instead of a false "100% human" guarantee.
+
+**Health check:** A syntactically clean AI paragraph run through `/api/humanize` returns a draft whose `scan_after.burstiness` differs from `scan_before.burstiness`. If they are identical, the model likely returned the input unchanged.
