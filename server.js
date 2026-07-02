@@ -11,7 +11,7 @@ const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
 const promptRouter = require('./routes/prompt');
 const { syncCalendarMeetings } = require('./lib/crm');
-const { runDailyIntelligencePipeline } = require('./lib/nakai-intelligence-pipeline');
+const { runDailyIntelligencePipeline, retryDailyBriefing } = require('./lib/nakai-intelligence-pipeline');
 const { sendWeeklyDigest } = require('./lib/weekly-digest');
 const { sendRhStats } = require('./lib/rh-stats');
 const { sendWeeklyReminder } = require('./lib/newsletter-pipeline');
@@ -220,7 +220,9 @@ setInterval(() => {
 const REG_MONITOR_ENABLED = process.env.REG_MONITOR_ENABLED === '1';
 const NAKAI_PIPELINE_HOUR   = parseInt(process.env.NAKAI_PIPELINE_HOUR   || '7');
 const NAKAI_PIPELINE_MINUTE = parseInt(process.env.NAKAI_PIPELINE_MINUTE || '0');
+const NAKAI_BRIEFING_RETRY_MS = parseInt(process.env.NAKAI_BRIEFING_RETRY_MINUTES || '60') * 60 * 1000;
 let nakaiPipelineAttemptDate = '';
+let nakaiBriefingRetryAt = 0; // epoch ms of next briefing-only retry; 0 = none pending
 
 setInterval(() => {
   if (!REG_MONITOR_ENABLED) return;
@@ -228,11 +230,38 @@ setInterval(() => {
   const dateKey = now.toLocaleDateString('sv-SE');
   const dueMinute = (NAKAI_PIPELINE_HOUR * 60) + NAKAI_PIPELINE_MINUTE;
   const currentMinute = (now.getHours() * 60) + now.getMinutes();
-  if (currentMinute < dueMinute || nakaiPipelineAttemptDate === dateKey) return;
-  nakaiPipelineAttemptDate = dateKey;
-  runDailyIntelligencePipeline().catch(err => {
-    console.error('[intelligence-pipeline] scheduled run error:', err);
-  });
+
+  // Retries never cross Dublin midnight — the next scheduled run owns the new day.
+  if (nakaiBriefingRetryAt && nakaiPipelineAttemptDate !== dateKey) nakaiBriefingRetryAt = 0;
+
+  if (currentMinute >= dueMinute && nakaiPipelineAttemptDate !== dateKey) {
+    nakaiPipelineAttemptDate = dateKey;
+    runDailyIntelligencePipeline().then(result => {
+      if (!result.briefingOk) {
+        nakaiBriefingRetryAt = Date.now() + NAKAI_BRIEFING_RETRY_MS;
+        console.error(`[intelligence-pipeline] briefing failed — retrying at ${new Date(nakaiBriefingRetryAt).toISOString()}`);
+      }
+    }).catch(err => {
+      console.error('[intelligence-pipeline] scheduled run error:', err);
+      nakaiBriefingRetryAt = Date.now() + NAKAI_BRIEFING_RETRY_MS;
+    });
+    return;
+  }
+
+  if (nakaiBriefingRetryAt && Date.now() >= nakaiBriefingRetryAt) {
+    nakaiBriefingRetryAt = 0; // cleared while in flight so ticks don't stack retries
+    retryDailyBriefing().then(result => {
+      if (result.ok) {
+        console.log('[intelligence-pipeline] briefing retry succeeded');
+      } else {
+        nakaiBriefingRetryAt = Date.now() + NAKAI_BRIEFING_RETRY_MS;
+        console.error(`[intelligence-pipeline] briefing retry failed — next attempt at ${new Date(nakaiBriefingRetryAt).toISOString()}`);
+      }
+    }).catch(err => {
+      console.error('[intelligence-pipeline] briefing retry crashed:', err);
+      nakaiBriefingRetryAt = Date.now() + NAKAI_BRIEFING_RETRY_MS;
+    });
+  }
 }, 60 * 1000);
 
 // ── Daily system report (21:00 Europe/Dublin) ─────────────────────────────────
