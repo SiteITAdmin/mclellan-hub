@@ -75,6 +75,25 @@ test('applying topics compiles interest atoms with provenance and a radar cache'
   assert.ok(cache);
 });
 
+test('applying topics infers provenance when the model omits signal ids', () => {
+  cleanup();
+  seedScenario();
+  const signals = gatherInterestSignals(USER);
+  const compiled = applyInterestTopics(USER, [{
+    topic: 'cyber security in Microsoft 365',
+    why: 'Ops weekly invited Douglas to cyber security training, and Cyber Security Training is in the Monday calendar.',
+    confidence: 0.9,
+  }], signals);
+
+  assert.equal(compiled.length, 1);
+  assert.ok(compiled[0].signals.some(s => s.includes('Ops weekly')));
+  assert.ok(compiled[0].signals.some(s => s.includes('Cyber Security Training')));
+  const atom = db.hub().prepare('SELECT * FROM knowledge_atoms WHERE id = ?').get(compiled[0].atomId);
+  const refs = JSON.parse(atom.source_refs);
+  assert.ok(refs.some(r => r.kind === 'meeting_intake' && r.id === 'mi-cyber'));
+  assert.ok(refs.some(r => r.kind === 'meeting' && r.id === 'm-training'));
+});
+
 test('the radar surfaces fresh active interests and drops retired ones', () => {
   const radar = getInterestRadar(USER);
   assert.equal(radar.length, 1);
