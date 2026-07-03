@@ -76,6 +76,7 @@ The CRM, wiki, and project pages are no longer the knowledge — they are **view
 - **Atoms (`knowledge_atoms`):** derived `subject–predicate–value` claims, each with provenance (the source rows that justify it), confidence and status. Not authored by hand.
 - **CRM prompt engine (`crm_knowledge_engine`):** reviews raw CRM-bound sources through `crm_source_triage`, `crm_duplicate_review`, synthesis/provenance merge, and `crm_action_projection` before knowledge or tasks are compiled.
 - **Synthesis (nightly `synthesis_run`):** re-reads new sources *after* ingestion, extracts atoms and links them to the right contact/company/project from the whole corpus — so a care-plan address attaches to the person even though the email that first arrived knew nothing about them.
+- **Live threads (`live_thread_synthesis`):** reads across Gmail summaries, meeting intakes, newsletter/RSS intelligence, opportunity signals, and atoms to compile cross-source themes as `subject_kind = 'thread'`. This is how a Masterclass email about managing change can connect with M365 material and hospital department meeting notes without being forced into one CRM bucket.
 - **Routing & lint:** `task_route_run` attaches free-text tasks to the entity their knowledge points to; `knowledge_lint_run` decays stale claims and surfaces contradictions/duplicates at `/admin/knowledge`.
 
 A contact or project page renders the atoms about that entity, each claim click-through to its source. The vault/wiki is a feeder and a human-facing view — not the master knowledge store.
@@ -258,7 +259,7 @@ The main roots are:
 - Systems
 - Resources
 
-Rules are maintained in the email taxonomy configuration and admin page. Manual labeling can be used as learning evidence. Use the audit and migration scripts before broad taxonomy changes.
+Rules are maintained in the email taxonomy configuration and admin page. Manual Gmail labeling is used as learning evidence: when a recent processed Gmail message has exactly one canonical Hub label, the email processor learns or updates a sender rule for future messages from that sender. Messages with zero or multiple canonical labels are ignored as ambiguous. Use the audit and migration scripts before broad taxonomy changes.
 
 ### Task-creation threshold
 
@@ -652,6 +653,7 @@ Pipeline slots separate background and specialist work from the interactive Chat
 | Chat infrastructure | Recall tagger, multi-search planner, multi-search synthesiser |
 | Background processing | CRM intent parser, email classifier, regulatory synopsis, prompt improver, test synthesiser |
 | CRM knowledge engine | Source triage, duplicate/supersession review, action projection |
+| Knowledge layer | Embeddings model, atom extractor, completed task extractor, entity linker, cross-entity synthesis, live thread synthesis |
 | Debrief | Interviewer, extractor |
 | LinkedIn | Query planner, research synthesiser, post drafter, scorer, carousel generator, refiner/reviewer, image-prompt writer |
 | Workday | Narrative writer |
@@ -729,6 +731,10 @@ The queue is checked every minute. Jobs survive a Node restart, are visible at `
 | `email_process` | Every 15 minutes | Fetches and classifies Gmail for configured users |
 | `agentmail_process` | Every 15 minutes | Processes the AI-facing AgentMail inbox |
 | `crm_knowledge_engine` | Recurring/background | Runs source triage, duplicate/supersession review, synthesis merge, and action projection for CRM-bound evidence |
+| `synthesis_run` | Nightly about 03:00 Dublin, drains backlog every 5 minutes | Re-reads raw sources into compiled atoms and projects knowledge to the wiki |
+| `cross_entity_synthesis` | Nightly about 04:15 Dublin | Creates insight atoms spanning entities |
+| `live_thread_synthesis` | Nightly about 04:35 Dublin | Creates thread atoms spanning Gmail, meetings, newsletter/RSS intelligence, opportunities, and atoms |
+| `interest_synthesis_run` | Daily about 05:45 Dublin | Maintains the morning brief interest radar |
 | `mycelium_run` | Every 6 hours | Connects flights, documents, meetings, contacts, tasks, and projects |
 | `mycelium_doc` | Event-driven | Extracts tasks and contact links after document upload |
 | `mycelium_flights` | Event-driven | Creates preparation/check-in tasks after flight creation |
@@ -766,16 +772,17 @@ These are minute checks inside `server.js`. They do not create persistent job ro
 
 ### Timed agent assessments
 
-The main timed agent assessment is `suggestion_run`. It gathers calendar events, travel-related CRM facts, booked flights, Skyscanner price points, RSS articles, newsletter topics, and recent LinkedIn posts. It asks an LLM to identify useful travel-booking or content opportunities.
+The main timed agent assessment is `suggestion_run`. It gathers calendar events, travel-related CRM facts, booked flights, Skyscanner price points, RSS articles, newsletter topics, opportunity signals from email, and recent LinkedIn posts. It asks an LLM to identify useful travel-booking, content, or short-lived opportunity observations.
 
 The assessment is advisory:
 
 - It creates no booking or publication.
 - It stores evidence with each suggestion.
-- It pushes at most two new suggestions to Google Chat.
-- Open suggestions appear in the morning briefing.
+- Open suggestions appear in the morning briefing. The old Google Chat suggestion-card path is not currently an active delivery surface.
 - `accept N` creates a task; `dismiss N` closes it; `why N` shows evidence.
 - Suggestions expire after 14 days.
+
+The work daily brief also surfaces compiled knowledge-layer signals. **Project Signals** compares recent project evidence from email summaries, meeting intakes, semantic retrieval, and compiled knowledge atoms against current radar/RSS/intelligence signals. **Live Threads** shows cross-source themes compiled by `live_thread_synthesis`, such as a change-management idea recurring across Gmail, newsletters, and meeting notes. Both sections are intentionally evidence-backed and quiet when the source material does not genuinely connect.
 
 Other timed assessments are deterministic rather than LLM-led:
 

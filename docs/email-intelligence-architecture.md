@@ -161,6 +161,22 @@ idempotent and retain links to every email and calendar event used as evidence.
 The same pattern supports parcel tracking, renewal warnings, event preparation,
 financial price changes, software incidents, and relationship follow-ups.
 
+## Opportunity Signals
+
+The same source-backed pattern now applies to short-lived opportunities such as
+retail offers. Gmail ingestion can extract an `opportunity_signal` from a
+Commerce/Offers-style message, store the usable details and validity window, and
+compile a derived `opportunity` atom with provenance. The daily suggestion pass
+then runs a salience synthesis loop: for each signal it asks what could make the
+signal matter, creates semantic searches over atoms/emails/meetings/documents,
+retrieves nearby evidence, and only then decides whether the current calendar and
+knowledge context make it worth surfacing. For example, a UK/GBP Co-op member
+offer should stay quiet while Douglas is in Ireland, but become suggestible when
+the retrieved context and calendar show a Scotland trip during the offer window.
+
+The signal is not an action. It becomes a Hub suggestion only when synthesis can
+explain the context join and cite the underlying email/calendar evidence.
+
 ## Migration Sequence
 
 1. Export Gmail labels, counts, and message IDs to a timestamped manifest.

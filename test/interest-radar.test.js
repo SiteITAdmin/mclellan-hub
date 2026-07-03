@@ -7,7 +7,14 @@ const {
   gatherInterestSignals, parseTopics, applyInterestTopics, getInterestRadar,
   RADAR_CONTEXT_KEY,
 } = require('../lib/interest-synthesis');
-const { radarSectionHtml, radarSectionText } = require('../lib/work-daily-brief');
+const {
+  radarSectionHtml,
+  radarSectionText,
+  projectSalienceSectionHtml,
+  projectSalienceSectionText,
+  liveThreadSectionHtml,
+  liveThreadSectionText,
+} = require('../lib/work-daily-brief');
 
 const USER = '__test_radar';
 
@@ -126,4 +133,47 @@ test('the brief renders a radar section with stories and the why line', () => {
 
   assert.equal(radarSectionHtml([]), '');
   assert.deepEqual(radarSectionText([]), []);
+});
+
+test('the brief renders project salience highlights with matching evidence', () => {
+  const highlights = [{
+    project_slug: 'm365-modernisation',
+    title: 'M365 change work resembles a new Entra hardening signal',
+    body: 'The project has a recent meeting note about conditional access sequencing, and the radar stream includes a related Entra defaults rollout.',
+    matching_signal: 'Microsoft hardens Entra defaults',
+    project_evidence: ['conditional access sequencing discussed in Ops weekly'],
+  }];
+
+  const html = projectSalienceSectionHtml(highlights);
+  assert.match(html, /Project Signals/);
+  assert.match(html, /m365-modernisation/);
+  assert.match(html, /Microsoft hardens Entra defaults/);
+
+  const text = projectSalienceSectionText(highlights).join('\n');
+  assert.match(text, /PROJECT SIGNALS/);
+  assert.match(text, /conditional access sequencing/);
+
+  assert.equal(projectSalienceSectionHtml([]), '');
+  assert.deepEqual(projectSalienceSectionText([]), []);
+});
+
+test('the brief renders live threads as cross-source ideas', () => {
+  const threads = [{
+    title: 'Managing change across M365',
+    type: 'theme',
+    body: 'M365 adoption material, a Masterclass email, and hospital department meeting notes all point at change management as a live topic.',
+    whyNow: 'The theme appeared in separate email, newsletter, and meeting streams this week.',
+  }];
+
+  const html = liveThreadSectionHtml(threads);
+  assert.match(html, /Live Threads/);
+  assert.match(html, /Managing change across M365/);
+  assert.match(html, /Why now/);
+
+  const text = liveThreadSectionText(threads).join('\n');
+  assert.match(text, /LIVE THREADS/);
+  assert.match(text, /Masterclass email/);
+
+  assert.equal(liveThreadSectionHtml([]), '');
+  assert.deepEqual(liveThreadSectionText([]), []);
 });
