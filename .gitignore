@@ -19,3 +19,7 @@ config/mclellan-hub-*.json
 .fuse_hidden*
 output/
 tmp/
+
+# Generated nightly by com.mclellan.token-burn-refresh (launchd) and rsynced to the VPS directly — not tracked
+token-burn-dashboard/deploy-data/daily-burn.sample.json
+token-burn-dashboard/deploy-data/openrouter-activity.summary.json
