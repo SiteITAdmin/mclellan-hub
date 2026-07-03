@@ -11,7 +11,11 @@ const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
 const promptRouter = require('./routes/prompt');
 const { syncCalendarMeetings } = require('./lib/crm');
-const { runDailyIntelligencePipeline, retryDailyBriefing } = require('./lib/nakai-intelligence-pipeline');
+const {
+  runDailyIntelligencePipeline,
+  retryDailyBriefing,
+  getDailyPipelineRunState,
+} = require('./lib/nakai-intelligence-pipeline');
 const { sendWeeklyDigest } = require('./lib/weekly-digest');
 const { sendRhStats } = require('./lib/rh-stats');
 const { sendWeeklyReminder } = require('./lib/newsletter-pipeline');
@@ -235,6 +239,18 @@ setInterval(() => {
   if (nakaiBriefingRetryAt && nakaiPipelineAttemptDate !== dateKey) nakaiBriefingRetryAt = 0;
 
   if (currentMinute >= dueMinute && nakaiPipelineAttemptDate !== dateKey) {
+    const runState = getDailyPipelineRunState(dateKey);
+    if (runState.reported) {
+      nakaiPipelineAttemptDate = dateKey;
+      if (!runState.briefingOk && !nakaiBriefingRetryAt) {
+        nakaiBriefingRetryAt = Date.now();
+        console.error(`[intelligence-pipeline] ${dateKey} already reported but briefing failed — resuming briefing retry`);
+      } else {
+        console.log(`[intelligence-pipeline] ${dateKey} already reported — skipping restart-triggered run`);
+      }
+      return;
+    }
+
     nakaiPipelineAttemptDate = dateKey;
     runDailyIntelligencePipeline().then(result => {
       if (!result.briefingOk) {
