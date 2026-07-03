@@ -162,7 +162,11 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Does not own:** The raw sources (documents, emails, meetings, crm_facts) — those remain the source of truth; atoms are derived and re-derivable. Does not write to the public portfolio (private knowledge stays private).
 
-**Health check:** `knowledge_atoms` and `embeddings` counts are non-zero and growing; open a contact page and confirm the Knowledge panel shows claims with click-through sources; `/admin/knowledge` shows the review queue.
+**Retention contract:** Knowledge never disappears; it only leaves the default line of sight. Immutable predicates (date of birth, kinship — see `isImmutablePredicate` in `lib/knowledge-lint.js`) are exempt from decay and staleness. Mutable facts decay after 180 days unconfirmed and go `stale` after 365 — but stale atoms remain searchable in Ask the Hub (ranked below active, flagged to the model as possibly outdated), appear on entity pages behind the existing "show history" toggle, and are revived automatically if the fact reappears in any new source. Each weekly lint writes its decisions to `crm_context` (`knowledge_lint_last`) and the daily system report renders them under KNOWLEDGE, so nothing leaves view silently.
+
+**Interest radar:** `lib/interest-synthesis.js`, job `interest_synthesis_run` (daily 05:45, before the work brief). Joins recent meeting intakes with the upcoming meetings/calendar and asks the model which work topics Douglas is actively engaged with; writes `interest`-kind atoms (predicate `active_interest`) with provenance to the signals, plus a compiled radar cache in `crm_context` (`interest_radar`). The work daily brief reads the radar and pulls recent stories per topic (Exa search) into an "On your radar" section, each with the "why" naming the meeting or calendar entry that earned it. Interests fade from the brief 45 days after their last reconfirmation; the atoms live on.
+
+**Health check:** `knowledge_atoms` and `embeddings` counts are non-zero and growing; open a contact page and confirm the Knowledge panel shows claims with click-through sources; `/admin/knowledge` shows the review queue; the daily system report's KNOWLEDGE section shows atom counts and the last lint run.
 
 ---
 
