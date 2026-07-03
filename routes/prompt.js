@@ -8,6 +8,7 @@ const { requireSameOrigin } = require('../lib/security');
 const {
   PURPOSES,
   MODEL_TIERS,
+  MODEL_FAMILIES,
   AUDIT_STAGES,
   HARNESS_LABELS,
   classifyPrompt,
@@ -124,6 +125,7 @@ router.get('/', requirePromptAuth, (req, res) => {
     totalPromptCount,
     purposes: PURPOSES,
     modelTiers: MODEL_TIERS,
+    modelFamilies: MODEL_FAMILIES,
     auditStages: AUDIT_STAGES,
     harnessLabels: HARNESS_LABELS,
   });
@@ -142,6 +144,7 @@ router.post('/optimize', requirePromptAuth, async (req, res) => {
       purpose: normalizePurpose(req.body.purpose),
       examplesText: req.body.examples_text,
       sourcePromptIds: ids,
+      targetModelFamily: req.body.target_model_family,
     });
     res.json({ ok: true, ...result });
   } catch (err) {
@@ -163,6 +166,7 @@ router.post('/optimizations/:id/save', requirePromptAuth, (req, res) => {
       source_type: 'optimization',
       source_ref: row.id,
       source_title: row.source_prompt_id || null,
+      target_model_family: row.target_model_family || null,
       tags: ['optimized', row.logbook?.dspy_candidate ? 'dspy-candidate' : 'prompt-gym'].filter(Boolean).join(', '),
     });
     res.json({ ok: true, id: saved.id });
@@ -265,6 +269,7 @@ router.post('/adapt', requirePromptAuth, async (req, res) => {
       purpose: normalizePurpose(req.body.purpose),
       mode: req.body.mode || 'quick',
       sourcePromptIds: ids,
+      targetModelFamily: req.body.target_model_family,
     });
     res.json({ ok: true, ...result });
   } catch (err) {
@@ -284,6 +289,7 @@ router.post('/adapt/check', requirePromptAuth, (req, res) => {
       purpose: normalizePurpose(req.body.purpose),
       mode: req.body.mode || 'quick',
       sourcePromptIds: ids,
+      targetModelFamily: req.body.target_model_family,
     });
     res.json(result);
   } catch (err) {
@@ -305,6 +311,7 @@ router.post('/adaptations/:id/save', requirePromptAuth, (req, res) => {
       source_type: 'adaptation',
       source_ref: row.id,
       source_title: row.source_prompt_id || null,
+      target_model_family: row.target_model_family || null,
     });
     res.json({ ok: true, id: saved.id });
   } catch (err) {

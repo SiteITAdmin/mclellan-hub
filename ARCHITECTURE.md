@@ -108,6 +108,11 @@ Adding a new feature → add a task code to `openrouter-attribution.js` first, t
 | crm_source_triage | anthropic/claude-haiku-4-5 |
 | crm_duplicate_review | anthropic/claude-haiku-4-5 |
 | crm_action_projection | anthropic/claude-haiku-4-5 |
+| prompt_shaper | anthropic/claude-sonnet-4-6 |
+| style_distiller | anthropic/claude-sonnet-4-6 |
+
+### Model style profiles
+`lib/model-style-profiles.js` holds per-family prompt style profiles (claude/gpt/gemini/grok/open), distilled monthly by the `style_profile_run` job from production system prompts in github.com/asgeirtj/system_prompts_leaks. Stored as compiled knowledge in `crm_context` (`hub_style_profile_<family>`, user `system`) with receipts in `knowledge_receipts`. Consumers: the prompt tool's target-model selector (adapt + Prompt Gym), and the admin "Shape for model" action (`POST /admin/system-models/_shape`), which proposes a restyled system prompt for the family of the slot's assigned model — proposal only, never auto-saved. `familyFromModelId()` maps any OpenRouter model id to a family. Module contract: MODULES.md → Model Style Profiles.
 
 ---
 

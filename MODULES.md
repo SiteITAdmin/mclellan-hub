@@ -340,3 +340,20 @@ These are the tools the system runs on. They are not features — they are the f
 **Deliberately not built:** No automated AI-detector API integration. Detector scores are unreliable and paid; the tool shows its own heuristic tell-scan and an honest caveat instead of a false "100% human" guarantee.
 
 **Health check:** A syntactically clean AI paragraph run through `/api/humanize` returns a draft whose `scan_after.burstiness` differs from `scan_before.burstiness`. If they are identical, the model likely returned the input unchanged.
+
+## Model Style Profiles
+**Purpose:** Compiled knowledge of how each frontier vendor writes production prompts for its own model family (Claude, GPT, Gemini, Grok, open-weights), distilled monthly from github.com/asgeirtj/system_prompts_leaks. Used to shape prompts for the model they will actually run on: the prompt tool's target-model selector (adapt + Prompt Gym) and the admin "Shape for model" button on every system prompt slot.
+
+**Core capability (must be present):** Selecting a target model family in the prompt builder measurably changes the output style (e.g. XML tags for Claude, markdown headers and terse MUST-rules for GPT). "Shape for model" returns a restyled proposal that preserves every rule and placeholder of the original — it restyles, it does not rewrite content.
+
+**Knowledge over tables:** Profiles are the compiled output of the `style_profile_run` synthesis job, stored in `crm_context` under `hub_style_profile_<family>` (user `system`) — no dedicated tables. Evidence files are selected dynamically from the repo by name pattern and size, so new model releases are picked up without code changes. Each run writes `knowledge_receipts` rows (`source_kind='style_profile'`).
+
+**Healthy looks like:**
+- All five family badges on `/admin/models` show as present, with a distilled date within ~35 days.
+- `system_jobs` always has a pending `style_profile_run` (monthly self-reschedule; first run ~10 min after boot when no profiles exist).
+- A family failure keeps the previous profile (stale beats absent) and writes an `error` receipt — it must not silently blank a profile.
+- `prompt_library` / `prompt_adaptations` / `prompt_optimizations` rows record `target_model_family` when one was selected; the sense check flags family mismatches when reusing examples.
+
+**Does not own:** The prompts themselves (prompt library module), model slot assignment (`lib/settings.js`), or the improver used in the admin test panel. Shaping proposals are never auto-saved — Douglas reviews and saves.
+
+**Health check:** `node -e "require('./lib/model-style-profiles').listStyleProfiles().forEach(p => console.log(p.key, p.present, p.distilled_at))"` shows five `true` rows with recent timestamps.
