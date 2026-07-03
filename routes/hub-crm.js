@@ -435,7 +435,7 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
 
   // Knowledge layer (compiled): claims the synthesis loop derived about this
   // contact. Legacy facts still render in the timeline during the migration.
-  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'contact', contact.id);
+  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'contact', contact.id, { includeStale: showHistory });
 
   res.render('hub/crm-contact', {
     ...crmPageData(req.hubUser), contact, companies,
@@ -508,7 +508,7 @@ router.get('/crm/company/:id', requireAuth, (req, res) => {
   const availableContacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   const showHistory = req.query.show_history === '1';
   const tasks = getCachedTasks(req.hubUser, { companyId: company.id }, showHistory);
-  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'company', company.id);
+  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'company', company.id, { includeStale: showHistory });
 
   res.render('hub/crm-company', {
     ...crmPageData(req.hubUser), company, contacts,
@@ -1617,12 +1617,12 @@ function parseSourceRefs(json) {
   }
 }
 
-function knowledgeGroupsForEntity(user, subjectKind, subjectId, { includeEvents = false } = {}) {
+function knowledgeGroupsForEntity(user, subjectKind, subjectId, { includeEvents = false, includeStale = false } = {}) {
   const { atomsForEntity } = require('../lib/atoms');
   const hub = db.hub();
   const knowledgeByPredicate = {};
   const events = [];
-  for (const a of atomsForEntity(user, subjectKind, subjectId, { includeProposed: true })) {
+  for (const a of atomsForEntity(user, subjectKind, subjectId, { includeProposed: true, includeStale })) {
     const sources = parseSourceRefs(a.source_refs);
     const view = {
       id: a.id,
@@ -2179,7 +2179,7 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
   // Knowledge layer (compiled): claims and events about this project. Legacy
   // projectFacts remain visible while CRM views migrate to compiled knowledge.
   const { knowledgeByPredicate, events: projectKnowledgeEvents } =
-    knowledgeGroupsForEntity(req.hubUser, 'project', project.id, { includeEvents: true });
+    knowledgeGroupsForEntity(req.hubUser, 'project', project.id, { includeEvents: true, includeStale: showHistory });
 
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),

@@ -160,6 +160,14 @@ Important rules:
 - Open tasks are operational state. They can inform triage and duplicate review, but durable knowledge should come from completed tasks or source evidence.
 - If a new CRM feature needs to connect people, projects, companies, tasks, documents, or emails, add a source kind or synthesis/projection step. Do not add a direct table copy path.
 
+### Knowledge retention
+
+Knowledge never disappears; it only leaves the default line of sight. The weekly lint (`lib/knowledge-lint.js`) decays unconfirmed mutable facts after 180 days and marks them `stale` after 365 — but immutable predicates (`isImmutablePredicate`: date of birth, kinship) are exempt, stale atoms stay searchable in Ask the Hub and visible on entity pages via "show history", and any new source mentioning the fact revives it. Lint decisions land in `crm_context` (`knowledge_lint_last`) and the daily system report's KNOWLEDGE section, so nothing goes stale silently.
+
+### Interest radar
+
+`lib/interest-synthesis.js` (job `interest_synthesis_run`, daily 05:45) is the pattern for "the system joined the dots": recent meeting intakes + upcoming meetings/calendar → model names the topics Douglas is actively engaged with → `interest` atoms with provenance + a compiled cache (`crm_context` key `interest_radar`) → the work daily brief pulls recent stories per topic into an "On your radar" section. To make another surface interest-aware, read `getInterestRadar(user)` — do not build a separate topic store.
+
 ---
 
 ## Scheduling & background jobs
