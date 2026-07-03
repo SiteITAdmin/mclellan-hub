@@ -371,6 +371,13 @@
     <strong>Use fallback</strong> removes a saved model choice and returns that slot to its built-in fallback model. It does not disable or delete the feature.
   </p>
 
+  <p style="font-size:12px;color:var(--text-dim);margin:-8px 0 16px">
+    <strong>Model style profiles</strong> (distilled monthly from production system prompts, used by "Shape for model" and the prompt tool's target-model selector):
+    <% for (const sp of styleProfiles) { %>
+      <span class="badge <%= sp.present ? 'badge-tier' : 'badge-search-none' %>" title="<%= sp.present ? ('Distilled ' + new Date(sp.distilled_at * 1000).toLocaleDateString('en-GB') + ' from ' + (sp.sources || []).length + ' prompts via ' + (sp.model_id || '')) : 'Not distilled yet — the style_profile_run job seeds this' %>"><%= sp.key %><%= sp.present ? '' : ' ✗' %></span>
+    <% } %>
+  </p>
+
   <% for (const group of systemGroups) { %>
   <div class="sys-group-label"><%= group.label %></div>
   <div class="model-cards" style="margin-bottom:4px">
@@ -435,11 +442,14 @@
             <p style="font-size:11px;color:var(--text-dim);margin:4px 0;">This feature does not expose a separate prompt.</p>
             <% } else { %>
             <p style="font-size:11px;color:var(--text-dim);margin:2px 0 6px;">Edit the full prompt below. Dynamic placeholders like [DATE], [NAME], [CALENDAR] are filled at runtime. Save to override; Clear to restore the default.</p>
-            <textarea name="prompt" rows="16" style="width:100%;font-family:var(--font-mono,monospace);font-size:11px;line-height:1.5;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);resize:vertical;"><%= slot.promptOverride || slot.promptDefault %></textarea>
+            <textarea name="prompt" rows="16" id="sys-prompt-text-<%= slot.feature %>" style="width:100%;font-family:var(--font-mono,monospace);font-size:11px;line-height:1.5;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);resize:vertical;"><%= slot.promptOverride || slot.promptDefault %></textarea>
             <% } %>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <% if (slot.promptDefault || slot.promptOverride) { %>
+            <button type="button" class="btn-sm" onclick="shapeSysPrompt('<%= slot.feature %>', '<%= slot.scope %>', this)" title="Rewrite this prompt to match the style conventions of the model family it runs on. Fills the textarea with a proposal — review, then Save.">Shape for model</button>
+            <% } %>
             <% if (slot.promptOverride) { %>
             <button type="button" class="btn-sm danger" onclick="restoreDefault('<%= slot.feature %>', this)">Restore default</button>
             <% } %>
@@ -707,6 +717,32 @@
     const ta = form.querySelector('textarea[name=prompt]');
     if (ta) ta.value = '';
     form.submit();
+  };
+
+  // ── Shape prompt for assigned model family ──────────────────────────────
+  window.shapeSysPrompt = async function(feature, scope, btn) {
+    const ta = document.getElementById('sys-prompt-text-' + feature);
+    if (!ta) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Shaping...';
+    try {
+      const r = await fetch('/admin/system-models/_shape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feature, scope }),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'Shaping failed');
+      ta.value = d.proposal;
+      btn.textContent = 'Shaped for ' + d.familyLabel + ' — review, then Save';
+      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 6000);
+      return;
+    } catch (e) {
+      alert(e.message);
+    }
+    btn.textContent = original;
+    btn.disabled = false;
   };
 
   // ── OR catalogue picker ──────────────────────────────────────────────────

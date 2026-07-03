@@ -35,6 +35,7 @@ const { synthesizeRefSources } = require('../lib/nakai-ref-synthesis');
 const { getAllWikiTags, getWikiPagesByTags } = require('../lib/wiki-tags');
 const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPrompt, getSystemPromptOverride, setSystemPromptOverride } = require('../lib/settings');
 const { PROMPTS } = require('../lib/prompts');
+const { familyFromModelId, shapePromptForFamily, listStyleProfiles } = require('../lib/model-style-profiles');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -619,11 +620,14 @@ const SYSTEM_MODEL_GROUPS = [
   { id: 'background', label: 'Background processing', slots: [
     { feature: 'crm_parser',       scope: 'system', label: 'CRM intent parser',   note: 'Runs when you save a CRM note.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'email_classifier', scope: 'system', label: 'Email classifier',    note: 'Runs on Gmail ingestion.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'meeting_intake',   scope: 'user',   label: 'Meeting intake',      note: 'Extracts summaries, attendees, CRM updates, actions, project notes and open questions from meeting transcripts.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'agentmail_extractor', scope: 'system', label: 'AgentMail extractor', note: 'Extracts people, facts and multiple actions from AgentMail messages.', fallback: 'google/gemini-3.1-pro-preview' },
     { feature: 'task_extractor',  scope: 'system', label: 'Task extractor',      note: 'Extracts follow-up tasks from documents and learns from rejected task suggestions.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'reg_synopsis',     scope: 'system', label: 'Regulatory synopsis', note: 'Assesses regulatory publications for Nakai-only email alerts.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'hub_dev_constraint', scope: 'system', label: 'Hub dev constraint', note: 'Knowledge-first development constraint for Hub coding and prompt work.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'prompt_improver',  scope: 'system', label: 'Prompt improver',     note: 'Rewrites prompts in the admin test panel.', fallback: 'google/gemini-2.5-flash-lite' },
+    { feature: 'prompt_shaper',    scope: 'system', label: 'Prompt shaper',       note: 'Restyles a system prompt to match the conventions of the model family it runs on ("Shape for model" button). Needs a strong model — weak ones copy profile content into the prompt.', fallback: 'anthropic/claude-sonnet-4-6' },
+    { feature: 'style_distiller',  scope: 'system', label: 'Style profile distiller', note: 'Monthly job — distils per-model-family prompt style profiles from production system prompts (system_prompts_leaks repo).', fallback: 'anthropic/claude-sonnet-4-6' },
     { feature: 'prompt_adapter',   scope: 'system', label: 'Prompt adapter',      note: 'Builds structured reusable prompts from rough prompts and saved examples.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'prompt_optimizer', scope: 'system', label: 'Prompt optimizer',    note: 'Optimises recurring prompt assets against examples and a scored rubric.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'suggestions',      scope: 'system', label: 'Suggestion engine',   note: 'Generates advisory travel and content suggestions for the morning briefing.', fallback: 'google/gemini-2.5-flash' },
@@ -665,6 +669,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'completed_task_atom_extractor', scope: 'system', label: 'Completed task extractor', note: 'Nightly synthesis — promotes only durable completed tasks into project/contact knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'entity_linker',           scope: 'system', label: 'Entity linker',           note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'cross_entity_synthesis',  scope: 'system', label: 'Cross-entity synthesis',  note: 'Nightly synthesis — reads all active atoms and writes insight atoms: patterns, workflow opportunities, connections, and gaps spanning multiple entities.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'live_thread_synthesis',   scope: 'system', label: 'Live thread synthesis',   note: 'Knowledge layer — notices recurring ideas across Gmail, meetings, newsletters, RSS, opportunity signals, and atoms without forcing them into CRM buckets.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
   { id: 'crm-engine', label: 'CRM knowledge engine', slots: [
     { feature: 'crm_source_triage', scope: 'system', label: 'Source triage', note: 'First prompt in the CRM operating loop: decides whether a new email, meeting, document, task, or fact deserves synthesis.', fallback: 'anthropic/claude-haiku-4-5' },
@@ -725,7 +730,7 @@ router.get('/admin/models', requireHubAdmin, (req, res) => {
       return { ...slot, resolvedScope, currentKey: current?.key || null, currentLabel: current?.label || null, promptOverride, promptDefault };
     }),
   }));
-  res.render('hub-admin/models', { user: req.hubUser, models, tiers, defaultModel, systemGroups });
+  res.render('hub-admin/models', { user: req.hubUser, models, tiers, defaultModel, systemGroups, styleProfiles: listStyleProfiles() });
 });
 
 router.post('/admin/models/_set-default', requireHubAdmin, (req, res) => {
@@ -745,6 +750,30 @@ router.post('/admin/system-models/_set', requireHubAdmin, (req, res) => {
   const resolvedScope = scope === 'system' ? 'system' : req.hubUser;
   setSystemModel(feature, resolvedScope, model_key || null);
   res.redirect('/admin/models#sys-' + feature);
+});
+
+// Proposes a rewrite of a system prompt shaped for the model family of the slot's
+// assigned model. Returns a proposal for review — nothing is saved here.
+router.post('/admin/system-models/_shape', requireHubAdmin, async (req, res) => {
+  try {
+    const { feature, scope } = req.body || {};
+    const slot = SYSTEM_MODEL_GROUPS.flatMap(g => g.slots).find(s => s.feature === feature);
+    if (!slot) return res.status(404).json({ ok: false, error: 'Unknown system prompt slot' });
+    const resolvedScope = scope === 'system' ? 'system' : req.hubUser;
+    const currentPrompt = getSystemPromptOverride(feature, resolvedScope) || PROMPTS[feature] || '';
+    if (!currentPrompt.trim()) return res.status(400).json({ ok: false, error: 'This slot has no prompt to shape' });
+    const assignedModelId = getSystemModelId(feature, resolvedScope, slot.fallback);
+    const family = familyFromModelId(assignedModelId);
+    const result = await shapePromptForFamily({
+      user: req.hubUser,
+      promptText: currentPrompt,
+      family,
+      featureLabel: slot.label,
+    });
+    res.json({ ok: true, ...result, assignedModelId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 router.post('/admin/system-models/_set-prompt', requireHubAdmin, (req, res) => {

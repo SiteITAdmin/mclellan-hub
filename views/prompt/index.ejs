@@ -201,6 +201,13 @@ textarea { min-height:130px; resize:vertical; line-height:1.5; }
               <option value="high-stakes">High-stakes</option>
             </select>
           </div>
+          <div class="field" style="width:220px">
+            <label>Target model</label>
+            <select id="adapt-family">
+              <option value="">Any model</option>
+              <% for (const f of modelFamilies) { %><option value="<%= f.key %>"><%= f.label %></option><% } %>
+            </select>
+          </div>
         </div>
         <div class="field">
           <label>Rough prompt</label>
@@ -236,6 +243,11 @@ textarea { min-height:130px; resize:vertical; line-height:1.5; }
             <label>Purpose</label>
             <select id="opt-purpose">
               <% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %>
+            </select>
+            <label style="margin-top:8px">Target model</label>
+            <select id="opt-family">
+              <option value="">Any model</option>
+              <% for (const f of modelFamilies) { %><option value="<%= f.key %>"><%= f.label %></option><% } %>
             </select>
           </div>
           <div class="field">
@@ -475,6 +487,7 @@ async function senseCheckPrompt() {
         purpose: document.getElementById('adapt-purpose').value,
         mode: document.getElementById('adapt-mode').value,
         source_prompt_ids: selectedPromptIds(),
+        target_model_family: document.getElementById('adapt-family').value,
       }),
     });
     const d = await r.json();
@@ -507,6 +520,7 @@ async function adaptPrompt() {
         purpose: document.getElementById('adapt-purpose').value,
         mode: document.getElementById('adapt-mode').value,
         source_prompt_ids: selectedPromptIds(),
+        target_model_family: document.getElementById('adapt-family').value,
       }),
     });
     const d = await r.json();
@@ -517,7 +531,7 @@ async function adaptPrompt() {
     document.getElementById('adapt-output').textContent = d.adapted;
     document.getElementById('adapt-result').classList.add('open');
     document.getElementById('save-title').value = '';
-    status.textContent = `Built with ${d.examples.length} example${d.examples.length === 1 ? '' : 's'} · recommended ${d.classification.recommended_model_tier}`;
+    status.textContent = `Built with ${d.examples.length} example${d.examples.length === 1 ? '' : 's'} · recommended ${d.classification.recommended_model_tier}${d.targetModelFamily ? (d.styleProfileApplied ? ` · styled for ${d.targetModelFamily}` : ` · no style profile for ${d.targetModelFamily} yet`) : ''}`;
   } catch (e) {
     alert(e.message);
     status.textContent = 'Adaptation failed.';
@@ -597,12 +611,13 @@ async function optimizePrompt() {
         examples_text: document.getElementById('opt-examples').value,
         purpose: document.getElementById('opt-purpose').value,
         source_prompt_ids: selectedPromptIds(),
+        target_model_family: document.getElementById('opt-family').value,
       }),
     });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || 'Prompt Gym failed');
     renderOptimizerResult(d);
-    status.textContent = `Prompt Gym complete · ${d.candidates?.length || 0} candidates scored.`;
+    status.textContent = `Prompt Gym complete · ${d.candidates?.length || 0} candidates scored${d.targetModelFamily ? (d.styleProfileApplied ? ` · styled for ${d.targetModelFamily}` : ` · no style profile for ${d.targetModelFamily} yet`) : ''}.`;
   } catch (e) {
     alert(e.message);
     status.textContent = 'Prompt Gym failed.';
