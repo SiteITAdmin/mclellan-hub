@@ -33,7 +33,7 @@ const {
 const { resendBriefingFromRequest } = require('../lib/nakai-briefing-resolver');
 const { synthesizeRefSources } = require('../lib/nakai-ref-synthesis');
 const { getAllWikiTags, getWikiPagesByTags } = require('../lib/wiki-tags');
-const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPromptOverride, setSystemPromptOverride } = require('../lib/settings');
+const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPrompt, getSystemPromptOverride, setSystemPromptOverride } = require('../lib/settings');
 const { PROMPTS } = require('../lib/prompts');
 
 // Ensure test_jobs table exists (safe to run every startup)
