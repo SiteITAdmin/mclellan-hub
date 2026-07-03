@@ -65,7 +65,7 @@ async function taskAction(id, action) {
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;opacity:.55;margin-bottom:3px;"><%= pred.replace(/_/g,' ') %></div>
           <% for (const a of knowledgeByPredicate[pred]) { %>
             <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--border);">
-              <span style="font-size:13px;"><%= a.value %><% if (a.status === 'proposed') { %> <span style="font-size:10px;opacity:.6;">· proposed</span><% } %></span>
+              <span style="font-size:13px;<%= a.status === 'stale' ? 'opacity:.55;' : '' %>"><%= a.value %><% if (a.status === 'proposed') { %> <span style="font-size:10px;opacity:.6;">· proposed</span><% } %><% if (a.status === 'stale') { %> <span title="not confirmed by any source in over a year" style="font-size:10px;opacity:.6;">· stale</span><% } %></span>
               <span style="font-size:11px;white-space:nowrap;display:inline-flex;gap:6px;align-items:baseline;">
                 <span style="opacity:.5;" title="confidence <%= a.confidence.toFixed(2) %>"><%= Math.round(a.confidence*100) %>%</span>
                 <% a.sources.forEach(function(s){ %><a href="/crm/source/<%= s.kind %>/<%= encodeURIComponent(s.id) %>" style="opacity:.65;" title="open source: <%= s.kind.replace(/_/g,' ') %>"><%= ({document:'doc',email_summary:'email',meeting_intake:'meeting',crm_fact:'fact',completed_task:'task'})[s.kind] || s.kind %></a><% }); %>
