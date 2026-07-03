@@ -105,7 +105,9 @@ echo "==> Enforcing sensitive file permissions..."
    find /app/config -maxdepth 1 -type f -exec chmod 640 {} + &&
    test ! -f /app/.env || { chown root:hub /app/.env && chmod 640 /app/.env; } &&
    test ! -f /app/config/google-service-account.json || { chown root:hub /app/config/google-service-account.json && chmod 640 /app/config/google-service-account.json; } &&
-   test ! -d /app/backups || { chown -R root:root /app/backups && chmod -R go-rwx /app/backups; }"
+   test ! -d /app/backups || { chown -R root:root /app/backups && chmod -R go-rwx /app/backups; } &&
+   find /app -mindepth 1 \( -path /app/data -o -path /app/config -o -path /app/backups -o -path /app/exports -o -path /app/public/knowledge -o -name '.env*' \) -prune -o -type f ! -perm -o+r -exec chmod a+r {} + &&
+   find /app -mindepth 1 \( -path /app/data -o -path /app/config -o -path /app/backups -o -path /app/exports -o -path /app/public/knowledge \) -prune -o -type d ! -perm -o+rx -exec chmod a+rx {} +"
 
 echo "==> Syncing wiki policy and Synthadoc ingest override..."
 rsync -avz --progress -e "$RSYNC_RSH" \
