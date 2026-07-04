@@ -9,6 +9,7 @@ const db = require('../lib/db');
 const {
   canonicalOpenRouterModelId,
   categoriseLines,
+  compactRepeatedLines,
   crmKnowledgeHealthWarning,
   openRouterPolicyWarnings,
   recentOpenRouterGateViolations,
@@ -51,6 +52,16 @@ test('ordinary prose containing warning is not treated as an error', () => {
   ]);
   assert.equal(categories.errors.length, 0);
   assert.equal(categories.newsletter.length, 1);
+});
+
+test('repeated journal failures compact into one report line', () => {
+  const compacted = compactRepeatedLines([
+    "Jul 03 22:20:08 mclellan-hub-1 systemd[1]: hub.service: Failed with result 'exit-code'.",
+    "Jul 03 22:20:14 mclellan-hub-1 systemd[1]: hub.service: Failed with result 'exit-code'.",
+    "Jul 03 22:20:19 mclellan-hub-1 systemd[1]: hub.service: Failed with result 'exit-code'.",
+  ]);
+  assert.equal(compacted.length, 1);
+  assert.match(compacted[0], /repeated 3 times/);
 });
 
 test('CRM health accepts compiled knowledge without legacy facts', () => {
