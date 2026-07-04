@@ -93,8 +93,10 @@ Adding a new feature → add a task code to `openrouter-attribution.js` first, t
 
 ### Model selection
 - User default: `crm_context` key `hub_default_model`
-- System slots: `embeddings`, `synthesis`, `linkage`, `briefing` — configured in admin models UI
+- System slots: every LLM call in the system resolves through a named slot in `SYSTEM_MODEL_GROUPS` (`routes/hub-admin.js`) — 69 slots as of 4 Jul 2026, including prompt-only slots (spiciness modifiers, suggestion-engine prompts, work-brief prompts, task rule learner) whose model comes from a parent slot. Configured in the admin models UI (`/admin/models/system`, prompts at `/admin/models/prompts`).
+- Every slot's default prompt lives in `lib/prompts.js` (`PROMPTS`), overridable per-slot via `crm_context` key `hub_sys_prompt_<feature>`. Do not write an inline prompt in feature code — add a `PROMPTS` entry, read it with `getSystemPrompt(feature, scope, PROMPTS.<feature>)`, and give it a slot so it is visible in admin.
 - Never hardcode a model ID in feature code. Call `getSystemModelId()`.
+- Boot-time migration in `lib/db.js` deletes `hub_sys_model_*` overrides whose model key no longer exists in `model_config` (they would otherwise silently fall back while the admin page shows the stale override).
 
 ### Current system model defaults
 | Slot | Default model |

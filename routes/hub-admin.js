@@ -630,8 +630,24 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'style_distiller',  scope: 'system', label: 'Style profile distiller', note: 'Monthly job — distils per-model-family prompt style profiles from production system prompts (system_prompts_leaks repo).', fallback: 'anthropic/claude-sonnet-4-6' },
     { feature: 'prompt_adapter',   scope: 'system', label: 'Prompt adapter',      note: 'Builds structured reusable prompts from rough prompts and saved examples.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'prompt_optimizer', scope: 'system', label: 'Prompt optimizer',    note: 'Optimises recurring prompt assets against examples and a scored rubric.', fallback: 'google/gemini-2.5-pro-preview' },
-    { feature: 'suggestions',      scope: 'system', label: 'Suggestion engine',   note: 'Generates advisory travel and content suggestions for the morning briefing.', fallback: 'google/gemini-2.5-flash' },
+    { feature: 'opportunity_extractor', scope: 'system', label: 'Opportunity signal extractor', note: 'Extracts short-lived offers and opportunity signals from inbound emails.', fallback: 'google/gemini-2.5-flash' },
+    { feature: 'task_rule_learner', scope: 'system', label: 'Task rule learner', note: 'Generalises a wrongly created task into a reusable decision rule. Prompt only — runs on the Task extractor model.', fallback: 'prompt only (Task extractor model)' },
     { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
+  ]},
+  { id: 'suggestions', label: 'Suggestion engine', slots: [
+    { feature: 'suggestions',           scope: 'system', label: 'Suggestion engine model', note: 'Model for all suggestion-engine calls: travel, content, salience planning and synthesis, price extraction.', fallback: 'google/gemini-2.5-flash' },
+    { feature: 'suggestion_travel',     scope: 'system', label: 'Travel suggester',        note: 'Spots planned-but-unbooked travel and advises on booking timing. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
+    { feature: 'suggestion_content',    scope: 'system', label: 'Content suggester',       note: 'Suggests LinkedIn post topics from recent RSS/newsletter signals. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
+    { feature: 'suggestion_opportunity',scope: 'system', label: 'Opportunity salience synthesiser', note: 'Decides whether opportunity signals are worth surfacing given retrieved context. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
+    { feature: 'salience_search_plan',  scope: 'system', label: 'Salience search planner', note: 'Plans semantic-search queries to investigate whether signals matter. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
+    { feature: 'travel_price_extract',  scope: 'system', label: 'Travel price extractor',  note: 'Extracts flight prices from Skyscanner alert emails. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
+  ]},
+  { id: 'daily-reports', label: 'Daily & weekly reports', slots: [
+    { feature: 'work_daily_brief',  scope: 'system', label: 'Work daily brief model', note: 'Model for all Work Daily Brief LLM calls: yesterday recap, today line, project signals.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'work_brief_recap',  scope: 'system', label: 'Work brief — yesterday recap', note: 'Recaps yesterday\'s emails and meetings in 2-3 sentences. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
+    { feature: 'work_brief_today',  scope: 'system', label: 'Work brief — today line', note: 'One-sentence summary of today\'s calendar. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
+    { feature: 'work_brief_project_salience', scope: 'system', label: 'Work brief — project signals', note: 'Joins radar/briefing content to recent project evidence. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
+    { feature: 'weekly_digest',     scope: 'system', label: 'Weekly digest writer', note: 'Writes the Sunday weekly digest sections from chats, emails and CRM updates.', fallback: 'DIGEST_MODEL env or google/gemini-2.5-pro-preview' },
   ]},
   { id: 'debrief', label: 'Debrief', slots: [
     { feature: 'debrief_interviewer', scope: 'user', label: 'Debrief interviewer', note: 'Conducts the end-of-day voice debrief. Must be fast with short outputs.', fallback: 'anthropic/claude-haiku-4-5' },
@@ -670,6 +686,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'entity_linker',           scope: 'system', label: 'Entity linker',           note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'cross_entity_synthesis',  scope: 'system', label: 'Cross-entity synthesis',  note: 'Nightly synthesis — reads all active atoms and writes insight atoms: patterns, workflow opportunities, connections, and gaps spanning multiple entities.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'live_thread_synthesis',   scope: 'system', label: 'Live thread synthesis',   note: 'Knowledge layer — notices recurring ideas across Gmail, meetings, newsletters, RSS, opportunity signals, and atoms without forcing them into CRM buckets.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'interest_synthesis',      scope: 'system', label: 'Interest radar',          note: 'Daily job — joins meeting intakes and calendar to name the work topics Douglas is actively engaged with.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
   { id: 'crm-engine', label: 'CRM knowledge engine', slots: [
     { feature: 'crm_source_triage', scope: 'system', label: 'Source triage', note: 'First prompt in the CRM operating loop: decides whether a new email, meeting, document, task, or fact deserves synthesis.', fallback: 'anthropic/claude-haiku-4-5' },
@@ -693,6 +710,8 @@ const SYSTEM_MODEL_GROUPS = [
   ]},
   { id: 'nakai', label: 'Nakai intelligence', slots: [
     { feature: 'nakai_daily_briefing',  scope: 'system', label: 'Nakai daily briefing', note: 'Writes the daily PDF briefing for Nakai from regulator, government, financial press, and Block product source packs.', fallback: 'anthropic/claude-sonnet-4-6' },
+    { feature: 'nakai_ref_extraction',  scope: 'system', label: 'Reference source extractor', note: 'Extracts substantive regulatory content from reference-source webpages for the audit-horizon knowledge base.', fallback: 'anthropic/claude-haiku-4-5-20251001' },
+    { feature: 'nakai_ref_synthesis',   scope: 'system', label: 'Reference source synthesiser', note: 'Compiles extracted reference-source content into audit-horizon atoms used by the daily briefing.', fallback: 'anthropic/claude-haiku-4-5-20251001' },
   ]},
 ];
 
