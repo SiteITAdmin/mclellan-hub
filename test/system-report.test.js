@@ -9,6 +9,7 @@ const db = require('../lib/db');
 const {
   canonicalOpenRouterModelId,
   categoriseLines,
+  crmKnowledgeHealthWarning,
   openRouterPolicyWarnings,
   recentOpenRouterGateViolations,
 } = require('../lib/system-report');
@@ -50,6 +51,43 @@ test('ordinary prose containing warning is not treated as an error', () => {
   ]);
   assert.equal(categories.errors.length, 0);
   assert.equal(categories.newsletter.length, 1);
+});
+
+test('CRM health accepts compiled knowledge without legacy facts', () => {
+  const warning = crmKnowledgeHealthWarning({
+    agentmailSources: 2,
+    gmailSources: 1,
+    atomsCreated: 4,
+    receipts: 6,
+    synthesisedSources: 3,
+    legacyFacts: 0,
+  });
+  assert.equal(warning, null);
+});
+
+test('CRM health distinguishes stalled synthesis from missing source intake', () => {
+  const stalled = crmKnowledgeHealthWarning({
+    agentmailSources: 1,
+    gmailSources: 0,
+    agentmailSummaries: 0,
+    atomsCreated: 0,
+    receipts: 0,
+    synthesisedSources: 0,
+    legacyFacts: 0,
+  });
+  assert.match(stalled, /source item\(s\) arrived/);
+  assert.match(stalled, /crm_knowledge_engine may be stalled/);
+
+  const noIntake = crmKnowledgeHealthWarning({
+    agentmailSources: 0,
+    gmailSources: 0,
+    agentmailSummaries: 0,
+    atomsCreated: 0,
+    receipts: 0,
+    synthesisedSources: 0,
+    legacyFacts: 0,
+  });
+  assert.match(noIntake, /no Gmail\/AgentMail source records/);
 });
 
 test('OpenRouter policy warnings flag missing attribution and unapproved models', () => {
