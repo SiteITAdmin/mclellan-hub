@@ -652,6 +652,9 @@ const SYSTEM_MODEL_GROUPS = [
   { id: 'debrief', label: 'Debrief', slots: [
     { feature: 'debrief_interviewer', scope: 'user', label: 'Debrief interviewer', note: 'Conducts the end-of-day voice debrief. Must be fast with short outputs.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'debrief_extractor',  scope: 'user', label: 'Debrief extractor',   note: 'Extracts CRM facts and actions from the transcript.', fallback: 'deepseek/deepseek-v3.2' },
+    { feature: 'debrief_transcriber', scope: 'system', label: 'Debrief transcriber (STT)', note: 'Transcribes each spoken answer via the OpenRouter audio/transcriptions endpoint. Must be a speech-to-text model.', fallback: 'openai/whisper-large-v3' },
+    { feature: 'debrief_tts',        scope: 'system', label: 'Debrief voice (TTS)', note: 'Speaks the interviewer replies via the OpenRouter audio/speech endpoint. Must be a text-to-speech model.', fallback: 'hexgrad/kokoro-82m' },
+    { feature: 'debrief_tts_voice',  scope: 'system', label: 'Debrief voice name', note: 'Voice preset passed to the TTS model (Kokoro British voices: bf_emma, bf_isabella, bm_george, bm_lewis). Prompt only — the text IS the voice name.', fallback: 'prompt only (voice: bf_emma)' },
   ]},
   { id: 'linkedin', label: 'LinkedIn pipeline', slots: [
     { feature: 'linkedin_planner',    scope: 'user', label: 'Query planner',          note: 'Generates search queries for a LinkedIn topic.', fallback: 'deepseek/deepseek-v3.2' },
