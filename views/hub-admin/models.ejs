@@ -4,135 +4,10 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Models — Chat Admin — <%= user %></title>
+<title>Model catalogue — Chat Admin — <%= user %></title>
 <link rel="stylesheet" href="/portfolio.css">
+<%- include('partials/models-styles') %>
 <style>
-  :root {
-    --card-radius: 12px;
-    --card-border: var(--border, #dddaf0);
-    --card-bg: var(--bg, #faf9fb);
-    --accent: var(--primary, #7c6af5);
-  }
-
-  /* ── Model cards grid ── */
-  .model-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 14px;
-    margin-top: 4px;
-  }
-  .model-card {
-    border: 1px solid var(--card-border);
-    border-radius: var(--card-radius);
-    background: var(--card-bg);
-    padding: 16px 18px;
-    transition: box-shadow 0.15s;
-  }
-  .model-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
-  .model-card.disabled { opacity: 0.5; }
-  .model-card-head {
-    display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
-    margin-bottom: 8px;
-  }
-  .model-card-name {
-    font-size: 14px; font-weight: 600; color: var(--text, #15131e);
-    line-height: 1.3;
-  }
-  .model-card-id {
-    font-family: var(--mono, monospace); font-size: 10px;
-    color: var(--text-dim, #767586); margin-top: 2px; word-break: break-all;
-  }
-  .model-card-badges {
-    display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px;
-  }
-  .badge {
-    display: inline-flex; align-items: center; gap: 3px;
-    padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
-    line-height: 1.5;
-  }
-  .badge-tier   { background: rgba(124,106,245,0.12); color: #5b4ac4; }
-  .badge-cat    { background: rgba(22,160,133,0.12);  color: #0e7a65; }
-  .badge-search-native  { background: rgba(0,122,255,0.12); color: #0052cc; }
-  .badge-search-plugin  { background: rgba(255,149,0,0.12);  color: #b35e00; }
-  .badge-search-none    { background: rgba(0,0,0,0.06);       color: #666; }
-  .badge-off    { background: rgba(186,26,26,0.1);   color: #ba1a1a; }
-  .badge-default { background: rgba(40,167,69,0.12); color: #1a7a35; }
-  .badge-brave-ok   { background: rgba(22,163,74,0.12); color: #15803d; }
-  .badge-brave-fail { background: rgba(186,26,26,0.10); color: #ba1a1a; }
-  .badge-brave-none { background: rgba(0,0,0,0.05); color: #888; }
-
-  /* Brave test button + result panel */
-  .brave-test-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .brave-result-panel {
-    margin-top: 12px; padding: 10px 12px;
-    border-top: 1px solid var(--line, #e8e8e8);
-    background: var(--bg-soft, #f9f9fb);
-    border-radius: 0 0 8px 8px;
-  }
-  .brave-result-meta {
-    display: flex; justify-content: space-between; align-items: center;
-    font-size: 11px; color: var(--text-dim, #767586); margin-bottom: 6px;
-  }
-  .brave-result-status-ok  { color: #15803d; font-weight: 600; }
-  .brave-result-status-fail { color: #ba1a1a; font-weight: 600; }
-  .brave-result-body {
-    font-size: 12px; line-height: 1.55; color: var(--text, #222);
-    white-space: pre-wrap; word-break: break-word;
-    max-height: 320px; overflow-y: auto;
-  }
-
-  .model-card-cost {
-    font-size: 11px; color: var(--text-dim, #767586);
-    display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
-  }
-  .model-card-cost span { white-space: nowrap; }
-
-  .model-card-actions {
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-  }
-  .btn-sm {
-    padding: 5px 12px; font-size: 12px; border-radius: 6px; cursor: pointer;
-    border: 1px solid var(--outline, #c7c4d7); background: transparent;
-    color: var(--text, #15131e); font-family: inherit; transition: background 0.12s;
-  }
-  .btn-sm:hover { background: rgba(0,0,0,0.05); }
-  .btn-sm.danger { color: #ba1a1a; border-color: #ffdad6; }
-  .btn-sm.danger:hover { background: rgba(186,26,26,0.06); }
-
-  /* ── Inline edit panel (hidden by default, JS-toggled) ── */
-  .edit-panel {
-    display: none; margin-top: 14px; padding-top: 14px;
-    border-top: 1px solid var(--card-border);
-  }
-  .edit-panel.open { display: block; }
-
-  /* ── Forms ── */
-  .model-form { display: flex; flex-direction: column; gap: 12px; }
-  .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
-  .form-row .field { flex: 1; min-width: 120px; }
-  .field { display: flex; flex-direction: column; gap: 4px; }
-  .field label {
-    font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.06em; color: var(--text-dim, #464554);
-  }
-  .field input, .field select {
-    padding: 7px 10px; font-size: 13px; font-family: var(--font, sans-serif);
-    border: 1px solid var(--outline, #c7c4d7); border-radius: 7px;
-    background: var(--bg, #fcf8ff); color: var(--text, #1b1b23);
-    outline: none; transition: border-color 0.15s; width: 100%; box-sizing: border-box;
-  }
-  .field input:focus, .field select:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(124,106,245,0.12);
-  }
-  .field .hint { font-size: 11px; color: var(--text-dim, #767586); }
-  .form-actions { display: flex; gap: 8px; margin-top: 4px; }
-  .section-divider { border: none; border-top: 1px solid var(--card-border); margin: 4px 0; }
-  .form-section-label {
-    font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.08em; color: var(--text-dim, #767586);
-  }
-
   /* ── Add model section ── */
   .add-section {
     background: var(--card-bg); border: 1px solid var(--card-border);
@@ -173,24 +48,16 @@
 
   /* ── Category datalist styling (hint only — browsers style differently) ── */
   .cat-suggestions { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
-
-  /* ── System model section ── */
-  .sys-group-label {
-    font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.08em; color: var(--text-dim, #767586);
-    margin: 20px 0 8px;
-  }
-  .sys-group-label:first-child { margin-top: 0; }
-
 </style>
 </head>
 <body class="admin-page">
 
-<%- include('partials/admin-header', { title: `Models & prompts — ${user}` }) %>
+<%- include('partials/admin-header', { title: `Model catalogue — ${user}` }) %>
+<%- include('partials/models-subnav', { modelsTab: 'catalogue' }) %>
 
 <section class="admin-section">
   <h2>How this works</h2>
-  <p>The chat model picker is built from this list. Shared defaults (faded) are available to both users. Models you add here are visible only in <strong><%= user %></strong>'s chat. Category and cost data show on the cards in the chat interface.</p>
+  <p>The chat model picker is built from this list. Shared defaults (faded) are available to both users. Models you add here are visible only in <strong><%= user %></strong>'s chat. Category and cost data show on the cards in the chat interface. System features (background jobs, pipelines) pick from this catalogue on the <a href="/admin/models/system">System models</a> page; their prompts are edited on the <a href="/admin/models/prompts">Prompts</a> page.</p>
   <p style="margin-top:8px;font-size:13px;color:var(--text-dim)">
     <strong>Search modes:</strong>
     <strong>Native</strong> — Perplexity Sonar etc., model always searches, no plugin needed. When selected, hub auto-switches to Exa for semantic augmentation. &nbsp;|&nbsp;
@@ -363,193 +230,6 @@
   </div>
 </section>
 
-<section class="admin-section" id="system-models">
-  <h2>System models</h2>
-  <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">
-    Models used by background and automated features. Changes apply immediately — no restart needed.
-    Per-user slots show settings for <strong><%= user %></strong> only; other accounts have separate settings.
-    <strong>Use fallback</strong> removes a saved model choice and returns that slot to its built-in fallback model. It does not disable or delete the feature.
-  </p>
-
-  <p style="font-size:12px;color:var(--text-dim);margin:-8px 0 16px">
-    <strong>Model style profiles</strong> (distilled monthly from production system prompts, used by "Shape for model" and the prompt tool's target-model selector):
-    <% for (const sp of styleProfiles) { %>
-      <span class="badge <%= sp.present ? 'badge-tier' : 'badge-search-none' %>" title="<%= sp.present ? ('Distilled ' + new Date(sp.distilled_at * 1000).toLocaleDateString('en-GB') + ' from ' + (sp.sources || []).length + ' prompts via ' + (sp.model_id || '')) : 'Not distilled yet — the style_profile_run job seeds this' %>"><%= sp.key %><%= sp.present ? '' : ' ✗' %></span>
-    <% } %>
-  </p>
-
-  <% for (const group of systemGroups) { %>
-  <div class="sys-group-label"><%= group.label %></div>
-  <div class="model-cards" style="margin-bottom:4px">
-    <% for (const slot of group.slots) { %>
-    <div class="model-card" id="sys-<%= slot.feature %>">
-      <div class="model-card-head">
-        <div>
-          <div class="model-card-name"><%= slot.label %></div>
-          <div class="model-card-id"><%= slot.note %></div>
-        </div>
-        <span class="badge <%= slot.scope === 'system' ? 'badge-tier' : 'badge-cat' %>"><%= slot.scope %></span>
-      </div>
-
-      <div class="model-card-badges">
-        <% if (slot.currentKey) { %>
-          <span class="badge badge-default"><%= slot.currentLabel || slot.currentKey %></span>
-        <% } else { %>
-          <span class="badge badge-search-none">fallback: <%= slot.fallback %></span>
-        <% } %>
-      </div>
-
-      <div class="model-card-actions">
-        <button class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Model</button>
-        <button class="btn-sm" onclick="toggleSysPrompt('<%= slot.feature %>')" style="<%= slot.promptOverride ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '' %>">Prompt<%= slot.promptOverride ? ' ✎' : '' %></button>
-        <% if (slot.currentKey) { %>
-        <form method="POST" action="/admin/system-models/_set" style="display:inline">
-          <input type="hidden" name="feature" value="<%= slot.feature %>">
-          <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
-          <input type="hidden" name="model_key" value="">
-          <button class="btn-sm danger" type="submit" title="Remove this model override and use the built-in fallback">Use fallback</button>
-        </form>
-        <% } %>
-      </div>
-
-      <div class="edit-panel" id="sys-edit-<%= slot.feature %>">
-        <form method="POST" action="/admin/system-models/_set" class="model-form">
-          <input type="hidden" name="feature" value="<%= slot.feature %>">
-          <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
-          <div class="field">
-            <label>Model</label>
-            <select name="model_key">
-              <option value="">Use fallback (<%= slot.fallback %>)</option>
-              <% for (const m of models.filter(m => m.enabled)) { %>
-              <option value="<%= m.key %>"<%= slot.currentKey === m.key ? ' selected' : '' %>><%= m.label %></option>
-              <% } %>
-            </select>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
-            <button type="button" class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Cancel</button>
-          </div>
-        </form>
-      </div>
-
-      <div class="edit-panel" id="sys-prompt-<%= slot.feature %>">
-        <form method="POST" action="/admin/system-models/_set-prompt" class="model-form">
-          <input type="hidden" name="feature" value="<%= slot.feature %>">
-          <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
-          <div class="field">
-            <label>Prompt<% if (slot.promptOverride) { %> <span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">edited</span><% } else { %> <span style="font-size:10px;color:var(--text-dim);margin-left:4px;">(showing default)</span><% } %></label>
-            <% if (!slot.promptDefault && !slot.promptOverride) { %>
-            <p style="font-size:11px;color:var(--text-dim);margin:4px 0;">This feature does not expose a separate prompt.</p>
-            <% } else { %>
-            <p style="font-size:11px;color:var(--text-dim);margin:2px 0 6px;">Edit the full prompt below. Dynamic placeholders like [DATE], [NAME], [CALENDAR] are filled at runtime. Save to override; Clear to restore the default.</p>
-            <textarea name="prompt" rows="16" id="sys-prompt-text-<%= slot.feature %>" style="width:100%;font-family:var(--font-mono,monospace);font-size:11px;line-height:1.5;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);resize:vertical;"><%= slot.promptOverride || slot.promptDefault %></textarea>
-            <% } %>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
-            <% if (slot.promptDefault || slot.promptOverride) { %>
-            <button type="button" class="btn-sm" onclick="shapeSysPrompt('<%= slot.feature %>', '<%= slot.scope %>', this)" title="Rewrite this prompt to match the style conventions of the model family it runs on. Fills the textarea with a proposal — review, then Save.">Shape for model</button>
-            <% } %>
-            <% if (slot.promptOverride) { %>
-            <button type="button" class="btn-sm danger" onclick="restoreDefault('<%= slot.feature %>', this)">Restore default</button>
-            <% } %>
-            <button type="button" class="btn-sm" onclick="toggleSysPrompt('<%= slot.feature %>')">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-    <% } %>
-  </div>
-  <% } %>
-</section>
-
-<section class="admin-section">
-  <h2>Tiers</h2>
-  <p style="font-size:13px;color:var(--text-dim);margin-bottom:14px">Tiers group models in the chat picker. The key is used internally and in model records — don't change it after models reference it. Search default sets the auto-selected search mode when a model is added to this tier.</p>
-
-  <div class="model-cards" style="margin-bottom:20px">
-  <% for (const t of tiers) { %>
-    <div class="model-card" id="tier-card-<%= t.key %>">
-      <div class="model-card-head">
-        <div>
-          <div class="model-card-name"><%= t.label %></div>
-          <div class="model-card-id"><%= t.key %></div>
-        </div>
-        <span class="badge badge-tier"><%= t.search_default %></span>
-      </div>
-      <div class="model-card-actions">
-        <button class="btn-sm" onclick="toggleTierEdit('<%= t.key %>')">Edit</button>
-        <form method="POST" action="/admin/tiers/_delete" style="display:inline"
-          onsubmit="return confirm('Delete tier <%= t.key %>? Models in this tier will still exist but won\'t be grouped.')">
-          <input type="hidden" name="key" value="<%= t.key %>">
-          <button class="btn-sm danger" type="submit">Delete</button>
-        </form>
-      </div>
-      <div class="edit-panel" id="tier-edit-<%= t.key %>">
-        <form method="POST" action="/admin/tiers/_update" class="model-form">
-          <input type="hidden" name="key" value="<%= t.key %>">
-          <div class="form-row">
-            <div class="field">
-              <label>Display name</label>
-              <input name="label" value="<%= t.label %>" required>
-            </div>
-            <div class="field">
-              <label>Search default</label>
-              <select name="search_default">
-                <option value="web-plugin" <%= t.search_default === 'web-plugin' ? 'selected' : '' %>>Web plugin (Firecrawl)</option>
-                <option value="native"     <%= t.search_default === 'native'     ? 'selected' : '' %>>Native</option>
-                <option value="none"       <%= t.search_default === 'none'       ? 'selected' : '' %>>None</option>
-              </select>
-            </div>
-            <div class="field" style="flex:0 0 70px">
-              <label>Order</label>
-              <input name="display_order" type="number" value="<%= t.display_order %>">
-            </div>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
-            <button type="button" class="btn-sm" onclick="toggleTierEdit('<%= t.key %>')">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  <% } %>
-  </div>
-
-  <details style="margin-top:4px">
-    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Add a tier</summary>
-    <form method="POST" action="/admin/tiers" class="model-form" style="margin-top:12px;max-width:480px">
-      <div class="form-row">
-        <div class="field">
-          <label>Key <span style="font-weight:400;text-transform:none">(slug, e.g. fast-chat)</span></label>
-          <input name="key" placeholder="fast-chat" required>
-        </div>
-        <div class="field">
-          <label>Display name</label>
-          <input name="label" placeholder="Fast Chat" required>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label>Search default</label>
-          <select name="search_default">
-            <option value="web-plugin">Web plugin (Firecrawl)</option>
-            <option value="native">Native</option>
-            <option value="none">None</option>
-          </select>
-        </div>
-        <div class="field" style="flex:0 0 80px">
-          <label>Order</label>
-          <input name="display_order" type="number" value="<%= tiers.length %>">
-        </div>
-      </div>
-      <div class="form-actions">
-        <button type="submit" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">Add tier</button>
-      </div>
-    </form>
-  </details>
-</section>
-
 <section class="admin-section">
   <h2>Add a model</h2>
   <div class="add-section">
@@ -675,6 +355,11 @@
 </datalist>
 
 <script>
+// Old bookmarks used /admin/models#sys-<feature> and #system-models before the
+// split — forward them to the System models page.
+if (window.location.hash.startsWith('#sys') || window.location.hash === '#system-models') {
+  window.location.replace('/admin/models/system' + (window.location.hash === '#system-models' ? '' : window.location.hash));
+}
 (function () {
   // ── Edit toggle ──────────────────────────────────────────────────────────
   window.toggleEdit = function(key) {
@@ -682,67 +367,6 @@
     const safeId = key.replace(/\//g, '__');
     const panel = document.getElementById('edit-' + safeId);
     if (panel) panel.classList.toggle('open');
-  };
-
-  window.toggleTierEdit = function(key) {
-    const panel = document.getElementById('tier-edit-' + key);
-    if (panel) panel.classList.toggle('open');
-  };
-
-  // ── System model edit toggle ─────────────────────────────────────────────
-  window.toggleSysEdit = function(feature) {
-    const panel = document.getElementById('sys-edit-' + feature);
-    if (panel) {
-      panel.classList.toggle('open');
-      // close prompt panel if open
-      const pp = document.getElementById('sys-prompt-' + feature);
-      if (pp && panel.classList.contains('open')) pp.classList.remove('open');
-    }
-  };
-
-  // ── System prompt toggle ─────────────────────────────────────────────────
-  window.toggleSysPrompt = function(feature) {
-    const panel = document.getElementById('sys-prompt-' + feature);
-    if (panel) {
-      panel.classList.toggle('open');
-      // close model panel if open
-      const mp = document.getElementById('sys-edit-' + feature);
-      if (mp && panel.classList.contains('open')) mp.classList.remove('open');
-    }
-  };
-
-  // ── Restore default prompt ───────────────────────────────────────────────
-  window.restoreDefault = function(feature, btn) {
-    const form = btn.closest('form');
-    const ta = form.querySelector('textarea[name=prompt]');
-    if (ta) ta.value = '';
-    form.submit();
-  };
-
-  // ── Shape prompt for assigned model family ──────────────────────────────
-  window.shapeSysPrompt = async function(feature, scope, btn) {
-    const ta = document.getElementById('sys-prompt-text-' + feature);
-    if (!ta) return;
-    const original = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Shaping...';
-    try {
-      const r = await fetch('/admin/system-models/_shape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feature, scope }),
-      });
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error || 'Shaping failed');
-      ta.value = d.proposal;
-      btn.textContent = 'Shaped for ' + d.familyLabel + ' — review, then Save';
-      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 6000);
-      return;
-    } catch (e) {
-      alert(e.message);
-    }
-    btn.textContent = original;
-    btn.disabled = false;
   };
 
   // ── OR catalogue picker ──────────────────────────────────────────────────

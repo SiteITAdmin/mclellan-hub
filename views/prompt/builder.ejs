@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Builder — Prompt Library</title>
+<link rel="stylesheet" href="/hub.css">
+<%- include('partials/styles') %>
+</head>
+<body class="prompt-page">
+<div class="wrap">
+  <%- include('partials/nav', {
+    promptTab: 'builder',
+    pageTitle: 'Builder',
+    pageSub: 'Adapt rough prompts into stronger work orders, and build stage-specific audit agent packs. Examples ticked in the Library are used automatically.'
+  }) %>
+
+  <div class="grid">
+    <section>
+      <% if (user === 'nakai' || user === 'douglas') { %>
+      <div class="card">
+        <h2>Internal Audit Agent Builder</h2>
+        <p class="card-desc">Build a stage-specific agent orchestration pack for audit work. It creates separate copy-paste prompts for Claude Opus, ChatGPT 5.5, Goose, and Codex/OpenCode-style harnesses.</p>
+        <div class="agent-grid">
+          <div class="field">
+            <label>Audit name</label>
+            <input id="agent-audit-name" placeholder="e.g. AML 2026 audit">
+          </div>
+          <div class="field">
+            <label>Audit stage</label>
+            <select id="agent-stage">
+              <% for (const s of auditStages) { %><option value="<%= s.key %>"><%= s.label %> — <%= s.primaryJob %></option><% } %>
+            </select>
+          </div>
+          <div class="field">
+            <label>Business/process area</label>
+            <input id="agent-business-area" placeholder="e.g. AML transaction monitoring">
+          </div>
+          <div class="field">
+            <label>Audience</label>
+            <input id="agent-audience" placeholder="e.g. Internal Audit peer reviewer">
+          </div>
+        </div>
+        <div class="field">
+          <label>Audit objective</label>
+          <textarea id="agent-objective" style="min-height:70px" placeholder="What is this stage trying to achieve?"></textarea>
+        </div>
+        <div class="agent-grid">
+          <div class="field">
+            <label>Project room folders / links</label>
+            <textarea id="agent-source-folders" placeholder="00_source_evidence: paste shared evidence folder link&#10;01_inventory: paste inventory/workpaper folder link&#10;02_testing: paste testing folder link&#10;03_findings: paste findings folder link&#10;04_review: paste review folder link&#10;05_outputs: paste final outputs folder link"></textarea>
+          </div>
+          <div class="field">
+            <label>Output folder</label>
+            <textarea id="agent-output-folder" placeholder="Optional override. If blank, 05_outputs from the project room map is used."></textarea>
+          </div>
+        </div>
+        <div class="agent-grid">
+          <div class="field">
+            <label>Frameworks / criteria, one per line</label>
+            <textarea id="agent-frameworks" placeholder="Audit methodology&#10;AML policy&#10;Regulatory inspection scope"></textarea>
+          </div>
+          <div class="field">
+            <label>Constraints / do-not-do rules</label>
+            <textarea id="agent-constraints" placeholder="Do not edit source evidence&#10;Do not infer effectiveness without evidence"></textarea>
+          </div>
+        </div>
+        <div class="field">
+          <label>Desired outcomes</label>
+          <textarea id="agent-outcomes" style="min-height:80px" placeholder="What should the agents produce or decide by the end of this stage?"></textarea>
+        </div>
+        <div class="agent-grid">
+          <div class="field">
+            <label>Risk tolerance</label>
+            <select id="agent-risk">
+              <option value="High evidence discipline. Do not overstate conclusions.">High evidence discipline</option>
+              <option value="Drafting support only. Human auditor must validate every conclusion.">Drafting support only</option>
+              <option value="Exploratory analysis. Label all assumptions and gaps.">Exploratory analysis</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>External knowledge</label>
+            <select id="agent-external">
+              <option value="not-allowed">Use supplied material only</option>
+              <option value="allowed">Allow general knowledge for framing only</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Harness prompts to generate</label>
+          <div class="check-grid">
+            <% for (const [key, label] of Object.entries(harnessLabels)) { %>
+            <label class="check-pill"><input type="checkbox" class="agent-harness" value="<%= key %>" <%= ['claude','chatgpt','goose'].includes(key) ? 'checked' : '' %>> <%= label %></label>
+            <% } %>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="agent-preview-btn" type="button" onclick="previewAgentPack()">Preview agent pack</button>
+          <button class="btn" id="agent-save-btn" type="button" onclick="saveAgentPack()" disabled>Save pack</button>
+          <button class="btn" type="button" onclick="copyAgentPack()">Copy pack</button>
+          <span class="small" id="agent-status">Stage-aware audit prompts for controlled delegation.</span>
+        </div>
+        <div class="result" id="agent-result">
+          <div class="result-head"><strong>Agent orchestration pack</strong></div>
+          <pre id="agent-output"></pre>
+        </div>
+      </div>
+      <% } %>
+
+      <div class="card">
+        <h2>Builder</h2>
+        <p class="card-desc">Paste a rough prompt. Pick a purpose and, optionally, examples to borrow structure from (tick them in the <a href="/">Library</a>). The output is a reusable prompt, not the answer to the task.</p>
+        <div class="row">
+          <div class="field" style="flex:1;min-width:220px">
+            <label>Purpose</label>
+            <select id="adapt-purpose">
+              <% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %>
+            </select>
+          </div>
+          <div class="field" style="width:170px">
+            <label>Mode</label>
+            <select id="adapt-mode">
+              <option value="quick">Quick restructure</option>
+              <option value="guided">Guided prompt</option>
+              <option value="workflow">Workflow kit</option>
+              <option value="tool-assisted">Tool-assisted</option>
+              <option value="high-stakes">High-stakes</option>
+            </select>
+          </div>
+          <div class="field" style="width:220px">
+            <label>Target model</label>
+            <select id="adapt-family">
+              <option value="">Any model</option>
+              <% for (const f of modelFamilies) { %><option value="<%= f.key %>"><%= f.label %></option><% } %>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Rough prompt</label>
+          <textarea class="rough" id="rough-prompt" placeholder="Paste the basic prompt you want upgraded..."></textarea>
+        </div>
+        <div class="row">
+          <button class="btn" id="sense-btn" type="button" onclick="senseCheckPrompt()">Sense check</button>
+          <button class="btn primary" id="adapt-btn" type="button" onclick="adaptPrompt()">Build adapted prompt</button>
+          <span class="small" id="adapt-status">Selected examples: <span id="selected-count">0</span> <button class="btn" type="button" style="padding:2px 8px;font-size:10px" onclick="clearPicks()">clear</button></span>
+        </div>
+        <div class="sense-box" id="sense-box">
+          <div class="sense-title" id="sense-title">Sense check</div>
+          <div id="sense-content"></div>
+        </div>
+        <div class="result" id="adapt-result">
+          <div class="result-head">
+            <strong>Adapted prompt</strong>
+            <div class="row">
+              <input id="save-title" placeholder="Title to save as..." style="width:240px;padding:6px 8px">
+              <button class="btn" type="button" onclick="saveAdapted()">Save</button>
+              <button class="btn" type="button" onclick="copyAdapted()">Copy</button>
+            </div>
+          </div>
+          <pre id="adapt-output"></pre>
+        </div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>Recent Builds</h2>
+        <p class="card-desc">Last adapted prompts generated from rough prompts.</p>
+        <% if (!adaptations.length) { %><p class="small">No adaptations yet.</p><% } %>
+        <% for (const a of adaptations) { %>
+        <div class="history-item">
+          <div class="history-title"><%= a.purpose %> · <%= new Date(a.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+          <div class="history-text"><%= a.raw_request.slice(0, 160) %><%= a.raw_request.length > 160 ? '...' : '' %></div>
+        </div>
+        <% } %>
+      </div>
+
+      <div class="card">
+        <h2>Audit Agent Packs</h2>
+        <p class="card-desc">Saved stage-specific orchestration packs.</p>
+        <% if (!agentPacks.length) { %><p class="small">No audit agent packs saved yet.</p><% } %>
+        <% for (const p of agentPacks) { %>
+        <div class="history-item">
+          <div class="history-title"><a href="/agent-packs/<%= p.id %>"><%= p.title %></a></div>
+          <div class="history-text"><%= p.stage %> · <%= new Date(p.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+        </div>
+        <% } %>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<%- include('partials/common-js') %>
+<script>
+let latestAdaptationId = null;
+let latestAdaptedText = '';
+let latestAgentPackText = '';
+let latestAgentPackInput = null;
+
+function renderSenseCheck(d) {
+  const box = document.getElementById('sense-box');
+  const title = document.getElementById('sense-title');
+  const content = document.getElementById('sense-content');
+  if (!box || !content || !d) return;
+  box.classList.add('open');
+  box.classList.toggle('warn', d.verdict === 'needs-attention');
+  title.textContent = d.verdict === 'needs-attention' ? 'Sense check: review before build' : 'Sense check: good fit';
+  const list = (label, items) => items?.length
+    ? `<div class="sense-line"><strong>${label}</strong></div><ul class="sense-list">${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`
+    : '';
+  content.innerHTML = [
+    `<div class="sense-line"><strong>Task:</strong> ${escapeHtml(d.taskSummary)}</div>`,
+    `<div class="sense-line"><strong>Your selection:</strong> ${escapeHtml(d.selected.purposeLabel)} · ${escapeHtml(d.selected.mode)} · ${d.selected.exampleCount} example${d.selected.exampleCount === 1 ? '' : 's'}</div>`,
+    `<div class="sense-line"><strong>Suggested fit:</strong> ${escapeHtml(d.recommended.purposeLabel)} · ${escapeHtml(d.recommended.mode)} · ${escapeHtml(d.recommended.recommendedModelTier)} · ${escapeHtml(d.recommended.toolNeeds)}</div>`,
+    list('Prompt improver vs task', d.education),
+    list('Issues', d.issues),
+    list('Suggestions', d.suggestions),
+    list('Notes', d.notes),
+  ].filter(Boolean).join('');
+}
+
+async function senseCheckPrompt() {
+  const rough = document.getElementById('rough-prompt').value.trim();
+  if (!rough) { alert('Paste a rough prompt first.'); return; }
+  const btn = document.getElementById('sense-btn');
+  const status = document.getElementById('adapt-status');
+  btn.disabled = true;
+  status.textContent = 'Checking purpose, mode, examples and tool needs...';
+  try {
+    const r = await fetch('/adapt/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rough_prompt: rough,
+        purpose: document.getElementById('adapt-purpose').value,
+        mode: document.getElementById('adapt-mode').value,
+        source_prompt_ids: selectedPromptIds(),
+        target_model_family: document.getElementById('adapt-family').value,
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Sense check failed');
+    renderSenseCheck(d);
+    status.textContent = d.verdict === 'needs-attention' ? 'Sense check found things to review.' : 'Sense check looks good.';
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Sense check failed.';
+  } finally {
+    btn.disabled = false;
+    updateSelectedCount();
+  }
+}
+
+async function adaptPrompt() {
+  const rough = document.getElementById('rough-prompt').value.trim();
+  if (!rough) { alert('Paste a rough prompt first.'); return; }
+  const btn = document.getElementById('adapt-btn');
+  const status = document.getElementById('adapt-status');
+  btn.disabled = true;
+  btn.textContent = 'Building...';
+  status.textContent = 'Borrowing structure and routing guidance...';
+  try {
+    const r = await fetch('/adapt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rough_prompt: rough,
+        purpose: document.getElementById('adapt-purpose').value,
+        mode: document.getElementById('adapt-mode').value,
+        source_prompt_ids: selectedPromptIds(),
+        target_model_family: document.getElementById('adapt-family').value,
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Adaptation failed');
+    latestAdaptationId = d.id;
+    latestAdaptedText = d.adapted;
+    renderSenseCheck(d.senseCheck);
+    document.getElementById('adapt-output').textContent = d.adapted;
+    document.getElementById('adapt-result').classList.add('open');
+    document.getElementById('save-title').value = '';
+    status.textContent = `Built with ${d.examples.length} example${d.examples.length === 1 ? '' : 's'} · recommended ${d.classification.recommended_model_tier}${d.targetModelFamily ? (d.styleProfileApplied ? ` · styled for ${d.targetModelFamily}` : ` · no style profile for ${d.targetModelFamily} yet`) : ''}`;
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Adaptation failed.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Build adapted prompt';
+    updateSelectedCount();
+  }
+}
+
+async function saveAdapted() {
+  if (!latestAdaptationId) return;
+  const title = document.getElementById('save-title').value.trim() || 'Adapted prompt';
+  const r = await fetch(`/adaptations/${latestAdaptationId}/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Save failed'); return; }
+  window.location.href = `/prompts/${d.id}`;
+}
+
+async function copyAdapted() {
+  if (!latestAdaptedText) return;
+  await navigator.clipboard.writeText(latestAdaptedText);
+  document.getElementById('adapt-status').textContent = 'Copied adapted prompt.';
+}
+
+function agentInput() {
+  return {
+    audit_name: document.getElementById('agent-audit-name')?.value || '',
+    stage: document.getElementById('agent-stage')?.value || 'planning',
+    business_area: document.getElementById('agent-business-area')?.value || '',
+    audience: document.getElementById('agent-audience')?.value || '',
+    audit_objective: document.getElementById('agent-objective')?.value || '',
+    source_folders: document.getElementById('agent-source-folders')?.value || '',
+    output_folder: document.getElementById('agent-output-folder')?.value || '',
+    frameworks: document.getElementById('agent-frameworks')?.value || '',
+    constraints: document.getElementById('agent-constraints')?.value || '',
+    desired_outcomes: document.getElementById('agent-outcomes')?.value || '',
+    risk_tolerance: document.getElementById('agent-risk')?.value || '',
+    external_knowledge: document.getElementById('agent-external')?.value || 'not-allowed',
+    harnesses: [...document.querySelectorAll('.agent-harness:checked')].map(cb => cb.value),
+  };
+}
+
+async function previewAgentPack() {
+  const input = agentInput();
+  if (!input.audit_name.trim()) { alert('Add an audit name first.'); return; }
+  const btn = document.getElementById('agent-preview-btn');
+  const status = document.getElementById('agent-status');
+  btn.disabled = true;
+  status.textContent = 'Building stage-specific pack...';
+  try {
+    const r = await fetch('/agent-builder/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Preview failed');
+    latestAgentPackText = d.markdown;
+    latestAgentPackInput = input;
+    document.getElementById('agent-output').textContent = d.markdown;
+    document.getElementById('agent-result').classList.add('open');
+    document.getElementById('agent-save-btn').disabled = false;
+    status.textContent = `${d.stageLabel} pack ready · ${d.harnesses.length} harness prompt${d.harnesses.length === 1 ? '' : 's'}`;
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Agent pack preview failed.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveAgentPack() {
+  if (!latestAgentPackInput) await previewAgentPack();
+  if (!latestAgentPackInput) return;
+  const r = await fetch('/agent-builder/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(latestAgentPackInput),
+  });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Save failed'); return; }
+  window.location.href = `/agent-packs/${d.id}`;
+}
+
+async function copyAgentPack() {
+  if (!latestAgentPackText) await previewAgentPack();
+  if (!latestAgentPackText) return;
+  await navigator.clipboard.writeText(latestAgentPackText);
+  document.getElementById('agent-status').textContent = 'Copied agent pack.';
+}
+
+updateSelectedCount();
+</script>
+</body>
+</html>

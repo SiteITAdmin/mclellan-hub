@@ -95,15 +95,12 @@ router.use((req, res, next) => {
   return next();
 });
 
+// Library — browse and pick saved prompt examples
 router.get('/', requirePromptAuth, (req, res) => {
   const user = req.hubUser;
   const purpose = req.query.purpose || 'all';
   const q = req.query.q || '';
   const prompts = listPrompts(user, { purpose, q });
-  const candidates = newsletterPromptCandidates(user);
-  const adaptations = recentAdaptations(user, 8);
-  const optimizations = recentOptimizations(user, 6);
-  const agentPacks = listAgentPacks(user, 8);
   const counts = db.hub().prepare(`
     SELECT purpose, COUNT(*) AS n
       FROM prompt_library
@@ -117,17 +114,44 @@ router.get('/', requirePromptAuth, (req, res) => {
     purpose,
     q,
     prompts,
-    candidates,
-    adaptations,
-    optimizations,
-    agentPacks,
     counts,
     totalPromptCount,
     purposes: PURPOSES,
-    modelTiers: MODEL_TIERS,
+  });
+});
+
+// Builder — prompt adapter + audit agent builder
+router.get('/builder', requirePromptAuth, (req, res) => {
+  const user = req.hubUser;
+  res.render('prompt/builder', {
+    user,
+    adaptations: recentAdaptations(user, 8),
+    agentPacks: listAgentPacks(user, 8),
+    purposes: PURPOSES,
     modelFamilies: MODEL_FAMILIES,
     auditStages: AUDIT_STAGES,
     harnessLabels: HARNESS_LABELS,
+  });
+});
+
+// Gym — prompt optimiser + run history
+router.get('/gym', requirePromptAuth, (req, res) => {
+  const user = req.hubUser;
+  res.render('prompt/gym', {
+    user,
+    optimizations: recentOptimizations(user, 6),
+    purposes: PURPOSES,
+    modelFamilies: MODEL_FAMILIES,
+  });
+});
+
+// Inbox — manual add, kit import, newsletter candidates
+router.get('/inbox', requirePromptAuth, (req, res) => {
+  const user = req.hubUser;
+  res.render('prompt/inbox', {
+    user,
+    candidates: newsletterPromptCandidates(user),
+    purposes: PURPOSES,
   });
 });
 

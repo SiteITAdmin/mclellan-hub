@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content — Published — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<%- include('partials/content-styles') %>
+</head>
+<body class="hub-page" style="background: var(--bg, #fcf8ff); min-height: 100vh;">
+<%- include('partials/top-nav') %>
+<main>
+<div class="content-wrap">
+
+  <h1 class="page-title">Content — Published</h1>
+  <p class="page-sub">Published archive and stats. Edit public display titles here — they feed llms.txt, the knowledge bundle and portfolio chat.</p>
+
+  <%- include('partials/content-tabs', { contentTab: 'published' }) %>
+
+  <!-- Stats -->
+  <%
+    const typeCounts = {};
+    posts.forEach(p => { if (p.content_type) typeCounts[p.content_type] = (typeCounts[p.content_type] || 0) + 1; });
+    const topType = Object.entries(typeCounts).sort((a,b) => b[1]-a[1])[0];
+    const scored = posts.filter(p => p.score?.overall_score);
+    const avgScore = scored.length ? (scored.reduce((s,p) => s + parseFloat(p.score.overall_score), 0) / scored.length).toFixed(1) : null;
+  %>
+  <% if (posts.length) { %>
+  <div class="stats-row">
+    <div class="stat-pill"><strong><%= totalPosts %></strong><span>Total posts</span></div>
+    <div class="stat-pill"><strong><%= posts.length %></strong><span>Published</span></div>
+    <% if (avgScore) { %><div class="stat-pill"><strong><%= avgScore %></strong><span>Avg score</span></div><% } %>
+    <% if (topType) { %><div class="stat-pill"><strong><%= topType[1] %></strong><span><%= topType[0] %></span></div><% } %>
+  </div>
+  <% } %>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-row">
+      <span class="toolbar-label">Sort:</span>
+      <button class="sort-btn active" data-sort="published-desc">Published date</button>
+      <button class="sort-btn" data-sort="date-desc">Created — newest</button>
+      <button class="sort-btn" data-sort="score-desc">Highest score</button>
+    </div>
+    <div class="toolbar-row">
+      <span class="toolbar-label">Filter:</span>
+      <button class="filter-chip active" data-filter="all">All</button>
+      <% for (const t of contentTypes) { %>
+      <button class="filter-chip" data-filter="type:<%= t %>"><%= t %></button>
+      <% } %>
+    </div>
+  </div>
+
+  <%- include('partials/content-post-list', { posts, contentTypes, emptyMsg: 'Nothing published yet. Mark a queued post as Published and it moves here.' }) %>
+
+</div>
+</main>
+
+<%- include('partials/content-post-js') %>
+
+</body>
+</html>

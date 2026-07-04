@@ -1,0 +1,6 @@
+<nav class="content-tabs" aria-label="Content sections">
+  <a href="/lin" class="<%= contentTab === 'create' ? 'active' : '' %>">Create</a>
+  <a href="/lin/plan" class="<%= contentTab === 'plan' ? 'active' : '' %>">Plan</a>
+  <a href="/lin/queue" class="<%= contentTab === 'queue' ? 'active' : '' %>">Queue<% if (locals.queueCount) { %> <span class="tab-count"><%= queueCount %></span><% } %></a>
+  <a href="/lin/published" class="<%= contentTab === 'published' ? 'active' : '' %>">Published</a>
+</nav>

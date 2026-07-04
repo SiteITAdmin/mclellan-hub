@@ -257,6 +257,22 @@ router.get('/token-burn', requireAuth, (req, res) => {
   });
 });
 
+// ── Command palette index — CRM entities for the ⌘K jump palette ────────────
+router.get('/api/palette-index', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const items = [];
+  for (const c of hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name LIMIT 400').all(req.hubUser)) {
+    items.push({ t: c.name, u: '/crm/contact/' + c.id, k: 'contact' });
+  }
+  for (const co of hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name LIMIT 200').all(req.hubUser)) {
+    items.push({ t: co.name, u: '/crm/company/' + co.id, k: 'company' });
+  }
+  for (const p of hub.prepare('SELECT slug, name FROM projects WHERE user = ? ORDER BY name LIMIT 200').all(req.hubUser)) {
+    items.push({ t: p.name, u: '/crm/project/' + p.slug, k: 'project' });
+  }
+  res.json({ items });
+});
+
 // ── AI text humanizer ────────────────────────────────────────────────────────
 router.get('/humanizer', requireAuth, (req, res) => {
   res.render('hub/humanizer', { user: req.hubUser, maxChars: HUMANIZER_MAX_CHARS });

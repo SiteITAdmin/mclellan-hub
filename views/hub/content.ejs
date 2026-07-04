@@ -4,316 +4,19 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Content — McLellan Hub</title>
+<title>Content — Create — McLellan Hub</title>
 <link rel="stylesheet" href="/hub.css">
-<style>
-body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; }
-.content-wrap { max-width: 1200px; margin: 0 auto; padding: 24px 20px 80px; }
-
-.back-link { font-size: 13px; color: var(--text-dim); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; }
-.back-link:hover { color: var(--accent, #4648d4); }
-.page-title { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
-.page-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 28px; }
-
-/* Generate box */
-.gen-box {
-  background: var(--surface, #f4f3fb);
-  border: 1px solid var(--border, #e0ddf0);
-  border-radius: 16px; padding: 20px; margin-bottom: 24px;
-}
-.gen-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); margin-bottom: 10px; }
-.gen-row { display: flex; gap: 10px; }
-.gen-input {
-  flex: 1; padding: 10px 14px; font-size: 14px;
-  border: 1px solid var(--border, #e0ddf0); border-radius: 10px;
-  background: var(--bg, #fff); color: var(--text, #15131e); font-family: inherit; outline: none;
-  transition: border-color .15s, box-shadow .15s;
-}
-.gen-input:focus { border-color: var(--accent, #4648d4); box-shadow: 0 0 0 3px rgba(70,72,212,.1); }
-.gen-btn {
-  padding: 10px 22px; background: var(--accent, #4648d4); color: #fff;
-  border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
-  white-space: nowrap; font-family: inherit; transition: opacity .15s;
-}
-.gen-btn:disabled { opacity: .5; cursor: default; }
-.gen-btn:not(:disabled):hover { opacity: .9; }
-
-.spicy-row { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
-.spicy-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); white-space: nowrap; }
-.spicy-btn {
-  padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer;
-  border: 1.5px solid var(--border, #e0ddf0); background: transparent; font-family: inherit;
-  color: var(--text-dim); transition: all .12s;
-}
-.spicy-btn[data-spicy="professional"].active { background: rgba(70,72,212,.1); border-color: #4648d4; color: #4648d4; }
-.spicy-btn[data-spicy="challenging"].active  { background: rgba(245,158,11,.12); border-color: #d97706; color: #b45309; }
-.spicy-btn[data-spicy="provocative"].active  { background: rgba(239,68,68,.1); border-color: #ef4444; color: #dc2626; }
-.spicy-btn:not(.active):hover { border-color: var(--accent, #4648d4); color: var(--accent, #4648d4); }
-
-.gen-progress { margin-top: 14px; display: none; }
-.gen-progress.visible { display: block; }
-.progress-track { height: 3px; background: var(--border, #e0ddf0); border-radius: 2px; margin-bottom: 8px; overflow: hidden; }
-.progress-fill { height: 100%; background: var(--accent, #4648d4); border-radius: 2px; transition: width .5s ease; }
-.progress-msg { font-size: 12px; color: var(--text-dim); }
-
-/* Cadence policy */
-.cadence-box {
-  background: var(--bg, #fff);
-  border: 1px solid var(--border, #e0ddf0);
-  border-radius: 10px;
-  padding: 16px;
-  margin-bottom: 24px;
-}
-.cadence-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.cadence-title { font-size: 14px; font-weight: 700; margin: 0; }
-.cadence-link { font-size: 12px; color: var(--accent, #4648d4); text-decoration: none; }
-.cadence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.cadence-panel {
-  border: 1px solid var(--border, #e0ddf0);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--surface, #f4f3fb);
-}
-.cadence-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
-.cadence-panel-title { font-size: 13px; font-weight: 700; }
-.cadence-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.cadence-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.cadence-field label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  color: var(--text-dim);
-}
-.cadence-field input {
-  padding: 7px 9px;
-  border: 1px solid var(--border, #e0ddf0);
-  border-radius: 7px;
-  font-size: 13px;
-  font-family: inherit;
-  background: var(--bg, #fff);
-  color: var(--text, #15131e);
-}
-.recur-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
-.recur-controls select,
-.recur-controls input {
-  min-width: 0;
-  padding: 7px 8px;
-  border: 1px solid var(--border, #e0ddf0);
-  border-radius: 7px;
-  font-size: 13px;
-  font-family: inherit;
-  background: var(--bg, #fff);
-  color: var(--text, #15131e);
-}
-.cadence-state {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 10px;
-}
-.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
-.switch input { width: 16px; height: 16px; accent-color: var(--accent, #4648d4); }
-.cadence-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.cadence-msg { font-size: 12px; color: var(--text-dim); }
-.topic-plan {
-  margin-top: 14px;
-  border-top: 1px solid var(--border, #e0ddf0);
-  padding-top: 14px;
-}
-.topic-plan-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.topic-plan-title { font-size: 13px; font-weight: 700; }
-.topic-plan-meta { font-size: 12px; color: var(--text-dim); }
-.topic-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-.topic-day {
-  border: 1px solid var(--border, #e0ddf0);
-  border-radius: 8px;
-  background: var(--surface, #f4f3fb);
-  padding: 10px;
-}
-.topic-day-title { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-.topic-day-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
-.topic-day-controls select {
-  min-width: 0;
-  padding: 6px 8px;
-  border: 1px solid var(--border, #e0ddf0);
-  border-radius: 7px;
-  font-size: 12px;
-  font-family: inherit;
-  background: var(--bg, #fff);
-  color: var(--text, #15131e);
-}
-.topic-item {
-  background: var(--bg, #fff);
-  border: 1px solid var(--border, #e0ddf0);
-  border-radius: 7px;
-  padding: 8px;
-  margin-bottom: 6px;
-}
-.topic-item:last-child { margin-bottom: 0; }
-.topic-title { font-size: 12px; font-weight: 700; line-height: 1.35; margin-bottom: 5px; }
-.topic-summary { font-size: 11px; color: var(--text-dim); line-height: 1.45; margin-bottom: 7px; }
-.topic-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.topic-source { font-size: 10px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 760px) {
-  .cadence-grid { grid-template-columns: 1fr; }
-  .cadence-fields { grid-template-columns: 1fr; }
-  .recur-controls { grid-template-columns: 1fr; }
-}
-
-/* Stats */
-.stats-row { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
-.stat-pill { background: var(--surface, #f4f3fb); border: 1px solid var(--border, #e0ddf0); border-radius: 8px; padding: 8px 14px; font-size: 13px; }
-.stat-pill strong { font-size: 18px; font-weight: 700; color: var(--accent, #4648d4); display: block; line-height: 1.2; }
-.stat-pill span { font-size: 11px; color: var(--text-dim); }
-
-/* Toolbar: sort + filter */
-.toolbar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
-.toolbar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.toolbar-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); white-space: nowrap; margin-right: 2px; }
-.sort-btn, .filter-chip {
-  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
-  border: 1px solid var(--border, #e0ddf0); background: transparent; cursor: pointer;
-  color: var(--text-dim); font-family: inherit; transition: background .12s, color .12s, border-color .12s;
-}
-.sort-btn:hover, .filter-chip:hover { border-color: var(--accent, #4648d4); color: var(--accent, #4648d4); }
-.sort-btn.active, .filter-chip.active { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
-
-/* Badges */
-.badge {
-  padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; line-height: 1.6;
-  display: inline-flex; align-items: center; white-space: nowrap;
-}
-.badge-processing { background: rgba(245,158,11,.12); color: #d97706; }
-.badge-error      { background: rgba(239,68,68,.12);  color: #dc2626; }
-.badge-draft      { background: rgba(70,72,212,.12);  color: #4648d4; }
-.badge-scheduled  { background: rgba(124,58,237,.12); color: #7c3aed; }
-.badge-published  { background: rgba(16,185,129,.12); color: #059669; }
-.badge-type       { background: rgba(0,0,0,.06); color: var(--text-dim); font-weight: 400; }
-.badge-spicy-professional { background: rgba(70,72,212,.08); color: #4648d4; }
-.badge-spicy-challenging  { background: rgba(245,158,11,.12); color: #b45309; }
-.badge-spicy-provocative  { background: rgba(239,68,68,.12);  color: #dc2626; }
-.badge-score      { background: rgba(70,72,212,.12); color: var(--accent, #4648d4); font-weight: 700; }
-.badge-date       { background: rgba(124,58,237,.08); color: #7c3aed; font-weight: 400; }
-
-/* Post list */
-.post-list { display: flex; flex-direction: column; gap: 6px; }
-
-.post-row {
-  background: var(--bg, #fff);
-  border: 1px solid var(--border, #e0ddf0);
-  border-left: 4px solid var(--row-accent, var(--border, #e0ddf0));
-  border-radius: 10px;
-  overflow: hidden;
-  transition: box-shadow .15s;
-}
-.post-row:hover { box-shadow: 0 2px 12px rgba(0,0,0,.07); }
-.post-row[data-status="processing"] { --row-accent: #f59e0b; }
-.post-row[data-status="error"]      { --row-accent: #ef4444; }
-.post-row[data-status="draft"]      { --row-accent: var(--accent, #4648d4); }
-.post-row[data-status="scheduled"]  { --row-accent: #7c3aed; }
-.post-row[data-status="published"]  { --row-accent: #10b981; }
-
-.row-main {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px; cursor: default;
-}
-.row-date { font-size: 11px; color: var(--text-dim); white-space: nowrap; min-width: 72px; }
-.row-topic { flex: 1; font-size: 14px; font-weight: 600; color: var(--text, #15131e); line-height: 1.3; min-width: 0; }
-.row-badges { display: flex; flex-wrap: wrap; gap: 4px; flex-shrink: 0; }
-.row-actions { display: flex; gap: 5px; flex-shrink: 0; }
-
-@media (max-width: 700px) {
-  /* Switch row to block — topic gets full width, no flex fighting */
-  .row-main { display: block; padding: 12px 14px; }
-  .row-topic { display: block; margin-bottom: 8px; min-width: 0; white-space: normal; word-break: break-word; }
-  .row-date  { display: inline; font-size: 11px; margin-right: 6px; }
-  .row-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; vertical-align: middle; }
-  .row-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .row-actions .btn-sm { flex: 1; justify-content: center; min-height: 40px; }
-  .cadence-head { display: block; }
-  /* Toolbar */
-  .toolbar-row { gap: 6px; }
-  .sort-btn, .filter-chip { padding: 4px 10px; font-size: 11px; }
-  /* Expand panel */
-  .expand-panel { padding: 12px 14px 16px; }
-  .score-grid { grid-template-columns: 1fr 1fr; }
-  .schedule-row { flex-direction: column; align-items: stretch; }
-  .schedule-input { width: 100%; }
-}
-
-/* Buttons */
-.btn-sm {
-  padding: 4px 11px; font-size: 12px; border-radius: 7px; cursor: pointer;
-  border: 1px solid var(--border, #e0ddf0); background: transparent;
-  color: var(--text, #15131e); font-family: inherit; transition: background .12s;
-  text-decoration: none; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
-}
-.btn-sm:hover { background: rgba(0,0,0,.05); }
-.btn-sm.primary { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
-.btn-sm.primary:hover { opacity: .9; background: var(--accent, #4648d4); }
-.btn-sm.danger { color: #dc2626; border-color: rgba(220,38,38,.3); }
-.btn-sm.danger:hover { background: rgba(220,38,38,.07); }
-.btn-sm.view-btn.open { background: var(--accent, #4648d4); color: #fff; border-color: var(--accent, #4648d4); }
-
-/* Expand panel */
-.expand-panel { display: none; padding: 16px 20px 18px; border-top: 1px solid var(--border, #e0ddf0); background: var(--surface, #f4f3fb); }
-.expand-panel.open { display: block; }
-
-.panel-section { margin-bottom: 14px; }
-.panel-label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
-  color: var(--text-dim); margin-bottom: 6px;
-}
-.panel-draft {
-  font-size: 13px; line-height: 1.65; color: var(--text, #15131e);
-  white-space: pre-wrap; word-break: break-word;
-  background: var(--bg, #fff); border: 1px solid var(--border, #e0ddf0);
-  border-radius: 8px; padding: 12px 14px; max-height: 340px; overflow-y: auto;
-}
-
-.score-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; margin: 8px 0; }
-.score-item { background: var(--bg, #fff); border: 1px solid var(--border, #e0ddf0); border-radius: 8px; padding: 8px 10px; }
-.score-item-key { font-size: 10px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
-.score-item-val { font-size: 18px; font-weight: 700; color: var(--accent, #4648d4); line-height: 1; }
-
-.fix-item { font-size: 12px; margin-bottom: 4px; line-height: 1.45; }
-.fix-item strong { color: var(--text, #15131e); }
-
-.links-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.schedule-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.schedule-input, .type-select {
-  padding: 6px 10px; border: 1px solid var(--border, #e0ddf0); border-radius: 8px;
-  font-size: 13px; background: var(--bg, #fff); color: var(--text, #15131e); font-family: inherit; outline: none;
-}
-.schedule-input:focus, .type-select:focus { border-color: var(--accent, #4648d4); }
-
-.status-row { display: flex; gap: 6px; flex-wrap: wrap; }
-
-.empty-state { text-align: center; padding: 48px 24px; color: var(--text-dim); }
-.empty-state p { font-size: 14px; }
-</style>
+<%- include('partials/content-styles') %>
 </head>
 <body class="hub-page" style="background: var(--bg, #fcf8ff); min-height: 100vh;">
 <%- include('partials/top-nav') %>
 <main>
 <div class="content-wrap">
 
-  <a href="/" class="back-link">← Back to hub</a>
   <h1 class="page-title">Content</h1>
-  <p class="page-sub">Generate and manage LinkedIn posts — research, draft, score, refine, carousel.</p>
+  <p class="page-sub">Generate LinkedIn posts — research, draft, score, refine, carousel. Cadence and topic planning live in <a href="/lin/plan" style="color:var(--accent,#4648d4)">Plan</a>; work-in-progress posts in <a href="/lin/queue" style="color:var(--accent,#4648d4)">Queue</a>.</p>
+
+  <%- include('partials/content-tabs', { contentTab: 'create' }) %>
 
   <!-- Generate -->
   <div class="gen-box">
@@ -339,332 +42,58 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     </div>
   </div>
 
-  <!-- Cadence policy -->
+  <!-- Today's researched suggestions -->
+  <% const daysWithSuggestions = topicPlan.days.filter(d => d.suggestions.length).slice(0, 2); %>
+  <% if (daysWithSuggestions.length) { %>
   <section class="cadence-box">
     <div class="cadence-head">
-      <h2 class="cadence-title">Cadence policy</h2>
-      <a href="/admin/models#sys-linkedin_planner" class="cadence-link">Models &amp; prompts</a>
+      <h2 class="cadence-title">Researched suggestions</h2>
+      <a href="/lin/plan" class="cadence-link">Topic plan →</a>
     </div>
-    <form id="cadence-form">
-      <div class="cadence-grid">
-        <div class="cadence-panel">
-          <div class="cadence-panel-head">
-            <div class="cadence-panel-title">LinkedIn posting</div>
-            <label class="switch"><input type="checkbox" name="linkedinEnabled" <%= cadencePolicy.linkedin.enabled ? 'checked' : '' %>> On</label>
-          </div>
-          <div class="cadence-fields">
-            <div class="cadence-field">
-              <label>Cadence days</label>
-              <input type="number" min="1" max="60" name="linkedinCadenceDays" value="<%= cadencePolicy.linkedin.cadenceDays %>">
-            </div>
-            <div class="cadence-field">
-              <label>Reminder schedule</label>
-              <input type="hidden" name="linkedinRecur" id="linkedinRecur" value="<%= cadencePolicy.linkedin.recur %>">
-              <div class="recur-controls" data-field="linkedinRecur" data-value="<%= cadencePolicy.linkedin.recur %>"></div>
-            </div>
-          </div>
-          <div class="cadence-state">
-            <span class="badge badge-type"><%= describeRecur(cadencePolicy.linkedin.recur) %></span>
-            <% const liRow = cadenceRows.find(r => r.dedup_key && r.dedup_key.startsWith('content-linkedin:')); %>
-            <% if (liRow) { %>
-              <span class="badge badge-<%= liRow.status %>"><%= liRow.status %></span>
-              <% if (liRow.due_label) { %><span class="badge badge-date"><%= liRow.due_label %></span><% } %>
-              <% if (liRow.needs_action) { %><span class="badge badge-processing">needs action</span><% } %>
-            <% } %>
-          </div>
-        </div>
-
-        <div class="cadence-panel">
-          <div class="cadence-panel-head">
-            <div class="cadence-panel-title">Newsletter topics</div>
-            <label class="switch"><input type="checkbox" name="newsletterEnabled" <%= cadencePolicy.newsletter.enabled ? 'checked' : '' %>> On</label>
-          </div>
-          <div class="cadence-fields">
-            <div class="cadence-field">
-              <label>Minimum topics</label>
-              <input type="number" min="1" max="25" name="newsletterMinTopics" value="<%= cadencePolicy.newsletter.minTopics %>">
-            </div>
-            <div class="cadence-field">
-              <label>Reminder schedule</label>
-              <input type="hidden" name="newsletterRecur" id="newsletterRecur" value="<%= cadencePolicy.newsletter.recur %>">
-              <div class="recur-controls" data-field="newsletterRecur" data-value="<%= cadencePolicy.newsletter.recur %>"></div>
-            </div>
-          </div>
-          <div class="cadence-state">
-            <span class="badge badge-type"><%= describeRecur(cadencePolicy.newsletter.recur) %></span>
-            <% const nlRow = cadenceRows.find(r => r.dedup_key && r.dedup_key.startsWith('content-nl-midweek:')); %>
-            <% if (nlRow) { %>
-              <span class="badge badge-<%= nlRow.status %>"><%= nlRow.status %></span>
-              <% if (nlRow.due_label) { %><span class="badge badge-date"><%= nlRow.due_label %></span><% } %>
-              <% if (nlRow.needs_action) { %><span class="badge badge-processing">needs action</span><% } %>
-            <% } %>
-          </div>
-        </div>
-
-        <div class="cadence-panel">
-          <div class="cadence-panel-head">
-            <div class="cadence-panel-title">Topic research</div>
-            <label class="switch"><input type="checkbox" name="topicPlanResearchEnabled" <%= cadencePolicy.topicPlan.researchEnabled ? 'checked' : '' %>> On</label>
-          </div>
-          <div class="cadence-fields">
-            <div class="cadence-field">
-              <label>Research schedule</label>
-              <input type="hidden" name="topicPlanResearchRecur" id="topicPlanResearchRecur" value="<%= cadencePolicy.topicPlan.researchRecur %>">
-              <div class="recur-controls" data-field="topicPlanResearchRecur" data-value="<%= cadencePolicy.topicPlan.researchRecur %>"></div>
-            </div>
-          </div>
-          <div class="cadence-state">
-            <span class="badge badge-type"><%= describeRecur(cadencePolicy.topicPlan.researchRecur) %></span>
-          </div>
-        </div>
-
-        <div class="cadence-panel">
-          <div class="cadence-panel-head">
-            <div class="cadence-panel-title">Suggestion sources</div>
-            <label class="switch"><input type="checkbox" name="topicPlanShowIntelFallback" <%= cadencePolicy.topicPlan.showIntelFallback ? 'checked' : '' %>> Intel fallback</label>
-          </div>
-          <div class="cadence-state">
-            <span class="badge badge-type"><%= cadencePolicy.topicPlan.showIntelFallback ? 'Research + selected intel' : 'Research only' %></span>
-          </div>
-        </div>
-      </div>
-      <div class="cadence-actions">
-        <button class="btn-sm primary" type="submit">Save cadence</button>
-        <span class="cadence-msg" id="cadence-msg"></span>
-      </div>
-      <div class="topic-plan">
-        <div class="topic-plan-head">
-          <div class="topic-plan-title">Topic plan</div>
-          <div class="topic-plan-meta"><%= topicPlan.available %>/<%= topicPlan.requested %> available from <%= cadencePolicy.topicPlan.showIntelFallback ? 'research and selected intel' : 'research' %></div>
-        </div>
-        <div class="cadence-actions" style="margin:0 0 12px;">
-          <button class="btn-sm" type="button" id="clear-topic-suggestions">Clear suggestions</button>
-          <span class="cadence-msg" id="topic-plan-msg"></span>
-        </div>
-        <div class="cadence-fields" style="max-width:420px;margin-bottom:12px;">
-          <div class="cadence-field">
-            <label>Plan days</label>
-            <input type="number" min="1" max="30" name="topicPlanDays" value="<%= cadencePolicy.topicPlan.days %>">
-          </div>
-          <div class="cadence-field">
-            <label>Suggestions per day</label>
-            <input type="number" min="1" max="10" name="topicPlanSuggestionsPerDay" value="<%= cadencePolicy.topicPlan.suggestionsPerDay %>">
-          </div>
-        </div>
-        <div class="topic-days">
-          <input type="hidden" name="topicPlanDayPrefs" id="topicPlanDayPrefs" value="">
-          <% for (const day of topicPlan.days) { %>
-            <div class="topic-day">
-              <div class="topic-day-title"><%= day.label %></div>
-              <div class="topic-day-controls" data-plan-date="<%= day.date %>">
-                <select data-plan-topic aria-label="Topic for <%= day.label %>">
-                  <option value="">Any topic</option>
-                  <% for (const t of contentTypes) { %>
-                    <option value="<%= t %>" <%= day.preference.topic === t ? 'selected' : '' %>><%= t %></option>
-                  <% } %>
-                </select>
-                <select data-plan-tone aria-label="Tone for <%= day.label %>">
-                  <option value="professional" <%= day.preference.tone === 'professional' ? 'selected' : '' %>>Professional</option>
-                  <option value="challenging" <%= day.preference.tone === 'challenging' ? 'selected' : '' %>>Challenging</option>
-                  <option value="provocative" <%= day.preference.tone === 'provocative' ? 'selected' : '' %>>Provocative</option>
-                </select>
-                <button class="btn-sm" type="button" data-plan-research title="Select a topic above, then click to research web sources for that day">Research</button>
+    <div class="topic-days">
+      <% for (const day of daysWithSuggestions) { %>
+        <div class="topic-day">
+          <div class="topic-day-title"><%= day.label %></div>
+          <% for (const topic of day.suggestions) { %>
+            <div class="topic-item">
+              <div class="topic-title"><%= topic.title %></div>
+              <% if (topic.summary) { %><div class="topic-summary"><%= String(topic.summary).slice(0, 180) %></div><% } %>
+              <div class="topic-foot">
+                <span class="topic-source"><%= topic.source_kind || topic.category || topic.source_name || topic.item_type || 'intel' %> · <%= day.preference.tone %></span>
+                <button class="btn-sm" type="button" data-topic="<%= topic.title %>" data-tone="<%= day.preference.tone %>" data-source-url="<%= topic.source_url || '' %>" onclick="useTopic(this.dataset.topic, this.dataset.tone, this.dataset.sourceUrl)">Use</button>
               </div>
-              <% if (!day.suggestions.length) { %>
-                <div class="topic-summary">No researched suggestions yet<%= day.preference.topic ? ` for ${day.preference.topic}` : '' %>.</div>
-              <% } %>
-              <% for (const topic of day.suggestions) { %>
-                <div class="topic-item">
-                  <div class="topic-title"><%= topic.title %></div>
-                  <% if (topic.summary) { %><div class="topic-summary"><%= String(topic.summary).slice(0, 180) %></div><% } %>
-                  <div class="topic-foot">
-                    <span class="topic-source"><%= topic.source_kind || topic.category || topic.source_name || topic.item_type || 'intel' %> · <%= day.preference.tone %></span>
-                    <button class="btn-sm" type="button" data-topic="<%= topic.title %>" data-tone="<%= day.preference.tone %>" data-source-url="<%= topic.source_url || '' %>" onclick="useTopic(this.dataset.topic, this.dataset.tone, this.dataset.sourceUrl)">Use</button>
-                  </div>
-                </div>
-              <% } %>
             </div>
           <% } %>
         </div>
-      </div>
-    </form>
+      <% } %>
+    </div>
   </section>
-
-  <!-- Stats -->
-  <%
-    const totalPosts = posts.length;
-    const published = posts.filter(p => p.status === 'published').length;
-    const scheduled = posts.filter(p => p.status === 'scheduled').length;
-    const typeCounts = {};
-    posts.forEach(p => { if (p.content_type) typeCounts[p.content_type] = (typeCounts[p.content_type] || 0) + 1; });
-    const topType = Object.entries(typeCounts).sort((a,b) => b[1]-a[1])[0];
-  %>
-  <% if (totalPosts > 0) { %>
-  <div class="stats-row">
-    <div class="stat-pill"><strong><%= totalPosts %></strong><span>Total posts</span></div>
-    <div class="stat-pill"><strong><%= published %></strong><span>Published</span></div>
-    <div class="stat-pill"><strong><%= scheduled %></strong><span>Scheduled</span></div>
-    <% if (topType) { %><div class="stat-pill"><strong><%= topType[1] %></strong><span><%= topType[0] %></span></div><% } %>
-  </div>
+  <% } else { %>
+  <section class="cadence-box">
+    <div class="cadence-head">
+      <h2 class="cadence-title">Researched suggestions</h2>
+      <a href="/lin/plan" class="cadence-link">Topic plan →</a>
+    </div>
+    <p style="font-size:13px;color:var(--text-dim);margin:0">No researched suggestions yet. Set day topics and run research on the <a href="/lin/plan" style="color:var(--accent,#4648d4)">Plan</a> tab.</p>
+  </section>
   <% } %>
 
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <div class="toolbar-row">
-      <span class="toolbar-label">Sort:</span>
-      <button class="sort-btn active" data-sort="date-desc">Newest first</button>
-      <button class="sort-btn" data-sort="date-asc">Oldest first</button>
-      <button class="sort-btn" data-sort="score-desc">Highest score</button>
-      <button class="sort-btn" data-sort="published-desc">Published date</button>
+  <!-- Recent activity -->
+  <% if (recentPosts.length) { %>
+  <section class="cadence-box">
+    <div class="cadence-head">
+      <h2 class="cadence-title">Recent</h2>
+      <a href="/lin/queue" class="cadence-link">Full queue →</a>
     </div>
-    <div class="toolbar-row">
-      <span class="toolbar-label">Filter:</span>
-      <button class="filter-chip active" data-filter="all">All</button>
-      <button class="filter-chip" data-filter="status:processing">Processing</button>
-      <button class="filter-chip" data-filter="status:draft">Draft</button>
-      <button class="filter-chip" data-filter="status:scheduled">Scheduled</button>
-      <button class="filter-chip" data-filter="status:published">Published</button>
-      <% for (const t of contentTypes) { %>
-      <button class="filter-chip" data-filter="type:<%= t %>"><%= t %></button>
-      <% } %>
-    </div>
-  </div>
-
-  <!-- Post list -->
-  <div class="post-list" id="post-list">
-  <% if (!posts.length) { %>
-    <div class="empty-state"><p>No posts yet. Generate your first LinkedIn post above.</p></div>
-  <% } %>
-  <% for (const p of posts) { %>
-  <%
-    const scoreVal = p.score?.overall_score;
-    const scoreNum = scoreVal ? parseFloat(scoreVal) : 0;
-    const dateStr = new Date(p.created_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    const statusLabel = { processing: 'Processing…', error: 'Error', draft: 'Draft', scheduled: 'Scheduled', published: 'Published' }[p.status] || p.status;
-    const calTopic = encodeURIComponent('Post: ' + p.topic);
-    const calDetail = encodeURIComponent(p.preview || p.topic);
-    const calDate = (p.scheduled_date || '').replace(/-/g, '');
-    const calUrl = p.scheduled_date ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTopic}&dates=${calDate}/${calDate}&details=${calDetail}` : '';
-  %>
-  <div class="post-row" id="row-<%= p.id %>"
-    data-status="<%= p.status %>"
-    data-type="<%= p.content_type || '' %>"
-    data-created="<%= p.created_at %>"
-    data-score="<%= scoreNum %>"
-    data-published="<%= p.published_at || '' %>"
-    data-scheduled="<%= p.scheduled_date || '' %>">
-
-    <div class="row-main">
-      <span class="row-date"><%= dateStr %></span>
-      <span class="row-topic" id="topic-<%= p.id %>" title="<%= p.display_title ? 'Original topic: ' + p.topic : '' %>"><%= p.display_title || p.topic %></span>
-      <% if (p.status === 'published') { %><button class="btn-sm" onclick="editTitle('<%= p.id %>')" title="Edit the public display title (llms.txt, knowledge bundle, portfolio chat)">✎ Title</button><% } %>
-      <div class="row-badges">
-        <span class="badge badge-<%= p.status %>"><%= statusLabel %></span>
-        <% if (scoreVal) { %><span class="badge badge-score"><%= scoreVal %>/5</span><% } %>
-        <% if (p.spiciness && p.spiciness !== 'professional') { %><span class="badge badge-spicy-<%= p.spiciness %>"><%= p.spiciness %></span><% } %>
-        <% if (p.content_type) { %><span class="badge badge-type"><%= p.content_type %></span><% } %>
-        <% if (p.scheduled_date) { %><span class="badge badge-date">📅 <%= p.scheduled_date %></span><% } %>
+    <% for (const p of recentPosts) { %>
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border,#e0ddf0);font-size:13px">
+        <span class="badge badge-<%= p.status %>"><%= { processing: 'Processing…', error: 'Error', draft: 'Draft', scheduled: 'Scheduled', published: 'Published' }[p.status] || p.status %></span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= p.display_title || p.topic %></span>
+        <span style="font-size:11px;color:var(--text-dim);white-space:nowrap"><%= new Date(p.created_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) %></span>
       </div>
-      <div class="row-actions">
-        <% if (p.status !== 'processing') { %>
-        <button class="btn-sm view-btn" onclick="toggleExpand('<%= p.id %>')">View</button>
-        <% } %>
-        <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">PDF</a><% } %>
-        <% if (!p.carousel_url && p.status !== 'processing' && (p.draft || p.preview)) { %><button class="btn-sm" id="retry-btn-<%= p.id %>" onclick="retryCarousel('<%= p.id %>')">Retry PDF</button><% } %>
-        <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">📅 Cal</a><% } %>
-        <% if (p.status !== 'processing') { %>
-        <button class="btn-sm danger" onclick="deletePost('<%= p.id %>')">Delete</button>
-        <% } %>
-      </div>
-    </div>
-
-    <% if (p.status !== 'processing') { %>
-    <div class="expand-panel" id="expand-<%= p.id %>">
-
-      <!-- Content type -->
-      <div class="panel-section">
-        <div class="panel-label">Content type</div>
-        <select class="type-select" onchange="setType('<%= p.id %>', this.value)">
-          <option value="">— Select type —</option>
-          <% for (const t of contentTypes) { %>
-          <option value="<%= t %>" <%= p.content_type === t ? 'selected' : '' %>><%= t %></option>
-          <% } %>
-        </select>
-      </div>
-
-      <!-- Score -->
-      <% if (scoreVal) { %>
-      <div class="panel-section">
-        <div class="panel-label">Score — <%= scoreVal %>/5</div>
-        <% if (p.score?.recruiter_value) { %><div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;"><%= p.score.recruiter_value %></div><% } %>
-        <% if (p.score?.axis_scores && Object.keys(p.score.axis_scores).length) { %>
-        <div class="score-grid">
-          <% for (const [k, v] of Object.entries(p.score.axis_scores)) { %>
-          <div class="score-item">
-            <div class="score-item-key"><%= k.replace(/_/g, ' ') %></div>
-            <div class="score-item-val"><%= v %>/5</div>
-          </div>
-          <% } %>
-        </div>
-        <% } %>
-        <% if (p.score?.top_fixes?.length) { %>
-        <div class="panel-label" style="margin-top:10px;">Top fixes</div>
-        <% for (const f of (p.score.top_fixes || [])) { %>
-        <div class="fix-item"><strong><%= f.problem %></strong> → <%= f.fix %></div>
-        <% } %>
-        <% } %>
-        <% if (p.score?.recruiter_perspective) { %>
-        <div style="font-size:12px;color:var(--text-dim);margin-top:8px;font-style:italic;"><%= p.score.recruiter_perspective %></div>
-        <% } %>
-      </div>
-      <% } %>
-
-      <!-- Draft -->
-      <div class="panel-section">
-        <div class="panel-label">Refined draft</div>
-        <div class="panel-draft" id="draft-<%= p.id %>">
-          <button class="btn-sm" onclick="loadDraft('<%= p.id %>')">Load draft</button>
-        </div>
-      </div>
-
-      <!-- Links -->
-      <% if (p.carousel_url || p.sheet_url) { %>
-      <div class="panel-section">
-        <div class="panel-label">Links</div>
-        <div class="links-row">
-          <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">Carousel PDF</a><% } %>
-          <% if (p.sheet_url) { %><a href="<%= p.sheet_url %>" target="_blank" class="btn-sm">Google Sheet</a><% } %>
-        </div>
-      </div>
-      <% } %>
-
-      <!-- Schedule -->
-      <div class="panel-section">
-        <div class="panel-label">Schedule</div>
-        <div class="schedule-row">
-          <input type="date" class="schedule-input" id="date-<%= p.id %>" value="<%= p.scheduled_date || '' %>" />
-          <button class="btn-sm primary" onclick="schedulePost('<%= p.id %>')">Save date</button>
-          <span id="cal-link-<%= p.id %>">
-            <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">Add to Calendar</a><% } %>
-          </span>
-        </div>
-      </div>
-
-      <!-- Status -->
-      <div class="panel-section">
-        <div class="panel-label">Status</div>
-        <div class="status-row">
-          <button class="btn-sm<%= p.status === 'draft' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'draft')">Draft</button>
-          <button class="btn-sm<%= p.status === 'scheduled' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'scheduled')">Scheduled</button>
-          <button class="btn-sm<%= p.status === 'published' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'published')">Published</button>
-        </div>
-      </div>
-
-    </div>
     <% } %>
-  </div>
+  </section>
   <% } %>
-  </div>
 
 </div>
 </main>
@@ -678,155 +107,6 @@ const genProgress = document.getElementById('gen-progress');
 const progressFill = document.getElementById('progress-fill');
 const progressMsg = document.getElementById('progress-msg');
 let pollTimer = null;
-
-// ── Cadence policy ───────────────────────────────────────────────────────────
-const cadenceForm = document.getElementById('cadence-form');
-const cadenceMsg = document.getElementById('cadence-msg');
-const topicPlanMsg = document.getElementById('topic-plan-msg');
-const clearTopicSuggestionsBtn = document.getElementById('clear-topic-suggestions');
-
-function parseRecurSpec(spec) {
-  const parts = String(spec || '').split(':');
-  if (parts[0] === 'weekly') return { frequency: 'weekly', day: parts[1] || 'wed', time: `${parts[2] || '10'}:${parts[3] || '00'}` };
-  return { frequency: 'daily', day: 'wed', time: `${parts[1] || '10'}:${parts[2] || '00'}` };
-}
-
-function composeRecurSpec(control) {
-  const frequency = control.querySelector('[data-recur-frequency]')?.value || 'daily';
-  const day = control.querySelector('[data-recur-day]')?.value || 'wed';
-  const time = control.querySelector('[data-recur-time]')?.value || '10:00';
-  return frequency === 'weekly' ? `weekly:${day}:${time}` : `daily:${time}`;
-}
-
-function syncRecurFields() {
-  document.querySelectorAll('.recur-controls').forEach(control => {
-    const hidden = document.getElementById(control.dataset.field);
-    if (hidden) hidden.value = composeRecurSpec(control);
-  });
-}
-
-function syncTopicPlanPrefs() {
-  const prefs = {};
-  document.querySelectorAll('[data-plan-date]').forEach(row => {
-    prefs[row.dataset.planDate] = {
-      topic: row.querySelector('[data-plan-topic]')?.value || '',
-      tone: row.querySelector('[data-plan-tone]')?.value || 'professional',
-    };
-  });
-  const input = document.getElementById('topicPlanDayPrefs');
-  if (input) input.value = JSON.stringify(prefs);
-}
-
-document.querySelectorAll('[data-plan-date]').forEach(row => {
-  row.addEventListener('change', syncTopicPlanPrefs);
-  row.querySelector('[data-plan-research]')?.addEventListener('click', () => researchPlanDate(row));
-});
-syncTopicPlanPrefs();
-
-document.querySelectorAll('.recur-controls').forEach(control => {
-  const current = parseRecurSpec(control.dataset.value);
-  control.innerHTML = `
-    <select data-recur-frequency aria-label="Frequency">
-      <option value="daily">Daily</option>
-      <option value="weekly">Weekly</option>
-    </select>
-    <select data-recur-day aria-label="Day">
-      <option value="mon">Mon</option>
-      <option value="tue">Tue</option>
-      <option value="wed">Wed</option>
-      <option value="thu">Thu</option>
-      <option value="fri">Fri</option>
-      <option value="sat">Sat</option>
-      <option value="sun">Sun</option>
-    </select>
-    <input type="time" data-recur-time aria-label="Time">
-  `;
-  control.querySelector('[data-recur-frequency]').value = current.frequency;
-  control.querySelector('[data-recur-day]').value = current.day;
-  control.querySelector('[data-recur-time]').value = current.time;
-  const daySelect = control.querySelector('[data-recur-day]');
-  const updateDayVisibility = () => { daySelect.style.visibility = control.querySelector('[data-recur-frequency]').value === 'weekly' ? 'visible' : 'hidden'; };
-  control.addEventListener('change', () => { updateDayVisibility(); syncRecurFields(); });
-  updateDayVisibility();
-});
-syncRecurFields();
-
-cadenceForm?.addEventListener('submit', async e => {
-  e.preventDefault();
-  syncRecurFields();
-  syncTopicPlanPrefs();
-  const data = Object.fromEntries(new FormData(cadenceForm));
-  data.linkedinEnabled = cadenceForm.elements.linkedinEnabled.checked;
-  data.newsletterEnabled = cadenceForm.elements.newsletterEnabled.checked;
-  data.topicPlanResearchEnabled = cadenceForm.elements.topicPlanResearchEnabled.checked;
-  data.topicPlanShowIntelFallback = cadenceForm.elements.topicPlanShowIntelFallback.checked;
-  cadenceMsg.textContent = 'Saving...';
-  try {
-    const r = await fetch('/api/content/cadence-policy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    const j = await r.json();
-    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not save cadence');
-    cadenceMsg.textContent = 'Saved';
-    setTimeout(() => window.location.reload(), 500);
-  } catch (err) {
-    cadenceMsg.textContent = err.message;
-  }
-});
-
-clearTopicSuggestionsBtn?.addEventListener('click', async () => {
-  clearTopicSuggestionsBtn.disabled = true;
-  topicPlanMsg.textContent = 'Clearing...';
-  try {
-    const r = await fetch('/api/content/topic-plan/suggestions/clear', { method: 'POST' });
-    const j = await r.json();
-    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not clear suggestions');
-    topicPlanMsg.textContent = `Cleared ${j.deleted || 0}`;
-    setTimeout(() => window.location.reload(), 500);
-  } catch (err) {
-    topicPlanMsg.textContent = err.message;
-    clearTopicSuggestionsBtn.disabled = false;
-  }
-});
-
-async function researchPlanDate(row) {
-  const topic = row.querySelector('[data-plan-topic]')?.value || '';
-  const tone = row.querySelector('[data-plan-tone]')?.value || 'professional';
-  const button = row.querySelector('[data-plan-research]');
-  if (!topic) {
-    const orig = button.textContent;
-    button.textContent = 'Pick a topic ↑';
-    button.style.color = '#dc2626';
-    button.style.borderColor = 'rgba(220,38,38,.4)';
-    topicPlanMsg.textContent = 'Select a topic from the dropdown above the Research button, then click Research again.';
-    setTimeout(() => {
-      button.textContent = orig;
-      button.style.color = '';
-      button.style.borderColor = '';
-    }, 2500);
-    return;
-  }
-  button.disabled = true;
-  button.textContent = 'Researching...';
-  topicPlanMsg.textContent = `Researching "${topic}"…`;
-  try {
-    const r = await fetch('/api/content/topic-plan/research', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: row.dataset.planDate, topic, tone }),
-    });
-    const j = await r.json();
-    if (!r.ok || !j.ok) throw new Error(j.error || 'Research failed');
-    topicPlanMsg.textContent = `Found ${j.result.count || 0} suggestions — reloading…`;
-    setTimeout(() => window.location.reload(), 800);
-  } catch (err) {
-    topicPlanMsg.textContent = err.message;
-    button.disabled = false;
-    button.textContent = 'Research';
-  }
-}
 
 window.useTopic = function(title, tone, sourceUrl) {
   genInput.value = title;
@@ -856,6 +136,15 @@ function setProgress(pct, msg) {
 
 genInput.addEventListener('keydown', e => { if (e.key === 'Enter') startGenerate(); });
 genBtn.addEventListener('click', startGenerate);
+
+// Prefill from Plan tab "Use" links (/lin?topic=…&tone=…&sourceUrl=…)
+(() => {
+  const params = new URLSearchParams(window.location.search);
+  const topic = params.get('topic');
+  if (!topic) return;
+  useTopic(topic, params.get('tone') || '', params.get('sourceUrl') || '');
+  history.replaceState(null, '', '/lin');
+})();
 
 async function startGenerate() {
   const topic = genInput.value.trim();
@@ -900,171 +189,11 @@ function beginPolling(postId) {
       const status = d.post?.status;
       if (status && status !== 'processing') {
         clearInterval(pollTimer);
-        setProgress(100, status === 'error' ? 'Pipeline encountered an error.' : 'Done — refreshing…');
-        setTimeout(() => window.location.reload(), 1500);
+        setProgress(100, status === 'error' ? 'Pipeline encountered an error.' : 'Done — opening queue…');
+        setTimeout(() => { window.location.href = '/lin/queue'; }, 1200);
       }
     } catch (_) {}
   }, 3000);
-}
-
-// ── Expand panel ──────────────────────────────────────────────────────────────
-window.toggleExpand = function(id) {
-  const panel = document.getElementById('expand-' + id);
-  const btn = document.querySelector('#row-' + id + ' .view-btn');
-  if (!panel) return;
-  const open = panel.classList.toggle('open');
-  if (btn) btn.classList.toggle('open', open);
-};
-
-// ── Load draft ────────────────────────────────────────────────────────────────
-window.loadDraft = async function(id) {
-  const el = document.getElementById('draft-' + id);
-  el.textContent = 'Loading…';
-  try {
-    const r = await fetch('/api/content/posts/' + id);
-    const d = await r.json();
-    el.textContent = d.post?.refined_draft || d.post?.draft || '(no draft yet)';
-  } catch (err) {
-    el.textContent = 'Error: ' + err.message;
-  }
-};
-
-// ── Content type ──────────────────────────────────────────────────────────────
-window.setType = async function(id, type) {
-  await fetch('/api/content/posts/' + id + '/type', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type }),
-  }).catch(() => {});
-};
-
-// ── Status ────────────────────────────────────────────────────────────────────
-window.setStatus = async function(id, status) {
-  const body = { status };
-  if (status === 'published') {
-    const url = prompt('LinkedIn URL of the published post (leave blank to skip):', '');
-    if (url === null) return;
-    if (url.trim()) body.post_url = url.trim();
-  }
-  const r = await fetch('/api/content/posts/' + id + '/status', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (r.ok) window.location.reload();
-  else alert((await r.json().catch(() => ({}))).error || 'Failed to update status');
-};
-
-// ── Display title ─────────────────────────────────────────────────────────────
-window.editTitle = async function(id) {
-  const current = document.getElementById('topic-' + id)?.textContent?.trim() || '';
-  const title = prompt('Public display title (shown on llms.txt, knowledge bundle, portfolio chat):', current);
-  if (title === null || !title.trim()) return;
-  const r = await fetch('/api/content/posts/' + id + '/title', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ display_title: title.trim() }),
-  });
-  if (r.ok) window.location.reload();
-  else alert((await r.json().catch(() => ({}))).error || 'Failed to update title');
-};
-
-// ── Schedule ──────────────────────────────────────────────────────────────────
-window.schedulePost = async function(id) {
-  const date = document.getElementById('date-' + id)?.value;
-  if (!date) return;
-  const r = await fetch('/api/content/posts/' + id + '/schedule', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date }),
-  });
-  if (r.ok) window.location.reload();
-};
-
-// ── Retry carousel ────────────────────────────────────────────────────────────
-window.retryCarousel = async function(id) {
-  const btn = document.getElementById('retry-btn-' + id);
-  if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
-  try {
-    const r = await fetch('/api/content/posts/' + id + '/retry-carousel', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-    });
-    if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Failed'); }
-    // Poll until no longer processing
-    const poll = setInterval(async () => {
-      try {
-        const pr = await fetch('/api/content/posts/' + id);
-        const pd = await pr.json();
-        if (pd.post?.status !== 'processing') {
-          clearInterval(poll);
-          window.location.reload();
-        }
-      } catch (_) {}
-    }, 3000);
-  } catch (err) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Retry PDF'; }
-    alert('Error: ' + err.message);
-  }
-};
-
-// ── Delete ────────────────────────────────────────────────────────────────────
-window.deletePost = async function(id) {
-  if (!confirm('Delete this post? This cannot be undone.')) return;
-  const r = await fetch('/api/content/posts/' + id + '/delete', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-  });
-  if (r.ok) {
-    const row = document.getElementById('row-' + id);
-    if (row) row.remove();
-  }
-};
-
-// ── Filter ────────────────────────────────────────────────────────────────────
-let activeFilter = 'all';
-document.querySelectorAll('.filter-chip').forEach(chip => {
-  chip.addEventListener('click', function() {
-    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-    this.classList.add('active');
-    activeFilter = this.dataset.filter;
-    applyFilterSort();
-  });
-});
-
-// ── Sort ──────────────────────────────────────────────────────────────────────
-let activeSort = 'date-desc';
-document.querySelectorAll('.sort-btn').forEach(btn => {
-  btn.addEventListener('click', function() {
-    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-    this.classList.add('active');
-    activeSort = this.dataset.sort;
-    applyFilterSort();
-  });
-});
-
-function applyFilterSort() {
-  const list = document.getElementById('post-list');
-  const rows = Array.from(list.querySelectorAll('.post-row'));
-
-  // Filter
-  rows.forEach(row => {
-    let show = true;
-    if (activeFilter !== 'all') {
-      const [kind, val] = activeFilter.split(':');
-      show = kind === 'status' ? row.dataset.status === val : row.dataset.type === val;
-    }
-    row.style.display = show ? '' : 'none';
-  });
-
-  // Sort visible rows
-  const visible = rows.filter(r => r.style.display !== 'none');
-  visible.sort((a, b) => {
-    switch (activeSort) {
-      case 'date-asc':  return Number(a.dataset.created) - Number(b.dataset.created);
-      case 'date-desc': return Number(b.dataset.created) - Number(a.dataset.created);
-      case 'score-desc': return Number(b.dataset.score) - Number(a.dataset.score);
-      case 'published-desc': {
-        return Number(b.dataset.published || 0) - Number(a.dataset.published || 0);
-      }
-      default: return 0;
-    }
-  });
-  visible.forEach(row => list.appendChild(row));
 }
 </script>
 

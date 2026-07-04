@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inbox — Prompt Library</title>
+<link rel="stylesheet" href="/hub.css">
+<%- include('partials/styles') %>
+</head>
+<body class="prompt-page">
+<div class="wrap">
+  <%- include('partials/nav', {
+    promptTab: 'inbox',
+    pageTitle: 'Inbox',
+    pageSub: 'Get prompts into the library — manual add, promptkit URL import, and prompt-type items extracted from newsletter intelligence.'
+  }) %>
+
+  <div class="grid">
+    <section>
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <h2>Newsletter Inbox</h2>
+            <p class="card-desc">Prompt-type items extracted from newsletter intelligence.</p>
+          </div>
+          <form method="POST" action="/newsletter/import-all"><button class="btn" type="submit">Import all new</button></form>
+        </div>
+        <% if (!candidates.length) { %><p class="small">No newsletter prompt candidates found yet.</p><% } %>
+        <% for (const c of candidates.slice(0, 25)) { %>
+        <div class="candidate">
+          <div class="candidate-main">
+            <div class="candidate-title"><%= c.title %></div>
+            <div class="candidate-meta"><%= c.sender_name %> · <%= c.source_title %></div>
+          </div>
+          <% if (c.saved_id) { %>
+            <a class="btn" href="/prompts/<%= c.saved_id %>">Saved</a>
+          <% } else { %>
+            <form method="POST" action="/newsletter/import/<%= c.id %>"><button class="btn" type="submit">Import</button></form>
+          <% } %>
+        </div>
+        <% } %>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>Add Prompt</h2>
+        <p class="card-desc">Manually save Nate-style examples, work prompts, or reusable harness instructions.</p>
+        <form method="POST" action="/prompts">
+          <div class="field"><label>Title</label><input name="title" required></div>
+          <div class="field"><label>Purpose</label><select name="purpose"><% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %></select></div>
+          <div class="field"><label>Description</label><textarea name="description" style="min-height:70px"></textarea></div>
+          <div class="field"><label>Prompt text</label><textarea name="raw_prompt" required></textarea></div>
+          <div class="field"><label>Tags, comma separated</label><input name="tags" placeholder="Nate, audit, evaluator"></div>
+          <button class="btn primary" type="submit">Save prompt</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Import Kit URL</h2>
+        <p class="card-desc">Paste a promptkit link. The importer fetches the Markdown version when available, splits individual prompts, saves provenance, and classifies each one.</p>
+        <div class="field">
+          <label>Prompt kit URL</label>
+          <input id="kit-url" placeholder="https://promptkit.natebjones.com/...">
+        </div>
+        <div class="field">
+          <label>Default purpose</label>
+          <select id="kit-purpose">
+            <option value="">Auto-classify</option>
+            <% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %>
+          </select>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="kit-import-btn" type="button" onclick="importKitUrl()">Import kit</button>
+          <span class="small" id="kit-import-status"></span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<%- include('partials/common-js') %>
+<script>
+async function importKitUrl() {
+  const url = document.getElementById('kit-url').value.trim();
+  if (!url) { alert('Paste a prompt kit URL first.'); return; }
+  const btn = document.getElementById('kit-import-btn');
+  const status = document.getElementById('kit-import-status');
+  btn.disabled = true;
+  status.textContent = 'Fetching kit...';
+  try {
+    const r = await fetch('/import-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        purpose: document.getElementById('kit-purpose').value,
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Import failed');
+    if (d.duplicate) {
+      status.textContent = `Already saved: ${d.existing} prompt${d.existing === 1 ? '' : 's'} from ${d.title}.`;
+    } else {
+      status.textContent = `Imported ${d.imported} prompt${d.imported === 1 ? '' : 's'} from ${d.title}.`;
+    }
+    setTimeout(() => window.location.href = '/?q=' + encodeURIComponent(d.title), 700);
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Import failed.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

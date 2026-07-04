@@ -3,38 +3,79 @@
   const displayUser = { douglas: 'Douglas', nakai: 'Nakai' }[locals.user] || (locals.user ? String(locals.user).charAt(0).toUpperCase() + String(locals.user).slice(1) : '');
   const displayTitle = String(title || 'Admin').replace(/—\s*douglas\b/ig, `— ${displayUser}`).replace(/—\s*nakai\b/ig, `— ${displayUser}`);
 %>
+<style>
+  .admin-nav-rows { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; min-width: 0; }
+  .admin-nav { padding-top: 0 !important; }
+  .admin-subnav {
+    display: none; flex-wrap: wrap; gap: 4px; align-items: center;
+    border-top: 1px solid var(--border); padding-top: 8px;
+  }
+  .admin-subnav.visible { display: flex; }
+  .admin-subnav a {
+    color: var(--text-dim); text-decoration: none; padding: 5px 9px; border-radius: 7px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .admin-subnav a:hover, .admin-subnav a.active { color: var(--accent); background: var(--accent-soft); }
+</style>
 <header class="admin-header">
   <div class="admin-title-block">
     <p class="admin-kicker">Admin</p>
     <h1><%- displayTitle %></h1>
   </div>
-  <nav class="admin-nav">
-    <a href="/admin">Overview</a>
-    <a href="/admin/crm">CRM</a>
-    <a href="/admin/models">Models &amp; prompts</a>
-    <a href="/admin/shortcuts">Cards</a>
-    <a href="/admin/test">Test</a>
-    <a href="/admin/linkedin">Content</a>
-    <a href="/newsletter">Newsletter</a>
-    <a href="/admin/newsletter-ingestion">Ingestion</a>
-    <a href="/admin/nakai-briefings">Nakai Briefings</a>
-    <a href="/admin/chatlogs">Chat logs</a>
-    <a href="/admin/debrief">Debrief logs</a>
-    <a href="/admin/jobs">Jobs</a>
-    <a href="/admin/connectivity">Connectivity</a>
-    <a href="/admin/knowledge">Knowledge</a>
-    <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
-  </nav>
+  <div class="admin-nav-rows">
+    <nav class="admin-nav" id="admin-nav-sections">
+      <a href="/admin" data-section="overview">Overview</a>
+      <a href="/admin/jobs" data-section="pipelines">Pipelines</a>
+      <a href="/admin/linkedin" data-section="content">Content</a>
+      <a href="/admin/chatlogs" data-section="logs">Logs</a>
+      <a href="/admin/models" data-section="system">System</a>
+      <form method="POST" action="/admin/logout"><button type="submit">Sign out</button></form>
+    </nav>
+    <nav class="admin-subnav" data-subnav="pipelines">
+      <a href="/admin/jobs">Jobs</a>
+      <a href="/admin/newsletter-ingestion">Ingestion</a>
+      <a href="/admin/knowledge">Knowledge</a>
+      <a href="/admin/email-taxonomy">Email taxonomy</a>
+      <a href="/admin/connectivity">Connectivity</a>
+    </nav>
+    <nav class="admin-subnav" data-subnav="content">
+      <a href="/admin/linkedin">LinkedIn</a>
+      <a href="/newsletter">Newsletter</a>
+      <a href="/admin/nakai-briefings">Nakai briefings</a>
+    </nav>
+    <nav class="admin-subnav" data-subnav="logs">
+      <a href="/admin/chatlogs">Chat logs</a>
+      <a href="/admin/debrief">Debrief logs</a>
+    </nav>
+    <nav class="admin-subnav" data-subnav="system">
+      <a href="/admin/models">Models &amp; prompts</a>
+      <a href="/admin/shortcuts">Cards</a>
+      <a href="/admin/test">Test</a>
+    </nav>
+  </div>
 </header>
 <script>
   (() => {
     const path = window.location.pathname;
-    let best = null;
-    for (const link of document.querySelectorAll('.admin-nav a')) {
-      const href = link.getAttribute('href');
-      const matches = href === '/admin' ? path === '/admin' : path === href || path.startsWith(href + '/');
-      if (matches && (!best || href.length > best.getAttribute('href').length)) best = link;
+    const sectionOf = (p) => {
+      if (/^\/admin\/(jobs|newsletter-ingestion|knowledge|email-taxonomy|connectivity)/.test(p)) return 'pipelines';
+      if (/^\/admin\/(linkedin|nakai-briefings)/.test(p) || p.startsWith('/newsletter')) return 'content';
+      if (/^\/admin\/(chatlogs|debrief)/.test(p)) return 'logs';
+      if (/^\/admin\/(models|shortcuts|test)/.test(p)) return 'system';
+      return 'overview';
+    };
+    const section = sectionOf(path);
+    const top = document.querySelector(`#admin-nav-sections a[data-section="${section}"]`);
+    if (top) top.classList.add('active');
+    const sub = document.querySelector(`.admin-subnav[data-subnav="${section}"]`);
+    if (sub) {
+      sub.classList.add('visible');
+      let best = null;
+      for (const link of sub.querySelectorAll('a')) {
+        const href = link.getAttribute('href');
+        if ((path === href || path.startsWith(href + '/')) && (!best || href.length > best.getAttribute('href').length)) best = link;
+      }
+      if (best) best.classList.add('active');
     }
-    if (best) best.classList.add('active');
   })();
 </script>

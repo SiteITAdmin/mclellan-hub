@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompts — Chat Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<%- include('partials/models-styles') %>
+<style>
+  .prompt-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+  .prompt-toolbar input[type=search] {
+    flex: 1; min-width: 220px; max-width: 420px; padding: 8px 12px; font-size: 13px;
+    border: 1px solid var(--outline, #c7c4d7); border-radius: 7px;
+    background: var(--card-bg); color: var(--text); outline: none; box-sizing: border-box;
+  }
+  .prompt-toolbar input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,245,0.12); }
+  .prompt-toolbar label { font-size: 12px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+  .prompt-group-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim); margin: 22px 0 8px;
+  }
+  .prompt-row {
+    border: 1px solid var(--card-border); border-radius: var(--card-radius);
+    background: var(--card-bg); margin-bottom: 8px; overflow: hidden;
+  }
+  .prompt-row-head {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer;
+  }
+  .prompt-row-head:hover { background: rgba(124,106,245,0.04); }
+  .prompt-row-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .prompt-row-note { font-size: 11px; color: var(--text-dim); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prompt-row-body { display: none; border-top: 1px solid var(--card-border); padding: 14px 16px; }
+  .prompt-row.open .prompt-row-body { display: block; }
+  .prompt-row textarea {
+    width: 100%; font-family: var(--font-mono, monospace); font-size: 11.5px; line-height: 1.55;
+    padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); resize: vertical; box-sizing: border-box;
+  }
+</style>
+</head>
+<body class="admin-page">
+
+<%- include('partials/admin-header', { title: `Prompts — ${user}` }) %>
+<%- include('partials/models-subnav', { modelsTab: 'prompts' }) %>
+
+<section class="admin-section">
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:10px">
+    Every system prompt the Hub runs, in one place. <strong>Edited</strong> slots override the built-in default; Restore default removes the override.
+    Dynamic placeholders like [DATE], [NAME], [CALENDAR] are filled at runtime.
+    <strong>Shape for model</strong> rewrites the prompt to match the style conventions of the model family the slot runs on — review the proposal, then Save.
+  </p>
+
+  <p style="font-size:12px;color:var(--text-dim);margin:0 0 16px">
+    <strong>Model style profiles</strong> (distilled monthly from production system prompts, used by "Shape for model" and the prompt tool's target-model selector):
+    <% for (const sp of styleProfiles) { %>
+      <span class="badge <%= sp.present ? 'badge-tier' : 'badge-search-none' %>" title="<%= sp.present ? ('Distilled ' + new Date(sp.distilled_at * 1000).toLocaleDateString('en-GB') + ' from ' + (sp.sources || []).length + ' prompts via ' + (sp.model_id || '')) : 'Not distilled yet — the style_profile_run job seeds this' %>"><%= sp.key %><%= sp.present ? '' : ' ✗' %></span>
+    <% } %>
+  </p>
+
+  <div class="prompt-toolbar">
+    <input type="search" id="prompt-filter" placeholder="Filter prompts — e.g. linkedin, triage, debrief…">
+    <label><input type="checkbox" id="prompt-edited-only"> Edited only</label>
+  </div>
+
+  <% for (const group of systemGroups) { %>
+  <% const promptSlots = group.slots.filter(s => s.promptDefault || s.promptOverride); %>
+  <% if (!promptSlots.length) continue; %>
+  <div class="prompt-group" data-group="<%= group.id %>">
+    <div class="prompt-group-title"><%= group.label %></div>
+    <% for (const slot of promptSlots) { %>
+    <div class="prompt-row" id="prompt-<%= slot.feature %>" data-name="<%= (group.label + ' ' + slot.label + ' ' + slot.feature).toLowerCase() %>" data-edited="<%= slot.promptOverride ? '1' : '0' %>">
+      <div class="prompt-row-head" onclick="toggleRow('<%= slot.feature %>')">
+        <span class="prompt-row-name"><%= slot.label %></span>
+        <span class="badge <%= slot.scope === 'system' ? 'badge-tier' : 'badge-cat' %>"><%= slot.scope %></span>
+        <% if (slot.promptOverride) { %><span class="badge badge-default">edited</span><% } %>
+        <span class="prompt-row-note"><%= slot.currentLabel || ('fallback: ' + slot.fallback) %></span>
+        <span style="color:var(--text-dim);font-size:12px">▾</span>
+      </div>
+      <div class="prompt-row-body">
+        <form method="POST" action="/admin/system-models/_set-prompt" class="model-form">
+          <input type="hidden" name="feature" value="<%= slot.feature %>">
+          <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
+          <p style="font-size:11px;color:var(--text-dim);margin:0 0 6px"><%= slot.note %></p>
+          <textarea name="prompt" rows="18" id="sys-prompt-text-<%= slot.feature %>"><%= slot.promptOverride || slot.promptDefault %></textarea>
+          <div class="form-actions">
+            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <button type="button" class="btn-sm" onclick="shapeSysPrompt('<%= slot.feature %>', '<%= slot.scope %>', this)" title="Rewrite this prompt to match the style conventions of the model family it runs on. Fills the textarea with a proposal — review, then Save.">Shape for model</button>
+            <% if (slot.promptOverride) { %>
+            <button type="button" class="btn-sm danger" onclick="restoreDefault('<%= slot.feature %>', this)">Restore default</button>
+            <% } %>
+            <a class="btn-sm" style="text-decoration:none;display:inline-flex;align-items:center" href="/admin/models/system#sys-<%= slot.feature %>">Model settings</a>
+          </div>
+        </form>
+      </div>
+    </div>
+    <% } %>
+  </div>
+  <% } %>
+  <div id="prompt-no-match" style="display:none;font-size:13px;color:var(--text-dim);padding:18px 4px">No prompts match that filter.</div>
+</section>
+
+<script>
+(function () {
+  window.toggleRow = function(feature) {
+    const row = document.getElementById('prompt-' + feature);
+    if (row) row.classList.toggle('open');
+  };
+
+  window.restoreDefault = function(feature, btn) {
+    const form = btn.closest('form');
+    const ta = form.querySelector('textarea[name=prompt]');
+    if (ta) ta.value = '';
+    form.submit();
+  };
+
+  window.shapeSysPrompt = async function(feature, scope, btn) {
+    const ta = document.getElementById('sys-prompt-text-' + feature);
+    if (!ta) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Shaping...';
+    try {
+      const r = await fetch('/admin/system-models/_shape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feature, scope }),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'Shaping failed');
+      ta.value = d.proposal;
+      btn.textContent = 'Shaped for ' + d.familyLabel + ' — review, then Save';
+      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 6000);
+      return;
+    } catch (e) {
+      alert(e.message);
+    }
+    btn.textContent = original;
+    btn.disabled = false;
+  };
+
+  // ── Filtering ──
+  const filter = document.getElementById('prompt-filter');
+  const editedOnly = document.getElementById('prompt-edited-only');
+  const rows = Array.from(document.querySelectorAll('.prompt-row'));
+  const groups = Array.from(document.querySelectorAll('.prompt-group'));
+  const noMatch = document.getElementById('prompt-no-match');
+
+  function applyFilter() {
+    const q = filter.value.trim().toLowerCase();
+    const onlyEdited = editedOnly.checked;
+    let visible = 0;
+    rows.forEach((row) => {
+      const ok = (!q || row.dataset.name.includes(q)) && (!onlyEdited || row.dataset.edited === '1');
+      row.style.display = ok ? '' : 'none';
+      if (ok) visible++;
+    });
+    groups.forEach((g) => {
+      const any = Array.from(g.querySelectorAll('.prompt-row')).some((r) => r.style.display !== 'none');
+      g.style.display = any ? '' : 'none';
+    });
+    noMatch.style.display = visible ? 'none' : 'block';
+  }
+  filter.addEventListener('input', applyFilter);
+  editedOnly.addEventListener('change', applyFilter);
+
+  // Deep link: #prompt-<feature> opens that editor
+  if (window.location.hash.startsWith('#prompt-')) {
+    const row = document.getElementById(window.location.hash.slice(1));
+    if (row) {
+      row.classList.add('open');
+      setTimeout(() => row.scrollIntoView({ block: 'start' }), 0);
+    }
+  }
+})();
+</script>
+</body>
+</html>

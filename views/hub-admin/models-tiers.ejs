@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiers — Chat Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<%- include('partials/models-styles') %>
+</head>
+<body class="admin-page">
+
+<%- include('partials/admin-header', { title: `Model tiers — ${user}` }) %>
+<%- include('partials/models-subnav', { modelsTab: 'tiers' }) %>
+
+<section class="admin-section">
+  <h2>Tiers</h2>
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:14px">Tiers group models in the chat picker. The key is used internally and in model records — don't change it after models reference it. Search default sets the auto-selected search mode when a model is added to this tier.</p>
+
+  <div class="model-cards" style="margin-bottom:20px">
+  <% for (const t of tiers) { %>
+    <div class="model-card" id="tier-card-<%= t.key %>">
+      <div class="model-card-head">
+        <div>
+          <div class="model-card-name"><%= t.label %></div>
+          <div class="model-card-id"><%= t.key %></div>
+        </div>
+        <span class="badge badge-tier"><%= t.search_default %></span>
+      </div>
+      <div class="model-card-actions">
+        <button class="btn-sm" onclick="toggleTierEdit('<%= t.key %>')">Edit</button>
+        <form method="POST" action="/admin/tiers/_delete" style="display:inline"
+          onsubmit="return confirm('Delete tier <%= t.key %>? Models in this tier will still exist but won\'t be grouped.')">
+          <input type="hidden" name="key" value="<%= t.key %>">
+          <button class="btn-sm danger" type="submit">Delete</button>
+        </form>
+      </div>
+      <div class="edit-panel" id="tier-edit-<%= t.key %>">
+        <form method="POST" action="/admin/tiers/_update" class="model-form">
+          <input type="hidden" name="key" value="<%= t.key %>">
+          <div class="form-row">
+            <div class="field">
+              <label>Display name</label>
+              <input name="label" value="<%= t.label %>" required>
+            </div>
+            <div class="field">
+              <label>Search default</label>
+              <select name="search_default">
+                <option value="web-plugin" <%= t.search_default === 'web-plugin' ? 'selected' : '' %>>Web plugin (Firecrawl)</option>
+                <option value="native"     <%= t.search_default === 'native'     ? 'selected' : '' %>>Native</option>
+                <option value="none"       <%= t.search_default === 'none'       ? 'selected' : '' %>>None</option>
+              </select>
+            </div>
+            <div class="field" style="flex:0 0 70px">
+              <label>Order</label>
+              <input name="display_order" type="number" value="<%= t.display_order %>">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+            <button type="button" class="btn-sm" onclick="toggleTierEdit('<%= t.key %>')">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  <% } %>
+  </div>
+
+  <details style="margin-top:4px">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim)">Add a tier</summary>
+    <form method="POST" action="/admin/tiers" class="model-form" style="margin-top:12px;max-width:480px">
+      <div class="form-row">
+        <div class="field">
+          <label>Key <span style="font-weight:400;text-transform:none">(slug, e.g. fast-chat)</span></label>
+          <input name="key" placeholder="fast-chat" required>
+        </div>
+        <div class="field">
+          <label>Display name</label>
+          <input name="label" placeholder="Fast Chat" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Search default</label>
+          <select name="search_default">
+            <option value="web-plugin">Web plugin (Firecrawl)</option>
+            <option value="native">Native</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div class="field" style="flex:0 0 80px">
+          <label>Order</label>
+          <input name="display_order" type="number" value="<%= tiers.length %>">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600">Add tier</button>
+      </div>
+    </form>
+  </details>
+</section>
+
+<script>
+  window.toggleTierEdit = function(key) {
+    const panel = document.getElementById('tier-edit-' + key);
+    if (panel) panel.classList.toggle('open');
+  };
+</script>
+</body>
+</html>

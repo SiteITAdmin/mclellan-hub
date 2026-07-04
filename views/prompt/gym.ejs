@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gym — Prompt Library</title>
+<link rel="stylesheet" href="/hub.css">
+<%- include('partials/styles') %>
+</head>
+<body class="prompt-page">
+<div class="wrap">
+  <%- include('partials/nav', {
+    promptTab: 'gym',
+    pageTitle: 'Prompt Gym',
+    pageSub: 'For recurring prompts. Add example input/output pairs and it will create a rubric, test candidate prompts, pick a winner, and give you a logbook entry for future review.'
+  }) %>
+
+  <div class="grid">
+    <section>
+      <div class="card">
+        <h2>Prompt Gym / Optimiser</h2>
+        <p class="card-desc">Examples ticked in the <a href="/">Library</a> are used as structural references. Best for prompts you will reuse and want to test.</p>
+        <div class="optimizer-grid">
+          <div class="field">
+            <label>Purpose</label>
+            <select id="opt-purpose">
+              <% for (const p of purposes) { %><option value="<%= p.key %>"><%= p.label %></option><% } %>
+            </select>
+            <label style="margin-top:8px">Target model</label>
+            <select id="opt-family">
+              <option value="">Any model</option>
+              <% for (const f of modelFamilies) { %><option value="<%= f.key %>"><%= f.label %></option><% } %>
+            </select>
+          </div>
+          <div class="field">
+            <label>Task description</label>
+            <textarea id="opt-task" style="min-height:88px" placeholder="What recurring task should this prompt handle?"></textarea>
+          </div>
+        </div>
+        <div class="optimizer-grid">
+          <div class="field">
+            <label>Current prompt, if any</label>
+            <textarea id="opt-current" placeholder="Paste the prompt you currently use, or leave blank."></textarea>
+          </div>
+          <div class="field">
+            <label>Example input/output pairs</label>
+            <textarea id="opt-examples" placeholder="Example 1:&#10;Input: ...&#10;Output: ...&#10;&#10;---&#10;&#10;Example 2:&#10;Input: ...&#10;Output: ..."></textarea>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="opt-btn" type="button" onclick="optimizePrompt()">Run Prompt Gym</button>
+          <span class="small" id="opt-status">Selected examples: <span id="selected-count">0</span></span>
+        </div>
+        <div class="result" id="opt-result">
+          <div class="result-head">
+            <strong>Optimised prompt asset</strong>
+            <div class="row">
+              <input id="opt-save-title" placeholder="Title to save as..." style="width:240px;padding:6px 8px">
+              <button class="btn" type="button" onclick="saveOptimized()">Save winner</button>
+              <button class="btn" type="button" onclick="copyOptimized()">Copy winner</button>
+            </div>
+          </div>
+          <div style="padding:14px">
+            <div id="opt-summary" class="small"></div>
+            <div class="mini-section"><h3>Rubric</h3><div id="opt-rubric"></div></div>
+            <div class="mini-section"><h3>Candidate scores</h3><div id="opt-candidates"></div></div>
+            <div class="mini-section"><h3>Final prompt</h3><pre id="opt-output" style="padding:0;max-height:420px"></pre></div>
+            <div class="mini-section"><h3>Logbook</h3><div id="opt-logbook" class="small"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>Prompt Gym Runs</h2>
+        <p class="card-desc">Recent self-optimising prompt runs with scoring/logbook metadata.</p>
+        <% if (!optimizations.length) { %><p class="small">No Prompt Gym runs yet.</p><% } %>
+        <% for (const o of optimizations) { %>
+        <div class="history-item">
+          <div class="history-title"><%= o.purpose %> · <%= o.logbook.version_label || 'Prompt_v1' %> · <%= new Date(o.created_at * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) %></div>
+          <div class="history-text"><%= o.task_description.slice(0, 160) %><%= o.task_description.length > 160 ? '...' : '' %></div>
+        </div>
+        <% } %>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<%- include('partials/common-js') %>
+<script>
+let latestOptimizationId = null;
+let latestOptimizedText = '';
+
+function renderOptimizerResult(d) {
+  latestOptimizationId = d.id;
+  latestOptimizedText = d.final_prompt || '';
+  document.getElementById('opt-result').classList.add('open');
+  document.getElementById('opt-output').textContent = latestOptimizedText;
+  document.getElementById('opt-save-title').value = '';
+  const winner = Number.isInteger(d.winner_index) ? d.winner_index : 0;
+  document.getElementById('opt-summary').innerHTML = `Winner: candidate ${winner + 1} · examples tested: ${d.examples?.length || 0} · recommended ${escapeHtml(d.classification?.recommended_model_tier || 'general-reasoning')}`;
+  const criteria = d.rubric?.criteria || [];
+  document.getElementById('opt-rubric').innerHTML = criteria.length ? `<table class="score-table"><thead><tr><th>Criterion</th><th>Weight</th><th>Rule</th></tr></thead><tbody>${criteria.map(c => `<tr><td><strong>${escapeHtml(c.name)}</strong><br>${escapeHtml(c.description || '')}</td><td>${escapeHtml(c.weight ?? '')}</td><td>${escapeHtml(c.score_rule || '')}</td></tr>`).join('')}</tbody></table>` : '<p class="small">No rubric returned.</p>';
+  const candidates = d.candidates || [];
+  document.getElementById('opt-candidates').innerHTML = candidates.length ? candidates.map((c, i) => `
+    <div class="history-item">
+      <div class="history-title">${i === winner ? 'Winner · ' : ''}${escapeHtml(c.name || `Candidate ${i + 1}`)} · avg ${escapeHtml(c.average_score ?? '?')}/10</div>
+      <div class="history-text"><strong>Strengths:</strong> ${(c.strengths || []).map(escapeHtml).join('; ') || 'None listed.'}</div>
+      <div class="history-text"><strong>Weaknesses:</strong> ${(c.weaknesses || []).map(escapeHtml).join('; ') || 'None listed.'}</div>
+    </div>`).join('') : '<p class="small">No candidates returned.</p>';
+  const log = d.logbook || {};
+  document.getElementById('opt-logbook').innerHTML = [
+    `<div class="sense-line"><strong>Version:</strong> ${escapeHtml(log.version_label || 'Prompt_v1')}</div>`,
+    `<div class="sense-line"><strong>Review cadence:</strong> ${escapeHtml(log.review_cadence || 'Review after a few uses')}</div>`,
+    `<div class="sense-line"><strong>Next experiment:</strong> ${escapeHtml(log.next_experiment || '')}</div>`,
+    `<div class="sense-line"><strong>DSPy candidate:</strong> ${log.dspy_candidate ? 'Yes' : 'No'} — ${escapeHtml(log.dspy_reason || '')}</div>`,
+    `<div class="sense-line"><strong>Success metrics:</strong></div>${renderList(log.success_metrics || [])}`,
+    `<div class="sense-line"><strong>Pitfalls:</strong></div>${renderList(d.pitfalls || [])}`,
+  ].join('');
+}
+
+async function optimizePrompt() {
+  const task = document.getElementById('opt-task').value.trim();
+  if (!task) { alert('Describe the recurring task first.'); return; }
+  const btn = document.getElementById('opt-btn');
+  const status = document.getElementById('opt-status');
+  btn.disabled = true;
+  btn.textContent = 'Optimising...';
+  status.textContent = 'Generating rubric, candidates, scores and logbook...';
+  try {
+    const r = await fetch('/optimize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task_description: task,
+        current_prompt: document.getElementById('opt-current').value,
+        examples_text: document.getElementById('opt-examples').value,
+        purpose: document.getElementById('opt-purpose').value,
+        source_prompt_ids: selectedPromptIds(),
+        target_model_family: document.getElementById('opt-family').value,
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Prompt Gym failed');
+    renderOptimizerResult(d);
+    status.textContent = `Prompt Gym complete · ${d.candidates?.length || 0} candidates scored${d.targetModelFamily ? (d.styleProfileApplied ? ` · styled for ${d.targetModelFamily}` : ` · no style profile for ${d.targetModelFamily} yet`) : ''}.`;
+  } catch (e) {
+    alert(e.message);
+    status.textContent = 'Prompt Gym failed.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Prompt Gym';
+  }
+}
+
+async function saveOptimized() {
+  if (!latestOptimizationId) return;
+  const title = document.getElementById('opt-save-title').value.trim() || 'Optimized prompt';
+  const r = await fetch(`/optimizations/${latestOptimizationId}/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  const d = await r.json();
+  if (!d.ok) { alert(d.error || 'Save failed'); return; }
+  window.location.href = `/prompts/${d.id}`;
+}
+
+async function copyOptimized() {
+  if (!latestOptimizedText) return;
+  await navigator.clipboard.writeText(latestOptimizedText);
+  document.getElementById('opt-status').textContent = 'Copied optimized prompt.';
+}
+
+updateSelectedCount();
+</script>
+</body>
+</html>

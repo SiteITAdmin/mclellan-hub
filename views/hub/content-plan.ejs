@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content — Plan — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<%- include('partials/content-styles') %>
+</head>
+<body class="hub-page" style="background: var(--bg, #fcf8ff); min-height: 100vh;">
+<%- include('partials/top-nav') %>
+<main>
+<div class="content-wrap">
+
+  <h1 class="page-title">Content — Plan</h1>
+  <p class="page-sub">Cadence policy, reminders and the researched topic plan that feeds the Create tab.</p>
+
+  <%- include('partials/content-tabs', { contentTab: 'plan' }) %>
+
+  <!-- Cadence policy -->
+  <section class="cadence-box">
+    <div class="cadence-head">
+      <h2 class="cadence-title">Cadence policy</h2>
+      <a href="/admin/models/system#sys-linkedin_planner" class="cadence-link">Models &amp; prompts</a>
+    </div>
+    <form id="cadence-form">
+      <div class="cadence-grid">
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">LinkedIn posting</div>
+            <label class="switch"><input type="checkbox" name="linkedinEnabled" <%= cadencePolicy.linkedin.enabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Cadence days</label>
+              <input type="number" min="1" max="60" name="linkedinCadenceDays" value="<%= cadencePolicy.linkedin.cadenceDays %>">
+            </div>
+            <div class="cadence-field">
+              <label>Reminder schedule</label>
+              <input type="hidden" name="linkedinRecur" id="linkedinRecur" value="<%= cadencePolicy.linkedin.recur %>">
+              <div class="recur-controls" data-field="linkedinRecur" data-value="<%= cadencePolicy.linkedin.recur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.linkedin.recur) %></span>
+            <% const liRow = cadenceRows.find(r => r.dedup_key && r.dedup_key.startsWith('content-linkedin:')); %>
+            <% if (liRow) { %>
+              <span class="badge badge-<%= liRow.status %>"><%= liRow.status %></span>
+              <% if (liRow.due_label) { %><span class="badge badge-date"><%= liRow.due_label %></span><% } %>
+              <% if (liRow.needs_action) { %><span class="badge badge-processing">needs action</span><% } %>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">Newsletter topics</div>
+            <label class="switch"><input type="checkbox" name="newsletterEnabled" <%= cadencePolicy.newsletter.enabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Minimum topics</label>
+              <input type="number" min="1" max="25" name="newsletterMinTopics" value="<%= cadencePolicy.newsletter.minTopics %>">
+            </div>
+            <div class="cadence-field">
+              <label>Reminder schedule</label>
+              <input type="hidden" name="newsletterRecur" id="newsletterRecur" value="<%= cadencePolicy.newsletter.recur %>">
+              <div class="recur-controls" data-field="newsletterRecur" data-value="<%= cadencePolicy.newsletter.recur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.newsletter.recur) %></span>
+            <% const nlRow = cadenceRows.find(r => r.dedup_key && r.dedup_key.startsWith('content-nl-midweek:')); %>
+            <% if (nlRow) { %>
+              <span class="badge badge-<%= nlRow.status %>"><%= nlRow.status %></span>
+              <% if (nlRow.due_label) { %><span class="badge badge-date"><%= nlRow.due_label %></span><% } %>
+              <% if (nlRow.needs_action) { %><span class="badge badge-processing">needs action</span><% } %>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">Topic research</div>
+            <label class="switch"><input type="checkbox" name="topicPlanResearchEnabled" <%= cadencePolicy.topicPlan.researchEnabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Research schedule</label>
+              <input type="hidden" name="topicPlanResearchRecur" id="topicPlanResearchRecur" value="<%= cadencePolicy.topicPlan.researchRecur %>">
+              <div class="recur-controls" data-field="topicPlanResearchRecur" data-value="<%= cadencePolicy.topicPlan.researchRecur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.topicPlan.researchRecur) %></span>
+          </div>
+        </div>
+
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">Suggestion sources</div>
+            <label class="switch"><input type="checkbox" name="topicPlanShowIntelFallback" <%= cadencePolicy.topicPlan.showIntelFallback ? 'checked' : '' %>> Intel fallback</label>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= cadencePolicy.topicPlan.showIntelFallback ? 'Research + selected intel' : 'Research only' %></span>
+          </div>
+        </div>
+      </div>
+      <div class="cadence-actions">
+        <button class="btn-sm primary" type="submit">Save cadence</button>
+        <span class="cadence-msg" id="cadence-msg"></span>
+      </div>
+      <div class="topic-plan">
+        <div class="topic-plan-head">
+          <div class="topic-plan-title">Topic plan</div>
+          <div class="topic-plan-meta"><%= topicPlan.available %>/<%= topicPlan.requested %> available from <%= cadencePolicy.topicPlan.showIntelFallback ? 'research and selected intel' : 'research' %></div>
+        </div>
+        <div class="cadence-actions" style="margin:0 0 12px;">
+          <button class="btn-sm" type="button" id="clear-topic-suggestions">Clear suggestions</button>
+          <span class="cadence-msg" id="topic-plan-msg"></span>
+        </div>
+        <div class="cadence-fields" style="max-width:420px;margin-bottom:12px;">
+          <div class="cadence-field">
+            <label>Plan days</label>
+            <input type="number" min="1" max="30" name="topicPlanDays" value="<%= cadencePolicy.topicPlan.days %>">
+          </div>
+          <div class="cadence-field">
+            <label>Suggestions per day</label>
+            <input type="number" min="1" max="10" name="topicPlanSuggestionsPerDay" value="<%= cadencePolicy.topicPlan.suggestionsPerDay %>">
+          </div>
+        </div>
+        <div class="topic-days">
+          <input type="hidden" name="topicPlanDayPrefs" id="topicPlanDayPrefs" value="">
+          <% for (const day of topicPlan.days) { %>
+            <div class="topic-day">
+              <div class="topic-day-title"><%= day.label %></div>
+              <div class="topic-day-controls" data-plan-date="<%= day.date %>">
+                <select data-plan-topic aria-label="Topic for <%= day.label %>">
+                  <option value="">Any topic</option>
+                  <% for (const t of contentTypes) { %>
+                    <option value="<%= t %>" <%= day.preference.topic === t ? 'selected' : '' %>><%= t %></option>
+                  <% } %>
+                </select>
+                <select data-plan-tone aria-label="Tone for <%= day.label %>">
+                  <option value="professional" <%= day.preference.tone === 'professional' ? 'selected' : '' %>>Professional</option>
+                  <option value="challenging" <%= day.preference.tone === 'challenging' ? 'selected' : '' %>>Challenging</option>
+                  <option value="provocative" <%= day.preference.tone === 'provocative' ? 'selected' : '' %>>Provocative</option>
+                </select>
+                <button class="btn-sm" type="button" data-plan-research title="Select a topic above, then click to research web sources for that day">Research</button>
+              </div>
+              <% if (!day.suggestions.length) { %>
+                <div class="topic-summary">No researched suggestions yet<%= day.preference.topic ? ` for ${day.preference.topic}` : '' %>.</div>
+              <% } %>
+              <% for (const topic of day.suggestions) { %>
+                <div class="topic-item">
+                  <div class="topic-title"><%= topic.title %></div>
+                  <% if (topic.summary) { %><div class="topic-summary"><%= String(topic.summary).slice(0, 180) %></div><% } %>
+                  <div class="topic-foot">
+                    <span class="topic-source"><%= topic.source_kind || topic.category || topic.source_name || topic.item_type || 'intel' %> · <%= day.preference.tone %></span>
+                    <button class="btn-sm" type="button" data-topic="<%= topic.title %>" data-tone="<%= day.preference.tone %>" data-source-url="<%= topic.source_url || '' %>" onclick="useTopic(this.dataset.topic, this.dataset.tone, this.dataset.sourceUrl)">Use</button>
+                  </div>
+                </div>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </form>
+  </section>
+
+</div>
+</main>
+
+<script>
+// ── Cadence policy ───────────────────────────────────────────────────────────
+const cadenceForm = document.getElementById('cadence-form');
+const cadenceMsg = document.getElementById('cadence-msg');
+const topicPlanMsg = document.getElementById('topic-plan-msg');
+const clearTopicSuggestionsBtn = document.getElementById('clear-topic-suggestions');
+
+function parseRecurSpec(spec) {
+  const parts = String(spec || '').split(':');
+  if (parts[0] === 'weekly') return { frequency: 'weekly', day: parts[1] || 'wed', time: `${parts[2] || '10'}:${parts[3] || '00'}` };
+  return { frequency: 'daily', day: 'wed', time: `${parts[1] || '10'}:${parts[2] || '00'}` };
+}
+
+function composeRecurSpec(control) {
+  const frequency = control.querySelector('[data-recur-frequency]')?.value || 'daily';
+  const day = control.querySelector('[data-recur-day]')?.value || 'wed';
+  const time = control.querySelector('[data-recur-time]')?.value || '10:00';
+  return frequency === 'weekly' ? `weekly:${day}:${time}` : `daily:${time}`;
+}
+
+function syncRecurFields() {
+  document.querySelectorAll('.recur-controls').forEach(control => {
+    const hidden = document.getElementById(control.dataset.field);
+    if (hidden) hidden.value = composeRecurSpec(control);
+  });
+}
+
+function syncTopicPlanPrefs() {
+  const prefs = {};
+  document.querySelectorAll('[data-plan-date]').forEach(row => {
+    prefs[row.dataset.planDate] = {
+      topic: row.querySelector('[data-plan-topic]')?.value || '',
+      tone: row.querySelector('[data-plan-tone]')?.value || 'professional',
+    };
+  });
+  const input = document.getElementById('topicPlanDayPrefs');
+  if (input) input.value = JSON.stringify(prefs);
+}
+
+document.querySelectorAll('[data-plan-date]').forEach(row => {
+  row.addEventListener('change', syncTopicPlanPrefs);
+  row.querySelector('[data-plan-research]')?.addEventListener('click', () => researchPlanDate(row));
+});
+syncTopicPlanPrefs();
+
+document.querySelectorAll('.recur-controls').forEach(control => {
+  const current = parseRecurSpec(control.dataset.value);
+  control.innerHTML = `
+    <select data-recur-frequency aria-label="Frequency">
+      <option value="daily">Daily</option>
+      <option value="weekly">Weekly</option>
+    </select>
+    <select data-recur-day aria-label="Day">
+      <option value="mon">Mon</option>
+      <option value="tue">Tue</option>
+      <option value="wed">Wed</option>
+      <option value="thu">Thu</option>
+      <option value="fri">Fri</option>
+      <option value="sat">Sat</option>
+      <option value="sun">Sun</option>
+    </select>
+    <input type="time" data-recur-time aria-label="Time">
+  `;
+  control.querySelector('[data-recur-frequency]').value = current.frequency;
+  control.querySelector('[data-recur-day]').value = current.day;
+  control.querySelector('[data-recur-time]').value = current.time;
+  const daySelect = control.querySelector('[data-recur-day]');
+  const updateDayVisibility = () => { daySelect.style.visibility = control.querySelector('[data-recur-frequency]').value === 'weekly' ? 'visible' : 'hidden'; };
+  control.addEventListener('change', () => { updateDayVisibility(); syncRecurFields(); });
+  updateDayVisibility();
+});
+syncRecurFields();
+
+cadenceForm?.addEventListener('submit', async e => {
+  e.preventDefault();
+  syncRecurFields();
+  syncTopicPlanPrefs();
+  const data = Object.fromEntries(new FormData(cadenceForm));
+  data.linkedinEnabled = cadenceForm.elements.linkedinEnabled.checked;
+  data.newsletterEnabled = cadenceForm.elements.newsletterEnabled.checked;
+  data.topicPlanResearchEnabled = cadenceForm.elements.topicPlanResearchEnabled.checked;
+  data.topicPlanShowIntelFallback = cadenceForm.elements.topicPlanShowIntelFallback.checked;
+  cadenceMsg.textContent = 'Saving...';
+  try {
+    const r = await fetch('/api/content/cadence-policy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not save cadence');
+    cadenceMsg.textContent = 'Saved';
+    setTimeout(() => window.location.reload(), 500);
+  } catch (err) {
+    cadenceMsg.textContent = err.message;
+  }
+});
+
+clearTopicSuggestionsBtn?.addEventListener('click', async () => {
+  clearTopicSuggestionsBtn.disabled = true;
+  topicPlanMsg.textContent = 'Clearing...';
+  try {
+    const r = await fetch('/api/content/topic-plan/suggestions/clear', { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not clear suggestions');
+    topicPlanMsg.textContent = `Cleared ${j.deleted || 0}`;
+    setTimeout(() => window.location.reload(), 500);
+  } catch (err) {
+    topicPlanMsg.textContent = err.message;
+    clearTopicSuggestionsBtn.disabled = false;
+  }
+});
+
+async function researchPlanDate(row) {
+  const topic = row.querySelector('[data-plan-topic]')?.value || '';
+  const tone = row.querySelector('[data-plan-tone]')?.value || 'professional';
+  const button = row.querySelector('[data-plan-research]');
+  if (!topic) {
+    const orig = button.textContent;
+    button.textContent = 'Pick a topic ↑';
+    button.style.color = '#dc2626';
+    button.style.borderColor = 'rgba(220,38,38,.4)';
+    topicPlanMsg.textContent = 'Select a topic from the dropdown above the Research button, then click Research again.';
+    setTimeout(() => {
+      button.textContent = orig;
+      button.style.color = '';
+      button.style.borderColor = '';
+    }, 2500);
+    return;
+  }
+  button.disabled = true;
+  button.textContent = 'Researching...';
+  topicPlanMsg.textContent = `Researching "${topic}"…`;
+  try {
+    const r = await fetch('/api/content/topic-plan/research', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: row.dataset.planDate, topic, tone }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Research failed');
+    topicPlanMsg.textContent = `Found ${j.result.count || 0} suggestions — reloading…`;
+    setTimeout(() => window.location.reload(), 800);
+  } catch (err) {
+    topicPlanMsg.textContent = err.message;
+    button.disabled = false;
+    button.textContent = 'Research';
+  }
+}
+
+// "Use" sends the topic to the Create tab pre-filled
+window.useTopic = function(title, tone, sourceUrl) {
+  const params = new URLSearchParams({ topic: title });
+  if (tone) params.set('tone', tone);
+  if (sourceUrl) params.set('sourceUrl', sourceUrl);
+  window.location.href = '/lin?' + params.toString();
+};
+</script>
+
+</body>
+</html>

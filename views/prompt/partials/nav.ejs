@@ -1,0 +1,17 @@
+<div class="top">
+  <div>
+    <h1><%= pageTitle %></h1>
+    <p class="sub"><%= pageSub %></p>
+  </div>
+  <form method="POST" action="/logout"><button class="logout" type="submit">Sign out <%= user %></button></form>
+</div>
+<nav class="prompt-nav" aria-label="Prompt library sections">
+  <a href="/" class="<%= promptTab === 'library' ? 'active' : '' %>">Library</a>
+  <a href="/builder" class="<%= promptTab === 'builder' ? 'active' : '' %>">Builder</a>
+  <a href="/gym" class="<%= promptTab === 'gym' ? 'active' : '' %>">Gym</a>
+  <a href="/inbox" class="<%= promptTab === 'inbox' ? 'active' : '' %>">Inbox</a>
+  <span class="ext">
+    <a href="https://dchat.mclellan.scot" target="_blank" rel="noopener">Hub ↗</a>&nbsp;&nbsp;
+    <a href="https://wiki.mclellan.scot" target="_blank" rel="noopener">Wiki ↗</a>
+  </span>
+</nav>
