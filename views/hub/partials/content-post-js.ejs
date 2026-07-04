@@ -1,0 +1,162 @@
+<script>
+// ── Expand panel ──────────────────────────────────────────────────────────────
+window.toggleExpand = function(id) {
+  const panel = document.getElementById('expand-' + id);
+  const btn = document.querySelector('#row-' + id + ' .view-btn');
+  if (!panel) return;
+  const open = panel.classList.toggle('open');
+  if (btn) btn.classList.toggle('open', open);
+};
+
+// ── Load draft ────────────────────────────────────────────────────────────────
+window.loadDraft = async function(id) {
+  const el = document.getElementById('draft-' + id);
+  el.textContent = 'Loading…';
+  try {
+    const r = await fetch('/api/content/posts/' + id);
+    const d = await r.json();
+    el.textContent = d.post?.refined_draft || d.post?.draft || '(no draft yet)';
+  } catch (err) {
+    el.textContent = 'Error: ' + err.message;
+  }
+};
+
+// ── Content type ──────────────────────────────────────────────────────────────
+window.setType = async function(id, type) {
+  await fetch('/api/content/posts/' + id + '/type', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type }),
+  }).catch(() => {});
+};
+
+// ── Status ────────────────────────────────────────────────────────────────────
+window.setStatus = async function(id, status) {
+  const body = { status };
+  if (status === 'published') {
+    const url = prompt('LinkedIn URL of the published post (leave blank to skip):', '');
+    if (url === null) return;
+    if (url.trim()) body.post_url = url.trim();
+  }
+  const r = await fetch('/api/content/posts/' + id + '/status', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (r.ok) window.location.reload();
+  else alert((await r.json().catch(() => ({}))).error || 'Failed to update status');
+};
+
+// ── Display title ─────────────────────────────────────────────────────────────
+window.editTitle = async function(id) {
+  const current = document.getElementById('topic-' + id)?.textContent?.trim() || '';
+  const title = prompt('Public display title (shown on llms.txt, knowledge bundle, portfolio chat):', current);
+  if (title === null || !title.trim()) return;
+  const r = await fetch('/api/content/posts/' + id + '/title', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ display_title: title.trim() }),
+  });
+  if (r.ok) window.location.reload();
+  else alert((await r.json().catch(() => ({}))).error || 'Failed to update title');
+};
+
+// ── Schedule ──────────────────────────────────────────────────────────────────
+window.schedulePost = async function(id) {
+  const date = document.getElementById('date-' + id)?.value;
+  if (!date) return;
+  const r = await fetch('/api/content/posts/' + id + '/schedule', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date }),
+  });
+  if (r.ok) window.location.reload();
+};
+
+// ── Retry carousel ────────────────────────────────────────────────────────────
+window.retryCarousel = async function(id) {
+  const btn = document.getElementById('retry-btn-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = 'Retrying…'; }
+  try {
+    const r = await fetch('/api/content/posts/' + id + '/retry-carousel', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Failed'); }
+    // Poll until no longer processing
+    const poll = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/content/posts/' + id);
+        const pd = await pr.json();
+        if (pd.post?.status !== 'processing') {
+          clearInterval(poll);
+          window.location.reload();
+        }
+      } catch (_) {}
+    }, 3000);
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Retry PDF'; }
+    alert('Error: ' + err.message);
+  }
+};
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+window.deletePost = async function(id) {
+  if (!confirm('Delete this post? This cannot be undone.')) return;
+  const r = await fetch('/api/content/posts/' + id + '/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+  });
+  if (r.ok) {
+    const row = document.getElementById('row-' + id);
+    if (row) row.remove();
+  }
+};
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+let activeFilter = 'all';
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    activeFilter = this.dataset.filter;
+    applyFilterSort();
+  });
+});
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+let activeSort = document.querySelector('.sort-btn.active')?.dataset.sort || 'date-desc';
+document.querySelectorAll('.sort-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    activeSort = this.dataset.sort;
+    applyFilterSort();
+  });
+});
+
+function applyFilterSort() {
+  const list = document.getElementById('post-list');
+  const rows = Array.from(list.querySelectorAll('.post-row'));
+
+  // Filter
+  rows.forEach(row => {
+    let show = true;
+    if (activeFilter !== 'all') {
+      const [kind, val] = activeFilter.split(':');
+      show = kind === 'status' ? row.dataset.status === val : row.dataset.type === val;
+    }
+    row.style.display = show ? '' : 'none';
+  });
+
+  // Sort visible rows
+  const visible = rows.filter(r => r.style.display !== 'none');
+  visible.sort((a, b) => {
+    switch (activeSort) {
+      case 'date-asc':  return Number(a.dataset.created) - Number(b.dataset.created);
+      case 'date-desc': return Number(b.dataset.created) - Number(a.dataset.created);
+      case 'score-desc': return Number(b.dataset.score) - Number(a.dataset.score);
+      case 'published-desc': {
+        return Number(b.dataset.published || 0) - Number(a.dataset.published || 0);
+      }
+      default: return 0;
+    }
+  });
+  visible.forEach(row => list.appendChild(row));
+}
+applyFilterSort();
+</script>

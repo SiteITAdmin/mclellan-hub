@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System models — Chat Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<%- include('partials/models-styles') %>
+<style>
+  .sys-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .sys-sidebar {
+    position: sticky; top: 78px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .sys-sidebar a {
+    color: var(--text-dim); text-decoration: none; padding: 7px 11px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; line-height: 1.3;
+  }
+  .sys-sidebar a:hover, .sys-sidebar a.active { color: var(--accent); background: var(--accent-soft, rgba(124,106,245,0.1)); }
+  .sys-sidebar a .n { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-left: 4px; }
+  .sys-group { display: none; }
+  .sys-group.visible { display: block; }
+  .sys-group-title { font-size: 16px; font-weight: 700; margin: 0 0 12px; color: var(--text); }
+  @media (max-width: 860px) {
+    .sys-layout { grid-template-columns: 1fr; }
+    .sys-sidebar { position: static; flex-direction: row; flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body class="admin-page">
+
+<%- include('partials/admin-header', { title: `System models — ${user}` }) %>
+<%- include('partials/models-subnav', { modelsTab: 'system' }) %>
+
+<section class="admin-section">
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">
+    Models used by background and automated features. Changes apply immediately — no restart needed.
+    Per-user slots show settings for <strong><%= user %></strong> only; other accounts have separate settings.
+    <strong>Use fallback</strong> removes a saved model choice and returns that slot to its built-in fallback model. It does not disable or delete the feature.
+    Prompts for these slots are edited on the <a href="/admin/models/prompts">Prompts</a> page.
+  </p>
+
+  <div class="sys-layout">
+    <nav class="sys-sidebar" id="sys-sidebar" aria-label="System model groups">
+      <% for (const group of systemGroups) { %>
+        <a href="#group-<%= group.id %>" data-group="<%= group.id %>"><%= group.label %><span class="n"><%= group.slots.length %></span></a>
+      <% } %>
+    </nav>
+
+    <div>
+      <% for (const group of systemGroups) { %>
+      <div class="sys-group" id="group-<%= group.id %>" data-group="<%= group.id %>">
+        <h2 class="sys-group-title"><%= group.label %></h2>
+        <div class="model-cards" style="margin-bottom:4px">
+          <% for (const slot of group.slots) { %>
+          <div class="model-card" id="sys-<%= slot.feature %>">
+            <div class="model-card-head">
+              <div>
+                <div class="model-card-name"><%= slot.label %></div>
+                <div class="model-card-id"><%= slot.note %></div>
+              </div>
+              <span class="badge <%= slot.scope === 'system' ? 'badge-tier' : 'badge-cat' %>"><%= slot.scope %></span>
+            </div>
+
+            <div class="model-card-badges">
+              <% if (slot.currentKey) { %>
+                <span class="badge badge-default"><%= slot.currentLabel || slot.currentKey %></span>
+              <% } else { %>
+                <span class="badge badge-search-none">fallback: <%= slot.fallback %></span>
+              <% } %>
+              <% if (slot.promptOverride) { %>
+                <span class="badge badge-tier">prompt edited</span>
+              <% } %>
+            </div>
+
+            <div class="model-card-actions">
+              <button class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Model</button>
+              <a class="btn-sm" style="text-decoration:none;display:inline-flex;align-items:center" href="/admin/models/prompts#prompt-<%= slot.feature %>">Prompt<%= slot.promptOverride ? ' ✎' : '' %></a>
+              <% if (slot.currentKey) { %>
+              <form method="POST" action="/admin/system-models/_set" style="display:inline">
+                <input type="hidden" name="feature" value="<%= slot.feature %>">
+                <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
+                <input type="hidden" name="model_key" value="">
+                <button class="btn-sm danger" type="submit" title="Remove this model override and use the built-in fallback">Use fallback</button>
+              </form>
+              <% } %>
+            </div>
+
+            <div class="edit-panel" id="sys-edit-<%= slot.feature %>">
+              <form method="POST" action="/admin/system-models/_set" class="model-form">
+                <input type="hidden" name="feature" value="<%= slot.feature %>">
+                <input type="hidden" name="scope" value="<%= slot.resolvedScope %>">
+                <div class="field">
+                  <label>Model</label>
+                  <select name="model_key">
+                    <option value="">Use fallback (<%= slot.fallback %>)</option>
+                    <% for (const m of models.filter(m => m.enabled)) { %>
+                    <option value="<%= m.key %>"<%= slot.currentKey === m.key ? ' selected' : '' %>><%= m.label %></option>
+                    <% } %>
+                  </select>
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)">Save</button>
+                  <button type="button" class="btn-sm" onclick="toggleSysEdit('<%= slot.feature %>')">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  window.toggleSysEdit = function(feature) {
+    const panel = document.getElementById('sys-edit-' + feature);
+    if (panel) panel.classList.toggle('open');
+  };
+
+  const groups = Array.from(document.querySelectorAll('.sys-group'));
+  const links  = Array.from(document.querySelectorAll('#sys-sidebar a'));
+
+  function show(groupId, updateHash) {
+    groups.forEach((g) => g.classList.toggle('visible', g.dataset.group === groupId));
+    links.forEach((l) => l.classList.toggle('active', l.dataset.group === groupId));
+    if (updateHash) history.replaceState(null, '', '#group-' + groupId);
+  }
+
+  links.forEach((l) => l.addEventListener('click', (e) => {
+    e.preventDefault();
+    show(l.dataset.group, true);
+    window.scrollTo({ top: 0 });
+  }));
+
+  // Deep links: #group-<id> selects a group; #sys-<feature> selects the group
+  // containing that slot and scrolls to the card.
+  const hash = window.location.hash;
+  let initial = groups[0] ? groups[0].dataset.group : null;
+  let scrollTarget = null;
+  if (hash.startsWith('#group-')) {
+    const id = hash.slice(7);
+    if (groups.some((g) => g.dataset.group === id)) initial = id;
+  } else if (hash.startsWith('#sys-')) {
+    const card = document.getElementById(hash.slice(1));
+    const holder = card && card.closest('.sys-group');
+    if (holder) { initial = holder.dataset.group; scrollTarget = card; }
+  }
+  if (initial) show(initial, false);
+  if (scrollTarget) setTimeout(() => scrollTarget.scrollIntoView({ block: 'center' }), 0);
+})();
+</script>
+</body>
+</html>

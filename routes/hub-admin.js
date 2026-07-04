@@ -700,7 +700,7 @@ function getAdminTiers(hub) {
   return hub.prepare('SELECT key, label, search_default, display_order FROM model_tiers ORDER BY display_order, key').all();
 }
 
-router.get('/admin/models', requireHubAdmin, (req, res) => {
+function getAdminModels(req) {
   const hub = db.hub();
   // Seed the free fallback if the table is completely empty (first run only)
   const hasAny = hub.prepare('SELECT 1 FROM model_config LIMIT 1').get();
@@ -712,15 +712,16 @@ router.get('/admin/models', requireHubAdmin, (req, res) => {
       insert.run(key, def.label || key, def.endpoint, def.id, def.tier, def.search);
     }
   }
-  const models = hub.prepare(
+  return hub.prepare(
     `SELECT *, category, cost_input, cost_output, context_length FROM model_config
       WHERE user IS NULL OR user = ?
       ORDER BY (user IS NULL) DESC, tier, display_order, key`
   ).all(req.hubUser);
-  const tiers = getAdminTiers(hub);
-  const defaultModel = getDefaultModel(req.hubUser);
-  // Resolve current setting for each system model slot
-  const systemGroups = SYSTEM_MODEL_GROUPS.map(group => ({
+}
+
+// Resolve current setting for each system model slot
+function getResolvedSystemGroups(req) {
+  return SYSTEM_MODEL_GROUPS.map(group => ({
     ...group,
     slots: group.slots.map(slot => {
       const resolvedScope = slot.scope === 'user' ? req.hubUser : 'system';
@@ -730,7 +731,37 @@ router.get('/admin/models', requireHubAdmin, (req, res) => {
       return { ...slot, resolvedScope, currentKey: current?.key || null, currentLabel: current?.label || null, promptOverride, promptDefault };
     }),
   }));
-  res.render('hub-admin/models', { user: req.hubUser, models, tiers, defaultModel, systemGroups, styleProfiles: listStyleProfiles() });
+}
+
+// System-model POSTs are reachable from both the System models page and the
+// Prompts page — send the user back to whichever one they submitted from.
+function modelsBackUrl(req, fallback) {
+  const ref = req.get('referer') || '';
+  try {
+    const u = new URL(ref);
+    if (u.pathname.startsWith('/admin/models')) return u.pathname;
+  } catch { /* no/invalid referer — use fallback */ }
+  return fallback;
+}
+
+router.get('/admin/models', requireHubAdmin, (req, res) => {
+  const models = getAdminModels(req);
+  const tiers = getAdminTiers(db.hub());
+  const defaultModel = getDefaultModel(req.hubUser);
+  res.render('hub-admin/models', { user: req.hubUser, models, tiers, defaultModel });
+});
+
+router.get('/admin/models/system', requireHubAdmin, (req, res) => {
+  const models = getAdminModels(req);
+  res.render('hub-admin/models-system', { user: req.hubUser, models, systemGroups: getResolvedSystemGroups(req) });
+});
+
+router.get('/admin/models/prompts', requireHubAdmin, (req, res) => {
+  res.render('hub-admin/models-prompts', { user: req.hubUser, systemGroups: getResolvedSystemGroups(req), styleProfiles: listStyleProfiles() });
+});
+
+router.get('/admin/models/tiers', requireHubAdmin, (req, res) => {
+  res.render('hub-admin/models-tiers', { user: req.hubUser, tiers: getAdminTiers(db.hub()) });
 });
 
 router.post('/admin/models/_set-default', requireHubAdmin, (req, res) => {
@@ -746,10 +777,10 @@ router.post('/admin/models/_set-default', requireHubAdmin, (req, res) => {
 
 router.post('/admin/system-models/_set', requireHubAdmin, (req, res) => {
   const { feature, scope, model_key } = req.body;
-  if (!feature) return res.redirect('/admin/models');
+  if (!feature) return res.redirect('/admin/models/system');
   const resolvedScope = scope === 'system' ? 'system' : req.hubUser;
   setSystemModel(feature, resolvedScope, model_key || null);
-  res.redirect('/admin/models#sys-' + feature);
+  res.redirect(modelsBackUrl(req, '/admin/models/system') + '#sys-' + feature);
 });
 
 // Proposes a rewrite of a system prompt shaped for the model family of the slot's
@@ -778,10 +809,10 @@ router.post('/admin/system-models/_shape', requireHubAdmin, async (req, res) => 
 
 router.post('/admin/system-models/_set-prompt', requireHubAdmin, (req, res) => {
   const { feature, scope, prompt } = req.body;
-  if (!feature) return res.redirect('/admin/models');
+  if (!feature) return res.redirect('/admin/models/prompts');
   const resolvedScope = scope === 'system' ? 'system' : req.hubUser;
   setSystemPromptOverride(feature, resolvedScope, prompt || null);
-  res.redirect('/admin/models#sys-' + feature);
+  res.redirect(modelsBackUrl(req, '/admin/models/prompts') + '#prompt-' + feature);
 });
 
 // ── Knowledge layer review queue ────────────────────────────────────────────
@@ -1191,7 +1222,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
 // ── Tier management ───────────────────────────────────────────────────────────
 router.post('/admin/tiers', requireHubAdmin, (req, res) => {
   const { key, label, search_default, display_order } = req.body;
-  if (!key || !label) return res.redirect('/admin/models');
+  if (!key || !label) return res.redirect('/admin/models/tiers');
   try {
     db.hub().prepare(
       'INSERT INTO model_tiers (key, label, search_default, display_order) VALUES (?, ?, ?, ?)'
@@ -1204,23 +1235,23 @@ router.post('/admin/tiers', requireHubAdmin, (req, res) => {
   } catch (err) {
     console.error('[hub-admin] add tier:', err.message);
   }
-  res.redirect('/admin/models');
+  res.redirect('/admin/models/tiers');
 });
 
 router.post('/admin/tiers/_update', requireHubAdmin, (req, res) => {
   const { key, label, search_default, display_order } = req.body;
-  if (!key) return res.redirect('/admin/models');
+  if (!key) return res.redirect('/admin/models/tiers');
   db.hub().prepare(
     'UPDATE model_tiers SET label = ?, search_default = ?, display_order = ? WHERE key = ?'
   ).run(label?.trim() || key, search_default?.trim() || 'web-plugin', parseInt(display_order, 10) || 0, key);
-  res.redirect('/admin/models');
+  res.redirect('/admin/models/tiers');
 });
 
 router.post('/admin/tiers/_delete', requireHubAdmin, (req, res) => {
   const { key } = req.body;
-  if (!key) return res.redirect('/admin/models');
+  if (!key) return res.redirect('/admin/models/tiers');
   db.hub().prepare('DELETE FROM model_tiers WHERE key = ?').run(key);
-  res.redirect('/admin/models');
+  res.redirect('/admin/models/tiers');
 });
 
 // ── Chat shortcuts (welcome screen cards) ─────────────────────────────────────

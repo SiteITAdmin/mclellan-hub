@@ -6,7 +6,36 @@ const {
   writeLimiter, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
 
+function getContentPosts(user) {
+  const posts = db.hub().prepare(
+    `SELECT id, topic, display_title, content_type, spiciness, score_json, carousel_url, sheet_url,
+            scheduled_date, status, created_at, published_at,
+            substr(refined_draft, 1, 300) AS preview
+     FROM linkedin_posts WHERE user = ? ORDER BY created_at DESC LIMIT 200`
+  ).all(user);
+  return posts.map(p => ({
+    ...p,
+    score: (() => { try { return JSON.parse(p.score_json || '{}'); } catch { return {}; } })(),
+  }));
+}
+
+// Create — generate box + researched suggestions + recent activity
 router.get('/lin', requireAuth, (req, res) => {
+  const { getContentCadencePolicy } = require('../lib/content-cadence-policy');
+  const { buildContentTopicPlan } = require('../lib/content-topic-plan');
+  const policy = getContentCadencePolicy(req.hubUser);
+  const topicPlan = buildContentTopicPlan(req.hubUser, policy.topicPlan);
+  const allPosts = getContentPosts(req.hubUser);
+  res.render('hub/content', {
+    user: req.hubUser,
+    topicPlan,
+    recentPosts: allPosts.slice(0, 6),
+    queueCount: allPosts.filter(p => p.status !== 'published').length,
+  });
+});
+
+// Plan — cadence policy + topic plan
+router.get('/lin/plan', requireAuth, (req, res) => {
   const { getContentCadencePolicy, describeRecur } = require('../lib/content-cadence-policy');
   const { buildContentTopicPlan } = require('../lib/content-topic-plan');
   const { listContentTopicNames } = require('../lib/content-taxonomy');
@@ -24,17 +53,42 @@ router.get('/lin', requireAuth, (req, res) => {
       : '',
     needs_action: Boolean(evaluateCheck(r).message),
   }));
-  const posts = db.hub().prepare(
-    `SELECT id, topic, display_title, content_type, spiciness, score_json, carousel_url, sheet_url,
-            scheduled_date, status, created_at, published_at,
-            substr(refined_draft, 1, 300) AS preview
-     FROM linkedin_posts WHERE user = ? ORDER BY created_at DESC LIMIT 100`
-  ).all(req.hubUser);
-  const parsed = posts.map(p => ({
-    ...p,
-    score: (() => { try { return JSON.parse(p.score_json || '{}'); } catch { return {}; } })(),
-  }));
-  res.render('hub/content', { user: req.hubUser, posts: parsed, contentTypes: listContentTopicNames(req.hubUser), cadencePolicy: policy, cadenceRows, topicPlan, describeRecur });
+  const allPosts = getContentPosts(req.hubUser);
+  res.render('hub/content-plan', {
+    user: req.hubUser,
+    contentTypes: listContentTopicNames(req.hubUser),
+    cadencePolicy: policy,
+    cadenceRows,
+    topicPlan,
+    describeRecur,
+    queueCount: allPosts.filter(p => p.status !== 'published').length,
+  });
+});
+
+// Queue — processing, error, draft, scheduled
+router.get('/lin/queue', requireAuth, (req, res) => {
+  const { listContentTopicNames } = require('../lib/content-taxonomy');
+  const allPosts = getContentPosts(req.hubUser);
+  res.render('hub/content-queue', {
+    user: req.hubUser,
+    posts: allPosts.filter(p => p.status !== 'published'),
+    contentTypes: listContentTopicNames(req.hubUser),
+  });
+});
+
+// Published — archive + stats
+router.get('/lin/published', requireAuth, (req, res) => {
+  const { listContentTopicNames } = require('../lib/content-taxonomy');
+  const allPosts = getContentPosts(req.hubUser);
+  const published = allPosts.filter(p => p.status === 'published')
+    .sort((a, b) => (b.published_at || 0) - (a.published_at || 0));
+  res.render('hub/content-published', {
+    user: req.hubUser,
+    posts: published,
+    totalPosts: allPosts.length,
+    contentTypes: listContentTopicNames(req.hubUser),
+    queueCount: allPosts.filter(p => p.status !== 'published').length,
+  });
 });
 
 router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {

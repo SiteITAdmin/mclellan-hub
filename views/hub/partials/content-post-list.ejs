@@ -1,0 +1,134 @@
+<div class="post-list" id="post-list">
+<% if (!posts.length) { %>
+  <div class="empty-state"><p><%= locals.emptyMsg || 'No posts yet. Generate your first LinkedIn post on the Create tab.' %></p></div>
+<% } %>
+<% for (const p of posts) { %>
+<%
+  const scoreVal = p.score?.overall_score;
+  const scoreNum = scoreVal ? parseFloat(scoreVal) : 0;
+  const dateStr = new Date(p.created_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const statusLabel = { processing: 'Processing…', error: 'Error', draft: 'Draft', scheduled: 'Scheduled', published: 'Published' }[p.status] || p.status;
+  const calTopic = encodeURIComponent('Post: ' + p.topic);
+  const calDetail = encodeURIComponent(p.preview || p.topic);
+  const calDate = (p.scheduled_date || '').replace(/-/g, '');
+  const calUrl = p.scheduled_date ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTopic}&dates=${calDate}/${calDate}&details=${calDetail}` : '';
+%>
+<div class="post-row" id="row-<%= p.id %>"
+  data-status="<%= p.status %>"
+  data-type="<%= p.content_type || '' %>"
+  data-created="<%= p.created_at %>"
+  data-score="<%= scoreNum %>"
+  data-published="<%= p.published_at || '' %>"
+  data-scheduled="<%= p.scheduled_date || '' %>">
+
+  <div class="row-main">
+    <span class="row-date"><%= dateStr %></span>
+    <span class="row-topic" id="topic-<%= p.id %>" title="<%= p.display_title ? 'Original topic: ' + p.topic : '' %>"><%= p.display_title || p.topic %></span>
+    <% if (p.status === 'published') { %><button class="btn-sm" onclick="editTitle('<%= p.id %>')" title="Edit the public display title (llms.txt, knowledge bundle, portfolio chat)">✎ Title</button><% } %>
+    <div class="row-badges">
+      <span class="badge badge-<%= p.status %>"><%= statusLabel %></span>
+      <% if (scoreVal) { %><span class="badge badge-score"><%= scoreVal %>/5</span><% } %>
+      <% if (p.spiciness && p.spiciness !== 'professional') { %><span class="badge badge-spicy-<%= p.spiciness %>"><%= p.spiciness %></span><% } %>
+      <% if (p.content_type) { %><span class="badge badge-type"><%= p.content_type %></span><% } %>
+      <% if (p.scheduled_date) { %><span class="badge badge-date">📅 <%= p.scheduled_date %></span><% } %>
+    </div>
+    <div class="row-actions">
+      <% if (p.status !== 'processing') { %>
+      <button class="btn-sm view-btn" onclick="toggleExpand('<%= p.id %>')">View</button>
+      <% } %>
+      <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">PDF</a><% } %>
+      <% if (!p.carousel_url && p.status !== 'processing' && (p.draft || p.preview)) { %><button class="btn-sm" id="retry-btn-<%= p.id %>" onclick="retryCarousel('<%= p.id %>')">Retry PDF</button><% } %>
+      <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">📅 Cal</a><% } %>
+      <% if (p.status !== 'processing') { %>
+      <button class="btn-sm danger" onclick="deletePost('<%= p.id %>')">Delete</button>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (p.status !== 'processing') { %>
+  <div class="expand-panel" id="expand-<%= p.id %>">
+
+    <!-- Content type -->
+    <div class="panel-section">
+      <div class="panel-label">Content type</div>
+      <select class="type-select" onchange="setType('<%= p.id %>', this.value)">
+        <option value="">— Select type —</option>
+        <% for (const t of contentTypes) { %>
+        <option value="<%= t %>" <%= p.content_type === t ? 'selected' : '' %>><%= t %></option>
+        <% } %>
+      </select>
+    </div>
+
+    <!-- Score -->
+    <% if (scoreVal) { %>
+    <div class="panel-section">
+      <div class="panel-label">Score — <%= scoreVal %>/5</div>
+      <% if (p.score?.recruiter_value) { %><div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;"><%= p.score.recruiter_value %></div><% } %>
+      <% if (p.score?.axis_scores && Object.keys(p.score.axis_scores).length) { %>
+      <div class="score-grid">
+        <% for (const [k, v] of Object.entries(p.score.axis_scores)) { %>
+        <div class="score-item">
+          <div class="score-item-key"><%= k.replace(/_/g, ' ') %></div>
+          <div class="score-item-val"><%= v %>/5</div>
+        </div>
+        <% } %>
+      </div>
+      <% } %>
+      <% if (p.score?.top_fixes?.length) { %>
+      <div class="panel-label" style="margin-top:10px;">Top fixes</div>
+      <% for (const f of (p.score.top_fixes || [])) { %>
+      <div class="fix-item"><strong><%= f.problem %></strong> → <%= f.fix %></div>
+      <% } %>
+      <% } %>
+      <% if (p.score?.recruiter_perspective) { %>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:8px;font-style:italic;"><%= p.score.recruiter_perspective %></div>
+      <% } %>
+    </div>
+    <% } %>
+
+    <!-- Draft -->
+    <div class="panel-section">
+      <div class="panel-label">Refined draft</div>
+      <div class="panel-draft" id="draft-<%= p.id %>">
+        <button class="btn-sm" onclick="loadDraft('<%= p.id %>')">Load draft</button>
+      </div>
+    </div>
+
+    <!-- Links -->
+    <% if (p.carousel_url || p.sheet_url) { %>
+    <div class="panel-section">
+      <div class="panel-label">Links</div>
+      <div class="links-row">
+        <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">Carousel PDF</a><% } %>
+        <% if (p.sheet_url) { %><a href="<%= p.sheet_url %>" target="_blank" class="btn-sm">Google Sheet</a><% } %>
+      </div>
+    </div>
+    <% } %>
+
+    <!-- Schedule -->
+    <div class="panel-section">
+      <div class="panel-label">Schedule</div>
+      <div class="schedule-row">
+        <input type="date" class="schedule-input" id="date-<%= p.id %>" value="<%= p.scheduled_date || '' %>" />
+        <button class="btn-sm primary" onclick="schedulePost('<%= p.id %>')">Save date</button>
+        <span id="cal-link-<%= p.id %>">
+          <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">Add to Calendar</a><% } %>
+        </span>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="panel-section">
+      <div class="panel-label">Status</div>
+      <div class="status-row">
+        <button class="btn-sm<%= p.status === 'draft' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'draft')">Draft</button>
+        <button class="btn-sm<%= p.status === 'scheduled' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'scheduled')">Scheduled</button>
+        <button class="btn-sm<%= p.status === 'published' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'published')">Published</button>
+      </div>
+    </div>
+
+  </div>
+  <% } %>
+</div>
+<% } %>
+</div>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content — Queue — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<%- include('partials/content-styles') %>
+</head>
+<body class="hub-page" style="background: var(--bg, #fcf8ff); min-height: 100vh;">
+<%- include('partials/top-nav') %>
+<main>
+<div class="content-wrap">
+
+  <h1 class="page-title">Content — Queue</h1>
+  <p class="page-sub">Work in progress — processing, drafts and scheduled posts. Published posts move to the <a href="/lin/published" style="color:var(--accent,#4648d4)">Published</a> tab.</p>
+
+  <%- include('partials/content-tabs', { contentTab: 'queue', queueCount: posts.length }) %>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-row">
+      <span class="toolbar-label">Sort:</span>
+      <button class="sort-btn active" data-sort="date-desc">Newest first</button>
+      <button class="sort-btn" data-sort="date-asc">Oldest first</button>
+      <button class="sort-btn" data-sort="score-desc">Highest score</button>
+    </div>
+    <div class="toolbar-row">
+      <span class="toolbar-label">Filter:</span>
+      <button class="filter-chip active" data-filter="all">All</button>
+      <button class="filter-chip" data-filter="status:processing">Processing</button>
+      <button class="filter-chip" data-filter="status:error">Error</button>
+      <button class="filter-chip" data-filter="status:draft">Draft</button>
+      <button class="filter-chip" data-filter="status:scheduled">Scheduled</button>
+      <% for (const t of contentTypes) { %>
+      <button class="filter-chip" data-filter="type:<%= t %>"><%= t %></button>
+      <% } %>
+    </div>
+  </div>
+
+  <%- include('partials/content-post-list', { posts, contentTypes, emptyMsg: 'Queue is empty. Generate a post on the Create tab.' }) %>
+
+</div>
+</main>
+
+<%- include('partials/content-post-js') %>
+
+</body>
+</html>

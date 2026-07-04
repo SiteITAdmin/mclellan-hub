@@ -1,0 +1,41 @@
+<script>
+// Example selection persists across pages (Library picks feed Builder/Gym)
+const PICKS_KEY = 'promptPicks';
+
+function storedPicks() {
+  try { return JSON.parse(localStorage.getItem(PICKS_KEY) || '[]'); } catch { return []; }
+}
+
+function savePicks(ids) {
+  localStorage.setItem(PICKS_KEY, JSON.stringify(ids));
+}
+
+function selectedPromptIds() {
+  const boxes = document.querySelectorAll('.pick');
+  if (boxes.length) return [...document.querySelectorAll('.pick:checked')].map(cb => cb.value);
+  return storedPicks();
+}
+
+function updateSelectedCount() {
+  const boxes = document.querySelectorAll('.pick');
+  if (boxes.length) savePicks([...document.querySelectorAll('.pick:checked')].map(cb => cb.value));
+  const el = document.getElementById('selected-count');
+  if (el) el.textContent = selectedPromptIds().length;
+}
+
+function clearPicks() {
+  savePicks([]);
+  document.querySelectorAll('.pick:checked').forEach(cb => { cb.checked = false; });
+  updateSelectedCount();
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderList(items) {
+  return items?.length ? `<ul class="sense-list">${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : '<p class="small">None.</p>';
+}
+</script>
