@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debrief session — <%= session.id.slice(0, 8) %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+.back { display: inline-block; margin-bottom: 16px; color: var(--primary); text-decoration: none; font-weight: 600; }
+.stage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+.stage { border: 1px solid var(--border); border-radius: 9px; padding: 13px; background: var(--surface); }
+.stage h2 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.stage strong { display: block; margin-bottom: 5px; overflow-wrap: anywhere; }
+.muted { color: var(--text-muted); }
+.mono { font-family: var(--mono); overflow-wrap: anywhere; }
+.detail-section { margin: 24px 0; }
+.detail-section h2 { font-size: 18px; margin-bottom: 10px; }
+.transcript { max-height: 650px; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 13px; line-height: 1.6; }
+.pill-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { border: 1px solid var(--border); border-radius: 20px; padding: 3px 11px; font-size: 12px; background: var(--surface); }
+.error-box { border: 1px solid #c4342b; border-radius: 8px; padding: 12px; color: #c4342b; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+ul.actions { margin: 0; padding-left: 20px; line-height: 1.7; font-size: 13px; }
+@media (max-width: 900px) { .stage-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .stage-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="admin-page">
+<%- include('partials/admin-header', { title: 'Debrief session detail' }) %>
+<section class="admin-section">
+  <a class="back" href="/admin/debrief">← Back to debrief sessions</a>
+
+  <div class="stage-grid">
+    <div class="stage">
+      <h2>Session</h2>
+      <strong><%= new Date(session.started_at * 1000).toLocaleString('en-GB', { timeZone: 'Europe/London' }) %></strong>
+      <div><%= session.turns %> turn<%= session.turns === 1 ? '' : 's' %></div>
+      <div class="muted mono"><%= session.id %></div>
+    </div>
+    <div class="stage">
+      <h2>Duration</h2>
+      <strong><%= session.duration != null ? Math.round(session.duration / 60) + ' min' : (session.ended_at ? '—' : 'never finished') %></strong>
+      <div class="muted"><%= session.ended_at ? 'ended ' + new Date(session.ended_at * 1000).toLocaleTimeString('en-GB', { timeZone: 'Europe/London' }) : 'no save recorded' %></div>
+    </div>
+    <div class="stage">
+      <h2>Note</h2>
+      <strong><%= session.note_path || 'not saved' %></strong>
+      <div class="muted"><%= session.transcript ? String(session.transcript).length.toLocaleString('en-GB') + ' chars transcript' : 'no transcript stored' %></div>
+    </div>
+    <div class="stage">
+      <h2>Extraction</h2>
+      <% if (session.extraction) { %>
+        <strong><%= (session.extraction.people || []).length %> people · <%= (session.extraction.projects || []).length %> projects · <%= (session.extraction.actions || []).length %> actions</strong>
+      <% } else { %>
+        <strong class="muted">none recorded</strong>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (session.error) { %>
+  <div class="detail-section">
+    <h2>Error</h2>
+    <div class="error-box"><%= session.error %></div>
+  </div>
+  <% } %>
+
+  <% if (session.calendar_events && session.calendar_events.length) { %>
+  <div class="detail-section">
+    <h2>Calendar context</h2>
+    <div class="pill-list">
+      <% session.calendar_events.forEach(ev => { %>
+        <span class="pill"><%= ev.time ? ev.time + ' ' : '' %><%= ev.summary %></span>
+      <% }) %>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (session.extraction) { %>
+  <div class="detail-section">
+    <h2>Extracted</h2>
+    <% if ((session.extraction.people || []).length) { %>
+      <p class="muted" style="margin:8px 0 4px">People</p>
+      <div class="pill-list"><% session.extraction.people.forEach(p => { %><span class="pill"><%= p %></span><% }) %></div>
+    <% } %>
+    <% if ((session.extraction.projects || []).length) { %>
+      <p class="muted" style="margin:12px 0 4px">Projects</p>
+      <div class="pill-list"><% session.extraction.projects.forEach(p => { %><span class="pill"><%= p %></span><% }) %></div>
+    <% } %>
+    <% if ((session.extraction.actions || []).length) { %>
+      <p class="muted" style="margin:12px 0 4px">Actions</p>
+      <ul class="actions"><% session.extraction.actions.forEach(a => { %><li><%= a %></li><% }) %></ul>
+    <% } %>
+  </div>
+  <% } %>
+
+  <div class="detail-section">
+    <h2>Transcript</h2>
+    <% if (session.transcript) { %>
+      <div class="transcript"><%= session.transcript %></div>
+    <% } else { %>
+      <p class="muted">No transcript was saved for this session — it was started but never finished, or saving failed.</p>
+    <% } %>
+  </div>
+</section>
+</body>
+</html>

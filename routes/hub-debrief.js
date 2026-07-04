@@ -16,8 +16,81 @@ const {
   chatLimiter, uploadLimiter, writeLimiter,
   requireAuth, requireSameOrigin, audioUpload,
 } = require('./hub-shared');
+const { buildDebriefContext } = require('../lib/debrief-context');
+const { synthesizeSpeech } = require('../lib/tts');
+const { transcribeAudioBuffer } = require('../lib/workday-ingest');
 
 const meetingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
+
+// ── Debrief auth: session (web) or bearer token (iOS app) ─────────────────────
+// The app cannot hold a session cookie, so it authenticates with
+// DEBRIEF_MOBILE_TOKEN. Token requests skip the same-origin check (no cookies
+// involved, so no CSRF surface); session requests keep it.
+function requireDebriefAuth(req, res, next) {
+  const token = process.env.DEBRIEF_MOBILE_TOKEN;
+  const auth = req.headers.authorization || '';
+  if (token && auth === `Bearer ${token}`) {
+    req.hubUser = 'douglas';
+    return next();
+  }
+  return requireSameOrigin(req, res, () => requireAuth(req, res, next));
+}
+
+// Per-session interview context, built once at /start. Sessions are short;
+// on a cache miss (server restart mid-drive) the context is rebuilt.
+const contextCache = new Map();
+const CONTEXT_TTL_MS = 4 * 60 * 60 * 1000;
+
+async function getSessionContext(user, sessionId) {
+  const cached = contextCache.get(sessionId);
+  if (cached && Date.now() - cached.ts < CONTEXT_TTL_MS) return cached;
+  for (const [id, entry] of contextCache) {
+    if (Date.now() - entry.ts >= CONTEXT_TTL_MS) contextCache.delete(id);
+  }
+  const built = { ...(await buildDebriefContext(user)), ts: Date.now() };
+  contextCache.set(sessionId, built);
+  return built;
+}
+
+async function interviewerReply({ user, history, contextText }) {
+  const displayName = { douglas: 'Douglas', nakai: 'Nakai' }[user] || user;
+  const systemPrompt = getSystemPrompt('debrief_interviewer', user, PROMPTS.debrief_interviewer)
+    .replace(/\[NAME\]/g, displayName)
+    .replace('[CONTEXT]', contextText)
+    .replace('[CALENDAR]', contextText);
+
+  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: openRouterHeaders(TASK_CODES.DEBRIEF),
+    body: JSON.stringify({
+      model: getSystemModelId('debrief_interviewer', user, 'anthropic/claude-haiku-4-5'),
+      messages: [{ role: 'system', content: systemPrompt }, ...history],
+      temperature: 0.4,
+      max_tokens: 180,
+    }),
+  });
+  if (!r.ok) throw new Error(`LLM ${r.status}`);
+  const data = await r.json();
+  logUsageFromResponse({
+    user,
+    feature: 'debrief-interviewer',
+    modelKey: 'debrief_interviewer',
+    fallbackModelId: getSystemModelId('debrief_interviewer', user, 'anthropic/claude-haiku-4-5'),
+    data,
+    taskCode: TASK_CODES.DEBRIEF,
+  });
+  const raw = data.choices[0].message.content.trim();
+  return { reply: raw.replace('[DONE]', '').trim(), done: raw.includes('[DONE]') };
+}
+
+async function ttsOrNull(text, user) {
+  try {
+    return (await synthesizeSpeech({ text, user })).toString('base64');
+  } catch (err) {
+    console.error('[debrief tts]', err.message);
+    return null; // clients show the text and keep going
+  }
+}
 
 // ── Daily Debrief ─────────────────────────────────────────────────────────────
 router.get('/debrief', requireAuth, async (req, res) => {
@@ -32,68 +105,69 @@ router.get('/debrief', requireAuth, async (req, res) => {
   res.render('hub/debrief', { user, displayName, events, today });
 });
 
-// LLM interviewer — receives conversation history, returns next acknowledgment + question
-router.post('/api/debrief/message', requireAuth, requireSameOrigin, chatLimiter, async (req, res) => {
-  const { messages: history, events: clientEvents, sessionId } = req.body;
-  if (!Array.isArray(history)) return res.status(400).json({ error: 'messages required' });
-
+// Opens a debrief: builds the day context, asks the opening question, speaks it.
+router.post('/api/debrief/start', requireDebriefAuth, chatLimiter, async (req, res) => {
   const user = req.hubUser;
-  const displayName = { douglas: 'Douglas', nakai: 'Nakai' }[user] || user;
+  const sessionId = uuid();
+  try {
+    const ctx = await getSessionContext(user, sessionId);
+    const { reply, done } = await interviewerReply({ user, history: [], contextText: ctx.contextText });
+    const audio = await ttsOrNull(reply, user);
 
-  let events = [];
-  try { events = clientEvents?.length ? clientEvents : await fetchTodayCalendarEvents(user); } catch (_) {}
+    db.hub().prepare(`
+      INSERT OR IGNORE INTO debrief_sessions (id, user, started_at, turns, calendar_events)
+      VALUES (?, ?, unixepoch(), 1, ?)
+    `).run(sessionId, user, JSON.stringify(ctx.events));
 
-  const calendarCtx = events.length
-    ? events.map(ev => `- ${ev.time ? ev.time + ' ' : ''}${ev.summary}`).join('\n')
-    : 'No calendar events found for today.';
+    res.json({ sessionId, reply, done, audio });
+  } catch (err) {
+    console.error('[debrief start]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
-  const systemPrompt = getSystemPrompt('debrief_interviewer', user, PROMPTS.debrief_interviewer)
-    .replace(/\[NAME\]/g, displayName)
-    .replace('[CALENDAR]', calendarCtx);
+// One interview turn: audio (or text) in → transcript + spoken reply out.
+// Stateless: the client sends the running history each time.
+router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.single('audio'), async (req, res) => {
+  const user = req.hubUser;
+  const { sessionId } = req.body;
+  let history;
+  try { history = JSON.parse(req.body.history || '[]'); } catch { history = null; }
+  if (!Array.isArray(history)) return res.status(400).json({ error: 'history must be a JSON array' });
 
   try {
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: openRouterHeaders(TASK_CODES.DEBRIEF),
-      body: JSON.stringify({
-        model: getSystemModelId('debrief_interviewer', user, 'anthropic/claude-haiku-4-5'),
-        messages: [{ role: 'system', content: systemPrompt }, ...history],
-        temperature: 0.4,
-        max_tokens: 180,
-      }),
-    });
-    if (!r.ok) throw new Error(`LLM ${r.status}`);
-    const data = await r.json();
-    logUsageFromResponse({
-      user,
-      feature: 'debrief-interviewer',
-      modelKey: 'debrief_interviewer',
-      fallbackModelId: getSystemModelId('debrief_interviewer', user, 'anthropic/claude-haiku-4-5'),
-      data,
-      taskCode: TASK_CODES.DEBRIEF,
-    });
-    const raw = data.choices[0].message.content.trim();
-    const done = raw.includes('[DONE]');
-    const reply = raw.replace('[DONE]', '').trim();
-    res.json({ reply, done });
-
-    // Log session turn in DB
-    if (sessionId) {
-      const hub = db.hub();
-      const isFirst = history.length === 0;
-      if (isFirst) {
-        hub.prepare(`
-          INSERT OR IGNORE INTO debrief_sessions (id, user, started_at, turns, calendar_events)
-          VALUES (?, ?, unixepoch(), 1, ?)
-        `).run(sessionId, user, JSON.stringify(clientEvents || events));
-      } else {
-        hub.prepare(`
-          UPDATE debrief_sessions SET turns = turns + 1 WHERE id = ?
-        `).run(sessionId);
-      }
+    let transcript = (req.body.text || '').trim();
+    if (req.file) {
+      transcript = (await transcribeAudioBuffer({
+        buffer: req.file.buffer,
+        filename: req.file.originalname || 'debrief-turn.m4a',
+        mimetype: req.file.mimetype || 'audio/mp4',
+        model: getSystemModelId('debrief_transcriber', 'system', 'openai/whisper-large-v3'),
+      }).catch(err => {
+        console.error('[debrief stt]', err.message);
+        return '';
+      })).trim();
     }
+
+    if (!transcript) {
+      const reply = "Sorry, I didn't catch that — could you say it again?";
+      return res.json({ transcript: '', reply, done: false, audio: await ttsOrNull(reply, user) });
+    }
+
+    const ctx = await getSessionContext(user, sessionId || uuid());
+    const { reply, done } = await interviewerReply({
+      user,
+      history: [...history, { role: 'user', content: transcript }],
+      contextText: ctx.contextText,
+    });
+    const audio = await ttsOrNull(reply, user);
+
+    if (sessionId) {
+      try { db.hub().prepare(`UPDATE debrief_sessions SET turns = turns + 1 WHERE id = ?`).run(sessionId); } catch (_) {}
+    }
+    res.json({ transcript, reply, done, audio });
   } catch (err) {
-    console.error('[debrief message]', err);
+    console.error('[debrief turn]', err);
     if (sessionId) {
       try { db.hub().prepare(`UPDATE debrief_sessions SET error = ? WHERE id = ?`).run(err.message, sessionId); } catch (_) {}
     }
@@ -102,7 +176,7 @@ router.post('/api/debrief/message', requireAuth, requireSameOrigin, chatLimiter,
 });
 
 // Save full transcript to Obsidian + async extraction → CRM / projects
-router.post('/api/debrief/save', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+router.post('/api/debrief/save', requireDebriefAuth, writeLimiter, async (req, res) => {
   const { transcript, sessionId } = req.body;
   if (!transcript?.trim()) return res.status(400).json({ error: 'No transcript provided' });
 
