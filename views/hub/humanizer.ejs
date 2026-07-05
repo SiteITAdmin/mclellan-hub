@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Humanizer · McLellan Hub</title>
+<title>Humaniser · McLellan Hub</title>
 <link rel="stylesheet" href="/hub.css">
 <style>
 body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !important; background: var(--bg-page, #f4f3fb); }
@@ -26,7 +26,7 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 textarea#src { width:100%; box-sizing:border-box; border:none; padding:14px; min-height: 340px; resize:vertical; font-size: 14px; line-height: 1.6; font-family: var(--mono); background: transparent; color: var(--text); }
 textarea#src:focus { outline: none; }
 #outText { padding:14px; min-height: 340px; white-space: pre-wrap; font-size: 14px; line-height: 1.7; }
-#outText:empty::before { content: "Your humanized draft will appear here."; color: var(--text-muted); }
+#outText:empty::before { content: "Your humanised draft will appear here."; color: var(--text-muted); }
 .hz-marker { background: rgba(232,160,0,.16); border-bottom: 1px dashed rgba(232,160,0,.7); padding: 0 2px; border-radius: 3px; font-weight: 600; }
 .hz-btn { appearance:none; border:none; cursor:pointer; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 700; font-family: inherit; }
 .hz-btn.primary { background: var(--accent); color:#fff; }
@@ -62,7 +62,7 @@ textarea#src:focus { outline: none; }
 <%- include('partials/top-nav') %>
 <div class="hz-wrap">
   <span class="hz-kicker">Editing tool</span>
-  <h1 class="hz-title">AI Text Humanizer</h1>
+  <h1 class="hz-title">AI Text Humaniser</h1>
   <p class="hz-lead">Paste AI-generated prose and it gets redrafted to read like a person wrote it. It edits two layers: the six <strong>surface</strong> tells (rule of three, uniform sentence length, predictable transitions, flat tone, thesaurus vocabulary, surface generality) and six <strong>discourse</strong> tells that survive surface edits — over-explaining, moralising, somatic emotion, sensory over-writing, rigid chronological order, and writing as if no one is reading. It never fabricates data or sources; where a specific figure or reference would help it flags a spot for you to fill in.</p>
 
   <div class="hz-controls">
@@ -78,7 +78,7 @@ textarea#src:focus { outline: none; }
         <option value="heavy">Heavy — restructure rhythm</option>
       </select>
     </div>
-    <button id="run" class="hz-btn primary"><span class="hz-btn-label">Humanize</span><span class="hz-spin">Working…</span></button>
+    <button id="run" class="hz-btn primary"><span class="hz-btn-label">Humanise</span><span class="hz-spin">Working…</span></button>
   </div>
 
   <div class="hz-grid">
@@ -91,7 +91,7 @@ textarea#src:focus { outline: none; }
     </div>
     <div class="hz-panel">
       <div class="hz-panel-head">
-        <h2>Humanized draft</h2>
+        <h2>Humanised draft</h2>
         <div class="hz-actions">
           <button id="copy" class="hz-btn ghost" disabled>Copy</button>
         </div>
