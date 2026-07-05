@@ -168,6 +168,9 @@ router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.si
         console.error('[debrief stt]', err.message);
         return '';
       })).trim();
+      // TEMP diagnostic: is the audio empty (mic not capturing) or is a real
+      // recording transcribing to nothing? Remove once the mic issue is closed.
+      console.log(`[debrief turn diag] audioBytes=${req.file.buffer.length} mime=${req.file.mimetype} name=${req.file.originalname} rawTranscript=${JSON.stringify(transcript).slice(0, 120)}`);
     }
 
     // Whisper emits stock phrases ("Thank you", "Thanks for watching") when
