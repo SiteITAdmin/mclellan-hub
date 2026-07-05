@@ -181,6 +181,14 @@ textarea#src:focus { outline: none; }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, field: $('field').value, aggressiveness: $('aggressiveness').value }),
       });
+      // A gateway/restart blip returns an HTML error page, not JSON — parsing it
+      // gave the cryptic "Unexpected token '<'". Detect that and say so plainly.
+      const ct = resp.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error(resp.status >= 500
+          ? `The server was briefly unavailable (${resp.status}) — this can happen for a moment during a deploy. Please try again.`
+          : `Unexpected response from the server (${resp.status}). Please try again.`);
+      }
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || `Request failed (${resp.status})`);
       out.dataset.raw = data.humanized_text;
