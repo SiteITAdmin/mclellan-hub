@@ -43,6 +43,9 @@ textarea#src:focus { outline: none; }
 .hz-changes { display:grid; gap:8px; }
 .hz-change { background: var(--surface); border:1px solid var(--border); border-radius: 10px; padding: 11px 13px; }
 .hz-change .tag { display:inline-flex; font-size:10px; font-family: var(--mono); font-weight:700; text-transform:uppercase; letter-spacing:.05em; color: var(--accent); background: var(--accent-light); border-radius:999px; padding:3px 8px; margin-bottom:7px; }
+.hz-change .layer { display:inline-flex; font-size:9px; font-family: var(--mono); font-weight:700; text-transform:uppercase; letter-spacing:.05em; border-radius:999px; padding:3px 7px; margin: 0 0 7px 6px; }
+.hz-change .layer.surface { color:#5a4a00; background: rgba(232,160,0,.14); }
+.hz-change .layer.discourse { color:#1f4d7a; background: rgba(31,77,122,.12); }
 .hz-change .ba { font-size: 13px; line-height:1.5; }
 .hz-change .ba del { color:#a33b31; text-decoration: line-through; opacity:.8; }
 .hz-change .ba ins { color:#0f6b3a; text-decoration: none; }
@@ -60,7 +63,7 @@ textarea#src:focus { outline: none; }
 <div class="hz-wrap">
   <span class="hz-kicker">Editing tool</span>
   <h1 class="hz-title">AI Text Humanizer</h1>
-  <p class="hz-lead">Paste AI-generated prose and it gets redrafted to read like a person wrote it — by editing the six recurring tells of machine writing: the rule of three, uniform sentence length, predictable transitions, flat/absolute tone, thesaurus vocabulary, and surface-level generality. It never fabricates data; where a specific figure would help it flags a spot for you to fill in.</p>
+  <p class="hz-lead">Paste AI-generated prose and it gets redrafted to read like a person wrote it. It edits two layers: the six <strong>surface</strong> tells (rule of three, uniform sentence length, predictable transitions, flat tone, thesaurus vocabulary, surface generality) and six <strong>discourse</strong> tells that survive surface edits — over-explaining, moralising, somatic emotion, sensory over-writing, rigid chronological order, and writing as if no one is reading. It never fabricates data or sources; where a specific figure or reference would help it flags a spot for you to fill in.</p>
 
   <div class="hz-controls">
     <div class="hz-field">
@@ -120,24 +123,33 @@ textarea#src:focus { outline: none; }
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
   const highlightMarkers = html =>
-    html.replace(/\[ADD SPECIFIC FIGURE:[^\]]*\]/gi, m => `<span class="hz-marker">${m}</span>`);
+    html.replace(/\[ADD SPECIFIC (?:FIGURE|SOURCE):[^\]]*\]/gi, m => `<span class="hz-marker">${m}</span>`);
 
   src.addEventListener('input', () => { $('srcCount').textContent = src.value.length; });
 
   const PATTERN_LABEL = {
     rule_of_three: 'Rule of three', burstiness: 'Burstiness', transitions: 'Transitions',
     nuance: 'Nuance', vocabulary: 'Vocabulary', surface_depth: 'Depth',
+    over_explanation: 'Over-explanation', moralising: 'Moralising', emotion_naming: 'Emotion naming',
+    sensory_density: 'Sensory density', presentation_order: 'Presentation order', audience_address: 'Audience address',
   };
+  const SURFACE_PATTERNS = new Set(['rule_of_three', 'burstiness', 'transitions', 'nuance', 'vocabulary', 'surface_depth']);
+  const layerOf = c => c.layer === 'surface' || c.layer === 'discourse'
+    ? c.layer : (SURFACE_PATTERNS.has(c.pattern) ? 'surface' : 'discourse');
   const riskClass = r => r === 'high' ? 'risk-high' : r === 'medium' ? 'risk-medium' : r === 'low' ? 'risk-low' : '';
 
   function renderStats(r) {
     const b = r.scan_before || {}, a = r.scan_after || {};
+    const db = r.scan_discourse_before || {}, da = r.scan_discourse_after || {};
     const rows = [
       ['Detector risk', `<span class="${riskClass(r.estimated_detector_risk_before)}">${esc(r.estimated_detector_risk_before)}</span> → <span class="${riskClass(r.estimated_detector_risk_after)}">${esc(r.estimated_detector_risk_after)}</span>`, 'model estimate'],
-      ['Burstiness', `${esc(b.burstiness)} → ${esc(a.burstiness)}`, 'sentence-length variety (higher = human)'],
+      ['Burstiness', `${esc(b.burstiness)} → ${esc(a.burstiness)}`, 'sentence variety (higher = human)'],
       ['Rule-of-three', `${esc(b.rule_of_three_count)} → ${esc(a.rule_of_three_count)}`, 'triad lists remaining'],
       ['Transition openers', `${esc(b.transition_openers)} → ${esc(a.transition_openers)}`, 'However/Therefore/etc.'],
       ['Wordy terms', `${(b.wordy_terms||[]).length} → ${(a.wordy_terms||[]).length}`, 'thesaurus vocabulary'],
+      ['Discourse flags', `${esc(db.flags_raised)} → ${esc(da.flags_raised)}`, 'structural AI tells raised'],
+      ['Moralising', `${esc(db.moralising_count)} → ${esc(da.moralising_count)}`, 'stated-lesson sentences'],
+      ['Over-explanation', `${esc(db.over_explanation_count)} → ${esc(da.over_explanation_count)}`, '"which means…" explainers'],
     ];
     stats.innerHTML = rows.map(([k, v, d]) =>
       `<div class="hz-stat"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('');
@@ -145,12 +157,15 @@ textarea#src:focus { outline: none; }
 
   function renderChanges(list) {
     if (!list.length) { changes.innerHTML = '<p class="hz-note">The model reported no major structural edits.</p>'; return; }
-    changes.innerHTML = list.map(c => `
+    changes.innerHTML = list.map(c => {
+      const layer = layerOf(c);
+      return `
       <div class="hz-change">
-        <span class="tag">${esc(PATTERN_LABEL[c.pattern] || c.pattern)}</span>
+        <span class="tag">${esc(PATTERN_LABEL[c.pattern] || c.pattern)}</span><span class="layer ${layer}">${layer}</span>
         <div class="ba"><del>${esc(c.before)}</del> <ins>${esc(c.after)}</ins></div>
         ${c.why ? `<div class="why">${esc(c.why)}</div>` : ''}
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   async function run() {

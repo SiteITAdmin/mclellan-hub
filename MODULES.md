@@ -323,23 +323,26 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## AI Text Humanizer
-**Purpose:** Take AI-generated prose and redraft it so it reads as if a person in the field wrote it, by editing the six recurring statistical "tells" of machine writing (manual method after Andy Stapleton): the rule of three, low burstiness (uniform sentence length), predictable transitions ("However/Therefore/In conclusion"), flat/absolute tone, thesaurus-level vocabulary, and surface-level generality. An editing tool, not a paraphraser and not a fabricator.
+**Purpose:** Take AI-generated prose and redraft it so it reads as if a person in the field wrote it, by editing two layers of machine-writing "tells". SURFACE (manual method after Andy Stapleton): rule of three, low burstiness (uniform sentence length), predictable transitions ("However/Therefore/In conclusion"), flat/absolute tone, thesaurus-level vocabulary, surface-level generality. DISCOURSE (after StoryScope, arXiv:2604.03136 — the signal that survives surface edits): over-explanation, moralising/stated-lesson sentences, emotion rendered as bodily sensation, sensory over-writing, rigid chronological ordering, and writing as if no reader is present. An editing tool, not a paraphraser and not a fabricator.
 
-**Core capability (must be present):** Given pasted text, it returns a full rewritten draft plus a per-tell report of what changed and a before/after tell-scan (burstiness, triad count, transition openers, wordy terms). If it only reworded without addressing the six tells, it is not doing the thing its name says.
+**Core capability (must be present):** Given pasted text, it returns a full rewritten draft plus a layer-tagged report of what changed and before/after scans of BOTH layers — surface (`scan_before`/`scan_after`: burstiness, triad count, transition openers, wordy terms) and discourse (`scan_discourse_before`/`scan_discourse_after`: moralising count, over-explanation count, sequence markers, somatic-emotion ratio, audience address, `flags_raised`). Discourse edits are why the tool is more than a de-cliché pass: surface polish alone barely moves a narrative-level detector (paper: ~1.6 points). If it only reworded the surface, it is not doing the whole thing its name says.
 
-**Honesty constraint:** It must never invent statistics, figures, dates, or citations to add "depth." Where a specific number would strengthen the text, it inserts an `[ADD SPECIFIC FIGURE: ...]` marker for the author to fill in. Fabricated data is a bug, not a feature.
+**Honesty constraint:** It must never invent statistics, figures, dates, citations, names, sources, or storylines to add "depth." Where a specific number would strengthen the text it inserts an `[ADD SPECIFIC FIGURE: ...]` marker; where a specific named reference would, it inserts an `[ADD SPECIFIC SOURCE: ...]` marker — both for the author to fill in. Every discourse edit rearranges or removes editorialising only; it must not change a fact. Fabricated data is a bug, not a feature.
 
 **Healthy looks like:**
-- `POST /api/humanize` returns `humanized_text`, `changes[]`, `scan_before`, `scan_after`, and honest risk estimates.
-- `scan_after` shows measurable movement on at least one tell (e.g. burstiness up, triad/transition counts down) versus `scan_before`.
-- Any `[ADD SPECIFIC FIGURE: ...]` markers the model leaves inline are surfaced in `added_data_markers` and highlighted in the UI.
+- `POST /api/humanize` returns `humanized_text`, layer-tagged `changes[]` (each with `layer: surface|discourse`), `scan_before`/`scan_after`, `scan_discourse_before`/`scan_discourse_after`, and honest risk estimates.
+- On genuinely AI text the discourse scan shows movement (e.g. `flags_raised`, `moralising_count`, or `over_explanation_count` falling) — not just surface burstiness/transition changes.
+- Any `[ADD SPECIFIC FIGURE: ...]` / `[ADD SPECIFIC SOURCE: ...]` markers are surfaced in `added_data_markers` / `added_source_markers` and highlighted in the UI.
+- No digit appears in the output that was not in the source (fabrication guard).
 - Usage is logged to `request_logs` under task code `UT-Humanizer`.
 
 **Does not own:** Content drafting (that's the Content/LinkedIn pipeline), chat, or document ingestion. It edits text the user pastes in; it does not read from the knowledge layer.
 
-**Deliberately not built:** No automated AI-detector API integration. Detector scores are unreliable and paid; the tool shows its own heuristic tell-scan and an honest caveat instead of a false "100% human" guarantee.
+**Deliberately not built:** No automated AI-detector API integration. Detector scores are unreliable and paid; the tool shows its own heuristic surface + discourse scans and an honest caveat instead of a false "100% human" guarantee.
 
-**Health check:** A syntactically clean AI paragraph run through `/api/humanize` returns a draft whose `scan_after.burstiness` differs from `scan_before.burstiness`. If they are identical, the model likely returned the input unchanged.
+**Known limitation:** The discourse scan (`lib/humanizer-discourse.js`) is a conservative cue-based heuristic, not a detector, and its payoff scales with text length — it does more on long-form (debriefs, knowledge synthesis) than on a short email, where the surface pass already carries most of the visible change. It is a moveable feast: expect to tune the cue lists as models and human writing drift.
+
+**Health check:** An AI paragraph that states its own moral (e.g. ends "Ultimately, this shows the importance of…") run through `/api/humanize` returns a draft where `scan_discourse_after.moralising_count < scan_discourse_before.moralising_count`, and no digit in the output is absent from the input.
 
 ## Model Style Profiles
 **Purpose:** Compiled knowledge of how each frontier vendor writes production prompts for its own model family (Claude, GPT, Gemini, Grok, open-weights), distilled monthly from github.com/asgeirtj/system_prompts_leaks. Used to shape prompts for the model they will actually run on: the prompt tool's target-model selector (adapt + Prompt Gym) and the admin "Shape for model" button on every system prompt slot.

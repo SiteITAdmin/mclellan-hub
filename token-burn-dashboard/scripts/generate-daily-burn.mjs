@@ -16,8 +16,15 @@ const deployOpenRouterSummaryPath = join(deployDataDir, "openrouter-activity.sum
 const hubRoot = join(home, "Documents", "mclellan hub");
 const openRouterSummary = {
   rows: 0,
+  exported_generations: 0,
+  zero_token_generations: 0,
   tokens: 0,
   cost_usd: 0,
+  cost_web_search_usd: 0,
+  cost_file_processing_usd: 0,
+  byok_usage_inference_usd: 0,
+  export_first_at: null,
+  export_last_at: null,
   by_model: {},
   by_provider: {},
   by_app: {},
@@ -258,19 +265,27 @@ function collectOpenRouterExports() {
       const reasoning = Number(record.tokens_reasoning || 0);
       const cached = Number(record.tokens_cached || 0);
       const tokens = prompt + completion + reasoning + cached;
-      if (tokens <= 0) continue;
       const cost = Number(record.cost_total || 0);
+      const webSearchCost = Number(record.cost_web_search || 0);
+      const fileProcessingCost = Number(record.cost_file_processing || 0);
+      const byokUsage = Number(record.byok_usage_inference || 0);
 
       const row = rowFor(date);
-      row.api_tokens += tokens;
+      if (tokens > 0) row.api_tokens += tokens;
       row.openrouter_export_rows += 1;
       row.openrouter_cost_usd += cost;
       addOpenRouterSummary("by_model", record.model_permaslug || "unknown", tokens, cost);
       addOpenRouterSummary("by_provider", record.provider_name || "unknown", tokens, cost);
       addOpenRouterSummary("by_app", normalizeOpenRouterApp(record.app_name), tokens, cost);
+      trackOpenRouterExportWindow(record.created_at);
+      openRouterSummary.exported_generations += 1;
+      if (tokens <= 0) openRouterSummary.zero_token_generations += 1;
       openRouterSummary.rows += 1;
       openRouterSummary.tokens += tokens;
       openRouterSummary.cost_usd += cost;
+      openRouterSummary.cost_web_search_usd += webSearchCost;
+      openRouterSummary.cost_file_processing_usd += fileProcessingCost;
+      openRouterSummary.byok_usage_inference_usd += byokUsage;
       imported += 1;
     }
   }
@@ -291,16 +306,33 @@ function normalizeOpenRouterApp(appName) {
   return value || "Legacy-Unattributed";
 }
 
+function trackOpenRouterExportWindow(createdAt) {
+  const value = String(createdAt || "").trim();
+  if (!value) return;
+  if (!openRouterSummary.export_first_at || value < openRouterSummary.export_first_at) {
+    openRouterSummary.export_first_at = value;
+  }
+  if (!openRouterSummary.export_last_at || value > openRouterSummary.export_last_at) {
+    openRouterSummary.export_last_at = value;
+  }
+}
+
 function finalizeOpenRouterSummary() {
   const sortBucket = (bucket) =>
     Object.values(bucket)
-      .sort((a, b) => b.tokens - a.tokens)
-      .slice(0, 20);
+      .sort((a, b) => b.tokens - a.tokens);
 
   return {
     rows: openRouterSummary.rows,
+    exported_generations: openRouterSummary.exported_generations,
+    zero_token_generations: openRouterSummary.zero_token_generations,
     tokens: openRouterSummary.tokens,
     cost_usd: openRouterSummary.cost_usd,
+    cost_web_search_usd: openRouterSummary.cost_web_search_usd,
+    cost_file_processing_usd: openRouterSummary.cost_file_processing_usd,
+    byok_usage_inference_usd: openRouterSummary.byok_usage_inference_usd,
+    export_first_at: openRouterSummary.export_first_at,
+    export_last_at: openRouterSummary.export_last_at,
     by_model: sortBucket(openRouterSummary.by_model),
     by_provider: sortBucket(openRouterSummary.by_provider),
     by_app: sortBucket(openRouterSummary.by_app),

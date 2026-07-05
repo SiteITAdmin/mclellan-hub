@@ -22,10 +22,6 @@ const { transcribeAudioBuffer } = require('../lib/workday-ingest');
 
 const meetingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
-// TEMP diagnostic: keep the most recent turn's raw audio so it can be pulled
-// back for inspection while chasing the quiet-mic issue. Remove when closed.
-let _lastTurnAudio = null;
-
 // ── Debrief auth: session (web) or bearer token (iOS app) ─────────────────────
 // The native app can't hold the Google-OAuth session cookie the website uses,
 // so it authenticates with a bearer token. To avoid minting a new production
@@ -107,6 +103,30 @@ function isLikelyHallucination(text) {
   return HALLUCINATION_PHRASES.has(norm);
 }
 
+function renderDebriefTranscript(history) {
+  return history
+    .map(m => {
+      const content = String(m.content || '').trim();
+      if (!content) return null;
+      const label = m.role === 'assistant' ? 'Interviewer' : 'You';
+      return `**${label}:** ${content}`;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function parseHistory(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function ttsOrNull(text, user) {
   try {
     return (await synthesizeSpeech({ text, user })).toString('base64');
@@ -127,15 +147,6 @@ router.get('/debrief', requireAuth, async (req, res) => {
   let events = [];
   try { events = await fetchTodayCalendarEvents(user); } catch (_) {}
   res.render('hub/debrief', { user, displayName, events, today });
-});
-
-// TEMP diagnostic endpoint: returns the last turn's raw audio for inspection.
-router.get('/api/debrief/_lastaudio', requireDebriefAuth, (req, res) => {
-  if (!_lastTurnAudio) return res.status(404).send('no audio yet');
-  res.set('Content-Type', _lastTurnAudio.mime || 'audio/mp4');
-  res.set('X-Audio-Name', _lastTurnAudio.name || 'turn.m4a');
-  res.set('X-Audio-Age-Ms', String(Date.now() - _lastTurnAudio.ts));
-  res.send(_lastTurnAudio.buf);
 });
 
 // Opens a debrief: builds the day context, asks the opening question, speaks it.
@@ -164,12 +175,17 @@ router.post('/api/debrief/start', requireDebriefAuth, chatLimiter, async (req, r
 router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.single('audio'), async (req, res) => {
   const user = req.hubUser;
   const { sessionId } = req.body;
-  let history;
-  try { history = JSON.parse(req.body.history || '[]'); } catch { history = null; }
+  const history = parseHistory(req.body.history);
   if (!Array.isArray(history)) return res.status(400).json({ error: 'history must be a JSON array' });
 
   try {
     let transcript = (req.body.text || '').trim();
+    const recording = req.file ? {
+      audioBytes: req.file.buffer.length,
+      mime: req.file.mimetype || 'application/octet-stream',
+      filename: req.file.originalname || 'debrief-turn.m4a',
+      transcriptionStatus: 'pending',
+    } : null;
     if (req.file) {
       transcript = (await transcribeAudioBuffer({
         buffer: req.file.buffer,
@@ -181,20 +197,29 @@ router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.si
         console.error('[debrief stt]', err.message);
         return '';
       })).trim();
-      // TEMP diagnostic: is the audio empty (mic not capturing) or is a real
-      // recording transcribing to nothing? Remove once the mic issue is closed.
-      console.log(`[debrief turn diag] audioBytes=${req.file.buffer.length} mime=${req.file.mimetype} name=${req.file.originalname} rawTranscript=${JSON.stringify(transcript).slice(0, 120)}`);
-      _lastTurnAudio = { buf: req.file.buffer, mime: req.file.mimetype, name: req.file.originalname, ts: Date.now() };
+      recording.transcriptionStatus = transcript ? 'text' : 'empty';
     }
 
     // Whisper emits stock phrases ("Thank you", "Thanks for watching") when
     // handed near-silent audio. Treat a bare one of these as nothing heard,
     // so the interviewer re-asks instead of banking a hallucinated answer.
-    if (req.file && isLikelyHallucination(transcript)) transcript = '';
+    if (req.file && isLikelyHallucination(transcript)) {
+      transcript = '';
+      recording.transcriptionStatus = 'filtered-hallucination';
+    }
 
     if (!transcript) {
       const reply = "Sorry, I didn't catch that — could you say it again?";
-      return res.json({ transcript: '', reply, done: false, audio: await ttsOrNull(reply, user) });
+      if (sessionId && recording) {
+        try {
+          db.hub().prepare(`
+            UPDATE debrief_sessions
+            SET error = ?
+            WHERE id = ?
+          `).run(`No transcribed answer; audioBytes=${recording.audioBytes}; mime=${recording.mime}; status=${recording.transcriptionStatus}`, sessionId);
+        } catch (_) {}
+      }
+      return res.json({ transcript: '', reply, done: false, audio: await ttsOrNull(reply, user), recording });
     }
 
     const ctx = await getSessionContext(user, sessionId || uuid());
@@ -206,9 +231,21 @@ router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.si
     const audio = await ttsOrNull(reply, user);
 
     if (sessionId) {
-      try { db.hub().prepare(`UPDATE debrief_sessions SET turns = turns + 1 WHERE id = ?`).run(sessionId); } catch (_) {}
+      const persistedTranscript = renderDebriefTranscript([
+        ...history,
+        { role: 'user', content: transcript },
+        { role: 'assistant', content: reply },
+      ]);
+      try {
+        db.hub().prepare(`
+          UPDATE debrief_sessions
+          SET turns = turns + 1, transcript = ?
+          WHERE id = ?
+        `).run(persistedTranscript, sessionId);
+      } catch (_) {}
     }
-    res.json({ transcript, reply, done, audio });
+    if (recording) recording.transcriptionStatus = 'text';
+    res.json({ transcript, reply, done, audio, recording });
   } catch (err) {
     console.error('[debrief turn]', err);
     if (sessionId) {
@@ -222,6 +259,7 @@ router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.si
 router.post('/api/debrief/save', requireDebriefAuth, writeLimiter, async (req, res) => {
   const { transcript, sessionId } = req.body;
   if (!transcript?.trim()) return res.status(400).json({ error: 'No transcript provided' });
+  if (!/\*\*You:\*\*\s*\S/.test(transcript)) return res.status(400).json({ error: 'No recorded answers to save' });
 
   const user = req.hubUser;
   const tz = 'Europe/London';
@@ -316,6 +354,13 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
   });
   const extracted = JSON.parse(data.choices[0].message.content);
 
+  if (sessionId) {
+    try {
+      db.hub().prepare(`UPDATE debrief_sessions SET extraction = ? WHERE id = ?`)
+        .run(JSON.stringify(extracted), sessionId);
+    } catch (_) {}
+  }
+
   // Log people mentions in CRM
   for (const personName of (extracted.people || [])) {
     const match = knownPeople.find(p => p.term.toLowerCase() === personName.toLowerCase());
@@ -346,14 +391,12 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
     await writeNote({
       notePath: `Debrief/Actions-${dateIso}.md`,
       content: [
-        `# Debrief Actions — ${dateIso}`,
-        '',
-        `_From [[${sourceNotePath.replace(/\.md$/, '')}]]_`,
+        `## From [[${sourceNotePath.replace(/\.md$/, '')}]]`,
         '',
         actionLines,
         '',
       ].join('\n'),
-      mode: 'create',
+      mode: 'append',
     });
 
     for (const action of extracted.actions) {
@@ -367,13 +410,6 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
   }
 
   console.log(`[debrief extraction] ${user}: people=${extracted.people?.length || 0} projects=${extracted.projects?.length || 0} actions=${extracted.actions?.length || 0}`);
-
-  if (sessionId) {
-    try {
-      db.hub().prepare(`UPDATE debrief_sessions SET extraction = ? WHERE id = ?`)
-        .run(JSON.stringify(extracted), sessionId);
-    } catch (_) {}
-  }
 }
 
 // ── Meeting debrief page ──────────────────────────────────────────────────────

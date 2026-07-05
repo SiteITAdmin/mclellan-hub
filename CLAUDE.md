@@ -30,6 +30,10 @@ Implementation rules:
 
 The Hub ingests raw life. A synthesis layer, with LLM jobs running on schedule, compiles that raw life into a knowledge base. The CRM, wiki, task list, and project notes are all views into that knowledge base. The work is to build better synthesis, not better storage.
 
+### Input contract
+
+Before adding or changing any input path, read `docs/hub-input-contract.md`. Every input must name its raw store, synthesis path, compiled layer, and visible surface. A raw capture path without synthesis is only an archive; a direct table write without receipts or provenance is not the long-term architecture.
+
 ### CRM prompt operating system
 
 As of 27 June 2026, the CRM-bound ingest path is explicitly prompt-led:

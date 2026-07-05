@@ -44,6 +44,10 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .row-list { width:100%; border-collapse:collapse; min-width:760px; }
 .row-list th, .row-list td { padding:11px 12px; border-bottom:1px solid var(--border); text-align:left; font-size:13px; color:var(--text-dim); font-variant-numeric:tabular-nums; }
 .row-list th { color:var(--accent); font-size:11px; font-family:var(--mono); text-transform:uppercase; letter-spacing:.08em; }
+.row-list th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+.row-list th.sortable::after { content:"↕"; display:inline-block; margin-left:6px; color:var(--text-muted); font-size:10px; }
+.row-list th.sortable[data-dir="asc"]::after { content:"↑"; color:var(--accent); }
+.row-list th.sortable[data-dir="desc"]::after { content:"↓"; color:var(--accent); }
 .table-wrap { overflow-x:auto; }
 .top-day { display:grid; grid-template-columns:110px 1fr 1fr; gap:10px; align-items:center; font-size:13px; color:var(--text-dim); }
 .top-day strong { color:var(--text); }
@@ -55,6 +59,8 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .or-name { color:var(--text-dim); font-size:13px; overflow-wrap:anywhere; }
 .or-tokens { color:var(--accent); font-weight:800; font-variant-numeric:tabular-nums; font-size:13px; }
 .or-meta { grid-column:1 / -1; color:var(--text-muted); font-size:12px; }
+.stale-callout { margin:16px 16px 0; padding:12px 14px; border:1px solid rgba(138,90,0,.28); border-radius:10px; background:rgba(232,160,0,.08); color:var(--text-dim); font-size:13px; line-height:1.45; }
+.stale-callout strong { color:#8a5a00; }
 @media (max-width: 860px) {
   .burn-grid, .burn-two, .source-grid, .or-detail { grid-template-columns: 1fr; }
 }
@@ -103,14 +109,14 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <article class="burn-panel">
       <div class="burn-panel-head">
         <div><span class="burn-label">Distribution</span><h2>Exact sources</h2></div>
-        <p>Consumer chat estimates are intentionally absent. OpenRouter export detail is shown below.</p>
+        <p>Consumer chat estimates are intentionally absent. API usage includes the OpenRouter export plus local Synthadoc audit logs.</p>
       </div>
       <div class="source-grid">
         <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.codex) %></strong><p class="burn-note">Codex</p></div>
         <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.claudeCode) %></strong><p class="burn-note">Claude Code</p></div>
         <div class="source-box"><span class="pill <%= tokenBurn.antigravityEstimated ? 'rough' : 'exact' %>"><%= tokenBurn.antigravityEstimated ? 'rough' : 'exact' %></span><strong><%= tokenBurn.antigravityEstimated ? '~' : '' %><%= formatTokens(tokenBurn.antigravity) %></strong><p class="burn-note">Antigravity</p></div>
-        <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.api) %></strong><p class="burn-note">Historical hub + Synthadoc API</p></div>
-        <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.openRouter.tokens) %></strong><p class="burn-note">OpenRouter export detail below</p></div>
+        <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.api) %></strong><p class="burn-note">CSV export + <%= formatTokens(tokenBurn.nonOpenRouterApi) %> local API logs</p></div>
+        <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.openRouterLive.tokens || tokenBurn.openRouter.tokens) %></strong><p class="burn-note"><%= tokenBurn.openRouterLive.tokens ? 'Live OpenRouter Activity' : 'OpenRouter CSV export' %></p></div>
       </div>
     </article>
 
@@ -128,15 +134,32 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
   <section class="burn-panel">
     <div class="burn-panel-head">
-      <div><span class="burn-label">OpenRouter export</span><h2>All API usage detail</h2></div>
-      <p><%= tokenBurn.openRouter.rows %> exported generations grouped by model, app, and provider. No prompts or generation IDs are shown.</p>
+      <div><span class="burn-label">OpenRouter Activity</span><h2>Live usage</h2></div>
+      <p>Totals come from the OpenRouter management analytics API, using the full window from 10 April 2026 onward.</p>
     </div>
-    <div class="source-grid">
-      <div class="source-box"><span class="pill exact">exact</span><strong><%= formatTokens(tokenBurn.openRouter.tokens) %></strong><p class="burn-note">OpenRouter export tokens</p></div>
-      <div class="source-box"><span class="pill exact">exact</span><strong><%= formatUsd(tokenBurn.openRouter.cost_usd) %></strong><p class="burn-note">OpenRouter export cost</p></div>
-    </div>
+    <% if (tokenBurn.openRouterLive.tokens) { %>
+      <div class="source-grid">
+        <div class="source-box"><span class="pill exact">live</span><strong><%= formatTokens(tokenBurn.openRouterLive.tokens) %></strong><p class="burn-note">Live OpenRouter tokens, <%= tokenBurn.openRouterLive.time_range?.label || 'current range' %></p></div>
+        <div class="source-box"><span class="pill exact">live</span><strong><%= formatUsd(tokenBurn.openRouterLive.cost_usd) %></strong><p class="burn-note">Live OpenRouter spend</p></div>
+        <div class="source-box"><span class="pill exact">live</span><strong><%= tokenBurn.openRouterLive.requests.toLocaleString() %></strong><p class="burn-note">Live OpenRouter requests</p></div>
+        <div class="source-box"><span class="pill exact">live</span><strong><%= (Number(tokenBurn.openRouterLive.cache_hit_rate || 0) * 100).toFixed(1) %>%</strong><p class="burn-note">Cache hit rate</p></div>
+      </div>
+    <% } %>
+    <% if (!tokenBurn.openRouterLive.tokens && (tokenBurn.openRouter.export_first_at || tokenBurn.openRouter.export_last_at)) { %>
+      <div class="stale-callout">
+        <strong>CSV export window:</strong>
+        <%= String(tokenBurn.openRouter.export_first_at || '').slice(0, 10) || 'unknown' %>
+        to
+        <%= String(tokenBurn.openRouter.export_last_at || '').slice(0, 10) || 'unknown' %>.
+        <% if (tokenBurn.openRouterExportStale) { %>
+          This CSV export is <%= tokenBurn.openRouterExportAgeDays %> days old; use the live Activity figures above for current spend.
+        <% } %>
+      </div>
+    <% } %>
     <div class="or-detail">
-      <% const groups = [['Models', tokenBurn.openRouter.by_model], ['Apps', tokenBurn.openRouter.by_app], ['Providers', tokenBurn.openRouter.by_provider]]; %>
+      <% const groups = (tokenBurn.openRouterLive.tokens
+        ? [['Live Models', tokenBurn.openRouterLive.by_model], ['Live Apps', tokenBurn.openRouterLive.by_app], ['Live Providers', tokenBurn.openRouterLive.by_provider]]
+        : [['Models', tokenBurn.openRouter.by_model], ['Apps', tokenBurn.openRouter.by_app], ['Providers', tokenBurn.openRouter.by_provider]]).filter(group => group[1] && group[1].length); %>
       <% for (const group of groups) { %>
         <div class="or-list">
           <h3><%= group[0] %></h3>
@@ -154,20 +177,39 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
   <section class="burn-panel">
     <div class="burn-panel-head">
-      <div><span class="burn-label">McLellan hub</span><h2>Live OpenRouter tasks</h2></div>
-      <p>Hub calls grouped by task identity. `UT` means user-triggered; `AT` means an automatic task.</p>
+      <div><span class="burn-label">OpenRouter Activity</span><h2>App and task usage</h2></div>
+      <p><%= tokenBurn.accountTasks.length ? 'Account-level OpenRouter activity grouped by app/title from the management API.' : 'Fallback view from local Hub request logs.' %> Click a column header to sort.</p>
     </div>
     <div class="table-wrap">
-      <table class="row-list">
-        <thead><tr><th>Task</th><th>Type</th><th>Calls</th><th>Input</th><th>Output</th><th>Total</th><th>Cost</th><th>Avg time</th></tr></thead>
+      <% const taskRows = tokenBurn.accountTasks.length ? tokenBurn.accountTasks : tokenBurn.liveTasks; %>
+      <table class="row-list sortable-table" data-default-sort="total" data-default-dir="desc">
+        <thead><tr>
+          <th class="sortable" data-sort="text">Task</th>
+          <th class="sortable" data-sort="type">Type</th>
+          <th class="sortable" data-sort="calls">Calls</th>
+          <th class="sortable" data-sort="input">Input</th>
+          <th class="sortable" data-sort="output">Output</th>
+          <th class="sortable" data-sort="total">Total</th>
+          <th class="sortable" data-sort="cost">Cost</th>
+          <th class="sortable" data-sort="avg">Avg time</th>
+        </tr></thead>
         <tbody>
-          <% if (!tokenBurn.liveTasks.length) { %>
-            <tr><td colspan="8">No task-attributed OpenRouter rows in the current hub DB yet.</td></tr>
+          <% if (!taskRows.length) { %>
+            <tr><td colspan="8">No OpenRouter activity rows available yet.</td></tr>
           <% } %>
-          <% for (const row of tokenBurn.liveTasks) { %>
-            <tr>
+          <% for (const row of taskRows) { %>
+            <tr
+              data-text="<%= row.label %>"
+              data-type="<%= row.task_type %>"
+              data-calls="<%= row.calls %>"
+              data-input="<%= row.tokens_in %>"
+              data-output="<%= row.tokens_out %>"
+              data-total="<%= row.total %>"
+              data-cost="<%= row.cost_usd %>"
+              data-avg="<%= row.avg_duration_ms == null ? -1 : row.avg_duration_ms %>"
+            >
               <td><strong><%= row.label %></strong><br><span class="burn-note"><%= row.task_code %></span></td>
-              <td><span class="pill <%= row.task_type === 'legacy' ? 'estimated' : 'exact' %>"><%= row.task_type %></span></td>
+              <td><span class="pill <%= row.task_type === 'legacy' || row.task_type === 'external' ? 'estimated' : 'exact' %>"><%= row.task_type %></span></td>
               <td><%= row.calls %></td>
               <td><%= formatTokens(row.tokens_in) %></td>
               <td><%= formatTokens(row.tokens_out) %></td>
@@ -234,5 +276,38 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     </div>
   </section>
 </main>
+<script>
+document.querySelectorAll('.sortable-table').forEach((table) => {
+  const tbody = table.querySelector('tbody');
+  const headers = Array.from(table.querySelectorAll('th.sortable'));
+
+  function sortTable(key, dir) {
+    const multiplier = dir === 'asc' ? 1 : -1;
+    const rows = Array.from(tbody.querySelectorAll('tr[data-total]'));
+    rows.sort((a, b) => {
+      const aValue = a.dataset[key] || '';
+      const bValue = b.dataset[key] || '';
+      if (key === 'text' || key === 'type') {
+        return aValue.localeCompare(bValue) * multiplier;
+      }
+      return (Number(aValue) - Number(bValue)) * multiplier;
+    });
+    rows.forEach((row) => tbody.appendChild(row));
+    headers.forEach((header) => header.removeAttribute('data-dir'));
+    const active = headers.find((header) => header.dataset.sort === key);
+    if (active) active.dataset.dir = dir;
+  }
+
+  headers.forEach((header) => {
+    header.addEventListener('click', () => {
+      const key = header.dataset.sort;
+      const nextDir = header.dataset.dir === 'desc' ? 'asc' : 'desc';
+      sortTable(key, nextDir);
+    });
+  });
+
+  sortTable(table.dataset.defaultSort || 'total', table.dataset.defaultDir || 'desc');
+});
+</script>
 </body>
 </html>

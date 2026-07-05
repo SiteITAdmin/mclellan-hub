@@ -8,7 +8,8 @@
 
 1. Identify the capability you need (email, LLM call, notifications, etc.)
 2. Find it below — entry point, function signature, env vars required
-3. Call it. Do not wrap it, rewrite it, or proxy it unless you have a specific reason confirmed with Douglas.
+3. If the change adds or alters an input path, read `docs/hub-input-contract.md` and identify the raw store, synthesis path, compiled layer, and visible surface before touching code.
+4. Call the existing capability. Do not wrap it, rewrite it, or proxy it unless you have a specific reason confirmed with Douglas.
 
 ---
 

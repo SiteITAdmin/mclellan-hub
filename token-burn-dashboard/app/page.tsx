@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import rawRows from "../data/daily-burn.sample.json";
 import openRouterSummary from "../data/openrouter-activity.summary.json";
+import openRouterLiveSummary from "../data/openrouter-live.summary.json";
 import {
   exactColumns,
   getAdaptiveHeadline,
@@ -39,6 +40,10 @@ export default function TokenBurnDashboard() {
   const lastAverage =
     selectedRows.length > 0 ? movingAverage7(selectedRows, selectedRows.length - 1) : 0;
   const drivers = buildDriverRows(selectedRows, exactTotal);
+  const apiUsageTotal = sumExact(selectedRows, "api_tokens");
+  const nonOpenRouterApi = Math.max(0, apiUsageTotal - Number(openRouterSummary.tokens || 0));
+  const liveOpenRouter = Number(openRouterLiveSummary.tokens || 0) > 0 ? openRouterLiveSummary : openRouterSummary;
+  const liveOpenRouterCalls = "requests" in liveOpenRouter ? liveOpenRouter.requests : openRouterSummary.rows;
   const weekly = weeklyTotals(selectedRows);
   const path = buildTrendPath(weekly.map((week) => week.total));
   const topDays = topNDays(selectedRows, 10).filter((day) => day.total > 0);
@@ -175,20 +180,20 @@ export default function TokenBurnDashboard() {
             <h2>All McLellan API usage</h2>
           </div>
           <p>
-            Exact export rows grouped by model, app, and provider. This is the detail behind
-            the API usage lane.
+            Live OpenRouter analytics grouped by model, app, and provider. Lists show the top 12;
+            headline totals use the management API window from April 10 onward.
           </p>
         </div>
         <div className="orSummary">
-          <Metric label="OpenRouter tokens" value={formatTokens(openRouterSummary.tokens)} note={`${openRouterSummary.rows} calls`} />
-          <Metric label="OpenRouter cost" value={formatUsd(openRouterSummary.cost_usd)} note="export total" />
-          <Metric label="Apps" value={`${openRouterSummary.by_app.length}`} note="grouped sources" />
-          <Metric label="Models" value={`${openRouterSummary.by_model.length}`} note="top 20 shown" />
+          <Metric label="OpenRouter tokens" value={formatTokens(liveOpenRouter.tokens)} note={`${liveOpenRouterCalls} calls`} />
+          <Metric label="OpenRouter cost" value={formatUsd(liveOpenRouter.cost_usd)} note="live total" />
+          <Metric label="Apps" value={`${liveOpenRouter.by_app.length}`} note="grouped sources" />
+          <Metric label="Other API" value={formatTokens(nonOpenRouterApi)} note="outside export" />
         </div>
         <div className="orDetailGrid">
-          <DetailList title="Models" rows={openRouterSummary.by_model.slice(0, 12)} />
-          <DetailList title="Apps" rows={openRouterSummary.by_app.slice(0, 12)} />
-          <DetailList title="Providers" rows={openRouterSummary.by_provider.slice(0, 12)} />
+          {liveOpenRouter.by_model.length ? <DetailList title="Models" rows={liveOpenRouter.by_model.slice(0, 12)} /> : null}
+          {liveOpenRouter.by_app.length ? <DetailList title="Apps" rows={liveOpenRouter.by_app.slice(0, 12)} /> : null}
+          {liveOpenRouter.by_provider.length ? <DetailList title="Providers" rows={liveOpenRouter.by_provider.slice(0, 12)} /> : null}
         </div>
       </section>
 
@@ -196,7 +201,7 @@ export default function TokenBurnDashboard() {
         <Panel
           label="Model distribution"
           title="Exact by source"
-          note="Measured usage by tool. OpenRouter export detail is expanded above."
+          note="Measured usage by tool. API usage includes OpenRouter plus local API audit logs."
         >
           <div className="sourceGrid">
             {exactColumns.map((col) => {
@@ -217,7 +222,7 @@ export default function TokenBurnDashboard() {
               <span className="pill exact">exact</span>
               <strong>{formatTokens(openRouterSummary.tokens)}</strong>
               <span className="muted">
-                OpenRouter export / {openRouterSummary.rows} calls
+                OpenRouter CSV export / {openRouterSummary.rows} calls
               </span>
             </div>
           </div>

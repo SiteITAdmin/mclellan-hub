@@ -36,12 +36,21 @@ fi
 printf '[%s] Regenerating local token-burn data...\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 cd "$DASHBOARD_DIR"
 "$NODE_BIN" scripts/generate-daily-burn.mjs
+"$NODE_BIN" scripts/sync-openrouter-activity.mjs || {
+  status=$?
+  if [ "$status" -eq 2 ]; then
+    printf '[%s] Live OpenRouter activity skipped; OPENROUTER_MANAGEMENT_KEY is not set.\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  else
+    exit "$status"
+  fi
+}
 
 printf '[%s] Publishing scrubbed JSON to VPS...\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_IP}" "mkdir -p '$REMOTE_DIR'"
 rsync -az -e "ssh ${SSH_OPTS[*]}" \
   "$DASHBOARD_DIR/deploy-data/daily-burn.sample.json" \
   "$DASHBOARD_DIR/deploy-data/openrouter-activity.summary.json" \
+  "$DASHBOARD_DIR/deploy-data/openrouter-live.summary.json" \
   "${VPS_USER}@${VPS_IP}:${REMOTE_DIR}/"
 
 printf '[%s] Done. The Hub reads these files on request; no service restart needed.\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
