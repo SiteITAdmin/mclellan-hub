@@ -294,7 +294,7 @@ The Goose prompt is tuned for:
 - Working inside listed source and output folders.
 - Reading files before planning conclusions.
 - Creating a lightweight evidence index.
-- Producing Markdown or CSV outputs by default.
+- Producing `.docx` files for narrative deliverables and `.xlsx` files for inventories, trackers, workpapers, logs, and testing artifacts.
 - Writing outputs to the output folder when file tools are available.
 - Logging issues instead of correcting source evidence.
 
@@ -305,7 +305,7 @@ The coding-harness prompt is tuned for:
 - Inspecting, indexing, transforming, or validating audit evidence.
 - Deterministic scripts for tasks like file listing, text extraction, CSV reconciliation, and workbook tab checks.
 - Showing commands or scripts used so another reviewer can reperform the work.
-- Keeping generated artifacts in the output folder.
+- Keeping generated artifacts in the output folder, using `.docx` and `.xlsx` output formats where tool support allows.
 
 It also states that the task is not a software build unless explicitly stated.
 
@@ -323,6 +323,13 @@ Every generated harness prompt includes these rules:
 - Do not infer control effectiveness, regulatory compliance, issue severity, or action closure unless evidence supports it.
 - If a required file or fact is missing, write `Evidence gap` and state exactly what is needed.
 - Write outputs only to the agreed output location or return them in chat if no output location is agreed.
+
+Every generated harness prompt also includes output-format rules:
+
+- Narrative deliverables should be document files, preferably `.docx`.
+- Tabular, tracker, testing, evidence, sample, action, issue, request, reconciliation, and log outputs should be spreadsheet files, preferably `.xlsx`.
+- Markdown is only for chat responses, short run notes, or tools that cannot create document or spreadsheet files.
+- CSV is only a simple interchange fallback when `.xlsx` is unavailable.
 
 These rules are the heart of the builder.
 

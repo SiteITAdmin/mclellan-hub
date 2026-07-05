@@ -132,6 +132,10 @@ test('buildAuditAgentPack creates stage-specific Goose and reviewer prompts', ()
   assert.match(pack.markdown, /Act as the Orchestrator Agent/);
   assert.match(pack.markdown, /MANAGED AGENT OPERATING MODEL/);
   assert.match(pack.markdown, /Reviewer Agent: Act in the persona of a Head of Internal Audit for a global fintech/);
+  assert.match(pack.markdown, /OUTPUT FORMAT REQUIREMENTS/);
+  assert.match(pack.markdown, /Produce narrative deliverables as document files, preferably \.docx/);
+  assert.match(pack.markdown, /Produce tabular, tracker, testing, evidence, sample, action, issue, request, reconciliation, and log outputs as spreadsheet files, preferably \.xlsx/);
+  assert.doesNotMatch(pack.markdown, /Prefer Markdown or CSV outputs/);
   assert.match(pack.markdown, /Do not move, rename, delete, overwrite, or transmit source evidence/);
   assert.match(pack.markdown, /unsupported, overstated, duplicated, or inconsistent/i);
 });
