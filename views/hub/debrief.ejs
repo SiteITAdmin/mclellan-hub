@@ -161,7 +161,7 @@ document.addEventListener('visibilitychange', () => {
 // ── Playback (server TTS — base64 MP3) ───────────────────────────────────────
 function playReply(audioB64, text, onDone) {
   if (!audioB64) { setTimeout(onDone, Math.min(6000, 300 + text.length * 55)); return; }
-  player.src = 'data:audio/mpeg;base64,' + audioB64;
+  player.src = 'data:audio/wav;base64,' + audioB64;
   player.onended = onDone;
   player.onerror = onDone;
   player.play().catch(onDone);
