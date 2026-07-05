@@ -23,13 +23,21 @@ const { transcribeAudioBuffer } = require('../lib/workday-ingest');
 const meetingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
 // ── Debrief auth: session (web) or bearer token (iOS app) ─────────────────────
-// The app cannot hold a session cookie, so it authenticates with
-// DEBRIEF_MOBILE_TOKEN. Token requests skip the same-origin check (no cookies
-// involved, so no CSRF surface); session requests keep it.
+// The native app can't hold the Google-OAuth session cookie the website uses,
+// so it authenticates with a bearer token. To avoid minting a new production
+// secret, it accepts the existing WORKDAY_MOBILE_TOKEN / WORKDAY_WEBHOOK_SECRET
+// (already set in prod and already used for the Workday mobile endpoints); a
+// dedicated DEBRIEF_MOBILE_TOKEN is honoured too if one is ever configured.
+// Token requests skip the same-origin check (no cookie, so no CSRF surface);
+// browser/session requests keep it.
 function requireDebriefAuth(req, res, next) {
-  const token = process.env.DEBRIEF_MOBILE_TOKEN;
+  const tokens = [
+    process.env.DEBRIEF_MOBILE_TOKEN,
+    process.env.WORKDAY_MOBILE_TOKEN,
+    process.env.WORKDAY_WEBHOOK_SECRET,
+  ].filter(Boolean);
   const auth = req.headers.authorization || '';
-  if (token && auth === `Bearer ${token}`) {
+  if (tokens.some(t => auth === `Bearer ${t}`)) {
     req.hubUser = 'douglas';
     return next();
   }
