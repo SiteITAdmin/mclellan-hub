@@ -151,6 +151,7 @@ router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.si
         filename: req.file.originalname || 'debrief-turn.m4a',
         mimetype: req.file.mimetype || 'audio/mp4',
         model: getSystemModelId('debrief_transcriber', 'system', 'openai/whisper-large-v3'),
+        provider: 'openrouter',
       }).catch(err => {
         console.error('[debrief stt]', err.message);
         return '';
