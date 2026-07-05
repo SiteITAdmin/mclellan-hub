@@ -129,6 +129,9 @@ test('buildAuditAgentPack creates stage-specific Goose and reviewer prompts', ()
   assert.match(pack.markdown, /Goose Agent Prompt/);
   assert.match(pack.markdown, /ChatGPT 5\.5 Prompt/);
   assert.match(pack.markdown, /Codex\/OpenCode Harness Prompt/);
+  assert.match(pack.markdown, /Act as the Orchestrator Agent/);
+  assert.match(pack.markdown, /MANAGED AGENT OPERATING MODEL/);
+  assert.match(pack.markdown, /Reviewer Agent: Act in the persona of a Head of Internal Audit for a global fintech/);
   assert.match(pack.markdown, /Do not move, rename, delete, overwrite, or transmit source evidence/);
   assert.match(pack.markdown, /unsupported, overstated, duplicated, or inconsistent/i);
 });
