@@ -91,6 +91,18 @@ async function interviewerReply({ user, history, contextText }) {
   return { reply: raw.replace('[DONE]', '').trim(), done: raw.includes('[DONE]') };
 }
 
+// Common Whisper outputs on silent/near-silent audio.
+const HALLUCINATION_PHRASES = new Set([
+  'thank you', 'thanks', 'thank you.', 'thanks for watching', 'thanks for watching!',
+  'you', 'bye', 'bye.', '.', 'thank you for watching', 'thank you very much',
+  'please subscribe', 'okay', 'ok',
+]);
+
+function isLikelyHallucination(text) {
+  const norm = text.toLowerCase().replace(/\s+/g, ' ').trim();
+  return HALLUCINATION_PHRASES.has(norm);
+}
+
 async function ttsOrNull(text, user) {
   try {
     return (await synthesizeSpeech({ text, user })).toString('base64');
@@ -157,6 +169,11 @@ router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.si
         return '';
       })).trim();
     }
+
+    // Whisper emits stock phrases ("Thank you", "Thanks for watching") when
+    // handed near-silent audio. Treat a bare one of these as nothing heard,
+    // so the interviewer re-asks instead of banking a hallucinated answer.
+    if (req.file && isLikelyHallucination(transcript)) transcript = '';
 
     if (!transcript) {
       const reply = "Sorry, I didn't catch that — could you say it again?";
