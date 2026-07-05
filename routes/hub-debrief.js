@@ -22,6 +22,10 @@ const { transcribeAudioBuffer } = require('../lib/workday-ingest');
 
 const meetingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
+// TEMP diagnostic: keep the most recent turn's raw audio so it can be pulled
+// back for inspection while chasing the quiet-mic issue. Remove when closed.
+let _lastTurnAudio = null;
+
 // ── Debrief auth: session (web) or bearer token (iOS app) ─────────────────────
 // The native app can't hold the Google-OAuth session cookie the website uses,
 // so it authenticates with a bearer token. To avoid minting a new production
@@ -125,6 +129,15 @@ router.get('/debrief', requireAuth, async (req, res) => {
   res.render('hub/debrief', { user, displayName, events, today });
 });
 
+// TEMP diagnostic endpoint: returns the last turn's raw audio for inspection.
+router.get('/api/debrief/_lastaudio', requireDebriefAuth, (req, res) => {
+  if (!_lastTurnAudio) return res.status(404).send('no audio yet');
+  res.set('Content-Type', _lastTurnAudio.mime || 'audio/mp4');
+  res.set('X-Audio-Name', _lastTurnAudio.name || 'turn.m4a');
+  res.set('X-Audio-Age-Ms', String(Date.now() - _lastTurnAudio.ts));
+  res.send(_lastTurnAudio.buf);
+});
+
 // Opens a debrief: builds the day context, asks the opening question, speaks it.
 router.post('/api/debrief/start', requireDebriefAuth, chatLimiter, async (req, res) => {
   const user = req.hubUser;
@@ -171,6 +184,7 @@ router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.si
       // TEMP diagnostic: is the audio empty (mic not capturing) or is a real
       // recording transcribing to nothing? Remove once the mic issue is closed.
       console.log(`[debrief turn diag] audioBytes=${req.file.buffer.length} mime=${req.file.mimetype} name=${req.file.originalname} rawTranscript=${JSON.stringify(transcript).slice(0, 120)}`);
+      _lastTurnAudio = { buf: req.file.buffer, mime: req.file.mimetype, name: req.file.originalname, ts: Date.now() };
     }
 
     // Whisper emits stock phrases ("Thank you", "Thanks for watching") when
