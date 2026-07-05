@@ -14,19 +14,20 @@
 .crm-eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 700; color: var(--crm-accent) !important; }
 .crm-back { color: var(--crm-muted); text-decoration: none; font-size: 13px; display: inline-block; margin-bottom: 18px; }
 .crm-back::before { content: "← "; }
-.section-card, .mgmt-card { background: var(--crm-card); border: 1px solid var(--crm-line); border-radius: 16px; box-shadow: 0 10px 30px rgba(36,31,61,.04); padding: 20px; }
+.section-card, .mgmt-card { background: #fff; border: 1px solid var(--crm-line); border-radius: 16px; box-shadow: 0 10px 30px rgba(36,31,61,.04); padding: 20px; min-width: 0; }
 .section-card { margin-bottom: 20px; }
 .section-card h2 { font-size: 16px; margin: 0 0 16px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; background: var(--crm-accent); color: #fff; padding: 10px 15px; font: 600 13px Geist, sans-serif; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .btn-sm { padding: 6px 10px; font-size: 12px; }
 .crm-note-form, .crm-inline-form { display: flex; gap: 10px; align-items: center; }
 .crm-note-form input { flex: 1; }
-input, select, textarea { width: 100%; border: 1px solid var(--crm-line); border-radius: 9px; padding: 10px 11px; background: #fff; color: #1e1b28; font: 14px Geist, sans-serif; }
+input, select, textarea { width: 100%; min-width: 0; border: 1px solid var(--crm-line); border-radius: 9px; padding: 10px 11px; background: #fff; color: #1e1b28; font: 14px Geist, sans-serif; }
 textarea { resize: vertical; }
 label, legend { color: var(--crm-muted); font-size: 12px; font-weight: 600; }
 label input, label select, label textarea { margin-top: 6px; }
 fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px; margin: 0; }
-.crm-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; align-items: end; }
+.crm-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; align-items: end; min-width: 0; }
+.crm-form-grid > * { min-width: 0; }
 .crm-form-grid .wide { grid-column: 1 / -1; }
 .crm-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 .crm-link-card { text-decoration: none; color: inherit; transition: transform .15s, border-color .15s; }
@@ -48,6 +49,7 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .crm-type.action { background: #fff0cf; color: #8a5b00; }
 .crm-type.note { background: #dff4ec; color: #226b55; }
 .crm-two-col { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, .8fr); gap: 20px; align-items: start; }
+.crm-two-col > * { min-width: 0; }
 .crm-stack { display: grid; gap: 0; }
 .crm-timeline { display: grid; gap: 12px; }
 .crm-timeline-item { display: grid; gap: 4px; border-left: 2px solid rgba(86,83,232,.24); padding: 2px 0 8px 15px; color: inherit; text-decoration: none; }

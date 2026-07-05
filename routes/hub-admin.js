@@ -709,7 +709,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'newsletter_briefing',  scope: 'user',   label: 'Briefing writer',  note: 'Writes the weekly intelligence briefing from selected topics.', fallback: 'anthropic/claude-sonnet-4-6' },
   ]},
   { id: 'writing', label: 'Writing tools', slots: [
-    { feature: 'ai_humanizer', scope: 'system', label: 'AI humanizer', note: 'Redrafts AI-generated prose to remove machine-writing tells. Prompt placeholders [FIELD], [AGGRESSIVENESS] and [SOURCE_TEXT] must be kept when editing.', fallback: 'anthropic/claude-sonnet-4-5' },
+    { feature: 'ai_humanizer', scope: 'system', label: 'AI humanizer', note: 'Redrafts AI-generated prose to remove machine-writing tells at two layers: six surface tells (rule of three, burstiness, transitions, tone, vocabulary, depth) and six discourse tells (over-explanation, moralising, emotion naming, sensory density, presentation order, audience address). Prompt placeholders [FIELD], [AGGRESSIVENESS] and [SOURCE_TEXT] must be kept. Keep the JSON schema (changes[] need a "layer" field; keep added_data_markers and added_source_markers) or the UI report breaks. Never let it invent facts, figures, or sources.', fallback: 'anthropic/claude-sonnet-4-5' },
   ]},
   { id: 'nakai', label: 'Nakai intelligence', slots: [
     { feature: 'nakai_daily_briefing',  scope: 'system', label: 'Nakai daily briefing', note: 'Writes the daily PDF briefing for Nakai from regulator, government, financial press, and Block product source packs.', fallback: 'anthropic/claude-sonnet-4-6' },

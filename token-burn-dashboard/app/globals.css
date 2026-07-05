@@ -366,6 +366,16 @@ h1 {
   padding-bottom: 0;
 }
 
+.exportWindow {
+  margin: 0 16px 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(138, 90, 0, 0.28);
+  border-radius: 10px;
+  background: rgba(232, 160, 0, 0.08);
+  color: var(--soft);
+  font-size: 13px;
+}
+
 .orDetailGrid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

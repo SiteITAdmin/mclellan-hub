@@ -85,7 +85,7 @@ body.hub-page { height: 100vh !important; overflow: hidden !important; display: 
   <div id="s-idle">
     <p class="date-line"><%= today %></p>
     <h1 class="title-line">Daily Debrief</h1>
-    <p class="desc-line">Hands-free interview for the drive home.<br>Tap start and talk.</p>
+    <p class="desc-line">Interview with manual answer recording.<br>Tap start, record each answer, then save.</p>
     <button class="start-btn" onclick="startInterview()">Start interview</button>
     <a href="/" class="back-link">← Back to hub</a>
   </div>
@@ -99,6 +99,10 @@ body.hub-page { height: 100vh !important; overflow: hidden !important; display: 
     </div>
     <p class="status-line" id="status-line">Starting…</p>
     <p class="interim-line" id="interim-line"></p>
+    <div class="record-controls" id="record-controls" style="display:none">
+      <button class="finish-btn record-btn" id="record-btn" onclick="startManualRecording()">Record answer</button>
+      <button class="finish-btn send-btn" id="send-btn" onclick="stopAndSendManual()" style="display:none">Send answer</button>
+    </div>
     <button class="finish-btn" onclick="finishInterview()">Finish &amp; save</button>
   </div>
 
@@ -131,6 +135,7 @@ let audioCtx    = null;
 let recorder    = null;
 let chunks      = [];
 let listenPoll  = null;
+let recordingManually = false;
 const player    = new Audio();
 
 function show(id) {
@@ -158,13 +163,33 @@ document.addEventListener('visibilitychange', () => {
   if (interviewActive && document.visibilityState === 'visible') keepAwake();
 });
 
-// ── Playback (server TTS — base64 MP3) ───────────────────────────────────────
+// ── Playback (server TTS — base64 WAV) ───────────────────────────────────────
+// iOS Safari won't play <audio> while the mic is capturing, and mutes/blocks a
+// large data: URI. So: the mic is closed before we get here, and we play from a
+// Blob URL. onDone is guarded to fire exactly once — firing it twice (onerror +
+// play() rejection) was spinning up overlapping recorders (the "flicker").
 function playReply(audioB64, text, onDone) {
-  if (!audioB64) { setTimeout(onDone, Math.min(6000, 300 + text.length * 55)); return; }
-  player.src = 'data:audio/wav;base64,' + audioB64;
-  player.onended = onDone;
-  player.onerror = onDone;
-  player.play().catch(onDone);
+  let fired = false, url = null, safety = null;
+  const finish = () => {
+    if (fired) return; fired = true;
+    clearTimeout(safety);
+    player.onended = null; player.onerror = null;
+    if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
+    onDone();
+  };
+  const readDelay = Math.min(9000, 600 + text.length * 60);
+  if (!audioB64) { safety = setTimeout(finish, readDelay); return; }
+  try {
+    const bytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
+    url = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+  } catch (_) { safety = setTimeout(finish, readDelay); return; }
+
+  player.src = url;
+  player.onended = finish;
+  player.onerror = () => { safety = setTimeout(finish, readDelay); };
+  // Hard stop if playback stalls without ever ending.
+  safety = setTimeout(finish, 30000);
+  player.play().catch(() => { clearTimeout(safety); safety = setTimeout(finish, readDelay); });
 }
 
 // ── Listening (MediaRecorder + silence detection) ─────────────────────────────
@@ -178,43 +203,46 @@ function pickMime() {
   return ['audio/mp4', 'audio/webm', ''].find(t => t === '' || MediaRecorder.isTypeSupported(t));
 }
 
-function startListening() {
+async function openMic() {
+  if (micStream) return true;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      }
+    });
+    return true;
+  }
+  catch (_) { setStatus('Microphone access denied — allow mic in Settings and try again.'); return false; }
+}
+
+function closeMic() {
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+}
+
+async function startListening() {
   if (!interviewActive) return;
+  closeMic();
+  setPulse('listening');
+  setStatus('Tap Record answer, speak, then Send answer.');
+  setRecordControls('ready');
+}
+
+async function startManualRecording() {
+  if (!interviewActive || recordingManually) return;
+  if (!(await openMic()) || !interviewActive) return;
+  try { await audioCtx?.resume(); } catch (_) {}
   chunks = [];
   const mime = pickMime();
   recorder = new MediaRecorder(micStream, mime ? { mimeType: mime } : undefined);
   recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
   recorder.start(1000);
-
+  recordingManually = true;
   setPulse('listening');
-  setStatus('Listening…');
-
-  const source   = audioCtx.createMediaStreamSource(micStream);
-  const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 2048;
-  source.connect(analyser);
-  const buf = new Float32Array(analyser.fftSize);
-
-  let spoke = false;
-  let lastVoice = 0;
-  const startedAt = Date.now();
-
-  listenPoll = setInterval(() => {
-    analyser.getFloatTimeDomainData(buf);
-    let sum = 0;
-    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-    const rms = Math.sqrt(sum / buf.length);
-    const now = Date.now();
-
-    if (rms > RMS_THRESHOLD) {
-      if (!spoke) { spoke = true; setStatus('Listening — got you…'); }
-      lastVoice = now;
-    }
-    if ((spoke && now - lastVoice > SILENCE_MS) || now - startedAt > MAX_TURN_MS) {
-      try { source.disconnect(); } catch (_) {}
-      endTurn(spoke);
-    }
-  }, 100);
+  setStatus('Recording… tap Send answer when you finish speaking.');
+  setRecordControls('recording');
 }
 
 function stopListening() {
@@ -229,15 +257,17 @@ function stopListening() {
   return Promise.resolve();
 }
 
+async function stopAndSendManual() {
+  if (!recordingManually) return;
+  await stopListening();
+  recordingManually = false;
+  await sendCapturedTurn();
+}
+
 // ── Interview flow ────────────────────────────────────────────────────────────
 async function startInterview() {
-  // Mic + AudioContext + <audio> unlock must happen inside the tap on iOS
-  try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  } catch (err) {
-    setStatus('Microphone access denied — please allow mic in Settings and try again.');
-    return;
-  }
+  // AudioContext + <audio> unlock must happen inside the tap on iOS.
+  // The mic opens only when Record answer is tapped, after the question plays.
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   audioCtx.resume().catch(() => {});
   player.muted = true;
@@ -266,7 +296,13 @@ async function endTurn(hadSpeech) {
   if (!interviewActive) return;
   await stopListening();
   if (!hadSpeech) { if (interviewActive) startListening(); return; }
+  await sendCapturedTurn();
+}
 
+async function sendCapturedTurn() {
+  if (!interviewActive) return;
+  closeMic();
+  setRecordControls('hidden');
   setPulse('thinking');
   setStatus('Got it — thinking…');
   setInterim('');
@@ -289,6 +325,8 @@ async function endTurn(hadSpeech) {
       messages.push({ role: 'user', content: d.transcript });
       transcriptLines.push(`**You:** ${d.transcript}`);
       setInterim(d.transcript);
+    } else if (d.recording?.audioBytes) {
+      setInterim(`Recorded ${Math.round(d.recording.audioBytes / 1024)} KB; no transcript.`);
     }
     handleReply(d);
   } catch (err) {
@@ -317,8 +355,10 @@ function handleReply(d) {
 async function finishInterview() {
   interviewActive = false;
   await stopListening();
+  recordingManually = false;
   try { player.pause(); } catch (_) {}
   micStream?.getTracks().forEach(t => t.stop());
+  setRecordControls('hidden');
   show('s-saving');
 
   const transcript = transcriptLines.join('\n\n');
@@ -349,6 +389,15 @@ function setPulse(state) {
   bg.className = 'pulse-bg' + (state === 'listening' ? ' listening' : state === 'speaking' ? ' speaking' : '');
   icon.textContent = state === 'listening' ? '🎤' : state === 'speaking' ? '🔊' : '⏳';
   if (state === 'listening') setStatus('Listening…');
+}
+function setRecordControls(state) {
+  const wrap = document.getElementById('record-controls');
+  const record = document.getElementById('record-btn');
+  const send = document.getElementById('send-btn');
+  if (!wrap) return;
+  wrap.style.display = state === 'hidden' ? 'none' : '';
+  record.style.display = state === 'ready' ? '' : 'none';
+  send.style.display = state === 'recording' ? '' : 'none';
 }
 </script>
 </body>
