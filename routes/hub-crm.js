@@ -646,6 +646,7 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
     LIMIT 80
   `).all(req.hubUser);
   const projects = hub.prepare('SELECT slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const projectContacts = hub.prepare(`
     SELECT DISTINCT c.id, c.name, p.slug AS project_slug
     FROM contacts c
@@ -664,8 +665,25 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
     ORDER BY mi.created_at DESC
     LIMIT 12
   `).all(req.hubUser);
+  const defaultActiveIntake = recent.find(item => item.status !== 'processed') || null;
+  const activeIntakeId = String(
+    req.query.draft
+    || req.query.review
+    || req.query.queued
+    || req.query.intake
+    || defaultActiveIntake?.id
+    || ''
+  ).trim();
+  const activeIntake = activeIntakeId
+    ? hub.prepare(`
+        SELECT mi.*, m.title AS meeting_title
+        FROM meeting_intakes mi
+        LEFT JOIN meetings m ON m.id = mi.meeting_id
+        WHERE mi.id = ? AND mi.user = ?
+      `).get(activeIntakeId, req.hubUser)
+    : null;
   res.render('hub/crm-meeting-intake', {
-    ...crmPageData(req.hubUser), meetings, projects, projectContacts, allContacts, recent, query: req.query,
+    ...crmPageData(req.hubUser), meetings, projects, companies, projectContacts, allContacts, recent, activeIntake, query: req.query,
   });
 });
 
@@ -680,6 +698,8 @@ function queueMeetingIntakeProcessing({ user, intakeId, transcript, body = {}, s
         meetingDate: body.meeting_date,
         meetingId: body.meeting_id,
         projectSlug: body.project_slug,
+        companyId: body.company_id,
+        attendeeContactIds: body.attendee_contact_ids,
         sourceFilename,
       });
       console.log(`[meeting-intake] processed ${intakeId}: meeting=${result.meetingId} facts=${result.counts.facts} actions=${result.counts.actions || 0} tasks=${result.counts.tasks}`);
@@ -722,6 +742,8 @@ function queueStoredMeetingIntake(user, intake) {
       meeting_date: options.meeting_date,
       meeting_id: intake.meeting_id || options.meeting_id,
       project_slug: intake.project_slug || options.project_slug,
+      company_id: options.company_id,
+      attendee_contact_ids: options.attendee_contact_ids,
     },
     sourceFilename: intake.source_filename || '',
   });
@@ -868,7 +890,7 @@ router.post('/api/krisp/webhook', writeLimiter, (req, res) => {
   const intakeId = uuid();
   const { speakerReviewForTranscript } = require('../lib/meeting-intake');
   const speakerReview = speakerReviewForTranscript(normalized.transcript);
-  const status = speakerReview ? 'needs_speaker_review' : 'processing';
+  const status = speakerReview ? 'needs_speaker_review' : 'draft';
   hub.prepare(`
     INSERT INTO meeting_intakes
       (id, user, meeting_id, project_slug, title, source_filename, transcript, status, extraction, created_counts)
@@ -887,19 +909,16 @@ router.post('/api/krisp/webhook', writeLimiter, (req, res) => {
         event_id: normalized.eventId,
         meeting_id: normalized.meetingId,
       },
+      intake_options: {
+        title: normalized.title,
+        meeting_date: normalized.meetingDate,
+        meeting_id: '',
+        project_slug: null,
+      },
       ...(speakerReview ? { speaker_review: speakerReview } : {}),
     })
   );
 
-  if (!speakerReview) {
-    queueMeetingIntakeProcessing({
-      user,
-      intakeId,
-      transcript: normalized.transcript,
-      body: { title: normalized.title, meeting_date: normalized.meetingDate },
-      sourceFilename: normalized.sourceKey,
-    });
-  }
   res.json({ ok: true, intakeId, status });
 });
 
@@ -921,6 +940,8 @@ router.post('/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter
     meeting_date: String(req.body.meeting_date || '').trim(),
     meeting_id: String(req.body.meeting_id || '').trim(),
     project_slug: projectSlug,
+    company_id: '',
+    attendee_contact_ids: [],
   };
   hub.prepare(`
     INSERT INTO meeting_intakes
@@ -936,6 +957,100 @@ router.post('/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter
   );
 
   const params = new URLSearchParams(speakerReview ? { review: intakeId } : { draft: intakeId });
+  res.redirect(`/crm/meeting-intake?${params.toString()}`);
+});
+
+router.post('/crm/meeting-intake/:id/update', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const intake = hub.prepare('SELECT * FROM meeting_intakes WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!intake) return res.status(404).send('Intake not found');
+  if (intake.status === 'processing' || intake.status === 'processed') {
+    return res.status(400).send('This intake has already been sent to CRM');
+  }
+
+  const title = String(req.body.title || '').trim() || 'Meeting transcript';
+  const transcript = String(req.body.transcript || '').trim();
+  if (!transcript) return res.status(400).send('Transcript required');
+
+  const meetingId = String(req.body.meeting_id || '').trim();
+  const projectSlug = String(req.body.project_slug || '').trim();
+  let companyId = String(req.body.company_id || '').trim();
+  const newCompanyName = String(req.body.new_company || '').trim();
+  const meetingDate = String(req.body.meeting_date || '').trim();
+  const attendeeIds = asArray(req.body.attendee_contact_ids).map(id => String(id).trim()).filter(Boolean);
+  const newAttendeeNames = String(req.body.new_attendees || '')
+    .split(/\r?\n|,/)
+    .map(name => name.trim())
+    .filter(Boolean);
+
+  if (meetingId && !hub.prepare('SELECT id FROM meetings WHERE id = ? AND user = ?').get(meetingId, req.hubUser)) {
+    return res.status(400).send('Selected meeting was not found');
+  }
+  if (projectSlug && !hub.prepare('SELECT slug FROM projects WHERE slug = ? AND user = ?').get(projectSlug, req.hubUser)) {
+    return res.status(400).send('Selected project was not found');
+  }
+  if (companyId && !hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(companyId, req.hubUser)) {
+    return res.status(400).send('Selected company was not found');
+  }
+  if (!companyId && newCompanyName) {
+    const existing = hub.prepare('SELECT id FROM companies WHERE user = ? AND lower(name) = lower(?)').get(req.hubUser, newCompanyName);
+    companyId = existing?.id || uuid();
+    if (!existing) {
+      hub.prepare('INSERT INTO companies (id, user, name) VALUES (?, ?, ?)').run(companyId, req.hubUser, newCompanyName);
+    }
+  }
+
+  const { isPlaceholderPersonName, speakerReviewForTranscript } = require('../lib/meeting-intake');
+  const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
+  const contactByName = new Map(contacts.map(contact => [contact.name.toLowerCase(), contact]));
+  for (const name of newAttendeeNames) {
+    if (isPlaceholderPersonName(name)) return res.status(400).send('Speaker labels are placeholders. Please enter the real person name.');
+    const existing = contactByName.get(name.toLowerCase());
+    if (existing) {
+      attendeeIds.push(existing.id);
+      continue;
+    }
+    const id = uuid();
+    hub.prepare('INSERT INTO contacts (id, user, name) VALUES (?, ?, ?)').run(id, req.hubUser, name);
+    attendeeIds.push(id);
+    contactByName.set(name.toLowerCase(), { id, name });
+  }
+
+  const extraction = parseMeetingIntakeExtraction(intake.extraction);
+  const speakerReview = speakerReviewForTranscript(transcript);
+  const status = speakerReview ? 'needs_speaker_review' : 'draft';
+  const intakeOptions = {
+    ...(extraction.intake_options || {}),
+    title,
+    meeting_date: meetingDate,
+    meeting_id: meetingId,
+    project_slug: projectSlug || null,
+    company_id: companyId,
+    attendee_contact_ids: [...new Set(attendeeIds)],
+  };
+  const nextExtraction = {
+    ...extraction,
+    intake_options: intakeOptions,
+    ...(speakerReview ? { speaker_review: speakerReview } : { speaker_review: undefined }),
+  };
+  if (!speakerReview) delete nextExtraction.speaker_review;
+
+  hub.prepare(`
+    UPDATE meeting_intakes
+    SET title = ?, meeting_id = ?, project_slug = ?, transcript = ?, status = ?, extraction = ?, error = NULL
+    WHERE id = ? AND user = ?
+  `).run(
+    title,
+    meetingId || null,
+    projectSlug || null,
+    transcript,
+    status,
+    JSON.stringify(nextExtraction),
+    intake.id,
+    req.hubUser
+  );
+
+  const params = new URLSearchParams(status === 'needs_speaker_review' ? { review: intake.id } : { draft: intake.id });
   res.redirect(`/crm/meeting-intake?${params.toString()}`);
 });
 
@@ -961,6 +1076,7 @@ router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, 
   const extraction = (() => { try { return JSON.parse(intake.extraction || '{}'); } catch { return {}; } })();
   const speakers = extraction.speaker_review?.speakers || [];
   const speakerMap = {};
+  const attendeeIds = new Set(extraction.intake_options?.attendee_contact_ids || []);
   const { isPlaceholderPersonName } = require('../lib/meeting-intake');
   const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   for (const speaker of speakers) {
@@ -981,7 +1097,10 @@ router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, 
         if (project) hub.prepare('INSERT OR IGNORE INTO contact_projects (contact_id, project_id, role) VALUES (?, ?, ?)').run(id, project.id, 'meeting attendee');
       }
     }
-    if (contact) speakerMap[speaker.label] = contact.name;
+    if (contact) {
+      speakerMap[speaker.label] = contact.name;
+      attendeeIds.add(contact.id);
+    }
   }
   if (Object.keys(speakerMap).length < speakers.length) {
     return res.status(400).send('Please map every detected speaker before processing');
@@ -991,16 +1110,22 @@ router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, 
   const resolvedTranscript = applySpeakerMap(intake.transcript, speakerMap);
   hub.prepare(`
     UPDATE meeting_intakes
-    SET transcript = ?, status = 'processing', extraction = ?, error = NULL
+    SET transcript = ?, status = 'draft', extraction = ?, error = NULL
     WHERE id = ? AND user = ?
   `).run(
     resolvedTranscript,
-    JSON.stringify({ ...extraction, speaker_map: speakerMap }),
+    JSON.stringify({
+      ...extraction,
+      speaker_map: speakerMap,
+      intake_options: {
+        ...(extraction.intake_options || {}),
+        attendee_contact_ids: [...attendeeIds],
+      },
+    }),
     intake.id,
     req.hubUser
   );
-  queueStoredMeetingIntake(req.hubUser, { ...intake, transcript: resolvedTranscript, extraction: JSON.stringify({ ...extraction, speaker_map: speakerMap }) });
-  res.redirect(`/crm/meeting-intake?queued=${encodeURIComponent(intake.id)}`);
+  res.redirect(`/crm/meeting-intake?draft=${encodeURIComponent(intake.id)}`);
 });
 
 router.post('/api/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter, upload.single('transcript_file'), async (req, res) => {
