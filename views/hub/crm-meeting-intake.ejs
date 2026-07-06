@@ -22,9 +22,19 @@
     Transcript queued and processing in the background. Refresh this page in a moment to see the meeting, outcomes, and tasks.
   </p>
 <% } %>
+<% if (query && query.submitted) { %>
+  <p class="crm-notice">
+    Intake submitted to CRM processing. It has been moved out of the review workspace; refresh in a moment if you want to see the generated meeting and outcomes.
+  </p>
+<% } %>
+<% if (query && query.saved) { %>
+  <p class="crm-notice">
+    Review changes saved. This intake is still a draft until you submit it to CRM.
+  </p>
+<% } %>
 <% if (query && query.draft) { %>
   <p class="crm-notice">
-    Transcript captured as a draft. Use Save to CRM when you want it to create the meeting, outcomes, project notes, and tasks.
+    Transcript captured as a draft. Use Submit to CRM when you want it to create the meeting, outcomes, project notes, and tasks.
   </p>
 <% } %>
 <% if (query && query.review) { %>
@@ -72,7 +82,7 @@
         <% if (activeIntake.meeting_id) { %><a class="btn btn-sm" href="/crm/meeting/<%= activeIntake.meeting_id %>">Open meeting</a><% } %>
         <% if (activeIntake.status === 'draft' || activeIntake.status === 'error') { %>
           <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/save">
-            <button class="btn btn-sm" type="submit">Save to CRM</button>
+            <button class="btn btn-sm" type="submit">Submit to CRM</button>
           </form>
         <% } %>
         <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/delete" onsubmit="return confirm('Delete this intake and all meeting-transcript data it created? This can remove the generated CRM meeting, attendee links, CRM outcomes, project notes, and Google Tasks related to that meeting. This is useful for duplicates, but it cannot be undone.');">
@@ -259,7 +269,7 @@
             <% if (item.status === 'draft' || item.status === 'error') { %>
               <a class="btn btn-sm btn-ghost" href="/crm/meeting-intake?draft=<%= item.id %>">Review</a>
               <form method="post" action="/crm/meeting-intake/<%= item.id %>/save">
-                <button class="btn btn-sm" type="submit">Save to CRM</button>
+                <button class="btn btn-sm" type="submit">Submit</button>
               </form>
             <% } %>
             <form method="post" action="/crm/meeting-intake/<%= item.id %>/delete" onsubmit="return confirm('Delete this intake and all meeting-transcript data it created? This can remove the generated CRM meeting, attendee links, CRM outcomes, project notes, and Google Tasks related to that meeting. This is useful for duplicates, but it cannot be undone.');">
