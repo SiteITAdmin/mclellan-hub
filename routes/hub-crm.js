@@ -665,7 +665,7 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
     ORDER BY mi.created_at DESC
     LIMIT 12
   `).all(req.hubUser);
-  const defaultActiveIntake = recent.find(item => item.status !== 'processed') || null;
+  const defaultActiveIntake = recent.find(item => ['draft', 'needs_speaker_review', 'error'].includes(item.status)) || null;
   const activeIntakeId = String(
     req.query.draft
     || req.query.review
@@ -1050,7 +1050,9 @@ router.post('/crm/meeting-intake/:id/update', requireAuth, requireSameOrigin, wr
     req.hubUser
   );
 
-  const params = new URLSearchParams(status === 'needs_speaker_review' ? { review: intake.id } : { draft: intake.id });
+  const params = new URLSearchParams(status === 'needs_speaker_review'
+    ? { saved: intake.id, review: intake.id }
+    : { saved: intake.id, draft: intake.id });
   res.redirect(`/crm/meeting-intake?${params.toString()}`);
 });
 
@@ -1061,10 +1063,10 @@ router.post('/crm/meeting-intake/:id/save', requireAuth, requireSameOrigin, writ
   if (intake.status === 'needs_speaker_review') {
     return res.status(400).send('Identify the detected speakers before saving this intake to CRM');
   }
-  if (intake.status === 'processing') return res.redirect(`/crm/meeting-intake?queued=${encodeURIComponent(intake.id)}`);
+  if (intake.status === 'processing') return res.redirect(`/crm/meeting-intake?submitted=${encodeURIComponent(intake.id)}`);
   if (intake.status === 'processed') return res.redirect(`/crm/meeting-intake?intake=${encodeURIComponent(intake.id)}&meeting=${encodeURIComponent(intake.meeting_id || '')}`);
   queueStoredMeetingIntake(req.hubUser, intake);
-  res.redirect(`/crm/meeting-intake?queued=${encodeURIComponent(intake.id)}`);
+  res.redirect(`/crm/meeting-intake?submitted=${encodeURIComponent(intake.id)}`);
 });
 
 router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
