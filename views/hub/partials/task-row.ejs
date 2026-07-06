@@ -1,4 +1,8 @@
-<div class="crm-task-row<%= t.deleted_at ? ' task-deleted' : t.status === 'completed' ? ' task-done' : '' %>">
+<% const _todayIso = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }); %>
+<div class="crm-task-row<%= t.deleted_at ? ' task-deleted' : t.status === 'completed' ? ' task-done' : '' %>"
+     data-task-status="<%= t.deleted_at ? 'deleted' : t.status === 'completed' ? 'completed' : 'open' %>"
+     data-task-due="<%= t.due ? String(t.due).slice(0, 10) : '' %>"
+     data-task-overdue="<%= t.due && t.status === 'needsAction' && !t.deleted_at && String(t.due).slice(0, 10) < _todayIso ? '1' : '0' %>">
   <div class="crm-task-main">
     <a class="crm-task-title" href="/crm/tasks/<%= t.id %>"><%= t.title %></a>
     <% if (t.notes) { %><span class="crm-task-notes"><%= t.notes.split('\n')[0].slice(0, 120) %></span><% } %>

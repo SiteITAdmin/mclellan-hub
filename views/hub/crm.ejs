@@ -36,15 +36,33 @@
 
 <section class="section-card" id="add-person-section" style="display:none">
   <h3 style="margin:0 0 12px">Add person</h3>
-  <form method="POST" action="/crm/contacts" class="crm-note-form">
-    <input name="name" placeholder="Full name" required style="flex:2">
-    <input name="email" type="email" placeholder="Email address" style="flex:2">
-    <input name="notes" placeholder="Notes (optional)" style="flex:3">
-    <button class="btn" type="submit">Add</button>
+  <form method="POST" action="/crm/contacts" class="crm-form-grid" id="add-person-form">
+    <label>Full name<input name="name" placeholder="Full name" required></label>
+    <label>Email<input name="email" type="email" placeholder="name@example.com"></label>
+    <label>Phone<input name="phone" placeholder="+353 …"></label>
+    <label>Company
+      <select name="company_id" id="add-person-company">
+        <option value="">No company</option>
+        <% for (const co of companies) { %><option value="<%= co.id %>"><%= co.name %></option><% } %>
+        <option value="__new__">+ New company…</option>
+      </select>
+    </label>
+    <label id="add-person-new-company" style="display:none">New company name<input name="new_company_name" placeholder="Company name"></label>
+    <label>Role at company<input name="role" placeholder="e.g. Head of partnerships"></label>
+    <label>First contacted<input name="first_contacted" type="date"></label>
+    <label class="wide">How we met<input name="how_we_met" placeholder="e.g. Introduced by Rob at the licence review call"></label>
+    <label class="wide">Notes<input name="notes" placeholder="Notes (optional)"></label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" type="submit">Add person</button>
+      <span class="crm-muted" style="font-size:12px;">Only the name is required — the rest saves context you'd otherwise lose.</span>
+    </div>
   </form>
 </section>
 <div style="margin:0 0 16px">
   <button class="btn btn-subtle" id="toggle-add-person">+ Add person</button>
+  <% if (q && !contacts.length) { %>
+    <button class="btn" id="create-from-search" data-name="<%= q %>">Create new contact: “<%= q %>”</button>
+  <% } %>
 </div>
 
 <section class="crm-card-grid">
@@ -54,9 +72,10 @@
         <span><%= contact.name %></span>
         <% if (contact.facts.length) { %><span class="crm-count"><%= contact.facts.length %> fact<%= contact.facts.length !== 1 ? 's' : '' %></span><% } %>
       </div>
-      <% if (contact.company_name) { %>
+      <% if (contact.company_name || (contact.keepWarmOverdueDays > 0)) { %>
         <div class="crm-badges">
-          <span class="crm-badge"><%= contact.company_name %></span>
+          <% if (contact.keepWarmOverdueDays > 0) { %><span class="crm-badge" style="color:var(--crm-danger,#c0392b);border-color:currentColor;">check-in <%= contact.keepWarmOverdueDays %>d overdue</span><% } %>
+          <% if (contact.company_name) { %><span class="crm-badge"><%= contact.company_name %></span><% } %>
           <% if (contact.company_role) { %><span class="crm-badge subtle"><%= contact.company_role %></span><% } %>
         </div>
       <% } %>
@@ -64,7 +83,8 @@
       <% if (contact.facts.length) { %>
         <ul class="crm-compact-list">
           <% for (const fact of contact.facts.slice(0, q ? 1 : 3)) { %>
-            <li><%= fact.fact %></li>
+            <% const ageDays = Math.floor((Date.now() / 1000 - fact.created_at) / 86400); %>
+            <li><%= fact.fact %> <span style="font-size:11px;opacity:.5;white-space:nowrap;"><%= ageDays === 0 ? 'today' : ageDays + 'd' %><%= fact.status === 'follow_up' ? ' · follow-up' : '' %></span></li>
           <% } %>
         </ul>
       <% } %>
@@ -91,11 +111,28 @@ document.getElementById('toggle-add-person').addEventListener('click', () => {
   if (open) section.querySelector('input[name=name]').focus();
 });
 
+document.getElementById('add-person-company').addEventListener('change', e => {
+  document.getElementById('add-person-new-company').style.display = e.target.value === '__new__' ? '' : 'none';
+});
+
+const createFromSearch = document.getElementById('create-from-search');
+if (createFromSearch) {
+  createFromSearch.addEventListener('click', () => {
+    const section = document.getElementById('add-person-section');
+    section.style.display = '';
+    const nameInput = section.querySelector('input[name=name]');
+    nameInput.value = createFromSearch.dataset.name;
+    document.getElementById('toggle-add-person').textContent = '− Cancel';
+    nameInput.focus();
+  });
+}
+
 document.getElementById('crm-note-form').addEventListener('submit', async event => {
   event.preventDefault();
   const input = document.getElementById('crm-note');
   const message = document.getElementById('crm-note-message');
   message.textContent = 'Saving...';
+  message.classList.remove('error');
   try {
     const response = await fetch('/api/crm/note', {
       method: 'POST',
@@ -104,9 +141,20 @@ document.getElementById('crm-note-form').addEventListener('submit', async event 
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || result.message || 'Could not save note');
-    message.textContent = result.message;
+    if (result.detail && result.detail.contactId) {
+      const d = result.detail;
+      const actionLabel = d.action === 'mark_done' ? 'Marked done' : 'Fact saved';
+      message.innerHTML = `<span style="display:inline-flex;gap:8px;align-items:baseline;flex-wrap:wrap;">
+        <strong>${actionLabel}</strong>
+        <span>→ <a href="/crm/contact/${d.contactId}">${d.contactName}</a></span>
+        ${d.fact ? `<span style="opacity:.75;">“${d.fact}”</span>` : ''}
+        ${d.followUp ? `<span style="opacity:.75;">follow-up: ${d.followUp}</span>` : ''}
+      </span>`;
+    } else {
+      message.textContent = result.message;
+    }
     input.value = '';
-    setTimeout(() => location.reload(), 700);
+    setTimeout(() => location.reload(), 2000);
   } catch (error) {
     message.textContent = error.message;
     message.classList.add('error');

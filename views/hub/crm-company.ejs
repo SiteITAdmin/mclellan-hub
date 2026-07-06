@@ -43,13 +43,14 @@ async function taskAction(id, action) {
         <% } %>
       <% } %>
       <!-- Quick add task for this company -->
-      <form class="crm-inline-form" id="company-task-form" style="margin-top:12px;">
-        <input name="title" placeholder="Add a task for this company…" required style="flex:1;">
+      <form class="crm-inline-form" id="company-task-form" style="margin-top:12px;flex-wrap:wrap;">
+        <input name="title" placeholder="Add a task for this company…" required style="flex:1;min-width:160px;">
         <input name="company_id" type="hidden" value="<%= company.id %>">
         <select name="contact_id" style="max-width:180px;">
           <option value="">No person</option>
           <% for (const c of contacts) { %><option value="<%= c.id %>"><%= c.name %></option><% } %>
         </select>
+        <input name="due" type="date" title="Due date (optional)" style="max-width:140px;font-size:13px;">
         <button class="btn btn-sm" type="submit">Add</button>
       </form>
       <p class="crm-muted" id="company-task-msg" style="font-size:12px;margin-top:4px;"></p>
@@ -61,12 +62,27 @@ async function taskAction(id, action) {
         <a class="crm-row-link" href="/crm/contact/<%= contact.id %>"><strong><%= contact.name %></strong><span><%= contact.role || 'Role not set' %><%= contact.is_primary ? ' · Shown on People card' : '' %></span></a>
       <% } %>
       <% if (!contacts.length) { %><p class="crm-muted">No contacts linked.</p><% } %>
-      <form class="crm-inline-form" method="post" action="/crm/company/<%= company.id %>/contacts">
-        <select name="contact_id" required><option value="">Link a contact</option><% for (const contact of availableContacts) { %><option value="<%= contact.id %>"><%= contact.name %></option><% } %></select>
+      <form class="crm-inline-form" method="post" action="/crm/company/<%= company.id %>/contacts" style="flex-wrap:wrap;">
+        <select name="contact_id" id="company-link-contact" required>
+          <option value="">Link a contact</option>
+          <% for (const contact of availableContacts) { %><option value="<%= contact.id %>"><%= contact.name %></option><% } %>
+          <option value="__new__">+ New person…</option>
+        </select>
+        <span id="company-new-person" style="display:none;gap:6px;">
+          <input name="new_name" placeholder="Full name">
+          <input name="new_email" type="email" placeholder="Email (optional)">
+        </span>
         <input name="role" placeholder="Role">
         <label class="crm-checkbox"><input type="checkbox" name="is_primary" value="1"> Show on People card</label>
         <button class="btn btn-sm" type="submit">Link</button>
       </form>
+      <script>
+      document.getElementById('company-link-contact').addEventListener('change', e => {
+        const span = document.getElementById('company-new-person');
+        span.style.display = e.target.value === '__new__' ? 'inline-flex' : 'none';
+        span.querySelector('input[name=new_name]').required = e.target.value === '__new__';
+      });
+      </script>
     </section>
 
     <% const predicates = Object.keys(knowledgeByPredicate || {}); %>

@@ -144,30 +144,51 @@
 
 <% if (evidence) { %>
   <section class="section-card" style="margin-top:18px;">
-    <h2>Evidence read</h2>
-    <div class="crm-card-grid">
-      <div class="mgmt-card">
-        <div class="crm-card-title">Recent meetings</div>
-        <% for (const m of evidence.meetings.slice(0, 5)) { %>
-          <p class="crm-muted" style="margin:8px 0 0;font-size:12px;"><%= m.meeting_date %> · <%= m.title %></p>
-        <% } %>
-        <% if (!evidence.meetings.length) { %><p class="crm-muted">None found.</p><% } %>
-      </div>
-      <div class="mgmt-card">
-        <div class="crm-card-title">Open tasks</div>
-        <% for (const t of evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at).slice(0, 5)) { %>
-          <p class="crm-muted" style="margin:8px 0 0;font-size:12px;"><%= t.title %><%= t.due ? ' · due ' + t.due : '' %></p>
-        <% } %>
-        <% if (!evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at).length) { %><p class="crm-muted">None found.</p><% } %>
-      </div>
-      <div class="mgmt-card">
-        <div class="crm-card-title">Knowledge claims (<%= evidence.atoms.length %>)</div>
-        <% for (const a of evidence.atoms.filter(a => a.status === 'active').slice(0, 5)) { %>
-          <p class="crm-muted" style="margin:8px 0 0;font-size:12px;"><%= a.predicate.replace(/_/g, ' ') %>: <%= a.value %></p>
-        <% } %>
-        <% if (!evidence.atoms.length) { %><p class="crm-muted">None found — run a synthesis job to build knowledge for this project.</p><% } %>
-      </div>
-    </div>
+    <h2 style="margin-bottom:4px;">Evidence read</h2>
+    <p class="crm-muted" style="font-size:12px;margin:0 0 12px;">Everything the report generator was given. Expand a section to audit exactly what was included and why.</p>
+    <details style="margin-bottom:10px;">
+      <summary style="cursor:pointer;font-size:14px;font-weight:600;">Meetings (<%= evidence.meetings.length %>)</summary>
+      <% for (const m of evidence.meetings) { %>
+        <div class="crm-action" style="padding:6px 0;">
+          <a href="/crm/meeting/<%= m.id %>" style="font-size:13px;"><%= m.meeting_date %> · <%= m.title %></a>
+          <span class="crm-badge subtle" title="How this meeting was linked to the project"><%= m.link_kind === 'direct' ? 'direct link' : m.link_kind === 'company' ? 'via company' : 'via attendee' %></span>
+        </div>
+      <% } %>
+      <% if (!evidence.meetings.length) { %><p class="crm-muted">None found.</p><% } %>
+    </details>
+    <details style="margin-bottom:10px;">
+      <% const openEv = evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at); %>
+      <% const doneEv = evidence.tasks.filter(t => t.status === 'completed' && !t.deleted_at); %>
+      <summary style="cursor:pointer;font-size:14px;font-weight:600;">Tasks (<%= openEv.length %> open · <%= doneEv.length %> completed)</summary>
+      <% for (const t of [...openEv, ...doneEv]) { %>
+        <div class="crm-action" style="padding:6px 0;">
+          <a href="/crm/tasks/<%= t.id %>" style="font-size:13px;<%= t.status === 'completed' ? 'text-decoration:line-through;opacity:.6;' : '' %>"><%= t.title %></a>
+          <span class="crm-muted" style="font-size:12px;"><%= t.due ? 'due ' + String(t.due).slice(0,10) : '' %></span>
+        </div>
+      <% } %>
+      <% if (!evidence.tasks.length) { %><p class="crm-muted">None found.</p><% } %>
+    </details>
+    <details style="margin-bottom:10px;">
+      <summary style="cursor:pointer;font-size:14px;font-weight:600;">Emails (<%= evidence.emails.length %>)</summary>
+      <% for (const e of evidence.emails) { %>
+        <p class="crm-muted" style="margin:6px 0 0;font-size:12px;"><%= e.subject %> — <%= e.from_name || e.from_email || 'unknown' %></p>
+      <% } %>
+      <% if (!evidence.emails.length) { %><p class="crm-muted">None found.</p><% } %>
+    </details>
+    <details style="margin-bottom:10px;">
+      <summary style="cursor:pointer;font-size:14px;font-weight:600;">Documents (<%= evidence.docs.length %>)</summary>
+      <% for (const d of evidence.docs) { %>
+        <p class="crm-muted" style="margin:6px 0 0;font-size:12px;"><%= d.filename %></p>
+      <% } %>
+      <% if (!evidence.docs.length) { %><p class="crm-muted">None found.</p><% } %>
+    </details>
+    <details>
+      <summary style="cursor:pointer;font-size:14px;font-weight:600;">Knowledge claims (<%= evidence.atoms.length %>)</summary>
+      <% for (const a of evidence.atoms) { %>
+        <p class="crm-muted" style="margin:6px 0 0;font-size:12px;<%= a.status !== 'active' ? 'opacity:.55;' : '' %>"><%= a.predicate.replace(/_/g, ' ') %>: <%= a.value %> · <%= Math.round(a.confidence * 100) %>%<%= a.status !== 'active' ? ' · ' + a.status : '' %></p>
+      <% } %>
+      <% if (!evidence.atoms.length) { %><p class="crm-muted">None found — run a synthesis job to build knowledge for this project.</p><% } %>
+    </details>
   </section>
 <% } %>
 

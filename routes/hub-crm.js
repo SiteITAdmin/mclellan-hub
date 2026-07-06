@@ -81,10 +81,12 @@ router.post('/api/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (
   if (existing) return res.status(409).json({ error: 'Contact already exists', id: existing.id });
   const id = uuid();
   const email = String(req.body.email || '').trim().toLowerCase() || null;
+  const phone = String(req.body.phone || '').trim() || null;
   const notes = String(req.body.notes || '').trim() || null;
-  hub.prepare('INSERT INTO contacts (id, user, name, email, notes) VALUES (?, ?, ?, ?, ?)').run(
-    id, req.hubUser, name, email, notes
+  hub.prepare('INSERT INTO contacts (id, user, name, email, phone, notes) VALUES (?, ?, ?, ?, ?, ?)').run(
+    id, req.hubUser, name, email, phone, notes
   );
+  applyContactCreationExtras(hub, req.hubUser, id, req.body);
   syncContactVaultProfile(req.hubUser, id);
   res.json({ ok: true, id, name });
 });
@@ -305,8 +307,49 @@ function promoteFirstLinkedCompany(hub, contactId) {
 router.get('/crm/contacts', requireAuth, (req, res) => {
   const q = String(req.query.q || '').trim();
   const contacts = listContacts(req.hubUser, q);
-  res.render('hub/crm', { ...crmPageData(req.hubUser), contacts, q });
+  const companies = db.hub().prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
+  res.render('hub/crm', { ...crmPageData(req.hubUser), contacts, q, companies });
 });
+
+// Shared by the form and API create paths: link a company (existing or created
+// inline) and record the how-we-met fact so the relationship origin is captured
+// at add-time instead of being lost. The fact's created_at is backdated to
+// first_contacted so the nightly last_contacted_at recompute agrees with it.
+function applyContactCreationExtras(hub, user, contactId, body) {
+  let companyId = String(body.company_id || '').trim();
+  const newCompanyName = String(body.new_company_name || '').trim();
+  if (companyId === '__new__' && newCompanyName) {
+    const existing = hub.prepare('SELECT id FROM companies WHERE user = ? AND name = ?').get(user, newCompanyName);
+    if (existing) companyId = existing.id;
+    else {
+      companyId = uuid();
+      hub.prepare('INSERT INTO companies (id, user, name) VALUES (?, ?, ?)').run(companyId, user, newCompanyName);
+    }
+  }
+  if (companyId && companyId !== '__new__') {
+    const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(companyId, user);
+    if (company) {
+      hub.prepare(`
+        INSERT INTO contact_companies (contact_id, company_id, role, is_primary)
+        VALUES (?, ?, ?, 1)
+        ON CONFLICT(contact_id, company_id) DO UPDATE SET role = excluded.role, is_primary = 1
+      `).run(contactId, company.id, String(body.role || '').trim() || null);
+    }
+  }
+  const firstContacted = /^\d{4}-\d{2}-\d{2}$/.test(String(body.first_contacted || '')) ? body.first_contacted : null;
+  const howWeMet = String(body.how_we_met || '').trim();
+  if (howWeMet || firstContacted) {
+    const ts = firstContacted ? Math.floor(Date.parse(firstContacted + 'T12:00:00Z') / 1000) : Math.floor(Date.now() / 1000);
+    const factText = howWeMet
+      ? `How we met: ${howWeMet}${firstContacted ? ` (${firstContacted})` : ''}`
+      : `First contact recorded: ${firstContacted}`;
+    hub.prepare(`
+      INSERT INTO crm_facts (id, user, contact_id, fact, status, source, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'active', 'manual', ?, ?)
+    `).run(uuid(), user, contactId, factText, ts, ts);
+    hub.prepare('UPDATE contacts SET last_contacted_at = MAX(COALESCE(last_contacted_at, 0), ?) WHERE id = ?').run(ts, contactId);
+  }
+}
 
 router.post('/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const name = String(req.body.name || '').trim();
@@ -314,9 +357,11 @@ router.post('/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req,
   const hub = db.hub();
   const id = uuid();
   const email = String(req.body.email || '').trim().toLowerCase() || null;
-  hub.prepare('INSERT INTO contacts (id, user, name, email, notes) VALUES (?, ?, ?, ?, ?)').run(
-    id, req.hubUser, name, email, String(req.body.notes || '').trim()
+  const phone = String(req.body.phone || '').trim() || null;
+  hub.prepare('INSERT INTO contacts (id, user, name, email, phone, notes) VALUES (?, ?, ?, ?, ?, ?)').run(
+    id, req.hubUser, name, email, phone, String(req.body.notes || '').trim()
   );
+  applyContactCreationExtras(hub, req.hubUser, id, req.body);
   syncContactVaultProfile(req.hubUser, id);
   res.redirect('/crm/contact/' + id);
 });
@@ -447,7 +492,8 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
 });
 
 router.get('/crm/companies', requireAuth, (req, res) => {
-  const companies = db.hub().prepare(`
+  const hub = db.hub();
+  const companies = hub.prepare(`
     SELECT co.*,
       COUNT(DISTINCT cc.contact_id) AS contact_count,
       COUNT(DISTINCT m.id) AS meeting_count
@@ -458,6 +504,21 @@ router.get('/crm/companies', requireAuth, (req, res) => {
     GROUP BY co.id
     ORDER BY co.name
   `).all(req.hubUser);
+  const keyContactRows = hub.prepare(`
+    SELECT cc.company_id, c.name, cc.role, cc.is_primary
+    FROM contact_companies cc
+    JOIN contacts c ON c.id = cc.contact_id
+    JOIN companies co ON co.id = cc.company_id
+    WHERE co.user = ?
+    ORDER BY cc.is_primary DESC, c.name
+  `).all(req.hubUser);
+  const keyContactsByCompany = new Map();
+  for (const row of keyContactRows) {
+    if (!keyContactsByCompany.has(row.company_id)) keyContactsByCompany.set(row.company_id, []);
+    const list = keyContactsByCompany.get(row.company_id);
+    if (list.length < 2) list.push(row);
+  }
+  for (const co of companies) co.keyContacts = keyContactsByCompany.get(co.id) || [];
   res.render('hub/crm-companies', { ...crmPageData(req.hubUser), companies });
 });
 
@@ -520,7 +581,22 @@ router.get('/crm/company/:id', requireAuth, (req, res) => {
 router.post('/crm/company/:id/contacts', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const company = hub.prepare('SELECT id FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
-  const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.body.contact_id, req.hubUser);
+  let contact;
+  if (req.body.contact_id === '__new__') {
+    const newName = String(req.body.new_name || '').trim();
+    if (!newName) return res.status(400).send('New person needs a name');
+    const existing = hub.prepare('SELECT id FROM contacts WHERE user = ? AND name = ?').get(req.hubUser, newName);
+    if (existing) contact = existing;
+    else {
+      const newId = uuid();
+      hub.prepare('INSERT INTO contacts (id, user, name, email) VALUES (?, ?, ?, ?)').run(
+        newId, req.hubUser, newName, String(req.body.new_email || '').trim().toLowerCase() || null
+      );
+      contact = { id: newId };
+    }
+  } else {
+    contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.body.contact_id, req.hubUser);
+  }
   if (!company || !contact) return res.status(404).send('Company or contact not found');
   const hasPrimary = hub.prepare(
     'SELECT 1 FROM contact_companies WHERE contact_id = ? AND is_primary = 1'
@@ -1402,14 +1478,36 @@ router.post('/api/crm/contacts/:id/edit', requireAuth, requireSameOrigin, writeL
   const email = String(req.body.email || '').trim().toLowerCase() || null;
   const birthday = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.birthday || '')) ? req.body.birthday : null;
   const keepWarm = [30, 60, 90].includes(parseInt(req.body.keep_warm_days, 10)) ? parseInt(req.body.keep_warm_days, 10) : null;
-  hub.prepare('UPDATE contacts SET name = ?, email = ?, aliases = ?, birthday = ?, keep_warm_days = ? WHERE id = ?')
-    .run(name, email, JSON.stringify(aliases), birthday, keepWarm, contact.id);
+  const phone = String(req.body.phone || '').trim() || null;
+  hub.prepare('UPDATE contacts SET name = ?, email = ?, phone = ?, aliases = ?, birthday = ?, keep_warm_days = ? WHERE id = ?')
+    .run(name, email, phone, JSON.stringify(aliases), birthday, keepWarm, contact.id);
   const profileSync = syncContactVaultProfile(req.hubUser, contact.id);
   res.json({
     ok: true,
     profileSynced: profileSync.synced,
     profileWarning: profileSync.synced ? null : profileSync.reason,
   });
+});
+
+// Manual touchpoint (call, message, chance meeting) — stored as a crm_fact so
+// the nightly last_contacted_at recompute (lib/crm-nudges.js) counts it; the
+// column is also bumped immediately so the UI reflects it without waiting.
+router.post('/api/crm/contacts/:id/touchpoint', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT id, name FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!contact) return res.status(404).json({ error: 'Not found' });
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.date || '')) ? req.body.date : null;
+  if (!date) return res.status(400).json({ error: 'date required (YYYY-MM-DD)' });
+  const ts = Math.floor(Date.parse(date + 'T12:00:00Z') / 1000);
+  if (ts > Math.floor(Date.now() / 1000) + 86400) return res.status(400).json({ error: 'date is in the future' });
+  const note = String(req.body.note || '').trim();
+  const fact = note ? `Touchpoint (${date}): ${note}` : `Touchpoint: spoke on ${date}`;
+  hub.prepare(`
+    INSERT INTO crm_facts (id, user, contact_id, fact, status, source, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'active', 'manual', ?, ?)
+  `).run(uuid(), req.hubUser, contact.id, fact, ts, ts);
+  hub.prepare('UPDATE contacts SET last_contacted_at = MAX(COALESCE(last_contacted_at, 0), ?) WHERE id = ?').run(ts, contact.id);
+  res.json({ ok: true });
 });
 
 router.post('/api/crm/contacts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
@@ -1834,7 +1932,10 @@ function buildProjectReportEvidence(user, project, { days = 90 } = {}) {
 
   const meetings = hub.prepare(`
     SELECT DISTINCT m.id, m.title, m.meeting_date, m.meeting_time, m.notes, co.name AS company_name,
-           mi.summary AS intake_summary, mi.project_slug AS intake_project_slug
+           mi.summary AS intake_summary, mi.project_slug AS intake_project_slug,
+           CASE WHEN mi.project_slug = ? THEN 'direct'
+                WHEN cop.project_id IS NOT NULL THEN 'company'
+                ELSE 'attendee' END AS link_kind
       FROM meetings m
       LEFT JOIN companies co ON co.id = m.company_id
       LEFT JOIN meeting_intakes mi ON mi.meeting_id = m.id AND mi.user = m.user
@@ -1846,7 +1947,7 @@ function buildProjectReportEvidence(user, project, { days = 90 } = {}) {
        AND (mi.project_slug = ? OR cp.project_id IS NOT NULL OR cop.project_id IS NOT NULL)
      ORDER BY m.meeting_date DESC, COALESCE(m.meeting_time,'') DESC
      LIMIT 20
-  `).all(project.id, project.id, user, since, project.slug);
+  `).all(project.slug, project.id, project.id, user, since, project.slug);
 
   const emails = hub.prepare(`
     SELECT subject, from_name, from_email, summary, received_at
@@ -2190,26 +2291,147 @@ router.get('/crm/knowledge', requireAuth, async (req, res) => {
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
+// Manual project declarations (status, deadline, scope, milestones) live in
+// knowledge_atoms with derived_by='manual' — declared knowledge enters the
+// same compiled layer the synthesis engine writes to, instead of new columns.
+const PROJECT_META_PREDICATES = ['status', 'deadline', 'scope', 'milestone'];
+const PROJECT_STATUS_VALUES = ['planning', 'active', 'blocked', 'completed'];
+
+function upsertManualProjectAtom(user, project, predicate, value) {
+  const hub = db.hub();
+  const trimmed = String(value || '').trim();
+  const existing = hub.prepare(`
+    SELECT id FROM knowledge_atoms
+    WHERE user = ? AND subject_kind = 'project' AND subject_id = ? AND predicate = ? AND derived_by = 'manual'
+  `).get(user, project.id, predicate);
+  if (!trimmed) {
+    if (existing) hub.prepare('DELETE FROM knowledge_atoms WHERE id = ?').run(existing.id);
+    return;
+  }
+  if (existing) {
+    hub.prepare(`
+      UPDATE knowledge_atoms SET value = ?, status = 'active', confidence = 1.0,
+        last_confirmed = unixepoch(), updated_at = unixepoch()
+      WHERE id = ?
+    `).run(trimmed, existing.id);
+  } else {
+    hub.prepare(`
+      INSERT INTO knowledge_atoms (id, user, subject_kind, subject_id, subject_label, predicate, value, source_refs, confidence, status, derived_by)
+      VALUES (?, ?, 'project', ?, ?, ?, ?, '[]', 1.0, 'active', 'manual')
+    `).run(uuid(), user, project.id, project.name, predicate, trimmed);
+  }
+}
+
+function projectMetaAtoms(user, projectIds) {
+  if (!projectIds.length) return new Map();
+  const rows = db.hub().prepare(`
+    SELECT id, subject_id, predicate, value, status FROM knowledge_atoms
+    WHERE user = ? AND subject_kind = 'project'
+      AND predicate IN ('status','deadline')
+      AND status = 'active' AND derived_by = 'manual'
+      AND subject_id IN (${projectIds.map(() => '?').join(',')})
+  `).all(user, ...projectIds);
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.subject_id)) map.set(r.subject_id, {});
+    map.get(r.subject_id)[r.predicate] = r.value;
+  }
+  return map;
+}
+
+// Health signal: manual status wins; otherwise derive from last activity so
+// projects show a truthful pulse without anyone maintaining a field.
+function deriveProjectHealth(manualStatus, lastActivityTs) {
+  if (manualStatus) return manualStatus;
+  if (!lastActivityTs) return null;
+  const days = Math.floor((Date.now() / 1000 - lastActivityTs) / 86400);
+  if (days < 30) return 'active';
+  if (days < 90) return 'quiet';
+  return 'stale';
+}
+
 router.post('/crm/projects', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const name = String(req.body.name || '').trim();
   if (!name) return res.status(400).send('Name required');
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const hub = db.hub();
   try {
-    db.hub().prepare(
+    hub.prepare(
       'INSERT INTO projects (id, user, name, slug, project_kind) VALUES (lower(hex(randomblob(8))), ?, ?, ?, ?)'
     ).run(req.hubUser, name, slug, 'crm');
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(400).send('A project with that name already exists');
     throw err;
   }
+  const project = hub.prepare('SELECT id, name FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, slug);
+  if (project) {
+    const status = PROJECT_STATUS_VALUES.includes(String(req.body.status || '')) ? req.body.status : null;
+    const deadline = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.target_date || '')) ? req.body.target_date : null;
+    if (status) upsertManualProjectAtom(req.hubUser, project, 'status', status);
+    if (deadline) upsertManualProjectAtom(req.hubUser, project, 'deadline', deadline);
+    if (String(req.body.description || '').trim()) upsertManualProjectAtom(req.hubUser, project, 'scope', req.body.description);
+  }
   res.redirect('/crm/project/' + slug);
+});
+
+router.post('/api/crm/project/:slug/meta', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const project = hub.prepare('SELECT id, name FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, req.params.slug);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if ('status' in req.body) {
+    const status = String(req.body.status || '').trim();
+    if (status && !PROJECT_STATUS_VALUES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    upsertManualProjectAtom(req.hubUser, project, 'status', status);
+  }
+  if ('deadline' in req.body) {
+    const deadline = String(req.body.deadline || '').trim();
+    if (deadline && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) return res.status(400).json({ error: 'Invalid deadline (YYYY-MM-DD)' });
+    upsertManualProjectAtom(req.hubUser, project, 'deadline', deadline);
+  }
+  if ('scope' in req.body) upsertManualProjectAtom(req.hubUser, project, 'scope', req.body.scope);
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/project/:slug/milestones', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const project = hub.prepare('SELECT id, name FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, req.params.slug);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Milestone name required' });
+  const target = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.target_date || '')) ? req.body.target_date : null;
+  const value = target ? `${name} — target ${target}` : name;
+  hub.prepare(`
+    INSERT INTO knowledge_atoms (id, user, subject_kind, subject_id, subject_label, predicate, value, source_refs, confidence, status, derived_by)
+    VALUES (?, ?, 'project', ?, ?, 'milestone', ?, '[]', 1.0, 'active', 'manual')
+  `).run(uuid(), req.hubUser, project.id, project.name, value);
+  res.json({ ok: true });
+});
+
+router.post('/api/crm/project-milestones/:id/:action', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const atom = hub.prepare(`
+    SELECT id FROM knowledge_atoms
+    WHERE id = ? AND user = ? AND subject_kind = 'project' AND predicate = 'milestone' AND derived_by = 'manual'
+  `).get(req.params.id, req.hubUser);
+  if (!atom) return res.status(404).json({ error: 'Milestone not found' });
+  if (req.params.action === 'done') {
+    hub.prepare("UPDATE knowledge_atoms SET status = 'retired', updated_at = unixepoch() WHERE id = ?").run(atom.id);
+  } else if (req.params.action === 'reopen') {
+    hub.prepare("UPDATE knowledge_atoms SET status = 'active', updated_at = unixepoch() WHERE id = ?").run(atom.id);
+  } else if (req.params.action === 'delete') {
+    hub.prepare('DELETE FROM knowledge_atoms WHERE id = ?').run(atom.id);
+  } else {
+    return res.status(400).json({ error: 'Unknown action' });
+  }
+  res.json({ ok: true });
 });
 
 router.get('/crm/projects', requireAuth, (req, res) => {
   const hub = db.hub();
   const projects = crmProjectsForUser(req.hubUser);
 
-  // Annotate each project with open task count and last activity
+  // Annotate each project with open task count, last activity, and health
+  const metaByProject = projectMetaAtoms(req.hubUser, projects.map(p => p.id));
   const annotated = projects.map(p => {
     const openTasks = hub.prepare(
       "SELECT COUNT(*) AS n FROM google_tasks WHERE user = ? AND project_slug = ? AND status = 'needsAction' AND deleted_at IS NULL"
@@ -2217,7 +2439,13 @@ router.get('/crm/projects', requireAuth, (req, res) => {
     const lastMsg = hub.prepare(
       'SELECT MAX(ts) AS ts FROM messages WHERE project_id = ?'
     ).get(p.id)?.ts;
-    return { ...p, openTasks, lastActivity: lastMsg };
+    const meta = metaByProject.get(p.id) || {};
+    return {
+      ...p, openTasks, lastActivity: lastMsg,
+      health: deriveProjectHealth(meta.status, lastMsg),
+      manualStatus: meta.status || null,
+      deadline: meta.deadline || null,
+    };
   });
 
   res.render('hub/crm-projects', { ...crmPageData(req.hubUser), projects: annotated });
@@ -2321,12 +2549,33 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
   const { knowledgeByPredicate, events: projectKnowledgeEvents } =
     knowledgeGroupsForEntity(req.hubUser, 'project', project.id, { includeEvents: true, includeStale: showHistory });
 
+  // Manual meta/milestone atoms get dedicated UI on this page — drop them from
+  // the generic knowledge card so they don't render twice.
+  for (const pred of PROJECT_META_PREDICATES) delete knowledgeByPredicate[pred];
+
+  const metaRows = hub.prepare(`
+    SELECT id, predicate, value, status FROM knowledge_atoms
+    WHERE user = ? AND subject_kind = 'project' AND subject_id = ? AND derived_by = 'manual'
+      AND predicate IN ('status','deadline','scope')
+  `).all(req.hubUser, project.id);
+  const projectMeta = {};
+  for (const r of metaRows) { if (r.status === 'active') projectMeta[r.predicate] = r.value; }
+
+  const milestones = hub.prepare(`
+    SELECT id, value, status, updated_at FROM knowledge_atoms
+    WHERE user = ? AND subject_kind = 'project' AND subject_id = ? AND predicate = 'milestone' AND derived_by = 'manual'
+    ORDER BY status = 'retired', created_at
+  `).all(req.hubUser, project.id);
+
+  const lastMsg = hub.prepare('SELECT MAX(ts) AS ts FROM messages WHERE project_id = ?').get(project.id)?.ts;
+  const projectHealth = deriveProjectHealth(projectMeta.status, lastMsg);
+
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),
     project, tasks, contacts, directContactIds: [...directContactIds],
     availableContacts, linkedCompanies, linkedCompanyIds: [...linkedCompanyIds],
     availableCompanies, recentEmails, projectFacts: dedupedProjectFacts, projectKnowledgeEvents, recentMessages, showHistory, todayIsoStr,
-    projectDocs, knowledgeByPredicate,
+    projectDocs, knowledgeByPredicate, projectMeta, milestones, projectHealth,
   });
 });
 
