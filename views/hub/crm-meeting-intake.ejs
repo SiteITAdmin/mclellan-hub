@@ -84,6 +84,8 @@
           <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/save">
             <button class="btn btn-sm" type="submit">Submit to CRM</button>
           </form>
+        <% } else if (activeIntake.status === 'needs_speaker_review') { %>
+          <button class="btn btn-sm" type="button" disabled style="opacity:.55;cursor:not-allowed;">Submit after speaker names</button>
         <% } %>
         <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/delete" onsubmit="return confirm('Delete this intake and all meeting-transcript data it created? This can remove the generated CRM meeting, attendee links, CRM outcomes, project notes, and Google Tasks related to that meeting. This is useful for duplicates, but it cannot be undone.');">
           <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
@@ -169,7 +171,15 @@
         <label class="wide">Transcript
           <textarea name="transcript" rows="26" style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.55;"><%= activeTranscript %></textarea>
         </label>
-        <button class="btn" type="submit">Save review changes</button>
+        <div class="wide" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-ghost" type="submit" name="action" value="save">Save review changes</button>
+          <% if (activeIntake.status === 'draft' || activeIntake.status === 'error') { %>
+            <button class="btn" type="submit" name="action" value="submit">Submit to CRM</button>
+          <% } else if (activeIntake.status === 'needs_speaker_review') { %>
+            <button class="btn" type="button" disabled style="opacity:.55;cursor:not-allowed;">Submit after speaker names</button>
+            <span class="crm-muted" style="font-size:13px;">Map every detected speaker first.</span>
+          <% } %>
+        </div>
       </form>
     <% } %>
     <% if (activeIntake.summary) { %>
