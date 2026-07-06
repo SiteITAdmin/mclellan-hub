@@ -29,7 +29,7 @@
 <% } %>
 <% if (query && query.review) { %>
   <p class="crm-notice">
-    Transcript captured. Identify each detected speaker below, then save it to CRM.
+    Transcript captured. Identify each detected speaker below, then review the transcript before saving it to CRM.
   </p>
 <% } %>
 <% if (query && query.deleted) { %>
@@ -39,6 +39,151 @@
     <%= query.tasks || 0 %> task<%= query.tasks === '1' ? '' : 's' %>, and
     <%= query.docs || 0 %> project note<%= query.docs === '1' ? '' : 's' %>.
   </p>
+<% } %>
+
+<% if (activeIntake) {
+  let activeExtraction = {};
+  let activeCounts = {};
+  try { activeExtraction = JSON.parse(activeIntake.extraction || '{}'); } catch (_) {}
+  try { activeCounts = JSON.parse(activeIntake.created_counts || '{}'); } catch (_) {}
+  const activeOptions = activeExtraction.intake_options || {};
+  const activeAttendeeIds = new Set(activeOptions.attendee_contact_ids || []);
+  const activeSpeakerReview = activeExtraction.speaker_review;
+  const activeScopedContactOptions = activeIntake.project_slug
+    ? projectContacts.filter(c => c.project_slug === activeIntake.project_slug)
+    : allContacts;
+  const activeContactOptions = activeScopedContactOptions.length ? activeScopedContactOptions : allContacts;
+  const activeTranscript = activeIntake.transcript || '';
+  const activePreviewTitle = activeIntake.title || activeIntake.meeting_title || activeOptions.title || 'Meeting transcript';
+%>
+  <section class="section-card" style="margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+      <div>
+        <p class="crm-eyebrow">Review captured evidence</p>
+        <h2 style="margin-top:0;"><%= activePreviewTitle %></h2>
+        <p class="crm-muted" style="margin:6px 0 0;">
+          <%= activeIntake.status %>
+          <% if (activeOptions.meeting_date) { %> | <%= activeOptions.meeting_date %><% } %>
+          <% if (activeIntake.source_filename) { %> | <%= activeIntake.source_filename %><% } %>
+          | <%= activeTranscript.length.toLocaleString('en-GB') %> chars
+        </p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <% if (activeIntake.meeting_id) { %><a class="btn btn-sm" href="/crm/meeting/<%= activeIntake.meeting_id %>">Open meeting</a><% } %>
+        <% if (activeIntake.status === 'draft' || activeIntake.status === 'error') { %>
+          <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/save">
+            <button class="btn btn-sm" type="submit">Save to CRM</button>
+          </form>
+        <% } %>
+        <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/delete" onsubmit="return confirm('Delete this intake and all meeting-transcript data it created? This can remove the generated CRM meeting, attendee links, CRM outcomes, project notes, and Google Tasks related to that meeting. This is useful for duplicates, but it cannot be undone.');">
+          <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
+        </form>
+      </div>
+    </div>
+    <% if (activeIntake.status === 'needs_speaker_review' && activeSpeakerReview && activeSpeakerReview.speakers && activeSpeakerReview.speakers.length) { %>
+      <form class="crm-form-grid" method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/speakers" style="margin-top:14px;padding:12px;border:1px solid var(--crm-border,#ddd);border-radius:8px;">
+        <h3 class="wide" style="margin:0;font-size:14px;">Identify speakers</h3>
+        <% for (const speaker of activeSpeakerReview.speakers) {
+          const key = speaker.label.replace(/[^a-z0-9]/gi, '_');
+        %>
+          <div class="wide" style="display:grid;gap:8px;">
+            <strong><%= speaker.label %></strong>
+            <% for (const sample of speaker.samples || []) { %>
+              <blockquote style="margin:0;padding:8px 10px;border-left:3px solid var(--accent,#7c6af5);background:rgba(0,0,0,.03);font-size:12px;"><%= sample %></blockquote>
+            <% } %>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;">
+              <label>Existing person
+                <select name="contact_<%= key %>">
+                  <option value="">Choose...</option>
+                  <% for (const contact of activeContactOptions) { %>
+                    <option value="<%= contact.id %>"><%= contact.name %></option>
+                  <% } %>
+                </select>
+              </label>
+              <label>Or add new person
+                <input name="new_<%= key %>" placeholder="Full name">
+              </label>
+            </div>
+          </div>
+        <% } %>
+        <button class="btn" type="submit">Apply speaker names</button>
+      </form>
+    <% } %>
+    <% if (activeIntake.status !== 'processed' && activeIntake.status !== 'processing') { %>
+      <form class="crm-form-grid" method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/update" style="margin-top:14px;">
+        <label class="wide">Meeting title
+          <input name="title" value="<%= activePreviewTitle %>" required>
+        </label>
+        <label>Date
+          <input name="meeting_date" type="date" value="<%= activeOptions.meeting_date || new Date(activeIntake.created_at * 1000).toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }) %>">
+        </label>
+        <label>Attach to meeting
+          <select name="meeting_id">
+            <option value="">Create a new CRM meeting</option>
+            <% for (const meeting of meetings) { %>
+              <option value="<%= meeting.id %>" <%= (activeIntake.meeting_id || activeOptions.meeting_id) === meeting.id ? 'selected' : '' %>>
+                <%= meeting.meeting_date %><%= meeting.meeting_time ? ` ${meeting.meeting_time}` : '' %> | <%= meeting.title %><%= meeting.company_name ? ` | ${meeting.company_name}` : '' %>
+              </option>
+            <% } %>
+          </select>
+        </label>
+        <label>Project
+          <select name="project_slug">
+            <option value="">Infer from transcript</option>
+            <% for (const project of projects) { %>
+              <option value="<%= project.slug %>" <%= (activeIntake.project_slug || activeOptions.project_slug) === project.slug ? 'selected' : '' %>><%= project.name %> /<%= project.slug %></option>
+            <% } %>
+          </select>
+        </label>
+        <label>Company
+          <select name="company_id">
+            <option value="">Infer or leave blank</option>
+            <% for (const company of companies) { %>
+              <option value="<%= company.id %>" <%= activeOptions.company_id === company.id ? 'selected' : '' %>><%= company.name %></option>
+            <% } %>
+          </select>
+        </label>
+        <label class="wide">Or add new company
+          <input name="new_company" placeholder="Company name">
+        </label>
+        <label class="wide">People in the meeting
+          <select name="attendee_contact_ids" multiple size="8">
+            <% for (const contact of allContacts) { %>
+              <option value="<%= contact.id %>" <%= activeAttendeeIds.has(contact.id) ? 'selected' : '' %>><%= contact.name %></option>
+            <% } %>
+          </select>
+        </label>
+        <label class="wide">Add new people
+          <textarea name="new_attendees" rows="3" placeholder="One person per line, or comma separated"></textarea>
+        </label>
+        <label class="wide">Transcript
+          <textarea name="transcript" rows="26" style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.55;"><%= activeTranscript %></textarea>
+        </label>
+        <button class="btn" type="submit">Save review changes</button>
+      </form>
+    <% } %>
+    <% if (activeIntake.summary) { %>
+      <div style="margin-top:12px;">
+        <h3 style="font-size:14px;margin:0 0 6px;">Summary</h3>
+        <p style="white-space:pre-wrap;margin:0;"><%= activeIntake.summary %></p>
+      </div>
+    <% } %>
+    <% if (activeIntake.error) { %>
+      <p class="crm-muted" style="margin:12px 0 0;color:#a33;"><%= activeIntake.error %></p>
+    <% } %>
+    <% if (activeIntake.status === 'processed' || activeIntake.status === 'processing') { %>
+      <details open style="margin-top:14px;">
+        <summary style="cursor:pointer;font-weight:700;">Transcript</summary>
+        <pre style="margin:10px 0 0;max-height:520px;overflow:auto;white-space:pre-wrap;word-break:break-word;border:1px solid var(--crm-border,#ddd);border-radius:8px;padding:12px;background:rgba(0,0,0,.03);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"><%= activeTranscript %></pre>
+      </details>
+    <% } %>
+    <% if (activeIntake.status === 'processed') { %>
+      <p class="crm-muted" style="margin:10px 0 0;">
+        Created <%= activeCounts.facts || 0 %> outcomes, <%= activeCounts.actions || 0 %> actions,
+        <%= activeCounts.tasks || 0 %> tasks, and <%= activeCounts.projectDocuments || 0 %> project notes.
+      </p>
+    <% } %>
+  </section>
 <% } %>
 
 <div class="crm-two-col">
@@ -108,7 +253,11 @@
           </span>
           <div style="display:flex;gap:6px;align-items:center;">
             <% if (item.meeting_id) { %><a class="btn btn-sm" href="/crm/meeting/<%= item.meeting_id %>">Open</a><% } %>
+            <% if (item.status === 'needs_speaker_review') { %>
+              <a class="btn btn-sm btn-ghost" href="/crm/meeting-intake?review=<%= item.id %>">Review</a>
+            <% } %>
             <% if (item.status === 'draft' || item.status === 'error') { %>
+              <a class="btn btn-sm btn-ghost" href="/crm/meeting-intake?draft=<%= item.id %>">Review</a>
               <form method="post" action="/crm/meeting-intake/<%= item.id %>/save">
                 <button class="btn btn-sm" type="submit">Save to CRM</button>
               </form>
@@ -144,7 +293,7 @@
                 </div>
               </div>
             <% } %>
-            <button class="btn" type="submit">Save to CRM</button>
+            <button class="btn" type="submit">Apply speaker names</button>
           </form>
         <% } %>
       <% } %>
