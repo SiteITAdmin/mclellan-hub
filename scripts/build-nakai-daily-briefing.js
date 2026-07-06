@@ -92,6 +92,51 @@ function standingContextMarkdown() {
   }).join('\n\n---\n\n');
 }
 
+function alertIntelMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
+  const hub = require('../lib/db').hub();
+  const since = asOfEpoch - 72 * 3600;
+  const rows = hub.prepare(`
+    SELECT i.id, i.title, i.summary, i.source_url, i.published_at, i.category,
+           d.source_kind, d.sender_name, d.sender_email,
+           s.name AS source_name, s.briefing_priority
+    FROM intel_items i
+    JOIN intel_documents d ON d.id = i.document_id
+    LEFT JOIN intel_sources s ON s.id = d.source_id
+    WHERE i.published_at >= ? AND i.published_at <= ?
+      AND i.user IN ('nakai', 'douglas')
+      AND i.selected = 1
+      AND COALESCE(s.briefing_priority, 3) <= 3
+      AND (
+        lower(COALESCE(s.name, '')) LIKE '%fca%'
+        OR lower(COALESCE(s.name, '')) LIKE '%esma%'
+        OR lower(COALESCE(s.name, '')) LIKE '%financial times%'
+        OR lower(COALESCE(s.name, '')) LIKE '%myft%'
+        OR lower(COALESCE(d.sender_email, '')) LIKE '%fca.org.uk%'
+        OR lower(COALESCE(d.sender_email, '')) LIKE '%esma%'
+        OR lower(COALESCE(d.sender_email, '')) LIKE '%ft.com%'
+        OR lower(COALESCE(d.sender_email, '')) LIKE '%news-alerts.ft.com%'
+        OR lower(COALESCE(d.sender_email, '')) LIKE '%newsletters.ft.com%'
+      )
+    ORDER BY COALESCE(s.briefing_priority, 3), i.published_at DESC
+    LIMIT 20
+  `).all(since, asOfEpoch);
+
+  if (!rows.length) return '';
+  const dateStr = d => new Date(d * 1000).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Dublin',
+  });
+  return rows.map((item, i) => [
+    `[I${i + 1}] ${item.title}`,
+    `Source: ${item.source_name || item.sender_name || item.sender_email || item.source_kind || 'email/RSS'}`,
+    item.source_kind ? `Source kind: ${item.source_kind}` : '',
+    item.category ? `Category: ${item.category}` : '',
+    item.source_url ? `URL: ${item.source_url}` : '',
+    item.published_at ? `Published/received: ${dateStr(item.published_at)}` : '',
+    item.summary ? `Summary: ${String(item.summary).replace(/\s+/g, ' ').slice(0, 700)}` : '',
+    'Use note: press/email intelligence is context only unless the source is an official regulator/government item.',
+  ].filter(Boolean).join('\n')).join('\n\n---\n\n');
+}
+
 // Live source pack — reads from reg_monitor_items (last 48 hours as of
 // asOfEpoch) so the briefing reflects what the regulatory monitor actually
 // found overnight. asOfEpoch defaults to now (the live daily run); a rebuild
@@ -105,7 +150,9 @@ function liveSourcePackMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
   // from nothing (and a historical rebuild never leaks future-dated items).
   const since48h = asOfEpoch - 48 * 3600;
   let items = hub.prepare(`
-    SELECT id, site, title, url, synopsis, found_at
+    SELECT id, site, title, url, synopsis, found_at,
+           publication_type, priority, why_it_matters, ireland_eu_relevance,
+           source_kind, external_id, detail_json
     FROM reg_monitor_items
     WHERE found_at >= ? AND found_at <= ?
       AND is_relevant = 1
@@ -118,7 +165,9 @@ function liveSourcePackMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
   let staleFallback = false;
   if (!items.length) {
     items = hub.prepare(`
-      SELECT id, site, title, url, synopsis, found_at
+      SELECT id, site, title, url, synopsis, found_at,
+             publication_type, priority, why_it_matters, ireland_eu_relevance,
+             source_kind, external_id, detail_json
       FROM reg_monitor_items
       WHERE found_at <= ?
         AND is_relevant = 1
@@ -140,10 +189,17 @@ function liveSourcePackMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
     const lines = [
       `[L${i + 1}] ${item.title}`,
       `Source: ${item.site}`,
+      item.source_kind && item.source_kind !== 'web' ? `Source kind: ${item.source_kind}` : '',
+      item.external_id ? `External ID: ${item.external_id}` : '',
+      item.publication_type ? `Publication type: ${item.publication_type}` : '',
+      item.priority ? `Priority: ${item.priority}` : '',
       `URL: ${item.url}`,
       `Found: ${dateStr(item.found_at)}`,
-    ];
+    ].filter(Boolean);
     if (item.synopsis) lines.push(`Synopsis: ${item.synopsis}`);
+    if (item.why_it_matters) lines.push(`Why it matters: ${item.why_it_matters}`);
+    if (item.ireland_eu_relevance) lines.push(`Ireland/EU relevance: ${item.ireland_eu_relevance}`);
+    if (item.detail_json && item.detail_json !== '{}') lines.push(`Structured details: ${item.detail_json}`);
     return lines.join('\n');
   }).join('\n\n---\n\n');
 
@@ -154,6 +210,7 @@ function liveSourcePackMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
 
 function sourcePackMarkdown(asOfEpoch) {
   const { text: live, staleFallback, ids } = liveSourcePackMarkdown(asOfEpoch);
+  const alertIntel = alertIntelMarkdown(asOfEpoch);
   const standing = standingContextMarkdown();
   const parts = [];
   if (live) {
@@ -163,6 +220,9 @@ function sourcePackMarkdown(asOfEpoch) {
     parts.push(`## ${label}\n\n${live}`);
   } else {
     parts.push('## LIVE REGULATORY MONITOR OUTPUT\n\nNo items found in database.');
+  }
+  if (alertIntel) {
+    parts.push('## REGULATOR / PRESS EMAIL-RSS INTELLIGENCE (last 72 hours; summaries only)\n\n' + alertIntel);
   }
   parts.push('## AUDIT HORIZON — STANDING CONTEXT (evergreen reference, not today\'s news)\n\n' + standing);
   return { text: parts.join('\n\n═══\n\n'), liveIds: ids };
@@ -558,4 +618,8 @@ module.exports = {
   assertStoredBriefingPdf,
   buildStoredBriefingEmailPayload,
   resendUrl,
+  _test: {
+    alertIntelMarkdown,
+    sourcePackMarkdown,
+  },
 };
