@@ -1,6 +1,6 @@
 <%- include('partials/crm-head', { title: 'Companies', active: 'companies' }) %>
 <section class="crm-hero"><div><p class="crm-eyebrow">Connected CRM</p><h1>Companies</h1><p>Organisations with their people, meetings, and accumulated context.</p></div></section>
-<section class="section-card">
+<section class="section-card" id="add-company-section" style="display:none">
   <h2>Add company</h2>
   <form class="crm-form-grid" method="post" action="/crm/companies">
     <label>Name<input name="name" required></label>
@@ -10,13 +10,33 @@
     <button class="btn" type="submit">Create company</button>
   </form>
 </section>
+<div style="margin:0 0 16px">
+  <button class="btn btn-subtle" id="toggle-add-company">+ Add company</button>
+</div>
 <section class="crm-card-grid">
   <% for (const company of companies) { %>
     <a class="mgmt-card crm-link-card" href="/crm/company/<%= company.id %>">
       <div class="crm-card-title"><span><%= company.name %></span><span class="crm-badge"><%= company.type || 'company' %></span></div>
       <p><%= company.contact_count %> people · <%= company.meeting_count %> meetings</p>
+      <% if (company.keyContacts && company.keyContacts.length) { %>
+        <div class="crm-badges">
+          <% for (const kc of company.keyContacts) { %>
+            <span class="crm-badge subtle"><%= kc.name %><%= kc.role ? ` · ${kc.role}` : '' %></span>
+          <% } %>
+        </div>
+      <% } %>
       <% if (company.notes) { %><p class="crm-muted"><%= company.notes %></p><% } %>
     </a>
   <% } %>
 </section>
+<script>
+document.getElementById('toggle-add-company').addEventListener('click', () => {
+  const section = document.getElementById('add-company-section');
+  const btn = document.getElementById('toggle-add-company');
+  const open = section.style.display === 'none';
+  section.style.display = open ? '' : 'none';
+  btn.textContent = open ? '− Cancel' : '+ Add company';
+  if (open) section.querySelector('input[name=name]').focus();
+});
+</script>
 <%- include('partials/crm-foot') %>

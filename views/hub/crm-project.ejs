@@ -15,10 +15,42 @@ async function taskAction(id, action) {
     <p class="crm-eyebrow">Project</p>
     <h1><%= project.name %></h1>
     <p style="font-family:monospace;font-size:13px;opacity:.6;">/<%= project.slug %></p>
+    <div class="crm-badges" style="margin-top:4px;">
+      <% if (projectHealth) { %>
+        <% const healthColor = { blocked: 'var(--crm-danger,#c0392b)', stale: 'var(--crm-danger,#c0392b)', quiet: '#b8860b' }[projectHealth]; %>
+        <span class="crm-badge<%= healthColor ? '' : ' subtle' %>" <% if (healthColor) { %>style="color:<%= healthColor %>;border-color:currentColor;"<% } %>><%= projectHealth %><%= projectMeta.status ? '' : ' (derived)' %></span>
+      <% } %>
+      <% if (projectMeta.deadline) { %>
+        <% const daysLeft = Math.ceil((Date.parse(projectMeta.deadline) - Date.now()) / 86400000); %>
+        <span class="crm-badge subtle" <% if (daysLeft < 0) { %>style="color:var(--crm-danger,#c0392b);border-color:currentColor;"<% } %>>target <%= projectMeta.deadline %><%= daysLeft >= 0 ? ` · ${daysLeft}d left` : ` · ${-daysLeft}d over` %></span>
+      <% } %>
+    </div>
+    <% if (projectMeta.scope) { %><p style="font-size:13px;margin-top:6px;"><%= projectMeta.scope %></p><% } %>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <button class="btn btn-subtle" id="project-settings-toggle">Settings</button>
     <a class="btn" href="/c/<%= project.slug %>">Open AI Chat →</a>
   </div>
+</section>
+
+<section class="section-card" id="project-settings" style="display:none;">
+  <h3 style="margin:0 0 12px;">Project settings</h3>
+  <form class="crm-form-grid" id="project-meta-form">
+    <label>Status
+      <select name="status">
+        <option value="">Derived from activity</option>
+        <% for (const s of ['planning','active','blocked','completed']) { %>
+          <option value="<%= s %>" <%= projectMeta.status === s ? 'selected' : '' %>><%= s %></option>
+        <% } %>
+      </select>
+    </label>
+    <label>Target completion<input name="deadline" type="date" value="<%= projectMeta.deadline || '' %>"></label>
+    <label class="wide">Scope<input name="scope" value="<%= projectMeta.scope || '' %>" placeholder="One sentence on scope and outcome"></label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" type="submit">Save</button>
+      <span class="crm-muted" id="project-meta-msg" style="font-size:12px;">Stored as declared knowledge (manual atoms), not columns.</span>
+    </div>
+  </form>
 </section>
 
 <div class="crm-two-col">
@@ -32,9 +64,14 @@ async function taskAction(id, action) {
           <% const openTasks = tasks.filter(t => t.status === 'needsAction' && !t.deleted_at); %>
           <% if (openTasks.length) { %><span class="crm-count"><%= openTasks.length %></span><% } %>
         </h2>
-        <a href="?show_history=<%= showHistory ? '0' : '1' %>" style="font-size:12px;opacity:.6;">
-          <%= showHistory ? 'Hide history' : 'Show history' %>
-        </a>
+        <div style="display:flex;gap:6px;align-items:baseline;">
+          <% for (const [key, label] of [['all','All'],['overdue','Overdue'],['due-soon','Due soon']]) { %>
+            <button class="btn btn-sm btn-ghost project-task-filter" data-filter="<%= key %>" <%= key === 'all' ? 'style="font-weight:600;"' : '' %>><%= label %></button>
+          <% } %>
+          <a href="?show_history=<%= showHistory ? '0' : '1' %>" style="font-size:12px;opacity:.6;">
+            <%= showHistory ? 'Hide history' : 'Show history' %>
+          </a>
+        </div>
       </div>
       <% const histTasks = tasks.filter(t => t.status !== 'needsAction' || t.deleted_at); %>
       <% for (const t of openTasks) { %>
@@ -47,12 +84,47 @@ async function taskAction(id, action) {
         <% } %>
       <% } %>
       <!-- Quick-add task for this project -->
-      <form class="crm-inline-form" id="project-task-form" style="margin-top:12px;">
-        <input name="title" placeholder="Add a task…" required style="flex:1;">
+      <form class="crm-inline-form" id="project-task-form" style="margin-top:12px;flex-wrap:wrap;">
+        <input name="title" placeholder="Add a task…" required style="flex:1;min-width:160px;">
         <input name="project_slug" type="hidden" value="<%= project.slug %>">
+        <input name="due" type="date" title="Due date (optional)" style="max-width:140px;font-size:13px;">
         <button class="btn btn-sm" type="submit">Add</button>
       </form>
       <p class="crm-muted" id="project-task-msg" style="font-size:12px;margin-top:4px;"></p>
+    </section>
+
+    <section class="section-card">
+      <% const doneMilestones = milestones.filter(m => m.status === 'retired'); %>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+        <h2 style="margin:0;">Milestones
+          <% if (milestones.length) { %><span class="crm-count"><%= doneMilestones.length %>/<%= milestones.length %></span><% } %>
+        </h2>
+      </div>
+      <% if (milestones.length) { %>
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:12px;">
+          <div style="height:100%;width:<%= Math.round(doneMilestones.length / milestones.length * 100) %>%;background:var(--accent,#4648d4);"></div>
+        </div>
+      <% } %>
+      <% for (const m of milestones) { %>
+        <div class="crm-action">
+          <span style="font-size:13px;<%= m.status === 'retired' ? 'text-decoration:line-through;opacity:.55;' : '' %>"><%= m.value %></span>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <% if (m.status === 'retired') { %>
+              <button class="btn btn-sm btn-ghost" onclick="milestoneAction('<%= m.id %>','reopen')">Reopen</button>
+            <% } else { %>
+              <button class="btn btn-sm btn-ghost" onclick="milestoneAction('<%= m.id %>','done')">Done</button>
+            <% } %>
+            <button class="btn btn-sm btn-ghost" onclick="milestoneAction('<%= m.id %>','delete')">Remove</button>
+          </div>
+        </div>
+      <% } %>
+      <% if (!milestones.length) { %><p class="crm-muted">No milestones declared yet.</p><% } %>
+      <form class="crm-inline-form" id="milestone-form" style="margin-top:12px;flex-wrap:wrap;">
+        <input name="name" placeholder="Milestone, e.g. Design sign-off" required style="flex:1;min-width:160px;">
+        <input name="target_date" type="date" title="Target date (optional)" style="max-width:140px;font-size:13px;">
+        <button class="btn btn-sm" type="submit">Add</button>
+      </form>
+      <p class="crm-muted" id="milestone-msg" style="font-size:12px;margin-top:4px;"></p>
     </section>
 
     <% const projPredicates = Object.keys(knowledgeByPredicate || {}); %>
@@ -176,11 +248,19 @@ async function taskAction(id, action) {
   <div class="crm-stack">
 
     <section class="section-card">
-      <h2>Timeline</h2>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <h2 style="margin:0;">Timeline</h2>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+          <% for (const [key, label] of [['all','All'],['fact','Facts'],['email','Emails'],['knowledge_event','Knowledge']]) { %>
+            <button class="btn btn-sm btn-ghost timeline-filter" data-kind="<%= key %>" <%= key === 'all' ? 'style="font-weight:600;"' : '' %>><%= label %></button>
+          <% } %>
+          <input id="timeline-search" placeholder="Filter…" style="font-size:12px;padding:3px 8px;max-width:120px;">
+        </div>
+      </div>
       <% if (!projectFacts.length && !recentEmails.length && !(projectKnowledgeEvents || []).length) { %>
         <p class="crm-muted">No activity yet. Link people to this project to see their facts here.</p>
       <% } %>
-      <div class="crm-timeline">
+      <div class="crm-timeline" id="project-timeline">
         <%
           const SOURCE_BADGE = { agentmail: 'email', gmail: 'email', dchat: 'chat', manual: 'note' };
           const TYPE_BADGE = { action: 'action', decision: 'decision' };
@@ -193,7 +273,7 @@ async function taskAction(id, action) {
         %>
         <% for (const item of timelineItems) { %>
           <% if (item._kind === 'fact') { %>
-          <div class="crm-timeline-item">
+          <div class="crm-timeline-item" data-kind="fact">
             <time><%= new Date(item.ts * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %>
               <% if (TYPE_BADGE[item.fact_type]) { %><span class="crm-type <%= item.fact_type %>" style="margin-left:6px;"><%= TYPE_BADGE[item.fact_type] %></span><% } %>
             </time>
@@ -204,7 +284,7 @@ async function taskAction(id, action) {
             </span>
           </div>
           <% } else if (item._kind === 'knowledge_event') { %>
-          <div class="crm-timeline-item">
+          <div class="crm-timeline-item" data-kind="knowledge_event" style="border-left:2px solid var(--accent,#4648d4);padding-left:10px;border-radius:0;">
             <time><%= new Date(item.ts * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %>
               <span class="crm-type action" style="margin-left:6px;"><%= item.predicate.replace(/_/g, ' ') %></span>
             </time>
@@ -217,7 +297,7 @@ async function taskAction(id, action) {
             </span>
           </div>
           <% } else { %>
-          <div class="crm-timeline-item" style="opacity:.7;">
+          <div class="crm-timeline-item" data-kind="email" style="opacity:.7;">
             <time><%= new Date(item.ts * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></time>
             <strong style="font-weight:400;"><%= item.subject %></strong>
             <span style="font-size:12px;"><%= item.from_name || item.from_email %><% if (item.summary) { %> — <%= item.summary.slice(0,120) %><% } %></span>
@@ -249,6 +329,85 @@ async function taskAction(id, action) {
 </div>
 
 <script>
+// Project settings (manual atoms)
+document.getElementById('project-settings-toggle').addEventListener('click', () => {
+  const el = document.getElementById('project-settings');
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+});
+document.getElementById('project-meta-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('project-meta-msg');
+  msg.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/crm/project/<%= project.slug %>/meta', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+    });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = 'Saved.'; setTimeout(() => location.reload(), 600); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+});
+
+// Milestones
+document.getElementById('milestone-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('milestone-msg');
+  msg.textContent = 'Adding…';
+  try {
+    const r = await fetch('/api/crm/project/<%= project.slug %>/milestones', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+    });
+    const j = await r.json();
+    if (j.ok) location.reload();
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+});
+async function milestoneAction(id, action) {
+  if (action === 'delete' && !confirm('Remove this milestone?')) return;
+  const r = await fetch(`/api/crm/project-milestones/${id}/${action}`, { method: 'POST' });
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else alert('Error: ' + j.error);
+}
+
+// Task filters (open tasks only — history keeps its own toggle)
+document.querySelectorAll('.project-task-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.filter;
+    document.querySelectorAll('.project-task-filter').forEach(b => b.style.fontWeight = b === btn ? '600' : '');
+    const soonCutoff = new Date(Date.now() + 7 * 86400000).toLocaleDateString('sv-SE');
+    document.querySelectorAll('.crm-task-row[data-task-status=open]').forEach(row => {
+      const due = row.dataset.taskDue;
+      const overdue = row.dataset.taskOverdue === '1';
+      let show = true;
+      if (mode === 'overdue') show = overdue;
+      else if (mode === 'due-soon') show = Boolean(due) && !overdue && due <= soonCutoff;
+      row.style.display = show ? '' : 'none';
+    });
+  });
+});
+
+// Timeline filter + search
+let timelineKind = 'all';
+function applyTimelineFilter() {
+  const q = document.getElementById('timeline-search').value.trim().toLowerCase();
+  document.querySelectorAll('#project-timeline .crm-timeline-item').forEach(el => {
+    const kindOk = timelineKind === 'all' || el.dataset.kind === timelineKind;
+    const textOk = !q || el.textContent.toLowerCase().includes(q);
+    el.style.display = kindOk && textOk ? '' : 'none';
+  });
+}
+document.querySelectorAll('.timeline-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    timelineKind = btn.dataset.kind;
+    document.querySelectorAll('.timeline-filter').forEach(b => b.style.fontWeight = b === btn ? '600' : '');
+    applyTimelineFilter();
+  });
+});
+document.getElementById('timeline-search').addEventListener('input', applyTimelineFilter);
+
 // Wrong fact
 document.addEventListener('click', async e => {
   const btn = e.target.closest('[data-fact-id]');

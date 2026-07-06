@@ -9,9 +9,22 @@
 
 <section class="section-card" id="add-project-section" style="display:none">
   <h3 style="margin:0 0 12px">Add project</h3>
-  <form method="POST" action="/crm/projects" class="crm-note-form">
-    <input name="name" placeholder="Project name" required style="flex:1">
-    <button class="btn" type="submit">Add</button>
+  <form method="POST" action="/crm/projects" class="crm-form-grid">
+    <label>Project name<input name="name" placeholder="Project name" required></label>
+    <label>Status
+      <select name="status">
+        <option value="">Not set</option>
+        <option value="planning">Planning</option>
+        <option value="active">Active</option>
+        <option value="blocked">Blocked</option>
+        <option value="completed">Completed</option>
+      </select>
+    </label>
+    <label>Target completion<input name="target_date" type="date"></label>
+    <label class="wide">What is this project? <span style="font-size:11px;opacity:.6;">saved as declared scope in the knowledge layer</span>
+      <input name="description" placeholder="One sentence on scope and outcome">
+    </label>
+    <div><button class="btn" type="submit">Add project</button></div>
   </form>
 </section>
 <div style="margin:0 0 16px">
@@ -28,7 +41,11 @@
         <% } %>
       </div>
       <div class="crm-badges" style="margin-top:6px;">
-        <span class="crm-badge subtle"><%= p.slug %></span>
+        <% if (p.health) { %>
+          <% const healthColor = { blocked: 'var(--crm-danger,#c0392b)', stale: 'var(--crm-danger,#c0392b)', quiet: '#b8860b', completed: 'var(--crm-muted,#888)' }[p.health]; %>
+          <span class="crm-badge<%= healthColor ? '' : ' subtle' %>" <% if (healthColor) { %>style="color:<%= healthColor %>;border-color:currentColor;"<% } %>><%= p.health %><%= p.manualStatus ? '' : ' (derived)' %></span>
+        <% } %>
+        <% if (p.deadline) { %><span class="crm-badge subtle">target <%= p.deadline %></span><% } %>
         <% if (p.lastActivity) { %>
           <span class="crm-badge subtle">Active <%= new Date(p.lastActivity * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %></span>
         <% } %>

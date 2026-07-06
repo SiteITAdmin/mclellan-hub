@@ -12,7 +12,11 @@ async function taskAction(id, action) {
   <div>
     <p class="crm-eyebrow">Contact</p>
     <h1><%= contact.name %></h1>
-    <% if (contact.email) { %><p><a href="mailto:<%= contact.email %>"><%= contact.email %></a></p><% } %>
+    <p>
+      <% if (contact.email) { %><a href="mailto:<%= contact.email %>"><%= contact.email %></a><% } %>
+      <% if (contact.email && contact.phone) { %> · <% } %>
+      <% if (contact.phone) { %><a href="tel:<%= contact.phone %>"><%= contact.phone %></a><% } %>
+    </p>
     <% if (companies.length) { %>
       <p>
         <% for (const company of companies) { %>
@@ -20,10 +24,26 @@ async function taskAction(id, action) {
         <% } %>
       </p>
     <% } else { %><p>No company linked yet.</p><% } %>
-    <% if (contact.last_contacted_at) { %>
-      <% const daysSince = Math.floor((Date.now() / 1000 - contact.last_contacted_at) / 86400); %>
-      <p class="crm-muted" style="font-size:13px;">Last contacted: <%= daysSince === 0 ? 'today' : daysSince === 1 ? 'yesterday' : `${daysSince} days ago` %><%= contact.keep_warm_days ? ` · keep-warm every ${contact.keep_warm_days}d` : '' %></p>
-    <% } %>
+    <p class="crm-muted" style="font-size:13px;">
+      <% if (contact.last_contacted_at) { %>
+        <% const daysSince = Math.floor((Date.now() / 1000 - contact.last_contacted_at) / 86400); %>
+        Last contacted: <%= daysSince === 0 ? 'today' : daysSince === 1 ? 'yesterday' : `${daysSince} days ago` %><%= contact.keep_warm_days ? ` · keep-warm every ${contact.keep_warm_days}d` : '' %>
+        <% if (contact.keep_warm_days && daysSince > contact.keep_warm_days) { %>
+          <span style="color:var(--crm-danger,#c0392b);font-weight:600;">· check-in <%= daysSince - contact.keep_warm_days %>d overdue</span>
+        <% } else if (contact.keep_warm_days) { %>
+          <span>· next check-in in <%= contact.keep_warm_days - daysSince %>d</span>
+        <% } %>
+      <% } else { %>
+        No contact recorded yet<%= contact.keep_warm_days ? ` · keep-warm every ${contact.keep_warm_days}d` : '' %>
+      <% } %>
+      <button class="btn btn-sm btn-ghost" id="touchpoint-toggle" style="margin-left:8px;">Record touchpoint</button>
+    </p>
+    <form id="touchpoint-form" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+      <input name="date" type="date" required style="font-size:13px;padding:4px 8px;">
+      <input name="note" placeholder="What happened? (optional)" style="font-size:13px;padding:4px 8px;min-width:220px;">
+      <button class="btn btn-sm" type="submit">Save</button>
+      <span class="crm-muted" id="touchpoint-msg" style="font-size:12px;"></span>
+    </form>
   </div>
 </section>
 
@@ -112,9 +132,17 @@ async function taskAction(id, action) {
         <% } %>
       <% } %>
       <!-- Quick add task for this contact -->
-      <form class="crm-inline-form" id="contact-task-form" style="margin-top:12px;">
-        <input name="title" placeholder="Add a task…" required style="flex:1;">
+      <form class="crm-inline-form" id="contact-task-form" style="margin-top:12px;flex-wrap:wrap;">
+        <input name="title" placeholder="Add a task…" required style="flex:1;min-width:160px;">
         <input name="contact_id" type="hidden" value="<%= contact.id %>">
+        <input name="due" type="date" title="Due date (optional)" style="max-width:140px;font-size:13px;">
+        <% if (linkedProjects.length || availableProjects.length) { %>
+          <select name="project_slug" title="Project (optional)" style="max-width:150px;font-size:13px;">
+            <option value="">No project</option>
+            <% for (const p of linkedProjects) { %><option value="<%= p.slug %>"><%= p.name %></option><% } %>
+            <% for (const p of availableProjects) { %><option value="<%= p.slug %>"><%= p.name %></option><% } %>
+          </select>
+        <% } %>
         <button class="btn btn-sm" type="submit">Add</button>
       </form>
       <p class="crm-muted" id="contact-task-msg" style="font-size:12px;margin-top:4px;"></p>
@@ -208,7 +236,14 @@ async function taskAction(id, action) {
               <option value="<%= p.id %>"><%= p.name %></option>
             <% } %>
           </select>
-          <input name="role" placeholder="Role (optional)" style="max-width:140px;">
+          <input name="role" placeholder="Role (optional)" list="project-role-taxonomy" style="max-width:140px;">
+          <datalist id="project-role-taxonomy">
+            <option value="owner"></option>
+            <option value="stakeholder"></option>
+            <option value="decision-maker"></option>
+            <option value="vendor"></option>
+            <option value="end-user"></option>
+          </datalist>
           <button class="btn btn-sm" type="submit">Link</button>
         </form>
         <p class="crm-muted" id="link-project-msg" style="font-size:12px;margin-top:4px;"></p>
@@ -226,6 +261,9 @@ async function taskAction(id, action) {
         </label>
         <label class="wide">Email address
           <input name="email" type="email" value="<%= contact.email || '' %>" placeholder="name@example.com">
+        </label>
+        <label class="wide">Phone
+          <input name="phone" value="<%= contact.phone || '' %>" placeholder="+353 …">
         </label>
         <label>Birthday
           <input name="birthday" type="date" value="<%= contact.birthday && contact.birthday.length === 10 ? contact.birthday : '' %>">
@@ -265,6 +303,32 @@ async function taskAction(id, action) {
   </aside>
 </div>
 <script>
+// Manual touchpoint recorder
+document.getElementById('touchpoint-toggle').addEventListener('click', () => {
+  const form = document.getElementById('touchpoint-form');
+  const open = form.style.display === 'none';
+  form.style.display = open ? 'flex' : 'none';
+  if (open) {
+    const dateInput = form.elements.date;
+    if (!dateInput.value) dateInput.value = new Date().toLocaleDateString('sv-SE');
+    dateInput.focus();
+  }
+});
+document.getElementById('touchpoint-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('touchpoint-msg');
+  msg.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/crm/contacts/<%= contact.id %>/touchpoint', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+    });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = 'Saved.'; setTimeout(() => location.reload(), 600); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+});
+
 // Fact edit/archive/unarchive
 function startFactEdit(id) {
   document.getElementById('fact-text-' + id).style.display = 'none';
