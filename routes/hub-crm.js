@@ -1050,6 +1050,19 @@ router.post('/crm/meeting-intake/:id/update', requireAuth, requireSameOrigin, wr
     req.hubUser
   );
 
+  if (req.body.action === 'submit' && status !== 'needs_speaker_review') {
+    queueStoredMeetingIntake(req.hubUser, {
+      ...intake,
+      title,
+      meeting_id: meetingId || null,
+      project_slug: projectSlug || null,
+      transcript,
+      status,
+      extraction: JSON.stringify(nextExtraction),
+    });
+    return res.redirect(`/crm/meeting-intake?submitted=${encodeURIComponent(intake.id)}`);
+  }
+
   const params = new URLSearchParams(status === 'needs_speaker_review'
     ? { saved: intake.id, review: intake.id }
     : { saved: intake.id, draft: intake.id });
