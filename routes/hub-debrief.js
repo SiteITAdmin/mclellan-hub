@@ -413,11 +413,30 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
 }
 
 // ── Meeting debrief page ──────────────────────────────────────────────────────
-router.get('/meeting', requireAuth, (req, res) => {
+router.get('/meeting', requireAuth, async (req, res, next) => {
+  // Live context for the debrief prompts: today's calendar + overdue
+  // follow-ups, so the page primes what matters instead of generic cards.
+  try {
+    const hub = require('../lib/db').hub();
+    let todayEvents = [];
+    try { todayEvents = await fetchTodayCalendarEvents(req.hubUser); } catch (_) {}
+    const todayIso = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+    const overdueFollowUps = hub.prepare(`
+      SELECT f.fact, f.due_date, c.name AS contact_name
+      FROM crm_facts f JOIN contacts c ON c.id = f.contact_id
+      WHERE f.user = ? AND f.status = 'follow_up' AND f.due_date IS NOT NULL AND f.due_date <= ?
+      ORDER BY f.due_date LIMIT 5
+    `).all(req.hubUser, todayIso);
+    res.locals.debriefContext = { todayEvents, overdueFollowUps };
+  } catch (err) {
+    res.locals.debriefContext = { todayEvents: [], overdueFollowUps: [] };
+  }
+  next();
+}, (req, res) => {
   const hub = db.hub();
   const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
   const contacts = hub.prepare('SELECT name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
-  res.render('hub/meeting', { user: req.hubUser, projects, contacts });
+  res.render('hub/meeting', { user: req.hubUser, projects, contacts, debriefContext: res.locals.debriefContext });
 });
 
 router.post('/api/meeting/transcribe', requireAuth, requireSameOrigin, uploadLimiter, audioUpload.single('audio'), async (req, res) => {
@@ -434,20 +453,40 @@ router.post('/api/meeting/transcribe', requireAuth, requireSameOrigin, uploadLim
 
 router.post('/api/meeting/submit', requireAuth, requireSameOrigin, uploadLimiter, meetingUpload.single('transcript'), async (req, res) => {
   try {
-    const transcript = req.file
-      ? req.file.buffer.toString('utf8')
-      : (req.body.transcript || '');
-    if (!transcript.trim()) return res.status(400).json({ error: 'No transcript' });
+    // The form sends myThoughts (voice/typed debrief) and optionally a
+    // transcript file; writeMeetingNote takes (user, options). The old
+    // handler passed one object with mismatched keys, so every no-file
+    // submit failed with "No transcript" — found during the 6 Jul CRM
+    // review build and fixed here.
+    const uploadedTranscript = req.file ? req.file.buffer.toString('utf8') : '';
+    const myThoughts = String(req.body.myThoughts || req.body.transcript || '').trim();
+    if (!uploadedTranscript.trim() && !myThoughts) {
+      return res.status(400).json({ error: 'No transcript — record, type, or upload one first' });
+    }
+    const attendees = (() => {
+      try {
+        const parsed = JSON.parse(req.body.attendees || '[]');
+        return Array.isArray(parsed) ? parsed.map(a => String(a).trim()).filter(Boolean) : [];
+      } catch { return []; }
+    })();
+    const dateStr = String(req.body.meeting_date || '').trim();
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(dateStr + 'T12:00:00Z') : new Date();
+    const meetingTime = /^\d{2}:\d{2}$/.test(String(req.body.meeting_time || '')) ? req.body.meeting_time : '';
+    const durationMins = parseInt(req.body.duration_mins, 10);
+    const channel = ['video call', 'in person', 'phone', 'chat', 'async'].includes(String(req.body.channel || '')) ? req.body.channel : '';
 
-    const result = await writeMeetingNote({
-      user: req.hubUser,
-      transcript,
-      title: req.body.title,
-      attendees: req.body.attendees,
-      projectSlug: req.body.projectSlug,
-      model: req.body.model,
+    const result = await writeMeetingNote(req.hubUser, {
+      title: String(req.body.title || '').trim() || 'Meeting debrief',
+      attendees,
+      projectSlug: String(req.body.project || req.body.projectSlug || '').trim() || null,
+      myThoughts,
+      uploadedTranscript,
+      date,
+      meetingTime,
+      durationMins: Number.isFinite(durationMins) ? durationMins : null,
+      channel,
     });
-    res.json(result);
+    res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[meeting submit]', err);
     res.status(500).json({ error: err.message });
