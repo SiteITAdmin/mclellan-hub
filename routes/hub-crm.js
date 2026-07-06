@@ -1145,6 +1145,24 @@ router.post('/crm/meeting-intake/:id/update', requireAuth, requireSameOrigin, wr
   res.redirect(`/crm/meeting-intake?${params.toString()}`);
 });
 
+router.post('/crm/meeting-intake/:id/preview', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { previewMeetingIntake } = require('../lib/meeting-intake');
+    await previewMeetingIntake(req.hubUser, req.params.id);
+    res.redirect(`/crm/meeting-intake?draft=${encodeURIComponent(req.params.id)}&previewed=1`);
+  } catch (err) {
+    console.error('[meeting-intake preview]', err);
+    res.status(400).send(err.message);
+  }
+});
+
+router.get('/api/crm/meeting-intake/:id/inventory', requireAuth, (req, res) => {
+  const { intakeDeleteInventory } = require('../lib/meeting-intake');
+  const inventory = intakeDeleteInventory(req.hubUser, req.params.id);
+  if (!inventory) return res.status(404).json({ error: 'Intake not found' });
+  res.json({ ok: true, inventory });
+});
+
 router.post('/crm/meeting-intake/:id/save', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const intake = hub.prepare('SELECT * FROM meeting_intakes WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);

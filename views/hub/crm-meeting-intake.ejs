@@ -32,9 +32,14 @@
     Review changes saved. This intake is still a draft until you submit it to CRM.
   </p>
 <% } %>
-<% if (query && query.draft) { %>
+<% if (query && query.draft && !query.previewed) { %>
   <p class="crm-notice">
-    Transcript captured as a draft. Use Submit to CRM when you want it to create the meeting, outcomes, project notes, and tasks.
+    Transcript captured as a draft. Preview the extraction to see what will be created, then Submit to CRM.
+  </p>
+<% } %>
+<% if (query && query.previewed) { %>
+  <p class="crm-notice">
+    Extraction previewed below — nothing has been written to CRM yet. Submit when it looks right; the stored preview is reused so submitting costs no second model call.
   </p>
 <% } %>
 <% if (query && query.review) { %>
@@ -81,17 +86,95 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <% if (activeIntake.meeting_id) { %><a class="btn btn-sm" href="/crm/meeting/<%= activeIntake.meeting_id %>">Open meeting</a><% } %>
         <% if (activeIntake.status === 'draft' || activeIntake.status === 'error') { %>
+          <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/preview">
+            <button class="btn btn-sm btn-ghost" type="submit"><%= activeExtraction.preview ? 'Re-run preview' : 'Preview extraction' %></button>
+          </form>
           <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/save">
             <button class="btn btn-sm" type="submit">Submit to CRM</button>
           </form>
         <% } else if (activeIntake.status === 'needs_speaker_review') { %>
           <button class="btn btn-sm" type="button" disabled style="opacity:.55;cursor:not-allowed;">Submit after speaker names</button>
         <% } %>
-        <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/delete" onsubmit="return confirm('Delete this intake and all meeting-transcript data it created? This can remove the generated CRM meeting, attendee links, CRM outcomes, project notes, and Google Tasks related to that meeting. This is useful for duplicates, but it cannot be undone.');">
+        <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/delete" class="intake-delete-form" data-intake-id="<%= activeIntake.id %>">
           <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
         </form>
       </div>
     </div>
+    <% const preview = activeExtraction.preview; %>
+    <% if (preview && (activeIntake.status === 'draft' || activeIntake.status === 'error')) {
+      const pMeeting = preview.meeting || {};
+      const pAttendees = pMeeting.attendees || [];
+      const pFacts = (preview.crm_updates || []).filter(u => u.text);
+      const pActions = preview.action_register || [];
+      const pNotes = preview.project_notes || [];
+      const pQuestions = preview.open_questions || [];
+      const pWarnings = preview.warnings || [];
+      const pRisks = preview.risk_flags || [];
+    %>
+      <div style="margin-top:14px;padding:14px;border:1px solid var(--accent,#7c6af5);border-radius:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+          <h3 style="margin:0;font-size:14px;">Extraction preview — nothing saved to CRM yet</h3>
+          <span class="crm-muted" style="font-size:12px;">
+            <% if (typeof preview.confidence === 'number') { %>model confidence <%= Math.round(preview.confidence * 100) %>%<% } %>
+            <% if (preview.urgency && preview.urgency !== 'routine') { %> · urgency: <strong><%= preview.urgency %></strong><% } %>
+            <% if (preview.decision_quality) { %> · decisions: <%= preview.decision_quality.replace(/_/g,' ') %><% } %>
+          </span>
+        </div>
+        <% if (pRisks.length) { %>
+          <p style="margin:8px 0 0;font-size:13px;color:var(--crm-danger,#c0392b);">⚑ Risk flags: <%= pRisks.map(r => r.replace(/_/g,' ')).join(', ') %></p>
+        <% } %>
+        <% if (pWarnings.length) { %>
+          <p class="crm-muted" style="margin:6px 0 0;font-size:12px;">Model warnings: <%= pWarnings.join(' · ') %></p>
+        <% } %>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:12px;">
+          <div>
+            <h4 style="margin:0 0 6px;font-size:13px;">Attendees (<%= pAttendees.length %>)</h4>
+            <% for (const a of pAttendees) { %>
+              <div style="font-size:13px;padding:3px 0;">
+                <%= a.name %>
+                <% if (a.matched_contact) { %><span class="crm-badge subtle">matched</span><% } else { %><span class="crm-badge" style="color:#b8860b;border-color:currentColor;">new</span><% } %>
+                <% if (a.engagement && a.engagement !== 'participant') { %><span class="crm-muted" style="font-size:11px;">· <%= a.engagement.replace(/_/g,' ') %></span><% } %>
+              </div>
+            <% } %>
+            <% if (!pAttendees.length) { %><p class="crm-muted" style="font-size:12px;">None detected.</p><% } %>
+          </div>
+          <div>
+            <h4 style="margin:0 0 6px;font-size:13px;">CRM outcomes (<%= pFacts.length %>)</h4>
+            <% for (const f of pFacts) { %>
+              <div style="font-size:13px;padding:3px 0;"><span class="crm-type <%= f.type || 'note' %>"><%= f.type || 'note' %></span> <strong><%= f.subject %></strong>: <%= f.text %></div>
+            <% } %>
+            <% if (!pFacts.length) { %><p class="crm-muted" style="font-size:12px;">None detected.</p><% } %>
+          </div>
+          <div>
+            <h4 style="margin:0 0 6px;font-size:13px;">Actions (<%= pActions.length %>)</h4>
+            <% for (const a of pActions) { %>
+              <div style="font-size:13px;padding:3px 0;">
+                <strong><%= a.owner %></strong>: <%= a.task %>
+                <span class="crm-muted" style="font-size:11px;">
+                  <%= a.due_date ? '· due ' + a.due_date : '' %>
+                  <%= a.follow_up_by_douglas ? '· Douglas to track' : '' %>
+                  <%= a.status === 'blocked' ? '· blocked' : '' %>
+                </span>
+                <% if (a.blocked_by) { %><div style="font-size:11px;color:var(--crm-danger,#c0392b);">waits on: <%= a.blocked_by %></div><% } %>
+              </div>
+            <% } %>
+            <% if (!pActions.length) { %><p class="crm-muted" style="font-size:12px;">None detected.</p><% } %>
+          </div>
+          <% if (pNotes.length || pQuestions.length) { %>
+          <div>
+            <% if (pNotes.length) { %>
+              <h4 style="margin:0 0 6px;font-size:13px;">Project notes (<%= pNotes.length %>)</h4>
+              <% for (const n of pNotes) { %><div style="font-size:13px;padding:3px 0;">/<%= n.project_slug %>: <%= n.note %></div><% } %>
+            <% } %>
+            <% if (pQuestions.length) { %>
+              <h4 style="margin:10px 0 6px;font-size:13px;">Open questions</h4>
+              <% for (const oq of pQuestions) { %><div style="font-size:13px;padding:3px 0;">? <%= oq %></div><% } %>
+            <% } %>
+          </div>
+          <% } %>
+        </div>
+      </div>
+    <% } %>
     <% if (activeIntake.status === 'needs_speaker_review' && activeSpeakerReview && activeSpeakerReview.speakers && activeSpeakerReview.speakers.length) { %>
       <form class="crm-form-grid" method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/speakers" style="margin-top:14px;padding:12px;border:1px solid var(--crm-border,#ddd);border-radius:8px;">
         <h3 class="wide" style="margin:0;font-size:14px;">Identify speakers</h3>
@@ -159,9 +242,27 @@
           <input name="new_company" placeholder="Company name">
         </label>
         <label class="wide">People in the meeting
+          <%
+            const scopedIds = new Set(activeScopedContactOptions.map(c => c.id));
+            const scopedFirst = activeIntake.project_slug ? activeScopedContactOptions : [];
+            const restContacts = allContacts.filter(c => !activeIntake.project_slug || !scopedIds.has(c.id));
+          %>
           <select name="attendee_contact_ids" multiple size="8">
-            <% for (const contact of allContacts) { %>
-              <option value="<%= contact.id %>" <%= activeAttendeeIds.has(contact.id) ? 'selected' : '' %>><%= contact.name %></option>
+            <% if (scopedFirst.length) { %>
+              <optgroup label="On this project">
+                <% for (const contact of scopedFirst) { %>
+                  <option value="<%= contact.id %>" <%= activeAttendeeIds.has(contact.id) ? 'selected' : '' %>><%= contact.name %></option>
+                <% } %>
+              </optgroup>
+              <optgroup label="Everyone else">
+                <% for (const contact of restContacts) { %>
+                  <option value="<%= contact.id %>" <%= activeAttendeeIds.has(contact.id) ? 'selected' : '' %>><%= contact.name %></option>
+                <% } %>
+              </optgroup>
+            <% } else { %>
+              <% for (const contact of allContacts) { %>
+                <option value="<%= contact.id %>" <%= activeAttendeeIds.has(contact.id) ? 'selected' : '' %>><%= contact.name %></option>
+              <% } %>
             <% } %>
           </select>
         </label>
@@ -282,7 +383,7 @@
                 <button class="btn btn-sm" type="submit">Submit</button>
               </form>
             <% } %>
-            <form method="post" action="/crm/meeting-intake/<%= item.id %>/delete" onsubmit="return confirm('Delete this intake and all meeting-transcript data it created? This can remove the generated CRM meeting, attendee links, CRM outcomes, project notes, and Google Tasks related to that meeting. This is useful for duplicates, but it cannot be undone.');">
+            <form method="post" action="/crm/meeting-intake/<%= item.id %>/delete" class="intake-delete-form" data-intake-id="<%= item.id %>">
               <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
             </form>
           </div>
@@ -322,4 +423,32 @@
   </aside>
 </div>
 
+<script>
+// Delete confirm shows a live inventory of what will actually be removed,
+// instead of a generic warning.
+document.querySelectorAll('.intake-delete-form').forEach(form => {
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    let message = 'Delete this intake?';
+    try {
+      const r = await fetch(`/api/crm/meeting-intake/${form.dataset.intakeId}/inventory`);
+      const j = await r.json();
+      if (j.ok) {
+        const inv = j.inventory;
+        const parts = [];
+        if (inv.meeting) parts.push(`the meeting “${inv.meeting}”`);
+        if (inv.facts) parts.push(`${inv.facts} CRM outcome${inv.facts === 1 ? '' : 's'}`);
+        if (inv.tasks) parts.push(`${inv.tasks} Google Task${inv.tasks === 1 ? '' : 's'}`);
+        if (inv.documents) parts.push(`${inv.documents} project note${inv.documents === 1 ? '' : 's'}`);
+        message = parts.length
+          ? `Delete this intake? This will also remove ${parts.join(', ')}. This cannot be undone.`
+          : 'Delete this intake? No CRM artifacts were created from it, so only the draft is removed.';
+      }
+    } catch (_) {
+      message = 'Delete this intake and all meeting-transcript data it created? (Could not load the exact inventory.) This cannot be undone.';
+    }
+    if (confirm(message)) form.submit();
+  });
+});
+</script>
 <%- include('partials/crm-foot') %>

@@ -140,6 +140,28 @@ textarea.transcript-text {
   <h1 class="page-title">Meeting debrief</h1>
   <p class="page-sub">Record your thoughts — the prompts below guide what to cover. Metadata, then record.</p>
 
+  <% const ctx = typeof debriefContext !== 'undefined' && debriefContext ? debriefContext : { todayEvents: [], overdueFollowUps: [] }; %>
+  <% if (ctx.todayEvents.length || ctx.overdueFollowUps.length) { %>
+  <div style="margin:0 0 18px;padding:12px 14px;border:1px solid var(--border,#ddd);border-radius:10px;font-size:13px;">
+    <% if (ctx.todayEvents.length) { %>
+      <div style="margin-bottom:<%= ctx.overdueFollowUps.length ? '8px' : '0' %>;">
+        <strong>Today:</strong>
+        <% for (const ev of ctx.todayEvents.slice(0, 4)) { %>
+          <span style="margin-left:8px;"><%= ev.start || '' %> <%= ev.summary || ev.title || '' %></span>
+        <% } %>
+      </div>
+    <% } %>
+    <% if (ctx.overdueFollowUps.length) { %>
+      <div>
+        <strong style="color:var(--crm-danger,#c0392b);">Overdue follow-ups:</strong>
+        <% for (const f of ctx.overdueFollowUps) { %>
+          <span style="margin-left:8px;"><%= f.contact_name %> — <%= f.fact.slice(0, 60) %> <span style="opacity:.6;">(due <%= f.due_date %>)</span></span>
+        <% } %>
+      </div>
+    <% } %>
+  </div>
+  <% } %>
+
   <!-- ── Metadata ──────────────────────────────────────────────────────────── -->
   <div class="meta-strip">
     <div class="field-group">
@@ -155,6 +177,32 @@ textarea.transcript-text {
           <% for (const p of projects) { %>
           <option value="<%= p.slug %>"><%= p.name %></option>
           <% } %>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="meeting-date">Date</label>
+        <input type="date" id="meeting-date" value="<%= new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }) %>">
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="meeting-time">Time</label>
+        <input type="time" id="meeting-time">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field-group">
+        <label class="field-label" for="duration-mins">Duration (mins)</label>
+        <input type="number" id="duration-mins" min="5" step="5" placeholder="30">
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="channel">Channel</label>
+        <select id="channel">
+          <option value="">— Not set —</option>
+          <option value="video call">Video call</option>
+          <option value="in person">In person</option>
+          <option value="phone">Phone</option>
+          <option value="chat">Chat</option>
+          <option value="async">Async</option>
         </select>
       </div>
     </div>
@@ -399,6 +447,10 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
   fd.append('title', title);
   fd.append('attendees', JSON.stringify(attendees));
   fd.append('project', document.getElementById('project').value);
+  fd.append('meeting_date', document.getElementById('meeting-date').value);
+  fd.append('meeting_time', document.getElementById('meeting-time').value);
+  fd.append('duration_mins', document.getElementById('duration-mins').value);
+  fd.append('channel', document.getElementById('channel').value);
   fd.append('myThoughts', document.getElementById('voice-transcript').value);
   const fileInput = document.getElementById('transcript-file');
   if (fileInput.files[0]) fd.append('transcript', fileInput.files[0]);
@@ -408,7 +460,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
     const d = await r.json();
     if (r.ok) {
       msg.className = 'submit-msg ok';
-      msg.textContent = '✓ Saved — ' + d.notePath;
+      msg.innerHTML = '✓ Saved — ' + d.notePath + (d.meetingId ? ' · <a href="/crm/meeting/' + d.meetingId + '">Open in CRM</a>' : '');
       btn.textContent = 'Saved';
     } else {
       msg.className = 'submit-msg err';
