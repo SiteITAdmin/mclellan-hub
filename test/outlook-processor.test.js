@@ -25,9 +25,11 @@ const assert = require('node:assert/strict');
 const db = require('../lib/db');
 const { uuid } = require('../lib/id');
 const {
+  getSyncFolders,
   normalizeOutlookEvent,
   normalizeOutlookMessage,
   processOutlookMail,
+  setSyncFolders,
   stripOutlookHtml,
   syncOutlookCalendar,
 } = require('../lib/outlook-processor');
@@ -211,6 +213,48 @@ test('Outlook calendar sync upserts meetings and matches attendees to contacts',
     hub.prepare("SELECT title FROM meetings WHERE user = ? AND calendar_event_id = 'AAMkAGevent001'").get(USER).title,
     'IT security review (moved)'
   );
+});
+
+test('Outlook folder scoping only ingests designated folders', async () => {
+  assert.deepEqual(getSyncFolders(USER), ['Inbox'], 'default is the whole Inbox');
+  setSyncFolders(USER, 'Hub, Hub Reports, Old Projects');
+
+  const hubFolderMessage = {
+    ...FAKE_MESSAGES[0],
+    id: 'AAMkAGfake003',
+    subject: 'Filed into the Hub folder by an Outlook rule',
+    conversationId: 'AAQkAGthread03',
+  };
+  const routedGraph = async (path) => {
+    if (path.startsWith('/me/mailFolders?')) {
+      return [
+        { id: 'f-hub', displayName: 'Hub', childFolders: [{ id: 'f-hub-reports', displayName: 'Hub Reports' }] },
+        { id: 'f-alerts', displayName: 'Server Alerts' },
+      ];
+    }
+    if (path.startsWith('/me/mailFolders/f-hub/messages')) return [hubFolderMessage];
+    if (path.startsWith('/me/mailFolders/f-hub-reports/messages')) return [];
+    if (path.startsWith('/me/mailFolders/f-alerts/messages')) {
+      throw new Error('undesignated folder must never be queried');
+    }
+    if (path.startsWith('/me/mailFolders/inbox/messages')) {
+      throw new Error('inbox must not be queried when explicit folders are configured');
+    }
+    throw new Error(`unexpected Graph path: ${path}`);
+  };
+
+  const res = await processOutlookMail(USER, { graphGetAll: routedGraph, classify: fakeClassify });
+  assert.equal(res.processed, 1);
+  assert.deepEqual([...res.folders].sort(), ['Hub', 'Hub Reports']);
+  assert.deepEqual(res.missingFolders, ['Old Projects']);
+
+  assert.ok(hub.prepare(
+    "SELECT 1 FROM inbound_email_records WHERE user = ? AND external_message_id = 'AAMkAGfake003'"
+  ).get(USER), 'mail in a designated folder is ingested');
+
+  // Clearing the config falls back to Inbox.
+  setSyncFolders(USER, '');
+  assert.deepEqual(getSyncFolders(USER), ['Inbox']);
 });
 
 test('Outlook HTML stripper survives entities and nested markup', () => {
