@@ -152,7 +152,7 @@ Current CRM source kinds:
 
 | Source kind | Meaning |
 |---|---|
-| `email_summary` | Gmail and AgentMail summaries from email ingest |
+| `email_summary` | Gmail, AgentMail, and Outlook (`outlook:` prefix) summaries from email ingest |
 | `meeting_intake` | Meeting recordings/transcripts/summaries |
 | `document` | Uploaded or Drive-derived documents |
 | `open_task` | Current Google Tasks, used as operational evidence and duplicate context |
@@ -268,6 +268,19 @@ getDriveClient(user)             // same pattern
 ```
 Refresh tokens stored in `crm_context` table (key: `_google_refresh_token`).
 
+### Microsoft OAuth2 (Outlook mail + calendar, read-only)
+```js
+// lib/ms-graph.js
+startMicrosoftAuth({ user, callbackPath })   // redirect to Entra ID consent
+finishMicrosoftAuth({ user, callbackPath })  // exchange code, store refresh token
+graphFetch(user, path)                        // authenticated Graph call
+graphGetAll(user, path, { limit, headers })   // follows @odata.nextLink
+// lib/outlook-processor.js
+processOutlookMail(user)                      // inbox → inbound_email_records + email_summaries
+syncOutlookCalendar(user)                     // calendarView → meetings (source 'outlook_calendar')
+```
+Refresh token stored in `crm_context` (key: `_ms_refresh_token`) and **rotated on every refresh** — Entra ID invalidates the old one. Connect/status UI: `/admin/microsoft`.
+
 ### Session auth (web UI)
 Express session, SQLite store, 30-day lifetime. Cookie: `mclellan.sid`.  
 Admin check: `req.session.hubAdminUser`.  
@@ -307,6 +320,7 @@ Read via: `GET /api/obsidian/notes` or `/api/obsidian/search`.
 | OpenRouter | All LLM + embeddings | `OPENROUTER_API_KEY` | lib/fetch.js + lib/router.js |
 | Gmail API | Inbound/outbound email | OAuth2 refresh token | lib/gmail.js |
 | AgentMail | External email address | `AGENTMAIL_API_KEY` | lib/agentmail.js |
+| Microsoft Graph | Outlook work mail + calendar (read-only) | `MS_OAUTH_CLIENT_ID` + OAuth2 refresh token | lib/ms-graph.js |
 | Google Drive | Document fetch | OAuth2 refresh token | lib/google-drive.js |
 | Google Calendar | Events | OAuth2 refresh token | googleapis client |
 | Google Tasks | Task creation | OAuth2 refresh token | lib/google-tasks.js |

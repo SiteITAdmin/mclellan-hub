@@ -90,6 +90,24 @@ These are the tools the system runs on. They are not features — they are the f
 
 ---
 
+## Outlook (Microsoft 365)
+**Purpose:** Sync Douglas's work email and calendar directly from the Microsoft 365 tenancy — inbox mail every 15 minutes into the CRM knowledge engine's evidence pool, calendar every 30 minutes into meetings. Read-only: nothing is written back to the mailbox or calendar.
+
+**Healthy looks like:**
+- `inbound_email_records` with `source='outlook'` has entries on working days
+- Every synced email has a matching `email_summaries` row (`gmail_message_id` prefixed `outlook:`) — that row is what the CRM knowledge engine, embeddings, and digests read
+- `meetings` with `source='outlook_calendar'` matches the work calendar for ±30 days, with attendees linked to CRM contacts
+- `system_jobs` always has pending `outlook_email_process` and `outlook_calendar_sync` jobs
+- `/admin/microsoft` shows the connected account and a recent last-check time
+
+**Does not own:** Gmail processing (Email module), AgentMail, CRM fact/task creation (CRM knowledge engine), sending email.
+
+**Health check:** The daily system report warns if either Outlook job has no pending row or the last successful mail check is older than 24h while an account is connected (usually an expired refresh token — reconnect at `/admin/microsoft`). Unresolved `processing_failures` with `source='outlook'` also surface there.
+
+**Setup:** Entra ID app registration (delegated `Mail.Read`, `Calendars.Read`, `User.Read`, `offline_access`; redirect URI `<hub-url>/admin/auth/microsoft/callback`), then `MS_OAUTH_CLIENT_ID`/`MS_OAUTH_CLIENT_SECRET`/`MS_OAUTH_TENANT_ID` in `.env`, then Connect at `/admin/microsoft`. Refresh token lives in `crm_context` (`_ms_refresh_token`) and rotates on every refresh.
+
+---
+
 ## Flight Tracker
 **Purpose:** Track every Ryanair flight Douglas takes from booking email through to actual departure and arrival times.
 

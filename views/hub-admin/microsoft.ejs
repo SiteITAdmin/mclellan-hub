@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Microsoft 365 — McLellan Hub</title>
+<link rel="stylesheet" href="/portfolio.css">
+<style>
+.wrap { max-width: var(--max-w); }
+.section-head { font-size:13px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin:24px 0 10px; }
+.item { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-radius:8px; margin-bottom:8px; background:var(--surface-2, rgba(255,255,255,0.03)); border:1px solid var(--border); }
+.item.warning { border-left:3px solid #e06c6c; }
+.item.ok      { border-left:3px solid #5cb87a; }
+.item-body { flex:1; }
+.item-label { font-size:13px; font-weight:600; color:var(--text); }
+.item-detail { font-size:12px; color:var(--text-dim); margin-top:4px; }
+.stat-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.stat { padding:12px 16px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border); min-width:120px; }
+.stat-num { font-size:22px; font-weight:700; color:var(--text); }
+.stat-label { font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin-top:2px; }
+.run-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:var(--accent, #7c6af5); color:#fff; border:none; border-radius:6px; font-size:13px; cursor:pointer; text-decoration:none; }
+.run-btn.secondary { background:transparent; color:var(--text-dim); border:1px solid var(--border); }
+.run-btn:disabled { opacity:.5; cursor:default; }
+.run-log { margin-top:16px; padding:14px; background:var(--surface-2); border-radius:8px; border:1px solid var(--border); font-size:12px; font-family:monospace; white-space:pre-wrap; display:none; }
+.empty { padding:24px 0; text-align:center; color:var(--text-dim); font-size:14px; }
+</style>
+</head>
+<body class="admin-page">
+
+<%- include('partials/admin-header', { title: `Microsoft 365 — ${user}` }) %>
+
+<section class="admin-section wrap">
+  <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px;">
+    Work email and calendar sync from the Microsoft 365 tenancy. Mail is read every 15 minutes into
+    the CRM knowledge engine; the calendar syncs every 30 minutes into meetings. Read-only — nothing
+    is written back to the mailbox.
+  </p>
+
+  <% if (!status.configured) { %>
+    <div class="item warning">
+      <div class="item-body">
+        <div class="item-label">Not configured</div>
+        <div class="item-detail">Set MS_OAUTH_CLIENT_ID, MS_OAUTH_CLIENT_SECRET and MS_OAUTH_TENANT_ID in the environment, then restart the Hub. The Entra ID app registration needs delegated Mail.Read, Calendars.Read, User.Read and offline_access permissions and this redirect URI: <code>https://dchat.mclellan.scot/admin/auth/microsoft/callback</code></div>
+      </div>
+    </div>
+  <% } else if (!status.connected) { %>
+    <div class="item warning">
+      <div class="item-body">
+        <div class="item-label">Not connected</div>
+        <div class="item-detail">Sign in with the work account to start syncing.</div>
+      </div>
+    </div>
+    <a class="run-btn" href="/admin/auth/microsoft">Connect Microsoft 365</a>
+  <% } else { %>
+    <div class="item ok">
+      <div class="item-body">
+        <div class="item-label">Connected as <%= status.accountEmail || 'unknown account' %></div>
+        <div class="item-detail">
+          Last mail check: <%= status.lastCheckTs ? new Date(status.lastCheckTs * 1000).toLocaleString('en-GB', { timeZone: 'Europe/Dublin' }) : 'never' %>
+          · Mail job: <%= status.pendingMailJob ? 'scheduled' : 'MISSING' %>
+          · Calendar job: <%= status.pendingCalendarJob ? 'scheduled' : 'MISSING' %>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="stat-num"><%= status.emails24h %></div><div class="stat-label">Emails 24h</div></div>
+      <div class="stat"><div class="stat-num"><%= status.emailsTotal %></div><div class="stat-label">Emails total</div></div>
+      <div class="stat"><div class="stat-num"><%= status.meetingsUpcoming %></div><div class="stat-label">Upcoming meetings</div></div>
+      <div class="stat"><div class="stat-num"><%= status.meetingsTotal %></div><div class="stat-label">Meetings total</div></div>
+    </div>
+
+    <button class="run-btn" id="sync-btn" onclick="syncNow()">Sync now</button>
+    <form method="POST" action="/admin/microsoft/disconnect" style="display:inline" onsubmit="return confirm('Disconnect Microsoft 365? Background sync will stop until reconnected.')">
+      <button class="run-btn secondary" type="submit">Disconnect</button>
+    </form>
+    <pre class="run-log" id="sync-log"></pre>
+
+    <% if (status.failures.length) { %>
+      <div class="section-head">Unresolved processing failures</div>
+      <% status.failures.forEach(f => { %>
+        <div class="item warning">
+          <div class="item-body">
+            <div class="item-label"><%= f.last_error %></div>
+            <div class="item-detail"><%= f.attempts %> attempt(s) · last failed <%= new Date(f.last_failed_at * 1000).toLocaleString('en-GB', { timeZone: 'Europe/Dublin' }) %></div>
+          </div>
+        </div>
+      <% }) %>
+    <% } %>
+
+    <div class="section-head">Recent emails</div>
+    <% if (!status.recentEmails.length) { %>
+      <div class="empty">No Outlook emails ingested yet.</div>
+    <% } else { %>
+      <% status.recentEmails.forEach(e => { %>
+        <div class="item">
+          <div class="item-body">
+            <div class="item-label"><%= e.subject %> — <%= e.from_name || e.from_email %></div>
+            <div class="item-detail"><%= e.received_at ? new Date(e.received_at * 1000).toLocaleString('en-GB', { timeZone: 'Europe/Dublin' }) : '' %><%= e.project_slug ? ` · project: ${e.project_slug}` : '' %><%= e.summary ? ` · ${e.summary}` : '' %></div>
+          </div>
+        </div>
+      <% }) %>
+    <% } %>
+
+    <div class="section-head">Upcoming meetings</div>
+    <% if (!status.recentMeetings.length) { %>
+      <div class="empty">No upcoming Outlook meetings synced yet.</div>
+    <% } else { %>
+      <% status.recentMeetings.forEach(m => { %>
+        <div class="item">
+          <div class="item-body">
+            <div class="item-label"><%= m.title %></div>
+            <div class="item-detail"><%= m.meeting_date %><%= m.meeting_time ? ` ${m.meeting_time}` : ' (all day)' %><%= m.location ? ` · ${m.location}` : '' %></div>
+          </div>
+        </div>
+      <% }) %>
+    <% } %>
+  <% } %>
+</section>
+
+<script>
+async function syncNow() {
+  const btn = document.getElementById('sync-btn');
+  const log = document.getElementById('sync-log');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  log.style.display = 'none';
+  try {
+    const r = await fetch('/admin/microsoft/sync', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const data = await r.json();
+    if (data.error) { log.textContent = 'Error: ' + data.error; }
+    else {
+      log.textContent = 'Mail: ' + data.mail.processed + ' processed, ' + data.mail.skipped + ' already known.\n'
+        + 'Calendar: ' + data.calendar.events + ' events, ' + data.calendar.attendeesMatched + ' attendees matched.';
+    }
+    log.style.display = 'block';
+    setTimeout(() => location.reload(), 2500);
+  } catch (err) {
+    log.textContent = 'Request failed: ' + err.message;
+    log.style.display = 'block';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Sync now';
+}
+</script>
+</body>
+</html>
