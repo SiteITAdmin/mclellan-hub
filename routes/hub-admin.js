@@ -107,6 +107,26 @@ router.get('/admin/auth/google/callback', (req, res, next) =>
   finishGoogleAuth({ purpose: 'hub-admin', user: req.hubUser, callbackPath: '/admin/auth/google/callback', sessionKey: 'hubAdminUser', returnTo: '/admin' })(req, res, next)
 );
 
+// Microsoft 365 connect — background mail/calendar access for an already
+// signed-in admin, not a login method.
+router.get('/admin/auth/microsoft', requireHubAdmin, (req, res, next) => {
+  const { startMicrosoftAuth } = require('../lib/ms-graph');
+  startMicrosoftAuth({
+    user: req.hubUser,
+    callbackPath: '/admin/auth/microsoft/callback',
+    returnTo: '/admin/microsoft',
+  })(req, res, next);
+});
+
+router.get('/admin/auth/microsoft/callback', requireHubAdmin, (req, res, next) => {
+  const { finishMicrosoftAuth } = require('../lib/ms-graph');
+  finishMicrosoftAuth({
+    user: req.hubUser,
+    callbackPath: '/admin/auth/microsoft/callback',
+    returnTo: '/admin/microsoft',
+  })(req, res, next);
+});
+
 router.post('/admin/logout', requireSameOrigin, (req, res) => {
   req.session.hubAdminUser = null;
   res.redirect('/admin/login');
@@ -2349,6 +2369,82 @@ router.get('/admin/connectivity', requireHubAdmin, (req, res) => {
   const hub = db.hub();
   const items = buildConnectivityReport(req.hubUser, hub);
   res.render('hub-admin/connectivity', { user: req.hubUser, items });
+});
+
+// ── Microsoft 365 sync status ─────────────────────────────────────────────────
+
+router.get('/admin/microsoft', requireHubAdmin, (req, res) => {
+  const msGraph = require('../lib/ms-graph');
+  const hub = db.hub();
+  const user = req.hubUser;
+  const since24h = Math.floor(Date.now() / 1000) - 86400;
+
+  const lastCheckRow = hub.prepare(
+    "SELECT value FROM crm_context WHERE user = ? AND key = '_outlook_last_check_ts'"
+  ).get(user);
+  const status = {
+    configured: msGraph.isMsGraphConfigured(),
+    connected: msGraph.hasMsToken(user),
+    accountEmail: msGraph.getMsAccountEmail(user),
+    lastCheckTs: lastCheckRow ? parseInt(lastCheckRow.value, 10) : null,
+    emails24h: hub.prepare(
+      "SELECT COUNT(*) AS n FROM inbound_email_records WHERE user = ? AND source = 'outlook' AND processed_at >= ?"
+    ).get(user, since24h).n,
+    emailsTotal: hub.prepare(
+      "SELECT COUNT(*) AS n FROM inbound_email_records WHERE user = ? AND source = 'outlook'"
+    ).get(user).n,
+    meetingsTotal: hub.prepare(
+      "SELECT COUNT(*) AS n FROM meetings WHERE user = ? AND source = 'outlook_calendar'"
+    ).get(user).n,
+    meetingsUpcoming: hub.prepare(
+      "SELECT COUNT(*) AS n FROM meetings WHERE user = ? AND source = 'outlook_calendar' AND meeting_date >= date('now')"
+    ).get(user).n,
+    pendingMailJob: !!hub.prepare(
+      "SELECT 1 FROM system_jobs WHERE type = 'outlook_email_process' AND status IN ('pending','running') LIMIT 1"
+    ).get(),
+    pendingCalendarJob: !!hub.prepare(
+      "SELECT 1 FROM system_jobs WHERE type = 'outlook_calendar_sync' AND status IN ('pending','running') LIMIT 1"
+    ).get(),
+    failures: hub.prepare(`
+      SELECT external_id, attempts, last_error, last_failed_at
+      FROM processing_failures
+      WHERE source = 'outlook' AND resolved_at IS NULL
+      ORDER BY last_failed_at DESC LIMIT 10
+    `).all(),
+    recentEmails: hub.prepare(`
+      SELECT subject, from_name, from_email, received_at, summary, project_slug
+      FROM inbound_email_records
+      WHERE user = ? AND source = 'outlook'
+      ORDER BY received_at DESC LIMIT 10
+    `).all(user),
+    recentMeetings: hub.prepare(`
+      SELECT title, meeting_date, meeting_time, location
+      FROM meetings
+      WHERE user = ? AND source = 'outlook_calendar' AND meeting_date >= date('now')
+      ORDER BY meeting_date ASC, meeting_time ASC LIMIT 10
+    `).all(user),
+  };
+  res.render('hub-admin/microsoft', { user, status });
+});
+
+router.post('/admin/microsoft/sync', requireHubAdmin, async (req, res) => {
+  const { isOutlookSyncEnabled, processOutlookMail, syncOutlookCalendar } = require('../lib/outlook-processor');
+  if (!isOutlookSyncEnabled(req.hubUser)) {
+    return res.status(400).json({ error: 'Microsoft 365 is not connected' });
+  }
+  try {
+    const mail = await processOutlookMail(req.hubUser);
+    const calendar = await syncOutlookCalendar(req.hubUser);
+    res.json({ ok: true, mail, calendar });
+  } catch (err) {
+    console.error('[hub-admin] microsoft sync:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/microsoft/disconnect', requireHubAdmin, (req, res) => {
+  require('../lib/ms-graph').disconnectMicrosoft(req.hubUser);
+  res.redirect('/admin/microsoft');
 });
 
 router.post('/admin/mycelium/run', requireHubAdmin, async (req, res) => {
