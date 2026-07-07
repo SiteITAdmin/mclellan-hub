@@ -2806,7 +2806,7 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
   const milestones = hub.prepare(`
     SELECT id, value, status, updated_at FROM knowledge_atoms
     WHERE user = ? AND subject_kind = 'project' AND subject_id = ? AND predicate = 'milestone' AND derived_by = 'manual'
-    ORDER BY status = 'retired', created_at
+    ORDER BY status = 'retired', first_seen
   `).all(req.hubUser, project.id);
 
   const lastMsg = hub.prepare('SELECT MAX(ts) AS ts FROM messages WHERE project_id = ?').get(project.id)?.ts;
