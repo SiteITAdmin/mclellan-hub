@@ -273,6 +273,32 @@ Express session, SQLite store, 30-day lifetime. Cookie: `mclellan.sid`.
 Admin check: `req.session.hubAdminUser`.  
 MCP bearer fallback: `DCHAT_MCP_TOKEN` / `NCHAT_MCP_TOKEN`.
 
+### Mobile bearer auth (native iOS element apps)
+```js
+// routes/hub-shared.js
+mobileBearerBridge   // mounted in server.js BEFORE the hostname router
+```
+The per-element iPhone apps (Chat, Tasks, CRM, Content, Flights, Intelligence,
+Wiki, Prompts, Token Burn — repos at `~/Documents/McLellan <X> iOS`) and the
+Daily Debrief app authenticate with `Authorization: Bearer <token>` because a
+raw URLSession holds no session cookie. Accepted tokens: `HUB_MOBILE_TOKEN`,
+`DEBRIEF_MOBILE_TOKEN`, `WORKDAY_MOBILE_TOKEN`, `WORKDAY_WEBHOOK_SECRET`
+(first set wins; no new prod secret needed). A valid token sets
+`req.mobileAuth = true` and pins `req.hubUser = 'douglas'` on every host;
+`requireAuth` (hub, wiki), `requirePromptAuth`, and `requireSameOrigin` all
+early-exit on it, so the apps call the SAME endpoints as the web UI.
+
+Mobile-only JSON read endpoints (each lives in its element's route file):
+`/api/mobile/conversations[/:id]`, `/api/mobile/models`, `/api/mobile/token-burn`
+(hub.js); `/api/mobile/tasks`, `/api/mobile/crm[/contact/:id|/company/:id|/project/:slug]`
+(hub-crm.js); `/api/mobile/content` (hub-linkedin.js); `/api/mobile/flights`
+(hub-flights.js); `/newsletter/api/mobile[/briefing/:id]` (hub-newsletter.js);
+wiki `/api/mobile/pages`, `/api/mobile/page/:slug` (wiki.js); prompt
+`/api/mobile/prompts[/:id]` (prompt.js). Writes reuse existing endpoints
+(`/api/message` SSE chat, `/api/tasks*`, `/api/content/posts/:id/*`,
+`/newsletter/topics/toggle`). Before adding a new mobile endpoint, check the
+web endpoint can't simply be reused through the bridge.
+
 ---
 
 ## File / document storage

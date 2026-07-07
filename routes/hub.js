@@ -273,6 +273,50 @@ router.get('/api/palette-index', requireAuth, (req, res) => {
   res.json({ items });
 });
 
+// ── Mobile app JSON APIs ─────────────────────────────────────────────────────
+// Read endpoints for the native iOS element apps (bearer auth via
+// mobileBearerBridge in hub-shared.js). Writes reuse the existing web
+// endpoints (/api/message, /api/tasks, …), which accept the same token.
+router.get('/api/mobile/conversations', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const conversations = hub.prepare(`
+    SELECT c.id, c.title, c.created_at,
+           (SELECT content FROM messages m WHERE m.conversation_id = c.id ORDER BY m.ts DESC LIMIT 1) AS last_message,
+           (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
+    FROM conversations c WHERE c.user = ? ORDER BY c.created_at DESC LIMIT 50
+  `).all(req.hubUser).map(c => ({ ...c, last_message: String(c.last_message || '').slice(0, 160) }));
+  res.json({ conversations });
+});
+
+router.get('/api/mobile/conversations/:convId', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const conv = hub.prepare('SELECT id, title, created_at FROM conversations WHERE id = ? AND user = ?')
+    .get(req.params.convId, req.hubUser);
+  if (!conv) return res.status(404).json({ error: 'Not found' });
+  const messages = hub.prepare(
+    'SELECT id, role, content, model, ts FROM messages WHERE conversation_id = ? ORDER BY ts ASC'
+  ).all(conv.id);
+  res.json({ conversation: conv, messages });
+});
+
+router.get('/api/mobile/models', requireAuth, (req, res) => {
+  res.json({ models: listModelsForUser(req.hubUser) });
+});
+
+router.get('/api/mobile/token-burn', requireAuth, (req, res) => {
+  const t = buildTokenBurnPage(req.hubUser);
+  res.json({
+    importedExact: t.importedExact,
+    lastDate: t.lastDate,
+    maxDay: t.maxDay,
+    recentDays: t.recentDays,
+    topDays: t.topDays,
+    liveDaily: t.liveDaily,
+    liveTasks: t.liveTasks,
+    accountTasks: t.accountTasks,
+  });
+});
+
 // ── AI text humanizer ────────────────────────────────────────────────────────
 router.get('/humanizer', requireAuth, (req, res) => {
   res.render('hub/humanizer', { user: req.hubUser, maxChars: HUMANIZER_MAX_CHARS });

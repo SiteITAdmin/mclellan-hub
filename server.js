@@ -81,6 +81,10 @@ app.use(session({
   },
 }));
 
+// Native iOS apps authenticate with a bearer token on every host (see
+// routes/hub-shared.js). Must run before the hostname router dispatches.
+app.use(require('./routes/hub-shared').mobileBearerBridge);
+
 // ── Hostname router ───────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   const host = req.hostname;
@@ -94,7 +98,8 @@ app.use((req, res, next) => {
   }
 
   if (host === 'dchat.mclellan.scot' || host === 'nchat.mclellan.scot') {
-    req.hubUser = host.startsWith('d') ? 'douglas' : 'nakai';
+    // Mobile bearer tokens are Douglas's identity regardless of host.
+    if (!req.mobileAuth) req.hubUser = host.startsWith('d') ? 'douglas' : 'nakai';
 if (req.path.startsWith('/admin') || req.path.startsWith('/mcp')) {
       return hubAdminRouter(req, res, next);
     }
