@@ -29,6 +29,9 @@
       <% if (t.project_slug) { %>
         <a class="crm-badge subtle" href="/c/<%= t.project_slug %>"><%= t.project_slug %></a>
       <% } %>
+      <% if (!t.contact_name && !t.company_name && !t.project_slug && t.status === 'needsAction' && !t.deleted_at) { %>
+        <a class="crm-badge subtle" href="/crm/tasks/<%= t.id %>" style="opacity:.7;" title="No person, company, or project linked — open to add context">+ add context</a>
+      <% } %>
       <span class="crm-badge subtle"><%= t.source %></span>
     </div>
   </div>

@@ -162,9 +162,26 @@ async function taskAction(id, action) {
               <span style="font-size:11px;white-space:nowrap;display:inline-flex;gap:6px;align-items:baseline;">
                 <span style="opacity:.5;" title="confidence <%= a.confidence.toFixed(2) %>"><%= Math.round(a.confidence*100) %>%</span>
                 <% a.sources.forEach(function(s){ %><a href="/crm/source/<%= s.kind %>/<%= encodeURIComponent(s.id) %>" style="opacity:.65;" title="open source: <%= s.kind.replace(/_/g,' ') %>"><%= ({document:'doc',email_summary:'email',meeting_intake:'meeting',crm_fact:'fact',completed_task:'task'})[s.kind] || s.kind %></a><% }); %>
+                <% if (['stale','disputed'].includes(a.status)) { %><button class="crm-fact-archive atom-action" data-atom="<%= a.id %>" data-action="restore" title="Restore to active">restore</button><% } else { %><button class="crm-fact-archive atom-action" data-atom="<%= a.id %>" data-action="dispute" style="color:var(--crm-danger,#c0392b);opacity:.7;" title="This is wrong — the synthesis loop will re-weigh it">✕</button><% } %>
               </span>
             </div>
           <% } %>
+        </div>
+      <% } %>
+    </section>
+    <% } %>
+
+    <% if (contactReminders.length) { %>
+    <section class="section-card">
+      <h2>Active reminders</h2>
+      <% for (const r of contactReminders) { %>
+        <div class="crm-action">
+          <span style="font-size:13px;">
+            #<%= r.short_code %> <a href="/crm/tasks/<%= r.task_id %>"><%= r.title.slice(0, 60) %></a>
+            <span class="crm-muted" style="font-size:11px;">
+              · <%= r.status %><% if (r.next_fire_at && r.status !== 'acked') { %> · next <%= new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Dublin' }) %><% } %><% if (r.escalation_level > 0) { %> · pinged <%= r.escalation_level %>×<% } %>
+            </span>
+          </span>
         </div>
       <% } %>
     </section>
@@ -375,11 +392,31 @@ document.querySelectorAll('.crm-fact-edit-form').forEach(form => {
   });
 });
 
+// Archive/wrong hide the fact immediately but leave a 10-second undo toast
+// (the endpoints are reversible: unarchive / unwrong restore 'active').
+function showUndoToast(label, undoUrl) {
+  document.getElementById('fact-undo-toast')?.remove();
+  const toast = document.createElement('div');
+  toast.id = 'fact-undo-toast';
+  toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:70;background:var(--bg-card,#fff);border:1px solid var(--border,#ccc);border-radius:10px;padding:10px 16px;box-shadow:0 6px 20px rgba(0,0,0,.15);display:flex;gap:12px;align-items:center;font-size:13px;';
+  toast.innerHTML = `<span>${label}</span><button class="btn btn-sm">Undo</button>`;
+  toast.querySelector('button').onclick = async () => {
+    const r = await fetch(undoUrl, { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) location.reload();
+    else alert('Undo failed: ' + (j.error || 'unknown'));
+  };
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.remove(); location.reload(); }, 10000);
+}
+
 async function archiveFact(id) {
   const r = await fetch(`/api/crm/facts/${id}/archive`, { method: 'POST' });
   const j = await r.json();
-  if (j.ok) location.reload();
-  else alert('Error: ' + j.error);
+  if (j.ok) {
+    document.getElementById('fact-text-' + id)?.closest('.crm-timeline-item')?.style.setProperty('display', 'none');
+    showUndoToast('Fact archived.', `/api/crm/facts/${id}/unarchive`);
+  } else alert('Error: ' + j.error);
 }
 async function unarchiveFact(id) {
   const r = await fetch(`/api/crm/facts/${id}/unarchive`, { method: 'POST' });
@@ -390,8 +427,10 @@ async function unarchiveFact(id) {
 async function wrongFact(id) {
   const r = await fetch(`/api/crm/facts/${id}/wrong`, { method: 'POST' });
   const j = await r.json();
-  if (j.ok) location.reload();
-  else alert('Error: ' + j.error);
+  if (j.ok) {
+    document.getElementById('fact-text-' + id)?.closest('.crm-timeline-item')?.style.setProperty('display', 'none');
+    showUndoToast('Marked wrong — the extractor will learn from it.', `/api/crm/facts/${id}/unwrong`);
+  } else alert('Error: ' + j.error);
 }
 
 // Company link/unlink
@@ -618,6 +657,23 @@ deleteContactBtn.addEventListener('click', async () => {
     deleteContactMsg.textContent = err.message;
     deleteContactBtn.disabled = false;
   }
+});
+</script>
+
+<script>
+document.querySelectorAll('.atom-action').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const action = btn.dataset.action;
+    let reason = '';
+    if (action === 'dispute') reason = prompt('Why is this wrong? (optional — helps the synthesis re-weigh it)') || '';
+    btn.disabled = true;
+    const r = await fetch(`/api/crm/atoms/${btn.dataset.atom}/${action}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+    });
+    const j = await r.json();
+    if (j.ok) location.reload();
+    else { btn.disabled = false; alert(j.error || 'Error'); }
+  });
 });
 </script>
 <%- include('partials/crm-foot') %>
