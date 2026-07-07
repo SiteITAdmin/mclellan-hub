@@ -39,6 +39,8 @@ router.use(limiter);
 const WIKI_USER = 'douglas';
 
 function requireAuth(req, res, next) {
+  // Native iOS Wiki app: bearer token via mobileBearerBridge (server.js).
+  if (req.mobileAuth) return next();
   if (req.session?.wikiAuthed) return next();
   res.redirect('/login');
 }
@@ -211,6 +213,26 @@ function rebuildFile(page, { title, content, categories, tags }) {
   ];
   return `---\n${yamlLines.join('\n')}\n---\n\n${content.trim()}\n`;
 }
+
+// ── Mobile app JSON APIs ─────────────────────────────────────────────────────
+// Read endpoints for the native iOS Wiki app (bearer auth). Search reuses the
+// existing GET /api/search.
+router.get('/api/mobile/pages', requireAuth, (req, res) => {
+  const pages = allWikiPages().map(p => ({
+    slug: p.slug,
+    title: p.title,
+    tags: p.tags,
+    categories: p.categories,
+    created: p.created,
+  }));
+  res.json({ pages });
+});
+
+router.get('/api/mobile/page/:slug', requireAuth, (req, res) => {
+  const page = parseWikiPage(req.params.slug);
+  if (!page) return res.status(404).json({ error: 'Not found' });
+  res.json({ page });
+});
 
 // /page/new MUST come before /page/:slug to avoid being swallowed by the param route
 router.get('/page/new', requireAuth, (req, res) => {

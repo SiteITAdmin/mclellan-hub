@@ -159,6 +159,20 @@ router.get('/flights', requireAuth, (req, res) => {
   res.render('hub/flights', { user, flights, stats });
 });
 
+// Mobile app JSON (bearer auth via mobileBearerBridge) — same rows + stats the
+// /flights page renders.
+router.get('/api/mobile/flights', requireAuth, (req, res) => {
+  const raw = db.hub().prepare(
+    'SELECT * FROM flights WHERE user = ? ORDER BY flight_date DESC, created_at DESC'
+  ).all(req.hubUser);
+  const flights = raw.map(f => ({
+    ...f,
+    dep_delay: flightDelay(f.scheduled_dep, f.actual_dep),
+    arr_delay: flightDelay(f.scheduled_arr, f.actual_arr),
+  }));
+  res.json({ flights, stats: computeFlightStats(raw) });
+});
+
 router.post('/api/flights', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const user = req.hubUser;
   const { flight_number, airline, direction, flight_date,

@@ -1644,6 +1644,103 @@ router.post('/api/crm/facts/:id/delete', requireAuth, requireSameOrigin, writeLi
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
+// ── Mobile app JSON APIs ─────────────────────────────────────────────────────
+// Read endpoints for the native iOS CRM and Tasks apps (bearer auth via
+// mobileBearerBridge). Writes reuse the existing /api/tasks and /api/crm
+// endpoints, which accept the same token.
+router.get('/api/mobile/tasks', requireAuth, async (req, res) => {
+  let syncError = null;
+  try {
+    await syncTasks(req.hubUser);
+  } catch (err) {
+    syncError = err.message;
+  }
+  const tasks = getCachedTasks(req.hubUser, {}, req.query.show_history === '1');
+  res.json({ tasks, syncError });
+});
+
+router.get('/api/mobile/crm', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const contacts = hub.prepare(`
+    SELECT c.id, c.name, co.name AS company_name
+    FROM contacts c
+    LEFT JOIN contact_companies cc ON cc.contact_id = c.id AND cc.is_primary = 1
+    LEFT JOIN companies co ON co.id = cc.company_id
+    WHERE c.user = ? ORDER BY c.name
+  `).all(req.hubUser);
+  const companies = hub.prepare(`
+    SELECT co.id, co.name,
+           (SELECT COUNT(*) FROM contact_companies cc WHERE cc.company_id = co.id) AS contact_count
+    FROM companies co WHERE co.user = ? ORDER BY co.name
+  `).all(req.hubUser);
+  const projects = hub.prepare(
+    'SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name'
+  ).all(req.hubUser);
+  res.json({ contacts, companies, projects });
+});
+
+router.get('/api/mobile/crm/contact/:id', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const contact = hub.prepare('SELECT * FROM contacts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!contact) return res.status(404).json({ error: 'Not found' });
+  const companies = hub.prepare(`
+    SELECT co.id, co.name, cc.role, cc.is_primary
+    FROM contact_companies cc
+    JOIN companies co ON co.id = cc.company_id
+    WHERE cc.contact_id = ?
+    ORDER BY cc.is_primary DESC, co.name
+  `).all(contact.id);
+  const meetings = hub.prepare(`
+    SELECT m.id, m.title, m.meeting_date, m.meeting_time, co.name AS company_name
+    FROM meeting_attendees ma
+    JOIN meetings m ON m.id = ma.meeting_id
+    LEFT JOIN companies co ON co.id = m.company_id
+    WHERE ma.contact_id = ? AND m.user = ?
+    ORDER BY m.meeting_date DESC, m.meeting_time DESC
+    LIMIT 30
+  `).all(contact.id, req.hubUser);
+  const tasks = getCachedTasks(req.hubUser, { contactId: contact.id }, false);
+  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'contact', contact.id, {});
+  res.json({ contact, companies, meetings, tasks, knowledge: knowledgeByPredicate });
+});
+
+router.get('/api/mobile/crm/company/:id', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const company = hub.prepare('SELECT * FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!company) return res.status(404).json({ error: 'Not found' });
+  const contacts = hub.prepare(`
+    SELECT c.id, c.name, cc.role, cc.is_primary
+    FROM contact_companies cc
+    JOIN contacts c ON c.id = cc.contact_id
+    WHERE cc.company_id = ?
+    ORDER BY cc.is_primary DESC, c.name
+  `).all(company.id);
+  const tasks = getCachedTasks(req.hubUser, { companyId: company.id }, false);
+  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'company', company.id, {});
+  res.json({ company, contacts, tasks, knowledge: knowledgeByPredicate });
+});
+
+router.get('/api/mobile/crm/project/:slug', requireAuth, (req, res) => {
+  const hub = db.hub();
+  const project = hub.prepare('SELECT * FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, req.params.slug);
+  if (!project) return res.status(404).json({ error: 'Not found' });
+  const tasks = getCachedTasks(req.hubUser, { projectSlug: project.slug }, false);
+  const contacts = hub.prepare(`
+    SELECT c.id, c.name, cp.role AS project_role
+    FROM contact_projects cp
+    JOIN contacts c ON c.id = cp.contact_id
+    WHERE cp.project_id = ? ORDER BY c.name
+  `).all(project.id);
+  const companies = hub.prepare(`
+    SELECT co.id, co.name, cp.role AS project_role
+    FROM company_projects cp
+    JOIN companies co ON co.id = cp.company_id
+    WHERE cp.project_id = ? ORDER BY co.name
+  `).all(project.id);
+  const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'project', project.id, { includeEvents: true });
+  res.json({ project, tasks, contacts, companies, knowledge: knowledgeByPredicate });
+});
+
 router.get('/crm/tasks', requireAuth, async (req, res) => {
   const showHistory = req.query.show_history === '1';
   let syncError = null;

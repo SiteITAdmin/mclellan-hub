@@ -41,6 +41,9 @@ function promptUserFromSession(req) {
 }
 
 function requirePromptAuth(req, res, next) {
+  // Native iOS Prompts app: bearer token via mobileBearerBridge (server.js),
+  // which already set req.hubUser to douglas.
+  if (req.mobileAuth) return next();
   const user = promptUserFromSession(req);
   if (!user) return res.redirect('/login');
   req.hubUser = user;
@@ -93,6 +96,22 @@ router.post('/logout', requireSameOrigin, (req, res) => {
 router.use((req, res, next) => {
   if (req.method === 'POST') return requireSameOrigin(req, res, next);
   return next();
+});
+
+// ── Mobile app JSON APIs ─────────────────────────────────────────────────────
+// Read endpoints for the native iOS Prompts app (bearer auth).
+router.get('/api/mobile/prompts', requirePromptAuth, (req, res) => {
+  const prompts = listPrompts(req.hubUser, {
+    purpose: req.query.purpose || 'all',
+    q: req.query.q || '',
+  });
+  res.json({ prompts, purposes: PURPOSES });
+});
+
+router.get('/api/mobile/prompts/:id', requirePromptAuth, (req, res) => {
+  const prompt = getPrompt(req.hubUser, req.params.id);
+  if (!prompt) return res.status(404).json({ error: 'Not found' });
+  res.json({ prompt });
 });
 
 // Library — browse and pick saved prompt examples

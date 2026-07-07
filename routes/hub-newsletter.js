@@ -117,6 +117,59 @@ router.get('/', (req, res) => {
   });
 });
 
+// ── Mobile app JSON APIs ─────────────────────────────────────────────────────
+// Read endpoints for the native iOS Intelligence app (bearer auth via
+// mobileBearerBridge; this router is mounted under /newsletter with the hub's
+// requireAuth). Topic toggles reuse POST /newsletter/topics/toggle, which
+// already answers JSON when the client doesn't accept HTML.
+router.get('/api/mobile', (req, res) => {
+  const user = req.hubUser;
+  const hub = db.hub();
+  const requestedWeek = req.query.week || getWeekKey();
+  const weekKey = weekKeyRange(requestedWeek) ? requestedWeek : getWeekKey();
+
+  const recentItems = hub.prepare(`
+    SELECT i.id, i.title AS headline, i.summary, i.category, i.item_type,
+           i.selected, i.published_at, i.created_at, d.sender_name AS from_name
+    FROM intel_items i JOIN intel_documents d ON d.id = i.document_id
+    WHERE i.user = ?
+    ORDER BY i.published_at DESC
+    LIMIT 2000
+  `).all(user);
+  const weekMap = new Map();
+  for (const item of recentItems) {
+    const key = getWeekKey(new Date((item.published_at || item.created_at) * 1000));
+    const row = weekMap.get(key) || { week_key: key, total: 0, selected: 0 };
+    row.total++;
+    row.selected += item.selected ? 1 : 0;
+    weekMap.set(key, row);
+  }
+  const weeks = [...weekMap.values()].sort((a, b) => b.week_key.localeCompare(a.week_key)).slice(0, 8);
+  const topics = recentItems.filter(item =>
+    getWeekKey(new Date((item.published_at || item.created_at) * 1000)) === weekKey
+  );
+  const briefings = hub.prepare(`
+    SELECT b.id, b.created_at, b.topic_count, b.published_at, b.week_key,
+           COALESCE(b.format_name, f.name) AS resolved_format_name,
+           b.date_from, b.date_to
+    FROM nl_briefings b
+    LEFT JOIN nl_formats f ON f.id = b.format_id
+    WHERE b.user = ? ORDER BY b.created_at DESC LIMIT 12
+  `).all(user);
+
+  res.json({ weekKey, weekLabel: weekKeyLabel(weekKey), weeks, topics, briefings });
+});
+
+router.get('/api/mobile/briefing/:id', (req, res) => {
+  const briefing = db.hub().prepare(`
+    SELECT b.*, f.name AS linked_format_name
+    FROM nl_briefings b LEFT JOIN nl_formats f ON f.id = b.format_id
+    WHERE b.id = ? AND b.user = ?
+  `).get(req.params.id, req.hubUser);
+  if (!briefing) return res.status(404).json({ error: 'Not found' });
+  res.json({ briefing });
+});
+
 // ── Topic toggle ──────────────────────────────────────────────────────────────
 
 router.post('/topics/toggle', (req, res) => {

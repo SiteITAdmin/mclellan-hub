@@ -91,6 +91,12 @@ router.get('/lin/published', requireAuth, (req, res) => {
   });
 });
 
+// Mobile app JSON list (bearer auth via mobileBearerBridge). Post detail and
+// status changes reuse the existing /api/content/posts/:id endpoints.
+router.get('/api/mobile/content', requireAuth, (req, res) => {
+  res.json({ posts: getContentPosts(req.hubUser) });
+});
+
 router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const { setContentCadencePolicy } = require('../lib/content-cadence-policy');
   const bool = (value) => value === true || value === 'true' || value === 'on' || value === '1';
