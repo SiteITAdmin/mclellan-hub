@@ -104,7 +104,10 @@ test('the daily system report surfaces what went out of view', () => {
   const { knowledgeSection } = require('../lib/system-report');
   const section = knowledgeSection(USER);
   assert.match(section, /^KNOWLEDGE\n/);
-  assert.match(section, /stale \(out of view, never deleted/);
+  // Wording changed in 969c824 (Fix CRM knowledge daily report) — stale atoms
+  // are reported as out of view but still searchable, never deleted.
+  assert.match(section, /Out of view: \d+ stale atom/);
+  assert.match(section, /still searchable in Ask the Hub/);
   assert.match(section, /Newly out of view/);
   assert.match(section, /swimming/);
 });

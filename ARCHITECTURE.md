@@ -168,6 +168,26 @@ Important rules:
 - Open tasks are operational state. They can inform triage and duplicate review, but durable knowledge should come from completed tasks or source evidence.
 - If a new CRM feature needs to connect people, projects, companies, tasks, documents, or emails, add a source kind or synthesis/projection step. Do not add a direct table copy path.
 
+### User feedback on atoms (6 Jul 2026)
+
+Atoms can be disputed, marked stale, or restored from every surface that renders them (contact/company/project pages and the atom browser at `/crm/knowledge?browse=1`). The action sets `knowledge_atoms.status` and writes a `knowledge_receipts` row (`stage='user_feedback'`, payload carries the reason and previous status) — corrections enter the same evidence stream the engine already consumes. Engine run recency, per-stage failure counts, and data-health badges (duplicate emails, orphaned facts, stale/disputed atoms) are compiled live from `knowledge_receipts`/`knowledge_atoms` on `/crm/knowledge`; a manual "Process sources now" trigger calls `runCrmKnowledgeEngine` directly.
+
+### Manual project declarations (6 Jul 2026)
+
+Project status/deadline/scope/milestones are NOT columns — they are `knowledge_atoms` with `derived_by='manual'`, `subject_kind='project'` (predicates `status`, `deadline`, `scope`, `milestone`). Declared knowledge lives in the compiled layer with provenance like derived knowledge. Health falls back to activity-derived (active <30d, quiet <90d, stale beyond) when no status atom exists. Endpoints: `/api/crm/project/:slug/meta`, `/api/crm/project/:slug/milestones`, `/api/crm/project-milestones/:id/:action`.
+
+### Task priority/effort tags (6 Jul 2026)
+
+Task priority and effort are structured tags in the Google Tasks notes field (`[priority: high] [effort: 30m]`), not columns — they round-trip through the Google API and stay visible in any Google client. Helpers `parseTaskTags`/`stripTaskTags`/`withTaskTags` in `lib/google-tasks.js`; `getCachedTasks` returns parsed `priority`/`effort_minutes` plus a tag-free `notes_preview` on every row. Task-to-meeting traceability is parsed from `source_id` (`meeting:<id>:…`), never stored twice.
+
+### Meeting intake preview (6 Jul 2026)
+
+Drafts can run "Preview extraction" (`previewMeetingIntake` in `lib/meeting-intake.js`): the extraction is stored in `extraction.preview` keyed by a hash of (transcript, title, date, project); submit reuses it when inputs are unchanged, so review costs no second model call. The extraction schema includes attendee `engagement`, meeting-level `risk_flags`/`decision_quality`/`urgency`/`confidence`, and per-action `blocked_by`/`success_criteria`, all flowing into the meeting markdown the engine reads.
+
+### Scheduled project reports (6 Jul 2026)
+
+`project_report_schedules` (agreed config table — user preference, not derivable knowledge) holds one row per project: cadence `weekly:<day>`/`monthly:<1-28>`, window days, optional recipient. The hourly `project_report_schedules` job (`lib/job-queue.js`) calls `runDueProjectReportSchedules` (exported on the `hub-crm` router), which reuses the evidence-to-report-to-PDF-to-AgentMail path with a 20-hour double-send guard. Managed from the schedule card on `/crm/project-report`.
+
 ### Knowledge retention
 
 Knowledge never disappears; it only leaves the default line of sight. The weekly lint (`lib/knowledge-lint.js`) decays unconfirmed mutable facts after 180 days and marks them `stale` after 365 — but immutable predicates (`isImmutablePredicate`: date of birth, kinship) are exempt, stale atoms stay searchable in Ask the Hub and visible on entity pages via "show history", and any new source mentioning the fact revives it. Lint decisions land in `crm_context` (`knowledge_lint_last`) and the daily system report's KNOWLEDGE section, so nothing goes stale silently.

@@ -116,6 +116,9 @@ These are the tools the system runs on. They are not features — they are the f
 - CRM facts are accumulating from agentmail, email, and meetings
 - The morning briefing includes upcoming meetings and relevant contact context
 - Projects have contacts linked to them
+- Keep-warm-overdue contacts surface at the top of the People page with badges
+- Manual capture is one pass: Add Person takes phone/company/role/how-we-met; touchpoints, milestones, and project status are recorded where they're seen (facts and manual atoms, not columns)
+- Meeting intake drafts are previewed (attendees/outcomes/actions/risk flags) before anything is committed; debriefs create CRM meeting rows with date/time/duration/channel
 
 **Does not own:** Tasks (those go to Google Tasks), document storage (that's Projects/Documents)
 
