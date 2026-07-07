@@ -19,11 +19,92 @@
       autofocus
     />
     <button class="btn" type="submit" style="white-space:nowrap;">Ask</button>
+    <a class="btn btn-ghost" href="/crm/knowledge<%= browse ? '' : '?browse=1' %>" style="white-space:nowrap;"><%= browse ? 'Hide browser' : 'Browse atoms' %></a>
   </form>
   <% if (error) { %>
     <p class="crm-muted" style="color:var(--crm-danger,#c0392b);margin-top:10px;font-size:13px;"><%= error %></p>
   <% } %>
 </section>
+
+<section class="section-card" style="margin-bottom:18px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+    <h2 style="margin:0;font-size:15px;">Knowledge engine</h2>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <% if (health.duplicateEmails) { %><span class="crm-badge" style="color:#b8860b;border-color:currentColor;" title="Contacts sharing an email address"><%= health.duplicateEmails %> duplicate email<%= health.duplicateEmails === 1 ? '' : 's' %></span><% } %>
+      <% if (health.orphanFacts) { %><span class="crm-badge" style="color:var(--crm-danger,#c0392b);border-color:currentColor;" title="Facts whose contact no longer exists"><%= health.orphanFacts %> orphaned fact<%= health.orphanFacts === 1 ? '' : 's' %></span><% } %>
+      <% if (health.staleAtoms) { %><span class="crm-badge subtle"><%= health.staleAtoms %> stale atom<%= health.staleAtoms === 1 ? '' : 's' %></span><% } %>
+      <% if (health.disputedAtoms) { %><span class="crm-badge subtle"><%= health.disputedAtoms %> disputed</span><% } %>
+      <button class="btn btn-sm" id="engine-run-btn">Process sources now</button>
+      <span class="crm-muted" id="engine-run-msg" style="font-size:12px;"></span>
+    </div>
+  </div>
+  <% if (engineStages.length) { %>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;">
+      <% for (const s of engineStages) { %>
+        <span style="font-size:12px;" class="crm-muted">
+          <strong style="color:var(--crm-text,inherit);"><%= s.stage.replace(/_/g,' ') %></strong>
+          · last <%= new Date(s.last_at * 1000).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Dublin' }) %>
+          · <%= s.total %> receipts<% if (s.failures > 0) { %> · <span style="color:var(--crm-danger,#c0392b);"><%= s.failures %> failed</span><% } %>
+        </span>
+      <% } %>
+    </div>
+  <% } else { %>
+    <p class="crm-muted" style="font-size:12px;margin:10px 0 0;">No receipts yet — the engine has not processed any sources for this account.</p>
+  <% } %>
+</section>
+
+<% if (browse) { %>
+<section class="section-card" style="margin-bottom:18px;">
+  <h2 style="margin-bottom:10px;">Browse the knowledge base</h2>
+  <form method="GET" action="/crm/knowledge" class="crm-inline-form" style="flex-wrap:wrap;margin-bottom:14px;">
+    <input type="hidden" name="browse" value="1">
+    <select name="kind">
+      <option value="">All subjects</option>
+      <% for (const k of ['contact','company','project','document']) { %>
+        <option value="<%= k %>" <%= browseFilters.kind === k ? 'selected' : '' %>><%= k %></option>
+      <% } %>
+    </select>
+    <select name="status">
+      <option value="">Any status (except retired)</option>
+      <% for (const st of ['active','proposed','stale','disputed']) { %>
+        <option value="<%= st %>" <%= browseFilters.status === st ? 'selected' : '' %>><%= st %></option>
+      <% } %>
+    </select>
+    <select name="minconf">
+      <option value="">Any confidence</option>
+      <% for (const c of [0.5, 0.7, 0.9]) { %>
+        <option value="<%= c %>" <%= browseFilters.minConf === c ? 'selected' : '' %>>≥ <%= Math.round(c * 100) %>%</option>
+      <% } %>
+    </select>
+    <button class="btn btn-sm" type="submit">Filter</button>
+  </form>
+  <% const predicates = Object.keys(browseAtoms || {}); %>
+  <% if (!predicates.length) { %><p class="crm-muted">No atoms match these filters.</p><% } %>
+  <% for (const pred of predicates) { %>
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;opacity:.55;margin-bottom:3px;"><%= pred.replace(/_/g,' ') %> (<%= browseAtoms[pred].length %>)</div>
+      <% for (const a of browseAtoms[pred]) { %>
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--border,#eee);" id="atom-row-<%= a.id %>">
+          <span style="font-size:13px;<%= ['stale','disputed'].includes(a.status) ? 'opacity:.55;' : '' %>">
+            <% if (a.subject_kind === 'contact' && a.subject_id) { %><a href="/crm/contact/<%= a.subject_id %>"><strong><%= a.subject_label %></strong></a><% } else if (a.subject_kind === 'company' && a.subject_id) { %><a href="/crm/company/<%= a.subject_id %>"><strong><%= a.subject_label %></strong></a><% } else { %><strong><%= a.subject_label %></strong><% } %>
+            — <%= a.value %>
+            <% if (a.status !== 'active') { %><span style="font-size:10px;opacity:.7;">· <%= a.status %></span><% } %>
+          </span>
+          <span style="font-size:11px;white-space:nowrap;display:inline-flex;gap:6px;align-items:baseline;">
+            <span style="opacity:.5;"><%= Math.round(a.confidence * 100) %>%</span>
+            <% if (a.status === 'active' || a.status === 'proposed') { %>
+              <button class="crm-fact-archive atom-action" data-atom="<%= a.id %>" data-action="stale" title="No longer current — synthesis will re-check it">stale</button>
+              <button class="crm-fact-archive atom-action" data-atom="<%= a.id %>" data-action="dispute" style="color:var(--crm-danger,#c0392b);" title="This is wrong — synthesis will re-weigh it">dispute</button>
+            <% } else { %>
+              <button class="crm-fact-archive atom-action" data-atom="<%= a.id %>" data-action="restore" title="Restore to active">restore</button>
+            <% } %>
+          </span>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+</section>
+<% } %>
 
 <% if (result) { %>
   <section class="section-card" style="margin-bottom:18px;">
@@ -95,4 +176,33 @@
   </section>
 <% } %>
 
+<script>
+document.getElementById('engine-run-btn').addEventListener('click', async e => {
+  const msg = document.getElementById('engine-run-msg');
+  e.target.disabled = true;
+  msg.textContent = 'Starting…';
+  try {
+    const r = await fetch('/api/crm/knowledge/run', { method: 'POST' });
+    const j = await r.json();
+    msg.textContent = j.ok ? j.message : (j.error || 'Error');
+  } catch (err) { msg.textContent = err.message; e.target.disabled = false; }
+});
+
+document.querySelectorAll('.atom-action').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const action = btn.dataset.action;
+    let reason = '';
+    if (action === 'dispute') {
+      reason = prompt('Why is this wrong? (optional — helps the synthesis re-weigh it)') || '';
+    }
+    btn.disabled = true;
+    const r = await fetch(`/api/crm/atoms/${btn.dataset.atom}/${action}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+    });
+    const j = await r.json();
+    if (j.ok) location.reload();
+    else { btn.disabled = false; alert(j.error || 'Error'); }
+  });
+});
+</script>
 <%- include('partials/crm-foot') %>

@@ -49,6 +49,66 @@
   </section>
 <% } %>
 
+<% if (project) { %>
+  <section class="section-card" style="margin-bottom:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+      <h2 style="margin:0;font-size:15px;">Scheduled email</h2>
+      <% if (reportSchedule && reportSchedule.enabled) { %>
+        <span class="crm-badge">active: <%= reportSchedule.cadence.replace(':', ' ') %> · <%= reportSchedule.window_days %>d window<%= reportSchedule.last_run_at ? ` · last sent ${new Date(reportSchedule.last_run_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}` : '' %></span>
+      <% } %>
+    </div>
+    <form class="crm-inline-form" id="report-schedule-form" style="flex-wrap:wrap;margin-top:10px;">
+      <input type="hidden" name="project" value="<%= project.slug %>">
+      <select name="mode" id="sched-mode">
+        <% const curMode = reportSchedule?.enabled ? reportSchedule.cadence.split(':')[0] : 'off'; %>
+        <option value="off" <%= curMode === 'off' ? 'selected' : '' %>>No schedule</option>
+        <option value="weekly" <%= curMode === 'weekly' ? 'selected' : '' %>>Weekly</option>
+        <option value="monthly" <%= curMode === 'monthly' ? 'selected' : '' %>>Monthly</option>
+      </select>
+      <select name="day" id="sched-day-weekly" style="<%= curMode === 'weekly' ? '' : 'display:none;' %>">
+        <% for (const [v, l] of [['mon','Monday'],['tue','Tuesday'],['wed','Wednesday'],['thu','Thursday'],['fri','Friday'],['sat','Saturday'],['sun','Sunday']]) { %>
+          <option value="<%= v %>" <%= reportSchedule?.cadence === `weekly:${v}` ? 'selected' : '' %>><%= l %></option>
+        <% } %>
+      </select>
+      <select id="sched-day-monthly" style="<%= curMode === 'monthly' ? '' : 'display:none;' %>">
+        <% for (let d = 1; d <= 28; d++) { %>
+          <option value="<%= d %>" <%= reportSchedule?.cadence === `monthly:${d}` ? 'selected' : '' %>>Day <%= d %></option>
+        <% } %>
+      </select>
+      <select name="window_days">
+        <% for (const n of [30, 60, 90]) { %>
+          <option value="<%= n %>" <%= (reportSchedule?.window_days || 30) === n ? 'selected' : '' %>><%= n %>-day window</option>
+        <% } %>
+      </select>
+      <button class="btn btn-sm" type="submit">Save schedule</button>
+      <span class="crm-muted" id="report-schedule-msg" style="font-size:12px;"></span>
+    </form>
+  </section>
+  <script>
+  document.getElementById('sched-mode').addEventListener('change', e => {
+    document.getElementById('sched-day-weekly').style.display = e.target.value === 'weekly' ? '' : 'none';
+    document.getElementById('sched-day-monthly').style.display = e.target.value === 'monthly' ? '' : 'none';
+  });
+  document.getElementById('report-schedule-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = document.getElementById('report-schedule-msg');
+    const mode = document.getElementById('sched-mode').value;
+    const day = mode === 'monthly' ? document.getElementById('sched-day-monthly').value : document.getElementById('sched-day-weekly').value;
+    const data = Object.fromEntries(new FormData(e.target));
+    data.day = day;
+    msg.textContent = 'Saving…';
+    try {
+      const r = await fetch('/api/crm/project-report/schedule', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      const j = await r.json();
+      msg.textContent = j.ok ? j.message : (j.error || 'Error');
+      if (j.ok) setTimeout(() => location.reload(), 900);
+    } catch (err) { msg.textContent = err.message; }
+  });
+  </script>
+<% } %>
+
 <% if (project && evidence) { %>
   <section class="section-card" style="margin-bottom:18px;">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
