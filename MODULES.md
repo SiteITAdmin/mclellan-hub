@@ -91,7 +91,9 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## Outlook (Microsoft 365)
-**Purpose:** Sync Douglas's work email and calendar directly from the Microsoft 365 tenancy — inbox mail every 15 minutes into the CRM knowledge engine's evidence pool, calendar every 30 minutes into meetings. Read-only: nothing is written back to the mailbox or calendar.
+**Purpose:** Sync Douglas's work email and calendar directly from the Microsoft 365 tenancy — mail every 15 minutes into the CRM knowledge engine's evidence pool, calendar every 30 minutes into meetings. Read-only: nothing is written back to the mailbox or calendar.
+
+Mail sync is **folder-scoped**: only designated folders are read (`_outlook_sync_folders` in `crm_context`, configured at `/admin/microsoft`, default whole Inbox). Outlook rules decide what the Hub sees — server alerts and helpdesk cc's stay out by never being filed into a designated folder. Folder names match case-insensitively across the top level and one level of subfolders; a configured folder missing from the mailbox is logged and reported in the sync result.
 
 **Healthy looks like:**
 - `inbound_email_records` with `source='outlook'` has entries on working days

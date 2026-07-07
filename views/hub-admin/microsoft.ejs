@@ -34,7 +34,8 @@
   <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px;">
     Work email and calendar sync from the Microsoft 365 tenancy. Mail is read every 15 minutes into
     the CRM knowledge engine; the calendar syncs every 30 minutes into meetings. Read-only — nothing
-    is written back to the mailbox.
+    is written back to the mailbox. Mail sync only reads the designated folders below, so Outlook
+    rules decide what the Hub sees — server alerts and helpdesk cc's stay out.
   </p>
 
   <% if (!status.configured) { %>
@@ -70,6 +71,28 @@
       <div class="stat"><div class="stat-num"><%= status.meetingsUpcoming %></div><div class="stat-label">Upcoming meetings</div></div>
       <div class="stat"><div class="stat-num"><%= status.meetingsTotal %></div><div class="stat-label">Meetings total</div></div>
     </div>
+
+    <div class="section-head">Mail folders synced to the Hub</div>
+    <form method="POST" action="/admin/microsoft/folders" style="margin-bottom:8px;">
+      <input type="text" name="folders" value="<%= status.syncFolders.join(', ') %>"
+             style="width:100%;max-width:520px;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:13px;"
+             placeholder="Inbox">
+      <button class="run-btn" type="submit" style="margin-left:6px;">Save folders</button>
+      <div class="item-detail" style="margin-top:6px;">
+        Comma-separated folder names, matched case-insensitively (top level and one level of
+        subfolders). Only mail in these folders reaches the Hub — leave as <code>Inbox</code> to sync everything.
+      </div>
+    </form>
+    <% if (status.folderListError) { %>
+      <div class="item warning"><div class="item-body">
+        <div class="item-label">Could not list mailbox folders</div>
+        <div class="item-detail"><%= status.folderListError %></div>
+      </div></div>
+    <% } else if (status.availableFolders && status.availableFolders.length) { %>
+      <div class="item-detail" style="margin-bottom:16px;">
+        In the mailbox: <%= status.availableFolders.map(f => f.parent ? `${f.parent}/${f.displayName}` : f.displayName).join(' · ') %>
+      </div>
+    <% } %>
 
     <button class="run-btn" id="sync-btn" onclick="syncNow()">Sync now</button>
     <form method="POST" action="/admin/microsoft/disconnect" style="display:inline" onsubmit="return confirm('Disconnect Microsoft 365? Background sync will stop until reconnected.')">
@@ -131,7 +154,9 @@ async function syncNow() {
     const data = await r.json();
     if (data.error) { log.textContent = 'Error: ' + data.error; }
     else {
-      log.textContent = 'Mail: ' + data.mail.processed + ' processed, ' + data.mail.skipped + ' already known.\n'
+      log.textContent = 'Mail: ' + data.mail.processed + ' processed, ' + data.mail.skipped + ' already known'
+        + ' (folders: ' + (data.mail.folders || []).join(', ') + ').\n'
+        + ((data.mail.missingFolders || []).length ? 'WARNING — folders not found: ' + data.mail.missingFolders.join(', ') + '\n' : '')
         + 'Calendar: ' + data.calendar.events + ' events, ' + data.calendar.attendeesMatched + ' attendees matched.';
     }
     log.style.display = 'block';

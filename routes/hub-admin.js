@@ -2373,11 +2373,24 @@ router.get('/admin/connectivity', requireHubAdmin, (req, res) => {
 
 // ── Microsoft 365 sync status ─────────────────────────────────────────────────
 
-router.get('/admin/microsoft', requireHubAdmin, (req, res) => {
+router.get('/admin/microsoft', requireHubAdmin, async (req, res) => {
   const msGraph = require('../lib/ms-graph');
+  const { getSyncFolders, listMailFolders } = require('../lib/outlook-processor');
   const hub = db.hub();
   const user = req.hubUser;
   const since24h = Math.floor(Date.now() / 1000) - 86400;
+
+  // Live folder list is a convenience for the picker — the page must still
+  // render when Graph is unreachable or the token has expired.
+  let availableFolders = [];
+  let folderListError = null;
+  if (msGraph.isMsGraphConfigured() && msGraph.hasMsToken(user)) {
+    try {
+      availableFolders = await listMailFolders((path, opts) => msGraph.graphGetAll(user, path, opts));
+    } catch (err) {
+      folderListError = err.message;
+    }
+  }
 
   const lastCheckRow = hub.prepare(
     "SELECT value FROM crm_context WHERE user = ? AND key = '_outlook_last_check_ts'"
@@ -2387,6 +2400,9 @@ router.get('/admin/microsoft', requireHubAdmin, (req, res) => {
     connected: msGraph.hasMsToken(user),
     accountEmail: msGraph.getMsAccountEmail(user),
     lastCheckTs: lastCheckRow ? parseInt(lastCheckRow.value, 10) : null,
+    syncFolders: getSyncFolders(user),
+    availableFolders,
+    folderListError,
     emails24h: hub.prepare(
       "SELECT COUNT(*) AS n FROM inbound_email_records WHERE user = ? AND source = 'outlook' AND processed_at >= ?"
     ).get(user, since24h).n,
@@ -2440,6 +2456,13 @@ router.post('/admin/microsoft/sync', requireHubAdmin, async (req, res) => {
     console.error('[hub-admin] microsoft sync:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+router.post('/admin/microsoft/folders', requireHubAdmin, (req, res) => {
+  const { setSyncFolders } = require('../lib/outlook-processor');
+  const saved = setSyncFolders(req.hubUser, req.body.folders || '');
+  console.log(`[hub-admin] outlook sync folders for ${req.hubUser}: ${saved.join(', ')}`);
+  res.redirect('/admin/microsoft');
 });
 
 router.post('/admin/microsoft/disconnect', requireHubAdmin, (req, res) => {
