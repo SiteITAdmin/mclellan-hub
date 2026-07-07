@@ -39,13 +39,32 @@
         <label class="wide">Title
           <input name="title" value="<%= task.title %>" required>
         </label>
-        <label class="wide">Notes
-          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= task.notes || '' %></textarea>
+        <label class="wide">Notes <span style="font-size:11px;opacity:.6;">priority/effort tags are managed by the fields below</span>
+          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
         </label>
-        <label>Due date
+        <label>Priority
+          <select name="priority">
+            <option value="">— none —</option>
+            <% for (const p of ['low','medium','high']) { %>
+              <option value="<%= p %>" <%= taskTags.priority === p ? 'selected' : '' %>><%= p %></option>
+            <% } %>
+          </select>
+        </label>
+        <label>Effort
+          <select name="effort_minutes">
+            <option value="">— not sized —</option>
+            <% for (const [v, l] of [[5,'5 min'],[15,'15 min'],[30,'30 min'],[60,'1 hour'],[120,'2 hours']]) { %>
+              <option value="<%= v %>" <%= taskTags.effort_minutes === v ? 'selected' : '' %>><%= l %></option>
+            <% } %>
+            <% if (taskTags.effort_minutes && ![5,15,30,60,120].includes(taskTags.effort_minutes)) { %>
+              <option value="<%= taskTags.effort_minutes %>" selected><%= taskTags.effort_minutes %> min</option>
+            <% } %>
+          </select>
+        </label>
+        <label>Due date <span style="font-size:11px;opacity:.6;">(syncs to Google)</span>
           <input name="due" type="date" value="<%= task.due || '' %>">
         </label>
-        <label>Due time <span style="font-size:11px;opacity:.6;">(local only)</span>
+        <label>Reminder time <span style="font-size:11px;opacity:.6;">(Dublin, local to the Hub — not synced; use Remind me for alerts)</span>
           <input name="deadline" type="datetime-local"
             value="<%= task.deadline ? task.deadline.slice(0,16) : (task.due ? task.due + 'T09:00' : '') %>">
         </label>
@@ -81,11 +100,35 @@
     </section>
 
     <section class="section-card">
+      <h2>Task context</h2>
+      <% if (originMeeting) { %>
+        <div class="crm-action">
+          <span style="font-size:13px;">Spawned by meeting: <a href="/crm/meeting/<%= originMeeting.id %>"><strong><%= originMeeting.title %></strong></a> <span class="crm-muted">(<%= originMeeting.meeting_date %>)</span></span>
+        </div>
+      <% } %>
+      <% if (task.project_slug) { %>
+        <div class="crm-action"><span style="font-size:13px;">Project: <a href="/crm/project/<%= task.project_slug %>"><%= task.project_slug %></a></span></div>
+      <% } %>
+      <% if (relatedReminders.length) { %>
+        <p style="font-size:13px;font-weight:600;margin:10px 0 4px;">Reminders chasing this task</p>
+        <% for (const r of relatedReminders) { %>
+          <div class="crm-action">
+            <span style="font-size:13px;">#<%= r.short_code %> · <%= r.status %><% if (r.next_fire_at && !['done','cancelled'].includes(r.status)) { %> · next <%= new Date(r.next_fire_at * 1000).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Dublin' }) %><% } %><% if (r.escalation_level > 0) { %> · pinged <%= r.escalation_level %>×<% } %></span>
+          </div>
+        <% } %>
+      <% } %>
+      <% if (!originMeeting && !task.project_slug && !relatedReminders.length) { %>
+        <p class="crm-muted">No origin meeting, project, or reminders linked yet.</p>
+      <% } %>
+    </section>
+
+    <section class="section-card">
       <h2>Source &amp; sync</h2>
       <dl class="crm-dl">
         <dt>Source</dt><dd><%= task.source %><% if (task.source_id) { %> <span class="crm-muted">(<%= task.source_id.slice(0, 20) %>…)</span><% } %></dd>
         <dt>Google Task ID</dt><dd style="font-size:11px;word-break:break-all;"><%= task.google_task_id %></dd>
         <dt>Created</dt><dd><%= new Date(task.created_at * 1000).toLocaleString('en-GB') %></dd>
+        <% if (task.completed_at) { %><dt>Completed</dt><dd><%= new Date(task.completed_at * 1000).toLocaleString('en-GB') %></dd><% } %>
         <dt>Last synced</dt><dd><%= new Date(task.synced_at * 1000).toLocaleString('en-GB') %></dd>
       </dl>
     </section>
@@ -173,17 +216,39 @@ document.getElementById('task-edit-form').addEventListener('submit', async e => 
 });
 
 // Top-level task actions (complete / delete / restore)
-async function remindMe() {
-  const when = prompt('Remind you when? (YYYY-MM-DDTHH:MM, e.g. <%= new Date(Date.now() + 86400000).toLocaleDateString("sv-SE", { timeZone: "Europe/Dublin" }) %>T09:00)');
-  if (!when) return;
-  const r = await fetch('/api/reminders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind: 'task', target_id: '<%= task.id %>', title: <%- JSON.stringify(task.title) %>, remind_at: when }),
-  });
-  const j = await r.json();
-  if (j.ok) alert(`Reminder #${j.reminder.short_code} set.`);
-  else alert(j.error || 'Error');
+function remindMe() {
+  document.getElementById('remind-pop')?.remove();
+  const pop = document.createElement('div');
+  pop.id = 'remind-pop';
+  pop.style.cssText = 'position:fixed;z-index:60;top:30%;left:50%;transform:translateX(-50%);background:var(--bg-card,#fff);border:1px solid var(--border,#ccc);border-radius:10px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.18);display:grid;gap:10px;min-width:300px;';
+  const tomorrow = '<%= new Date(Date.now() + 86400000).toLocaleDateString("sv-SE", { timeZone: "Europe/Dublin" }) %>T09:00';
+  pop.innerHTML = `
+    <strong style="font-size:14px;">Remind me about this task</strong>
+    <label style="font-size:12px;display:grid;gap:4px;">When
+      <input id="remind-when" type="datetime-local" value="${tomorrow}" style="font-size:13px;padding:4px 8px;">
+    </label>
+    <span style="font-size:11px;opacity:.6;">Unanswered reminders escalate after 30 min, 3 h, then 24 h. Marking the reminder done also completes this task.</span>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm" id="remind-save">Set reminder</button>
+      <button class="btn btn-sm btn-ghost" id="remind-cancel">Cancel</button>
+      <span id="remind-msg" style="font-size:12px;opacity:.7;"></span>
+    </div>`;
+  document.body.appendChild(pop);
+  pop.querySelector('#remind-cancel').onclick = () => pop.remove();
+  pop.querySelector('#remind-save').onclick = async () => {
+    const when = pop.querySelector('#remind-when').value;
+    if (!when) return;
+    const msg = pop.querySelector('#remind-msg');
+    msg.textContent = 'Setting…';
+    const r = await fetch('/api/reminders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'task', target_id: '<%= task.id %>', title: <%- JSON.stringify(task.title) %>, remind_at: when }),
+    });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = `#${j.reminder.short_code} set.`; setTimeout(() => location.reload(), 700); }
+    else msg.textContent = j.error || 'Error';
+  };
 }
 
 async function taskAction(id, action) {

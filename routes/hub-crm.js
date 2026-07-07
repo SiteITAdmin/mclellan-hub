@@ -1635,26 +1635,34 @@ router.post('/api/crm/facts/:id/delete', requireAuth, requireSameOrigin, writeLi
 
 router.get('/crm/tasks', requireAuth, async (req, res) => {
   const showHistory = req.query.show_history === '1';
+  let syncError = null;
   try {
     await syncTasks(req.hubUser);
   } catch (err) {
     console.warn('[tasks] sync on page load failed:', err.message);
+    syncError = err.message;
   }
   const tasks = getCachedTasks(req.hubUser, {}, showHistory);
   const hub = db.hub();
   const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const projects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
-  res.render('hub/crm-tasks', { ...crmPageData(req.hubUser), tasks, showHistory, contacts, companies, projects });
+  res.render('hub/crm-tasks', { ...crmPageData(req.hubUser), tasks, showHistory, contacts, companies, projects, syncError });
 });
 
 router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   const title = String(req.body.title || '').trim();
   if (!title) return res.status(400).json({ error: 'title required' });
   try {
+    const { withTaskTags } = require('../lib/google-tasks');
+    const baseNotes = String(req.body.notes || '').trim();
+    const notes = withTaskTags(baseNotes, {
+      priority: req.body.priority,
+      effortMinutes: req.body.effort_minutes,
+    });
     const task = await createTask(req.hubUser, {
       title,
-      notes: String(req.body.notes || '').trim() || null,
+      notes: notes || null,
       due: req.body.due || null,
       source: 'manual',
       contactId: req.body.contact_id || null,
@@ -1733,7 +1741,25 @@ router.get('/crm/tasks/:id', requireAuth, async (req, res) => {
   const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const projects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
-  res.render('hub/crm-task', { ...crmPageData(req.hubUser), task, contacts, companies, projects });
+
+  // Origin + active escalations: the meeting id is parsed from source_id
+  // ("meeting:<id>:…") rather than stored twice, and reminders join back via
+  // kind='task'/target_id — both derive from existing data, no columns.
+  const { parseTaskTags } = require('../lib/google-tasks');
+  const taskTags = parseTaskTags(task.notes);
+  let originMeeting = null;
+  const meetingMatch = String(task.source_id || '').match(/^meeting:([^:]+):/);
+  if (meetingMatch) {
+    originMeeting = hub.prepare('SELECT id, title, meeting_date FROM meetings WHERE id = ? AND user = ?')
+      .get(meetingMatch[1], req.hubUser);
+  }
+  const relatedReminders = hub.prepare(`
+    SELECT id, short_code, title, status, next_fire_at, escalation_level, recur
+    FROM reminders WHERE user = ? AND kind = 'task' AND target_id = ?
+    ORDER BY status IN ('done','cancelled'), next_fire_at
+  `).all(req.hubUser, task.id);
+
+  res.render('hub/crm-task', { ...crmPageData(req.hubUser), task, contacts, companies, projects, originMeeting, relatedReminders, taskTags });
 });
 
 router.post('/api/tasks/sync', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
@@ -1751,10 +1777,18 @@ router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimite
     title, notes, due, deadline,
     contact_id: contactId, company_id: companyId, project_slug: projectSlug,
   } = req.body;
+  let finalNotes = notes;
+  if (notes !== undefined && (req.body.priority !== undefined || req.body.effort_minutes !== undefined)) {
+    const { withTaskTags } = require('../lib/google-tasks');
+    finalNotes = withTaskTags(String(notes), {
+      priority: req.body.priority,
+      effortMinutes: req.body.effort_minutes,
+    });
+  }
   try {
     await updateTask(req.hubUser, req.params.id, {
       ...(title !== undefined && { title: String(title).trim() }),
-      ...(notes !== undefined && { notes: String(notes).trim() }),
+      ...(notes !== undefined && { notes: String(finalNotes).trim() }),
       ...(due !== undefined && { due: due || null }),
       ...(deadline !== undefined && { deadline: deadline || null }),
       ...(contactId !== undefined && { contactId: contactId || null }),
@@ -1786,6 +1820,18 @@ router.get('/crm/reminders', requireAuth, (req, res) => {
   const { listOpenReminders } = require('../lib/reminders');
   const hub = db.hub();
   const open = listOpenReminders(req.hubUser);
+  // Task-kind reminders link back to the task that spawned them (target_id →
+  // google_tasks), and through the task's source_id to the origin meeting.
+  const taskIds = [...new Set(open.filter(r => r.kind === 'task' && r.target_id).map(r => r.target_id))];
+  const taskById = taskIds.length ? new Map(hub.prepare(`
+    SELECT t.id, t.title, t.source_id, m.id AS meeting_id, m.title AS meeting_title
+    FROM google_tasks t
+    LEFT JOIN meetings m ON m.user = t.user AND t.source_id LIKE 'meeting:' || m.id || ':%'
+    WHERE t.id IN (${taskIds.map(() => '?').join(',')})
+  `).all(...taskIds).map(t => [t.id, t])) : new Map();
+  for (const r of open) {
+    if (r.kind === 'task' && r.target_id) r.task = taskById.get(r.target_id) || null;
+  }
   const todayKey = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
   const dueDay = (r) => new Date(((r.next_fire_at || r.remind_at || 0) * 1000))
     .toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
@@ -1815,12 +1861,17 @@ router.post('/api/reminders', requireAuth, requireSameOrigin, writeLimiter, (req
   const { createReminder, dublinIsoToEpoch, epochAtNextDublin } = require('../lib/reminders');
   let remindAt = dublinIsoToEpoch(String(req.body.remind_at || '').trim());
   if (!remindAt || remindAt < Math.floor(Date.now() / 1000) - 60) remindAt = epochAtNextDublin(9, 0);
+  // recur: 'daily:HH:MM' or 'weekly:mon..sun:HH:MM' — validated here, consumed
+  // by nextRecurOccurrence in lib/reminders.js
+  const recurRaw = String(req.body.recur || '').trim().toLowerCase();
+  const recur = /^(daily:\d{2}:\d{2}|weekly:(mon|tue|wed|thu|fri|sat|sun):\d{2}:\d{2})$/.test(recurRaw) ? recurRaw : null;
   const reminder = createReminder(req.hubUser, {
     kind: req.body.kind === 'task' ? 'task' : 'adhoc',
     targetId: req.body.target_id || null,
     title,
     remindAt,
     source: 'hub-ui',
+    recur,
   });
   if (!reminder) return res.status(500).json({ error: 'Could not create reminder' });
   res.json({ ok: true, reminder });

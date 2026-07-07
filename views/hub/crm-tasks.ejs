@@ -12,6 +12,12 @@
   </div>
 </section>
 
+<% if (syncError) { %>
+  <p class="crm-notice" style="border-color:var(--crm-danger,#c0392b);color:var(--crm-danger,#c0392b);">
+    Google Tasks sync failed just now (<%= syncError %>) — this list may be stale. Changes still save locally and sync when Google is reachable.
+  </p>
+<% } %>
+
 <!-- Add task form -->
 <section class="section-card" style="margin-bottom:24px;">
   <h2>Add task</h2>
@@ -19,6 +25,24 @@
     <label class="wide">Title<input name="title" required placeholder="What needs doing?"></label>
     <label class="wide">Notes<input name="notes" placeholder="Optional details or context"></label>
     <label>Due date<input name="due" type="date"></label>
+    <label>Priority
+      <select name="priority">
+        <option value="">— none —</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </label>
+    <label>Effort
+      <select name="effort_minutes">
+        <option value="">— not sized —</option>
+        <option value="5">5 min</option>
+        <option value="15">15 min</option>
+        <option value="30">30 min</option>
+        <option value="60">1 hour</option>
+        <option value="120">2 hours</option>
+      </select>
+    </label>
     <label>Person
       <select name="contact_id">
         <option value="">— no person —</option>
@@ -48,7 +72,19 @@
 <% const deleted = tasks.filter(t => t.deleted_at); %>
 
 <section class="section-card">
-  <h2>Open (<%= open.length %>)</h2>
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+    <h2 style="margin:0;">Open (<%= open.length %>)</h2>
+    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+      <% for (const [key, label] of [['all','All'],['overdue','Overdue'],['due-soon','Due soon'],['high','High priority'],['unsized','No due/size']]) { %>
+        <button class="btn btn-sm btn-ghost task-filter" data-filter="<%= key %>" <%= key === 'all' ? 'style="font-weight:600;"' : '' %>><%= label %></button>
+      <% } %>
+      <select id="task-sort" style="font-size:12px;padding:3px 6px;">
+        <option value="due">Sort: due date</option>
+        <option value="priority">Sort: priority</option>
+        <option value="effort">Sort: effort</option>
+      </select>
+    </div>
+  </div>
   <% if (!open.length) { %><p class="crm-muted">No open tasks. Nice.</p><% } %>
   <% for (const t of open) { %>
     <%- include('partials/task-row', { t, showHistory }) %>
@@ -103,5 +139,36 @@ async function taskAction(id, action) {
   if (j.ok) location.reload();
   else alert('Error: ' + (j.error || action + ' failed'));
 }
+
+// Client-side filter + sort over the open list, driven by task-row data attrs
+const openSection = document.querySelector('.task-filter')?.closest('.section-card');
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2, '': 3 };
+document.querySelectorAll('.task-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.filter;
+    document.querySelectorAll('.task-filter').forEach(b => b.style.fontWeight = b === btn ? '600' : '');
+    const soonCutoff = new Date(Date.now() + 7 * 86400000).toLocaleDateString('sv-SE');
+    openSection.querySelectorAll('.crm-task-row[data-task-status=open]').forEach(row => {
+      const due = row.dataset.taskDue;
+      const overdue = row.dataset.taskOverdue === '1';
+      let show = true;
+      if (mode === 'overdue') show = overdue;
+      else if (mode === 'due-soon') show = Boolean(due) && !overdue && due <= soonCutoff;
+      else if (mode === 'high') show = row.dataset.taskPriority === 'high';
+      else if (mode === 'unsized') show = !due || !row.dataset.taskEffort;
+      row.style.display = show ? '' : 'none';
+    });
+  });
+});
+document.getElementById('task-sort')?.addEventListener('change', e => {
+  const mode = e.target.value;
+  const rows = [...openSection.querySelectorAll('.crm-task-row[data-task-status=open]')];
+  rows.sort((a, b) => {
+    if (mode === 'priority') return (PRIORITY_RANK[a.dataset.taskPriority] ?? 3) - (PRIORITY_RANK[b.dataset.taskPriority] ?? 3);
+    if (mode === 'effort') return (parseInt(a.dataset.taskEffort, 10) || 9999) - (parseInt(b.dataset.taskEffort, 10) || 9999);
+    return (a.dataset.taskDue || '9999') < (b.dataset.taskDue || '9999') ? -1 : 1;
+  });
+  for (const row of rows) openSection.appendChild(row);
+});
 </script>
 <%- include('partials/crm-foot') %>

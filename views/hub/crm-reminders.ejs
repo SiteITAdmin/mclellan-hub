@@ -12,7 +12,25 @@
   <form class="crm-form-grid" id="reminder-add-form">
     <label class="wide">Remind me to<input name="title" required placeholder="What should I chase you about?"></label>
     <label>When<input name="remind_at" type="datetime-local" required></label>
-    <button class="btn" type="submit">Set reminder</button>
+    <label>Repeat
+      <select id="recur-mode">
+        <option value="">Never</option>
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+      </select>
+    </label>
+    <label id="recur-day-label" style="display:none;">On
+      <select id="recur-day">
+        <% for (const [v, l] of [['mon','Monday'],['tue','Tuesday'],['wed','Wednesday'],['thu','Thursday'],['fri','Friday'],['sat','Saturday'],['sun','Sunday']]) { %>
+          <option value="<%= v %>"><%= l %></option>
+        <% } %>
+      </select>
+    </label>
+    <label id="recur-time-label" style="display:none;">At<input id="recur-time" type="time" value="09:00"></label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" type="submit">Set reminder</button>
+      <span class="crm-muted" style="font-size:12px;">Unanswered reminders escalate after 30 min, 3 h, then 24 h.</span>
+    </div>
     <p class="crm-muted" id="reminder-form-msg"></p>
   </form>
 </section>
@@ -31,7 +49,15 @@
           <% } %>
           <span class="crm-badge subtle"><%= statusLabel[r.status] || r.status %></span>
           <% if (r.escalation_level > 0) { %><span class="crm-badge subtle">pinged <%= r.escalation_level %>×</span><% } %>
-          <span class="crm-badge subtle"><%= r.kind %><%= r.recur ? ' · recurring' : '' %></span>
+          <% if (r.kind === 'task' && r.task) { %>
+            <a class="crm-badge" href="/crm/tasks/<%= r.task.id %>" title="Open the task this reminder chases">task: <%= r.task.title.slice(0, 40) %></a>
+            <% if (r.task.meeting_id) { %><a class="crm-badge subtle" href="/crm/meeting/<%= r.task.meeting_id %>" title="Meeting that spawned the task">from <%= r.task.meeting_title.slice(0, 30) %></a><% } %>
+          <% } else { %>
+            <span class="crm-badge subtle"><%= r.kind %></span>
+          <% } %>
+          <% if (r.recur) { const rp = r.recur.split(':'); %>
+            <span class="crm-badge subtle" title="<%= r.recur %>">↻ <%= rp[0] === 'daily' ? `daily ${rp[1]}:${rp[2]}` : `${rp[1]} ${rp[2]}:${rp[3]}` %></span>
+          <% } %>
         </div>
       </div>
       <div class="crm-task-actions">
@@ -59,7 +85,15 @@
           <% } %>
           <span class="crm-badge subtle"><%= statusLabel[r.status] || r.status %></span>
           <% if (r.escalation_level > 0) { %><span class="crm-badge subtle">pinged <%= r.escalation_level %>×</span><% } %>
-          <span class="crm-badge subtle"><%= r.kind %><%= r.recur ? ' · recurring' : '' %></span>
+          <% if (r.kind === 'task' && r.task) { %>
+            <a class="crm-badge" href="/crm/tasks/<%= r.task.id %>" title="Open the task this reminder chases">task: <%= r.task.title.slice(0, 40) %></a>
+            <% if (r.task.meeting_id) { %><a class="crm-badge subtle" href="/crm/meeting/<%= r.task.meeting_id %>" title="Meeting that spawned the task">from <%= r.task.meeting_title.slice(0, 30) %></a><% } %>
+          <% } else { %>
+            <span class="crm-badge subtle"><%= r.kind %></span>
+          <% } %>
+          <% if (r.recur) { const rp = r.recur.split(':'); %>
+            <span class="crm-badge subtle" title="<%= r.recur %>">↻ <%= rp[0] === 'daily' ? `daily ${rp[1]}:${rp[2]}` : `${rp[1]} ${rp[2]}:${rp[3]}` %></span>
+          <% } %>
         </div>
       </div>
       <div class="crm-task-actions">
@@ -92,10 +126,19 @@
 <% } %>
 
 <script>
+const recurMode = document.getElementById('recur-mode');
+recurMode.addEventListener('change', () => {
+  document.getElementById('recur-day-label').style.display = recurMode.value === 'weekly' ? '' : 'none';
+  document.getElementById('recur-time-label').style.display = recurMode.value ? '' : 'none';
+});
+
 document.getElementById('reminder-add-form').addEventListener('submit', async e => {
   e.preventDefault();
   const msg = document.getElementById('reminder-form-msg');
   const data = Object.fromEntries(new FormData(e.target));
+  const time = document.getElementById('recur-time').value || '09:00';
+  if (recurMode.value === 'daily') data.recur = `daily:${time}`;
+  else if (recurMode.value === 'weekly') data.recur = `weekly:${document.getElementById('recur-day').value}:${time}`;
   msg.textContent = 'Setting…';
   try {
     const r = await fetch('/api/reminders', {
@@ -116,10 +159,28 @@ async function reminderAction(id, action, body) {
   else alert(j.message || j.error || 'Error');
 }
 
+// Preset snooze picker anchored under the clicked button — no typed formats.
+// Snoozing also resets the escalation ladder (30m/3h/24h) back to the start.
 function reminderSnooze(id) {
-  const duration = prompt('Snooze for how long? (e.g. 30m, 2h, 1d, tomorrow)', '2h');
-  if (duration === null) return;
-  reminderAction(id, 'snooze', { duration });
+  document.getElementById('snooze-pop')?.remove();
+  const btn = event.currentTarget || event.target;
+  const pop = document.createElement('div');
+  pop.id = 'snooze-pop';
+  pop.style.cssText = 'position:absolute;z-index:50;background:var(--bg-card,#fff);border:1px solid var(--border,#ccc);border-radius:8px;padding:8px;display:flex;gap:6px;box-shadow:0 4px 14px rgba(0,0,0,.12);';
+  for (const [label, duration] of [['30 min','30m'],['2 h','2h'],['Tomorrow','tomorrow'],['3 days','3d'],['1 week','7d']]) {
+    const b = document.createElement('button');
+    b.className = 'btn btn-sm';
+    b.textContent = label;
+    b.onclick = () => { pop.remove(); reminderAction(id, 'snooze', { duration }); };
+    pop.appendChild(b);
+  }
+  const rect = btn.getBoundingClientRect();
+  pop.style.left = Math.max(8, rect.left + window.scrollX - 120) + 'px';
+  pop.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+  document.body.appendChild(pop);
+  setTimeout(() => document.addEventListener('click', function close(ev) {
+    if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', close); }
+  }), 0);
 }
 </script>
 <%- include('partials/crm-foot') %>
