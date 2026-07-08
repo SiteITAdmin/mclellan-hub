@@ -25,6 +25,21 @@ const {
   buildManagingEditorChecks,
 } = require('../lib/linkedin-agent-team');
 
+const {
+  NAKAI_EXCLUDED_TARGETS,
+  buildCapoQualityReview,
+  buildCrmPeopleQualityReview,
+  buildLinkedInQualityReview,
+  buildMeetingIntakeQualityReview,
+  buildTaskActionQualityReview,
+  buildUnderbossQualityReview,
+} = require('../lib/hub-quality-board');
+
+const {
+  buildDailyConsigliereReport,
+  dailyConsigliereSection,
+} = require('../lib/daily-consigliere-report');
+
 test('token burn auditor fails stale imported data and stale OpenRouter exports', () => {
   const now = Date.parse('2026-07-08T12:00:00Z');
   const summary = {
@@ -132,6 +147,119 @@ test('LinkedIn managing editor fails missing core stages and warns on optional a
   assert.equal(checks.find(c => c.name === 'research_present').verdict, 'pass');
   assert.equal(checks.find(c => c.name === 'score_present').verdict, 'fail');
   assert.equal(checks.find(c => c.name === 'carousel_present').verdict, 'warn');
+});
+
+test('LinkedIn quality board vetoes source-light or low-quality posts', () => {
+  const review = buildLinkedInQualityReview({
+    post: {
+      research: '',
+      draft: 'Generic thought.',
+      refined_draft: 'This is a game changer. What do you think?',
+      score_json: JSON.stringify({
+        overall_score: 2.5,
+        axis_scores: { demonstrated_expertise: 2 },
+      }),
+      carousel_url: '',
+    },
+    receipts: {
+      'agent:linkedin_research': { id: 'r1', status: 'fail' },
+      'agent:linkedin_draft_critic': { id: 'd1', status: 'warn' },
+    },
+  });
+
+  assert.equal(review.verdict, 'fail');
+  assert.equal(review.quality_veto, true);
+  assert(review.blocking_checks.includes('research_is_source_backed'));
+  assert(review.blocking_checks.includes('post_has_specific_voice'));
+});
+
+test('LinkedIn quality board passes strong sourced post with usable artifact', () => {
+  const review = buildLinkedInQualityReview({
+    post: {
+      research: 'Evidence '.repeat(80),
+      draft: 'Draft '.repeat(120),
+      refined_draft: 'The practical lesson is that platform teams need explicit operating contracts before agent work is trusted in production. The useful move is not more autonomy; it is clearer evidence, ownership, escalation, and rollback paths, so each agent output can be challenged before it reaches customers or colleagues. This is especially true where research, cost, compliance, and public writing share the same workflow.',
+      score_json: JSON.stringify({
+        overall_score: 4.2,
+        axis_scores: { demonstrated_expertise: 4, professional_positioning: 4 },
+        recruiter_perspective: 'A hiring manager would see: senior technology leader, credible experience in platform governance, but unclear on team scale. Likely to prompt a conversation if hiring for transformation leadership.',
+      }),
+      carousel_url: 'https://drive.google.com/file/d/example/view',
+    },
+    receipts: {
+      'agent:linkedin_research': { id: 'r1', status: 'pass' },
+      'agent:linkedin_draft_critic': { id: 'd1', status: 'pass' },
+      'agent:linkedin_artifact': { id: 'a1', status: 'pass' },
+      'agent:linkedin_managing_editor': { id: 'm1', status: 'pass' },
+    },
+  });
+
+  assert.equal(review.verdict, 'pass');
+  assert.equal(review.quality_veto, false);
+});
+
+test('CRM people quality board asks about Rob and Robert when project evidence overlaps', () => {
+  const review = buildCrmPeopleQualityReview({
+    contacts: [
+      { id: 'c-rob', name: 'Rob', aliases: '[]' },
+      { id: 'c-robert', name: 'Robert', aliases: '[]' },
+      { id: 'c-anna', name: 'Anna', aliases: '[]' },
+    ],
+    projectEvidence: [
+      { contact_id: 'c-rob', project_slug: 'wds', source: 'meeting_intakes' },
+      { contact_id: 'c-robert', project_slug: 'wds', source: 'google_tasks' },
+      { contact_id: 'c-anna', project_slug: 'wds', source: 'meeting_intakes' },
+    ],
+  });
+
+  assert.equal(review.verdict, 'warn');
+  const candidates = review.checks.find(c => c.name === 'project_scoped_duplicate_person_candidates').details.candidates;
+  assert.equal(candidates.length, 1);
+  assert.deepEqual(candidates[0].contacts, ['Rob', 'Robert']);
+  assert.deepEqual(candidates[0].shared_projects, ['wds']);
+});
+
+test('CRM meeting quality board asks for clarification on Trina and Triona audio ambiguity', () => {
+  const review = buildMeetingIntakeQualityReview({
+    contacts: [
+      { id: 'c-triona', name: 'Triona', aliases: '[]' },
+    ],
+    intakes: [{
+      id: 'intake-wds',
+      title: 'WDS planning',
+      project_slug: 'wds',
+      status: 'processed',
+      transcript: 'Trina: We need to check the WDS follow-up.',
+      extraction: JSON.stringify({
+        meeting: { attendees: [{ name: 'Trina' }] },
+        action_register: [{ owner: 'Trina', owner_type: 'external', task: 'Check WDS follow-up' }],
+      }),
+    }],
+  });
+
+  assert.equal(review.verdict, 'warn');
+  const clarifications = review.checks.find(c => c.name === 'transcription_clarifications_needed').details.clarifications;
+  assert(clarifications.some(item => item.type === 'near_name_audio_variant' && item.evidence.includes('Trina may be Triona')));
+});
+
+test('CRM task quality board flags unknown owners from meeting action registers', () => {
+  const review = buildTaskActionQualityReview({
+    tasks: [
+      { id: 'task-1', title: 'Follow up', source: 'meeting-transcript', source_id: 'meeting:m1:Follow up', project_slug: '', contact_id: '', company_id: '' },
+    ],
+    intakes: [{
+      id: 'intake-1',
+      title: 'Project call',
+      project_slug: 'wds',
+      extraction: JSON.stringify({
+        action_register: [{ owner: 'Speaker 2', owner_type: 'unknown_speaker', task: 'Send the document', project_slug: 'wds' }],
+      }),
+    }],
+  });
+
+  assert.equal(review.verdict, 'warn');
+  assert.equal(review.checks.find(c => c.name === 'meeting_actions_have_clear_owners').details.actions.length, 1);
+  assert.equal(review.checks.find(c => c.name === 'source_projected_tasks_have_context').details.tasks.length, 1);
 });
 
 test('Consigliere treats stale legacy source as superseded when fresh authoritative source exists', () => {
@@ -294,6 +422,225 @@ test('CRM underboss receipt fails when one of its capos has not reported', () =>
     assert.equal(receipt.verdict, 'fail');
     assert(receipt.checks.find(c => c.name === 'all_capos_reported').details.missing.includes('crm'));
     assert.equal(writes.length, 1);
+  } finally {
+    db.hub = originalHub;
+  }
+});
+
+test('capo quality board scopes briefings without Nakai daily briefing', () => {
+  const briefings = CAPOS.find(c => c.key === 'briefings');
+  const review = buildCapoQualityReview({
+    ...briefings,
+    key: 'briefings_non_nakai',
+    originalKey: 'briefings',
+    soldiers: briefings.soldiers.filter(s => !/nakai/i.test(s)),
+    scopeExclusions: NAKAI_EXCLUDED_TARGETS,
+  }, {
+    id: 'capo-receipt',
+    status: 'pass',
+    summary: 'Briefings Capo: PASS',
+    created_at: Math.floor(Date.now() / 1000),
+    payload: JSON.stringify({ checks: [{ name: 'briefings_present', verdict: 'pass' }] }),
+  });
+
+  assert.equal(review.verdict, 'pass');
+  assert.deepEqual(review.scope_exclusions, ['nakai_daily_briefing']);
+  assert(!review.checks.find(c => c.name === 'nakai_daily_briefing_is_out_of_scope').details.excluded_targets.includes('nakai_ref_synthesis'));
+});
+
+test('underboss quality board vetoes failing capo quality reviews', () => {
+  const review = buildUnderbossQualityReview(UNDERBOSSES[0], [
+    { capo: 'email', status: 'pass', latest: 'q1' },
+    { capo: 'crm', status: 'fail', latest: 'q2' },
+  ]);
+
+  assert.equal(review.verdict, 'fail');
+  assert.equal(review.quality_veto, true);
+  assert.deepEqual(review.checks.find(c => c.name === 'quality_vetoes_escalate').details.failing, ['crm']);
+});
+
+test('Daily Consigliere turns vetoes and clarifications into asks for Douglas', () => {
+  const now = 1783526400;
+  const report = buildDailyConsigliereReport('douglas', {
+    now,
+    rows: [
+      {
+        id: 'receipt-veto',
+        user: 'douglas',
+        source_kind: 'linkedin_post',
+        source_id: 'post-1',
+        stage: 'agent:linkedin_quality_board',
+        status: 'fail',
+        summary: 'LinkedIn Quality Board: FAIL - VETO',
+        payload: JSON.stringify({
+          board: 'LinkedIn Quality Board',
+          quality_veto: true,
+          blocking_checks: ['research_is_source_backed'],
+        }),
+        created_at: now,
+      },
+      {
+        id: 'receipt-clarify',
+        user: 'douglas',
+        source_kind: 'hub_quality',
+        source_id: 'crm:meeting_intake',
+        stage: 'agent:quality_board:crm:meeting_intake',
+        status: 'warn',
+        summary: 'CRM Meeting Intake Quality Board: WARN',
+        payload: JSON.stringify({
+          board: 'CRM Meeting Intake Quality Board',
+          clarification_requests: [{ evidence: 'Trina may be Triona', type: 'near_name_audio_variant' }],
+        }),
+        created_at: now,
+      },
+    ],
+    historyRows: [],
+  });
+
+  assert.equal(report.verdict, 'warn');
+  assert.equal(report.counts.asks_douglas, 2);
+  assert(report.asks_douglas.some(item => item.reason === 'veto'));
+  assert(report.asks_douglas.some(item => item.reason === 'clarification'));
+  assert.match(dailyConsigliereSection(report).join('\n'), /Trina may be Triona|clarification request/);
+});
+
+test('Daily Consigliere records agent corrections when latest receipt resolves prior issue', () => {
+  const now = 1783526400;
+  const report = buildDailyConsigliereReport('douglas', {
+    now,
+    rows: [],
+    historyRows: [
+      {
+        id: 'fixed-pass',
+        user: 'douglas',
+        source_kind: 'token_burn',
+        source_id: 'dashboard',
+        stage: 'agent:token_burn_auditor',
+        status: 'pass',
+        summary: 'Token Burn Auditor: PASS',
+        payload: '{}',
+        created_at: now,
+      },
+      {
+        id: 'old-warn',
+        user: 'douglas',
+        source_kind: 'token_burn',
+        source_id: 'dashboard',
+        stage: 'agent:token_burn_auditor',
+        status: 'warn',
+        summary: 'Token Burn Auditor: WARN stale export',
+        payload: '{}',
+        created_at: now - 3600,
+      },
+    ],
+  });
+
+  assert.equal(report.counts.agent_corrections, 1);
+  assert.equal(report.agent_corrections[0].receipt_id, 'fixed-pass');
+  assert.equal(report.agent_corrections[0].previous_receipt_id, 'old-warn');
+});
+
+test('Consigliere challenge covers every subject in a full nightly run (no window truncation)', () => {
+  const Database = require('better-sqlite3');
+  const mem = new Database(':memory:');
+  mem.exec(`
+    CREATE TABLE knowledge_receipts (
+      id TEXT PRIMARY KEY, user TEXT, source_kind TEXT, source_id TEXT,
+      stage TEXT, status TEXT, summary TEXT, payload TEXT,
+      model_key TEXT, model_id TEXT, created_at INTEGER
+    )
+  `);
+  const insert = mem.prepare(`
+    INSERT INTO knowledge_receipts (id, user, source_kind, source_id, stage, status, summary, payload, created_at)
+    VALUES (?, 'douglas', ?, ?, ?, 'pass', ?, '{}', ?)
+  `);
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  const subjects = [];
+  for (let i = 0; i < 45; i++) {
+    const sourceId = `module_${i}`;
+    subjects.push(sourceId);
+    insert.run(`r${i}`, 'hub_module', sourceId, `agent:capo:${sourceId}`, `capo ${i}: PASS`, nowEpoch - i);
+  }
+
+  const db = require('../lib/db');
+  const originalHub = db.hub;
+  db.hub = () => mem;
+  try {
+    const result = subordinateChallenge('douglas');
+    assert.equal(result.recent.length, 45, 'every subordinate subject must appear in the challenge');
+    const seen = new Set(result.recent.map(r => r.source_id));
+    for (const sourceId of subjects) {
+      assert(seen.has(sourceId), `subject ${sourceId} missing from consigliere challenge`);
+    }
+  } finally {
+    db.hub = originalHub;
+    mem.close();
+  }
+});
+
+test('capo job health check fails when the most recent completed run failed', () => {
+  const db = require('../lib/db');
+  const originalHub = db.hub;
+  db.hub = () => ({
+    prepare: (sql) => ({
+      get: () => {
+        const text = String(sql);
+        if (text.includes("status IN ('pending','running')")) return { ok: 1 };
+        if (text.includes("status IN ('done','failed')")) return { status: 'failed' };
+        if (text.includes("status = 'failed'")) return { n: 3 };
+        return { n: 1 };
+      },
+      all: () => [],
+    }),
+  });
+  try {
+    const checks = capoChecks('reminders', 'douglas', { now: 1783526400 });
+    const outcome = checks.find(c => c.name === 'reminder_sweep_outcome');
+    assert.equal(outcome.verdict, 'fail');
+    assert(outcome.evidence.includes('most recent completed run failed'));
+  } finally {
+    db.hub = originalHub;
+  }
+});
+
+test('system report capo warns when no daily report receipt exists and passes when one does', () => {
+  const db = require('../lib/db');
+  const originalHub = db.hub;
+  const makeHub = (count) => () => ({
+    prepare: () => ({ get: () => ({ n: count }), all: () => [] }),
+  });
+  try {
+    db.hub = makeHub(0);
+    const missing = capoChecks('system_report', 'douglas', { now: 1783526400 });
+    assert.equal(missing.find(c => c.name === 'daily_report_receipt_recent').verdict, 'warn');
+
+    db.hub = makeHub(1);
+    const present = capoChecks('system_report', 'douglas', { now: 1783526400 });
+    assert.equal(present.find(c => c.name === 'daily_report_receipt_recent').verdict, 'pass');
+  } finally {
+    db.hub = originalHub;
+  }
+});
+
+test('no capo ships a tautological always-pass count check', () => {
+  const db = require('../lib/db');
+  const originalHub = db.hub;
+  // Empty tables + no jobs: a healthy-looking green across the board must be impossible.
+  db.hub = () => ({
+    prepare: (sql) => ({
+      get: () => (String(sql).includes('COUNT(') ? { n: 0 } : undefined),
+      all: () => [],
+    }),
+  });
+  try {
+    for (const capo of CAPOS) {
+      if (capo.key === 'token_burn') continue; // file-based audit, not DB counts
+      const checks = capoChecks(capo.key, 'douglas', { now: 1783526400 });
+      assert(
+        checks.some(c => c.verdict !== 'pass'),
+        `${capo.key} capo reports all-pass against an empty database — it can never fail`,
+      );
+    }
   } finally {
     db.hub = originalHub;
   }

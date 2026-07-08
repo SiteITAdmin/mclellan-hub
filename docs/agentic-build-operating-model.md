@@ -329,6 +329,9 @@ Implementation status: initial LinkedIn teams are wired through `lib/linkedin-ag
 - `agent:linkedin_artifact`
 - `agent:linkedin_managing_editor`
 - `agent:linkedin_publishing_archivist`
+- `agent:linkedin_quality_board`
+
+The quality board is intentionally different from the functional agents. Functional agents produce research, drafts, PDFs, and publication capture; `lib/hub-quality-board.js` challenges whether the output is good enough to trust or ship. A LinkedIn quality-board veto marks the post `needs_revision` and blocks schedule/publish actions until the veto is cleared by a later review. The same module writes capo and underboss quality receipts for the wider Hub after the family audit. CRM gets section-level boards for people identity, meeting intake/audio clarity, tasks/actions, and project context. These boards ask for clarification when evidence suggests ambiguity, such as Rob/Robert sharing project evidence or Trina/Triona appearing as near-name transcript variants; they do not auto-merge contacts or silently relabel tasks. Nakai's daily briefing is explicitly out of scope for this layer for now.
 
 Definition of done:
 
