@@ -6,6 +6,11 @@ const {
   writeLimiter, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
 
+function activeLinkedInQualityVeto(user, postId) {
+  const latest = require('../lib/hub-quality-board').latestLinkedInQualityReceipt(user, postId);
+  return Boolean(latest?.payload_json?.quality_veto);
+}
+
 function getContentPosts(user) {
   const posts = db.hub().prepare(
     `SELECT id, topic, display_title, content_type, spiciness, score_json, carousel_url, sheet_url,
@@ -205,7 +210,10 @@ router.post('/api/content/posts/:id/type', requireAuth, requireSameOrigin, write
 
 router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   const status = String(req.body?.status || '').trim();
-  if (!['draft', 'scheduled', 'published'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  if (!['draft', 'needs_revision', 'scheduled', 'published'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  if (['scheduled', 'published'].includes(status) && activeLinkedInQualityVeto(req.hubUser, req.params.id)) {
+    return res.status(409).json({ error: 'Quality board veto is active. Resolve the review issues before scheduling or publishing.' });
+  }
   const postUrl = String(req.body?.post_url || '').trim();
   if (postUrl && !/^https:\/\/(www\.)?linkedin\.com\//.test(postUrl)) {
     return res.status(400).json({ error: 'post_url must be a linkedin.com URL' });
@@ -336,6 +344,9 @@ router.post('/api/content/posts/:id/title', requireAuth, requireSameOrigin, writ
 router.post('/api/content/posts/:id/schedule', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const date = String(req.body?.date || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Invalid date (YYYY-MM-DD)' });
+  if (activeLinkedInQualityVeto(req.hubUser, req.params.id)) {
+    return res.status(409).json({ error: 'Quality board veto is active. Resolve the review issues before scheduling.' });
+  }
   const result = db.hub().prepare(
     `UPDATE linkedin_posts SET scheduled_date = ?, status = 'scheduled' WHERE id = ? AND user = ?`
   ).run(date, req.params.id, req.hubUser);

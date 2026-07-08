@@ -2219,8 +2219,12 @@ router.post('/admin/linkedin/topics/delete', requireHubAdmin, (req, res) => {
 
 router.post('/admin/linkedin/:id/status', requireHubAdmin, (req, res) => {
   const { status } = req.body;
-  const allowed = ['draft', 'scheduled', 'published', 'archived'];
+  const allowed = ['draft', 'needs_revision', 'scheduled', 'published', 'archived'];
   if (!allowed.includes(status)) return res.redirect('/admin/linkedin');
+  if (['scheduled', 'published'].includes(status)) {
+    const latestQuality = require('../lib/hub-quality-board').latestLinkedInQualityReceipt(req.hubUser, req.params.id);
+    if (latestQuality?.payload_json?.quality_veto) return res.redirect('/admin/linkedin');
+  }
   db.hub().prepare(`
     UPDATE linkedin_posts
        SET status = ?,
@@ -2253,6 +2257,10 @@ router.post('/admin/linkedin/:id/status', requireHubAdmin, (req, res) => {
 
 router.post('/admin/linkedin/:id/schedule', requireHubAdmin, (req, res) => {
   const { scheduled_date } = req.body;
+  if (scheduled_date) {
+    const latestQuality = require('../lib/hub-quality-board').latestLinkedInQualityReceipt(req.hubUser, req.params.id);
+    if (latestQuality?.payload_json?.quality_veto) return res.redirect('/admin/linkedin');
+  }
   db.hub().prepare('UPDATE linkedin_posts SET scheduled_date = ?, status = ? WHERE id = ? AND user = ?')
     .run(scheduled_date || '', scheduled_date ? 'scheduled' : 'draft', req.params.id, req.hubUser);
   res.redirect('/admin/linkedin');

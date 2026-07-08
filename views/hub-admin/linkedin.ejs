@@ -46,6 +46,7 @@
   .post-card:hover { box-shadow: 0 2px 14px rgba(0,0,0,0.07); }
   .post-card.status-published { border-left: 3px solid #16a085; }
   .post-card.status-scheduled { border-left: 3px solid #7c6af5; }
+  .post-card.status-needs_revision { border-left: 3px solid #ba1a1a; }
   .post-card.status-archived  { opacity: 0.55; }
   .post-card.status-processing { border-left: 3px solid #f0a500; }
 
@@ -63,6 +64,7 @@
   }
   .badge-type       { background: rgba(124,106,245,0.12); color: #5b4ac4; }
   .badge-status-draft     { background: rgba(0,0,0,0.06);       color: #555; }
+  .badge-status-needs_revision { background: rgba(186,26,26,0.10); color: #ba1a1a; }
   .badge-status-scheduled { background: rgba(124,106,245,0.15); color: #5b4ac4; }
   .badge-status-published { background: rgba(22,160,133,0.14);  color: #0e7a65; }
   .badge-status-archived  { background: rgba(0,0,0,0.06);       color: #999; }
@@ -244,6 +246,7 @@
   <div class="filter-bar" id="filter-bar">
     <span class="filter-chip active" data-filter="all">All</span>
     <span class="filter-chip" data-filter="draft">Draft</span>
+    <span class="filter-chip" data-filter="needs_revision">Needs revision</span>
     <span class="filter-chip" data-filter="scheduled">Scheduled</span>
     <span class="filter-chip" data-filter="published">Published</span>
     <span style="width:1px;height:20px;background:var(--card-border);margin:0 4px;"></span>
@@ -266,6 +269,7 @@
     const overall = score.overall_score;
     const scoreCls = overall >= 4 ? 'badge-score' : overall >= 3 ? 'badge-score-mid' : 'badge-score-low';
     const statusCls = `badge-status-${p.status || 'draft'}`;
+    const statusText = { needs_revision: 'Needs revision' }[p.status] || (p.status || 'draft');
     const dateLabel = new Date(p.created_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
     const displayPost = p.refined_preview || p.draft_preview || '';
     const axes = score.axis_scores || {};
@@ -287,7 +291,7 @@
     </div>
 
     <div class="card-badges">
-      <span class="badge <%= statusCls %>"><%= p.status || 'draft' %></span>
+      <span class="badge <%= statusCls %>"><%= statusText %></span>
       <% if (p.content_type) { %><span class="badge badge-type"><%= p.content_type %></span><% } %>
       <% if (overall) { %><span class="badge <%= scoreCls %>"><%= overall.toFixed(1) %>/5</span><% } %>
       <% if (score.recruiter_value) { %><span class="badge badge-score-mid"><%= score.recruiter_value %></span><% } %>

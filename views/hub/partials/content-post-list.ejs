@@ -7,7 +7,7 @@
   const scoreVal = p.score?.overall_score;
   const scoreNum = scoreVal ? parseFloat(scoreVal) : 0;
   const dateStr = new Date(p.created_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const statusLabel = { processing: 'Processing…', error: 'Error', draft: 'Draft', scheduled: 'Scheduled', published: 'Published' }[p.status] || p.status;
+  const statusLabel = { processing: 'Processing…', error: 'Error', needs_revision: 'Needs revision', draft: 'Draft', scheduled: 'Scheduled', published: 'Published' }[p.status] || p.status;
   const calTopic = encodeURIComponent('Post: ' + p.topic);
   const calDetail = encodeURIComponent(p.preview || p.topic);
   const calDate = (p.scheduled_date || '').replace(/-/g, '');
@@ -122,6 +122,7 @@
       <div class="panel-label">Status</div>
       <div class="status-row">
         <button class="btn-sm<%= p.status === 'draft' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'draft')">Draft</button>
+        <button class="btn-sm<%= p.status === 'needs_revision' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'needs_revision')">Needs revision</button>
         <button class="btn-sm<%= p.status === 'scheduled' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'scheduled')">Scheduled</button>
         <button class="btn-sm<%= p.status === 'published' ? ' primary' : '' %>" onclick="setStatus('<%= p.id %>', 'published')">Published</button>
       </div>
