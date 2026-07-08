@@ -645,3 +645,125 @@ test('no capo ships a tautological always-pass count check', () => {
     db.hub = originalHub;
   }
 });
+
+const {
+  remediateCheck,
+  FIXERS,
+  ADVISOR_WHITELIST,
+} = require('../lib/hub-remediation');
+
+function remediationTestDb() {
+  const Database = require('better-sqlite3');
+  const mem = new Database(':memory:');
+  mem.exec(`
+    CREATE TABLE system_jobs (
+      id TEXT PRIMARY KEY, type TEXT, payload TEXT, run_at INTEGER,
+      status TEXT, source TEXT, error TEXT, ran_at INTEGER,
+      created_at INTEGER DEFAULT (unixepoch())
+    )
+  `);
+  return mem;
+}
+
+test('remediation sync fixer enqueues the missing job and re-verifies the check passes', async () => {
+  const db = require('../lib/db');
+  const originalHub = db.hub;
+  const mem = remediationTestDb();
+  db.hub = () => mem;
+  try {
+    const check = { name: 'reminder_sweep_pending', verdict: 'fail', evidence: 'reminder sweep has no pending/running job' };
+    const outcome = await remediateCheck({ capoKey: 'reminders', check, useModel: false, nowTs: 1783526400 });
+    assert.equal(outcome.status, 'resolved');
+    assert.equal(outcome.action, 'enqueue_reminder_sweep');
+    assert.equal(outcome.after, 'pass');
+    const pending = mem.prepare("SELECT COUNT(*) AS n FROM system_jobs WHERE type='reminder_sweep' AND status='pending'").get();
+    assert.equal(pending.n, 1);
+  } finally {
+    db.hub = originalHub;
+    mem.close();
+  }
+});
+
+test('remediation deferred fixer dispatches a backfill and reports verify-next-cycle', async () => {
+  const db = require('../lib/db');
+  const originalHub = db.hub;
+  const mem = remediationTestDb();
+  db.hub = () => mem;
+  try {
+    const check = { name: 'completed_flights_have_actuals', verdict: 'fail', evidence: '3 completed recent flight(s) missing actual times' };
+    const outcome = await remediateCheck({ capoKey: 'flights', check, useModel: false, nowTs: 1783526400 });
+    assert.equal(outcome.status, 'dispatched');
+    assert.equal(outcome.action, 'enqueue_flight_backfill');
+    assert.match(outcome.evidence, /next audit cycle/);
+    const jobs = mem.prepare("SELECT COUNT(*) AS n FROM system_jobs WHERE type='flight_backfill'").get();
+    assert.equal(jobs.n, 1);
+  } finally {
+    db.hub = originalHub;
+    mem.close();
+  }
+});
+
+test('remediation is idempotent — never stacks a duplicate job when one is already pending', async () => {
+  const db = require('../lib/db');
+  const originalHub = db.hub;
+  const mem = remediationTestDb();
+  db.hub = () => mem;
+  mem.prepare("INSERT INTO system_jobs (id, type, payload, run_at, status, source) VALUES ('j1','flight_backfill','{}',1,'pending','system')").run();
+  db.hub = () => mem;
+  try {
+    const check = { name: 'completed_flights_have_actuals', verdict: 'fail', evidence: 'missing actuals' };
+    const outcome = await remediateCheck({ capoKey: 'flights', check, useModel: false, nowTs: 1783526400 });
+    assert.equal(outcome.status, 'dispatched');
+    assert.match(outcome.evidence, /already pending/);
+    const jobs = mem.prepare("SELECT COUNT(*) AS n FROM system_jobs WHERE type='flight_backfill'").get();
+    assert.equal(jobs.n, 1, 'must not enqueue a second flight_backfill');
+  } finally {
+    db.hub = originalHub;
+    mem.close();
+  }
+});
+
+test('remediation escalates to the consigliere when no fixer exists and the model is off', async () => {
+  // recent_post_has_agent_receipts has no reversible job that clears it.
+  const check = { name: 'recent_post_has_agent_receipts', verdict: 'fail', evidence: 'Latest recent post has 0 agent receipt(s)' };
+  const outcome = await remediateCheck({ capoKey: 'linkedin_content', check, useModel: false, nowTs: 1783526400 });
+  assert.equal(outcome.status, 'escalate');
+  assert.equal(outcome.reason, 'no_fixer');
+});
+
+test('remediation advisor whitelist contains only reversible job types from the fixer registry', () => {
+  const fixerJobTypes = new Set(Object.values(FIXERS).map(f => f.jobType));
+  for (const jobType of ADVISOR_WHITELIST) {
+    assert(fixerJobTypes.has(jobType), `advisor whitelist leaked a non-fixer job type: ${jobType}`);
+  }
+});
+
+test('remediation escalates instead of dispatching forever after repeated unresolved retries', async () => {
+  const db = require('../lib/db');
+  const originalHub = db.hub;
+  const mem = remediationTestDb();
+  mem.exec(`
+    CREATE TABLE knowledge_receipts (
+      id TEXT PRIMARY KEY, user TEXT, source_kind TEXT, source_id TEXT,
+      stage TEXT, status TEXT, summary TEXT, payload TEXT,
+      model_key TEXT, model_id TEXT, created_at INTEGER
+    )
+  `);
+  const nowTs = 1783526400;
+  // Two prior dispatched (warn) retries for the same check within the window.
+  const ins = mem.prepare(`INSERT INTO knowledge_receipts (id,user,source_kind,source_id,stage,status,summary,payload,created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
+  ins.run('d1', 'douglas', 'hub_remediation', 'completed_flights_have_actuals', 'agent:remediation:flights', 'warn', 'retry', '{}', nowTs - 86400);
+  ins.run('d2', 'douglas', 'hub_remediation', 'completed_flights_have_actuals', 'agent:remediation:flights', 'warn', 'retry', '{}', nowTs - 2 * 3600);
+  db.hub = () => mem;
+  try {
+    const check = { name: 'completed_flights_have_actuals', verdict: 'fail', evidence: 'missing actuals' };
+    const outcome = await remediateCheck({ capoKey: 'flights', check, useModel: false, nowTs });
+    assert.equal(outcome.status, 'escalate');
+    assert.equal(outcome.reason, 'repeated_dispatch_unresolved');
+    const jobs = mem.prepare("SELECT COUNT(*) AS n FROM system_jobs WHERE type='flight_backfill'").get();
+    assert.equal(jobs.n, 0, 'must not dispatch another retry once the limit is hit');
+  } finally {
+    db.hub = originalHub;
+    mem.close();
+  }
+});

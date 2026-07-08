@@ -120,6 +120,25 @@ Do not:
 
 **Why first:** small blast radius, high confidence, easy to verify, and a good pilot for the receipt pattern.
 
+### 0. Remediation Layer (catch-and-correct)
+
+**Mandate:** close the loop between detection and escalation. Capos detect; this layer tries to *fix* before anything reaches Douglas, retries within bounds, and escalates only what it cannot resolve. This is the half the first build omitted — it turned the family into a monitor that reports rather than an institution that corrects.
+
+**Implementation:** `lib/hub-remediation.js`, `scripts/run-remediation.js`.
+
+**Safety model:** fixers may only take reversible, idempotent actions — re-enqueue an existing job type or a backfill via `scheduleJob`. No shell, no deletes, no direct domain writes. The optional model advisor (`remediation_advisor` slot) may only *choose from that same whitelist or decline*; a model can never emit an action of its own. This is the deliberate answer to "models guess": a guess is capped to one reversible attempt and then escalates.
+
+**Loop:**
+
+- **sync fix** (a missing pending job): enqueue, re-run the exact check, and only claim `resolved` when it now passes — the check is the proof;
+- **deferred fix** (a backfill, or retrying a job whose last run failed): dispatch and verify on the next audit cycle (`warn`, "verifies next cycle");
+- **no fix / model declines:** escalate to the consigliere (`fail`), with the advisor's diagnosis attached where present;
+- **repeat-dispatch guard:** after `MAX_DISPATCHES` retries over the recent window without clearing, stop retrying and escalate — a stuck failure is never masked as "retrying" forever.
+
+**Receipt:** `source_kind='hub_remediation'`, `stage='agent:remediation:<capo>'`, status `pass|warn|fail`.
+
+**Nightly flow:** remediate first (reads live checks, not receipts), then audit once, so capo receipts reflect the post-fix state — self-healed items become corrections, only the irreducible becomes an Ask-Douglas item, and a SELF-HEALING section records what the agents did.
+
 ### 1A. Hub Consigliere Agent
 
 **Mandate:** challenge the boss layer and subordinate agents. It checks whether source families have fresher authoritative versions before treating old data as stale, and it reviews recent agent receipts for failures.

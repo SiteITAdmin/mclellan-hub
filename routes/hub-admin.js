@@ -633,6 +633,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'opportunity_extractor', scope: 'system', label: 'Opportunity signal extractor', note: 'Extracts short-lived offers and opportunity signals from inbound emails.', fallback: 'google/gemini-2.5-flash' },
     { feature: 'task_rule_learner', scope: 'system', label: 'Task rule learner', note: 'Generalises a wrongly created task into a reusable decision rule. Prompt only — runs on the Task extractor model.', fallback: 'prompt only (Task extractor model)' },
     { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
+    { feature: 'remediation_advisor', scope: 'system', label: 'Remediation advisor', note: 'When a family health check fails with no deterministic fix, this model picks a reversible action from the remediation whitelist or declines and escalates to the consigliere. Cheap model is fine — it chooses from a menu, it does not write.', fallback: 'google/gemini-2.5-flash' },
   ]},
   { id: 'suggestions', label: 'Suggestion engine', slots: [
     { feature: 'suggestions',           scope: 'system', label: 'Suggestion engine model', note: 'Model for all suggestion-engine calls: travel, content, salience planning and synthesis, price extraction.', fallback: 'google/gemini-2.5-flash' },
