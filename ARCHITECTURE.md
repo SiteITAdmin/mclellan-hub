@@ -196,6 +196,12 @@ Knowledge never disappears; it only leaves the default line of sight. The weekly
 
 `lib/interest-synthesis.js` (job `interest_synthesis_run`, daily 05:45) is the pattern for "the system joined the dots": recent meeting intakes + upcoming meetings/calendar → model names the topics Douglas is actively engaged with → `interest` atoms with provenance + a compiled cache (`crm_context` key `interest_radar`) → the work daily brief pulls recent stories per topic into an "On your radar" section. To make another surface interest-aware, read `getInterestRadar(user)` — do not build a separate topic store.
 
+### Agent team receipts
+
+`lib/agent-receipts.js` writes accountable agent/team verdicts into `knowledge_receipts` instead of creating a parallel audit store. `lib/hub-agent-roster.js` defines the governance family: Consigliere, underbosses, capos, soldiers, and associates. `lib/hub-family-agents.js` writes capo receipts (`source_kind='hub_module'`, `stage='agent:capo:<key>'`) and underboss receipts (`source_kind='hub_underboss'`, e.g. `stage='agent:crm_underboss'`); `scripts/run-agent-family.js` runs capos, underbosses, then the Consigliere.
+
+`lib/hub-consigliere-agent.js` is the boss-layer challenge agent (`source_kind='hub_governance'`, `source_id='boss_layer'`, `stage='agent:hub_consigliere'`): it checks source families for stale-only evidence and challenges subordinate agent receipts. Token burn uses `lib/token-burn-auditor.js` (`source_kind='token_burn'`, `source_id='dashboard'`, `stage='agent:token_burn_auditor'`) to check generated burn JSON, freshness, OpenRouter export/live summaries, and Hub request-log visibility. A fresh `openrouter-live.summary.json` from `OPENROUTER_MANAGEMENT_KEY` supersedes a stale legacy CSV export. LinkedIn uses `lib/linkedin-agent-team.js` with `source_kind='linkedin_post'` to record research, draft/critic, artifact/PDF, managing-editor, and publishing-archivist checks for each post. The daily system report includes a compact Agent Teams section from these receipts.
+
 ---
 
 ## Scheduling & background jobs

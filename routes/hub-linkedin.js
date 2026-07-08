@@ -236,10 +236,27 @@ router.post('/api/content/posts/:id/status', requireAuth, requireSameOrigin, wri
     } catch (err) {
       console.warn('[content] display title generation failed (topic used as-is):', err.message);
     }
+    let captureOk = false;
+    let captureError = null;
     try {
       captureLinkedInPost(req.hubUser, req.params.id);
+      captureOk = true;
     } catch (err) {
+      captureError = err;
       console.warn('[content] knowledge capture failed:', err.message);
+    }
+    try {
+      const post = db.hub().prepare('SELECT * FROM linkedin_posts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+      require('../lib/linkedin-agent-team').writePublishingReceipt({
+        user: req.hubUser,
+        postId: req.params.id,
+        post,
+        postUrl,
+        captureOk,
+        error: captureError,
+      });
+    } catch (err) {
+      console.warn('[content] publishing receipt failed:', err.message);
     }
     setImmediate(async () => {
       try {

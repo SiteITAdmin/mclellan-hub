@@ -44,6 +44,8 @@ cd "$DASHBOARD_DIR"
     exit "$status"
   fi
 }
+cd "$APP_DIR"
+"$NODE_BIN" scripts/audit-token-burn.js || true
 
 printf '[%s] Publishing scrubbed JSON to VPS...\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_IP}" "mkdir -p '$REMOTE_DIR'"
