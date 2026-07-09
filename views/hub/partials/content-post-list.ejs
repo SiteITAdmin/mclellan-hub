@@ -36,8 +36,8 @@
       <% if (p.status !== 'processing') { %>
       <button class="btn-sm view-btn" onclick="toggleExpand('<%= p.id %>')">View</button>
       <% } %>
-      <% if (p.carousel_url) { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">PDF</a><% } %>
-      <% if (!p.carousel_url && p.status !== 'processing' && (p.draft || p.preview)) { %><button class="btn-sm" id="retry-btn-<%= p.id %>" onclick="retryCarousel('<%= p.id %>')">Retry PDF</button><% } %>
+      <% if (p.carousel_url && p.status !== 'needs_revision') { %><a href="<%= p.carousel_url %>" target="_blank" class="btn-sm">PDF</a><% } %>
+      <% if (!p.carousel_url && !['processing', 'needs_revision'].includes(p.status) && (p.draft || p.preview)) { %><button class="btn-sm" id="retry-btn-<%= p.id %>" onclick="retryCarousel('<%= p.id %>')">Retry PDF</button><% } %>
       <% if (calUrl) { %><a href="<%= calUrl %>" target="_blank" class="btn-sm">📅 Cal</a><% } %>
       <% if (p.status !== 'processing') { %>
       <button class="btn-sm danger" onclick="deletePost('<%= p.id %>')">Delete</button>
@@ -95,7 +95,7 @@
     </div>
 
     <!-- Links -->
-    <% if (p.carousel_url || p.sheet_url) { %>
+    <% if (p.status !== 'needs_revision' && (p.carousel_url || p.sheet_url)) { %>
     <div class="panel-section">
       <div class="panel-label">Links</div>
       <div class="links-row">

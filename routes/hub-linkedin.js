@@ -11,6 +11,14 @@ function activeLinkedInQualityVeto(user, postId) {
   return Boolean(latest?.payload_json?.quality_veto);
 }
 
+function activeLinkedInNonArtifactQualityVeto(user, postId) {
+  const latest = require('../lib/hub-quality-board').latestLinkedInQualityReceipt(user, postId);
+  if (!latest?.payload_json?.quality_veto) return false;
+  const retryableArtifactBlockers = new Set(['artifact_is_usable_when_present', 'pipeline_completed_cleanly']);
+  return (latest.payload_json.blocking_checks || [])
+    .some(name => !retryableArtifactBlockers.has(name));
+}
+
 function getContentPosts(user) {
   const posts = db.hub().prepare(
     `SELECT id, topic, display_title, content_type, spiciness, score_json, carousel_url, sheet_url,
@@ -360,6 +368,9 @@ router.post('/api/content/posts/:id/retry-carousel', requireAuth, requireSameOri
   ).get(req.params.id, req.hubUser);
   if (!post) return res.status(404).json({ error: 'Not found' });
   if (post.status === 'processing') return res.status(409).json({ error: 'Post is still processing' });
+  if (activeLinkedInNonArtifactQualityVeto(req.hubUser, req.params.id)) {
+    return res.status(409).json({ error: 'Quality board veto is active. Resolve the content review issues before generating a PDF.' });
+  }
 
   const { resumePost } = require('../lib/linkedin-pipeline');
   db.hub().prepare(`UPDATE linkedin_posts SET status = 'processing' WHERE id = ?`).run(req.params.id);
