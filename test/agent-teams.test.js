@@ -198,6 +198,31 @@ test('LinkedIn quality board passes strong sourced post with usable artifact', (
   assert.equal(review.quality_veto, false);
 });
 
+test('LinkedIn quality board allows strong post before artifacts are created', () => {
+  const review = buildLinkedInQualityReview({
+    post: {
+      research: 'Evidence '.repeat(80),
+      draft: 'Draft '.repeat(120),
+      refined_draft: 'The practical lesson is that public service AI needs explicit evidence of service redesign before it deserves a budget. A strong programme starts with the failure mode, proves the data is good enough, defines the human escalation route, and measures citizen outcomes before scaling. Otherwise the model becomes a more expensive way to expose the same broken process. That is the difference between automation theatre and measurable delivery improvement.',
+      score_json: JSON.stringify({
+        overall_score: 4.1,
+        axis_scores: { demonstrated_expertise: 4, professional_positioning: 4 },
+        recruiter_perspective: 'A hiring manager would see: senior technology leader, credible experience in AI governance, but unclear on team scale. Likely to prompt a conversation if hiring for public-sector transformation leadership.',
+      }),
+      carousel_url: '',
+    },
+    receipts: {
+      'agent:linkedin_research': { id: 'r1', status: 'pass' },
+      'agent:linkedin_draft_critic': { id: 'd1', status: 'pass' },
+      'agent:linkedin_managing_editor': { id: 'm1', status: 'warn' },
+    },
+  });
+
+  assert.equal(review.verdict, 'warn');
+  assert.equal(review.quality_veto, false);
+  assert.equal(review.checks.find(c => c.name === 'artifact_is_usable_when_present').verdict, 'warn');
+});
+
 test('CRM people quality board asks about Rob and Robert when project evidence overlaps', () => {
   const review = buildCrmPeopleQualityReview({
     contacts: [
