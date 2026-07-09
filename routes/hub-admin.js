@@ -634,6 +634,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'task_rule_learner', scope: 'system', label: 'Task rule learner', note: 'Generalises a wrongly created task into a reusable decision rule. Prompt only — runs on the Task extractor model.', fallback: 'prompt only (Task extractor model)' },
     { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'remediation_advisor', scope: 'system', label: 'Remediation advisor', note: 'When a family health check fails with no deterministic fix, this model picks a reversible action from the remediation whitelist or declines and escalates to the consigliere. Cheap model is fine — it chooses from a menu, it does not write.', fallback: 'google/gemini-2.5-flash' },
+    { feature: 'consigliere_brief', scope: 'system', label: 'Consigliere brief', note: 'Writes the plain-English daily brief at the top of the Consigliere report — translates the escalations into what needs you / handled / watching, with a recommended fix per problem. This is the voice Douglas reads each day; use a strong model.', fallback: 'anthropic/claude-sonnet-4-6' },
   ]},
   { id: 'suggestions', label: 'Suggestion engine', slots: [
     { feature: 'suggestions',           scope: 'system', label: 'Suggestion engine model', note: 'Model for all suggestion-engine calls: travel, content, salience planning and synthesis, price extraction.', fallback: 'google/gemini-2.5-flash' },

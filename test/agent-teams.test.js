@@ -792,3 +792,53 @@ test('remediation escalates instead of dispatching forever after repeated unreso
     mem.close();
   }
 });
+
+const {
+  renderBriefMarkdown,
+  fallbackBrief,
+  summarizeForModel,
+  isCircularGovernanceAsk,
+} = require('../lib/consigliere-brief');
+
+test('consigliere brief drops circular governance self-references', () => {
+  assert.equal(isCircularGovernanceAsk({ source_kind: 'hub_governance', source_id: 'boss_layer' }), true);
+  assert.equal(isCircularGovernanceAsk({ source_kind: 'hub_governance', source_id: 'daily_consigliere' }), true);
+  assert.equal(isCircularGovernanceAsk({ source_kind: 'hub_quality', source_id: 'crm:tasks' }), false);
+  const input = summarizeForModel({
+    asks_douglas: [
+      { source_kind: 'hub_governance', source_id: 'boss_layer', summary: 'meta', severity: 'blocker' },
+      { source_kind: 'hub_quality', source_id: 'crm:tasks', summary: 'real ask', severity: 'question' },
+    ],
+  }, {});
+  assert.equal(input.asks.length, 1);
+  assert.equal(input.asks[0].concern, 'real ask');
+});
+
+test('consigliere brief flattens clarification JSON into human strings, no raw objects', () => {
+  const input = summarizeForModel({
+    asks_douglas: [{
+      source_kind: 'hub_quality', source_id: 'crm:tasks', summary: 'Task board', severity: 'question',
+      clarification_requests: [{ owner: 'Speaker 2', task: "Confirm access to Rob's folder", title: 'Roadmap' }],
+    }],
+  }, {});
+  const serialized = JSON.stringify(input.asks[0].samples);
+  assert(!serialized.includes('{'), 'samples must be flat strings, not nested objects');
+  assert(input.asks[0].samples[0].includes("Rob's folder"));
+});
+
+test('consigliere fallback brief renders readable markdown with no UUIDs and promotes runtime errors', () => {
+  const report = {
+    asks_douglas: [{ source_kind: 'hub_quality', source_id: 'crm:people', summary: 'Possible duplicate', severity: 'question', clarification_requests: ['nickname_variant_same_project'] }],
+    agent_corrections: [{ source_kind: 'hub_module', source_id: 'linkedin_content', previous_summary: 'FAIL', summary: 'PASS' }],
+    monitoring: [],
+  };
+  const { markdown } = fallbackBrief(report, {
+    runtimeErrors: ['[email] classify error abc123: response must be a JSON object'],
+    remediation: { fixed: ['fixed reminders'], dispatched: ['retry documents'], counts: {} },
+    activityLine: '21 emails, 36 facts',
+  });
+  assert(markdown.includes('Needs you'));
+  assert(markdown.includes('needs code'), 'runtime error should be tagged needs code');
+  assert(markdown.includes('LinkedIn'), 'correction should surface in handled');
+  assert(!/[0-9a-f]{8}-[0-9a-f]{4}/.test(markdown), 'no UUIDs in the rendered brief');
+});
