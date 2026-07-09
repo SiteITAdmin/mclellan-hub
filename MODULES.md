@@ -281,6 +281,7 @@ These are the tools the system runs on. They are not features — they are the f
 - Tasks created today by source
 - Any completed flights (with actual times)
 - Module health checks — flag any module that shows signs of silent failure
+- AI spend: COST BY MODEL (grouped by the actual `request_logs.model_id`, canonicalised and joined to `model_config` for list rates), COST BY FEATURE (grouped by `model_key`), and a "WHAT EACH FEATURE DOES" glossary sourced from `lib/feature-descriptions.js` — so the report explains its own spend. Model↔feature is a many-to-one: features name the *task*, models name the *engine*.
 
 **Healthy looks like:** Douglas reads it and can tell from one glance whether the system is working or needs attention.
 
