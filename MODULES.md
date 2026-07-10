@@ -207,17 +207,6 @@ These are the tools the system runs on. They are not features — they are the f
 
 ---
 
-## LinkedIn Content
-**Purpose:** Own each selected LinkedIn topic from intent to a legitimate terminal outcome: a source-backed, quality-approved post package with a valid carousel PDF ready for Douglas, a published/captured post, or a visible unresolved case with a repair in progress. A quality veto is a repair instruction, not completion.
-
-**Journey contract:** Every active post must either have its intended artifact and be ready for human scheduling/publishing, be actively processing, or have a reversible repair job pending. `needs_revision`, `error`, and artifact-less draft/scheduled states are unmet outcomes that the LinkedIn Capo sends through the existing remediation queue. The repair job reuses `runPipeline()` for content revision and `resumePost()` for artifact recovery; it does not publish externally.
-
-**Evidence and learning:** `linkedin_posts` is operational state. Research, scoring, quality-board, artifact, managing-editor, publishing, and journey-supervisor receipts are the evidence trail. The Capo assesses the complete trail against this purpose; receipts alone never prove success.
-
-**Does not own:** Automatic external publishing, bypassing Douglas's approval, a second repair queue, or direct code mutation. Reversible runtime recovery belongs to `lib/hub-remediation.js`; reproducible code defects flow to the Self-Repair Venue.
-
----
-
 ## Regulatory Monitor
 **Purpose:** Scan specified websites daily for regulatory updates, read new publication pages with Firecrawl, and send Nakai a private regulatory email digest.
 
@@ -377,7 +366,7 @@ These are the tools the system runs on. They are not features — they are the f
 **Health check:** `node -e "require('./lib/model-style-profiles').listStyleProfiles().forEach(p => console.log(p.key, p.present, p.distilled_at))"` shows five `true` rows with recent timestamps.
 
 ## Self-Repair Venue (Mac mini only)
-**Purpose:** Turns narrow, reproduced runtime failures (mined nightly from the prod snapshot's `system_jobs.error`, `processing_failures`, error receipts in `knowledge_receipts`, and `hub.service.log`) into verified, human-gated code fixes. Pi (`@earendil-works/pi-coding-agent`) writes the fix inside a throwaway git worktree; a four-gate check harness verifies it; the result is a `repair/<id>` branch, a GitHub PR, and a summary email — never a deploy. Runs ONLY on the Mac mini (launchd, 04:30, after the 04:00 snapshot refresh); the VPS nightly flow is untouched.
+**Purpose:** Turns narrow, reproduced runtime failures (mined nightly from the prod snapshot's `system_jobs.error`, `processing_failures`, and `hub.service.log`) into verified, human-gated code fixes. Pi (`@earendil-works/pi-coding-agent`) writes the fix inside a throwaway git worktree; a four-gate check harness verifies it; the result is a `repair/<id>` branch, a GitHub PR, and a summary email — never a deploy. Runs ONLY on the Mac mini (launchd, 04:30, after the 04:00 snapshot refresh); the VPS nightly flow is untouched.
 
 **Core capability (must be present):** `node scripts/run-repair.js --reproducer <id>` on a fixable-narrow reproducer produces a pushed branch with ≤3 changed files including a regression test, all gates green, a PR, and an email — or an honest escalation email saying why not.
 
@@ -391,6 +380,6 @@ These are the tools the system runs on. They are not features — they are the f
 - Pi's model calls appear in the token-burn dashboard under `AT-RepairAgent` / `AT-RepairTriage`; models selectable via the `repair_agent` / `repair_triage` slots in `/admin/models`.
 - Worktrees under `.repair-worktrees/` contain no `.env*` (except the tracked `.env.example`), no `data/` from the repo, and are cleaned after each run / after 7 days.
 
-**Does not own:** Deploys (`scripts/deploy.sh`, human-run after PR review), the VPS nightly flow (`lib/system-report.js` untouched), or reversible domain remediation (`lib/hub-remediation.js`). The venue may mine truthful error receipts produced by journey repairs, but it does not treat an unmet content judgment as a code defect. Repairs surface via PR + email, and the next nightly cycle stops escalating once the fix is deployed.
+**Does not own:** Deploys (`scripts/deploy.sh`, human-run after PR review), the VPS nightly flow (`lib/system-report.js` untouched), remediation (`lib/hub-remediation.js` — the venue mines error tables directly, not remediation escalations), and the Consigliere brief (repairs surface via PR + email, and the next nightly cycle stops escalating once the fix is deployed).
 
 **Health check:** `node scripts/run-repair.js --dry-run` mines and triages against the latest snapshot without repairing, emailing, or spending.

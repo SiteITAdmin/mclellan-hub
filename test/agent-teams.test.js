@@ -397,7 +397,6 @@ test('agent family roster has CRM underboss and capos with soldiers and associat
     assert(capo.soldiers.length > 0, `${capo.key} has no soldiers`);
     assert(capo.associates.length > 0, `${capo.key} has no associates`);
   }
-  for (const capo of CAPOS) assert(capo.purpose, `${capo.key} has no runtime purpose`);
 });
 
 test('capo checks report missing soldiers as failures', () => {
@@ -729,34 +728,6 @@ test('remediation deferred fixer dispatches a backfill and reports verify-next-c
   }
 });
 
-test('remediation dispatches purpose-aware LinkedIn and CRM repairs through the existing job queue', async () => {
-  const db = require('../lib/db');
-  const originalHub = db.hub;
-  const mem = remediationTestDb();
-  db.hub = () => mem;
-  try {
-    const linkedin = await remediateCheck({
-      capoKey: 'linkedin_content',
-      check: { name: 'linkedin_journey_outcomes', verdict: 'fail', evidence: 'post needs revision and has no PDF' },
-      useModel: false,
-      nowTs: 1783526400,
-    });
-    const crm = await remediateCheck({
-      capoKey: 'crm',
-      check: { name: 'crm_knowledge_journey_outcomes', verdict: 'fail', evidence: 'source approved but synthesis missing' },
-      useModel: false,
-      nowTs: 1783526400,
-    });
-    assert.equal(linkedin.status, 'dispatched');
-    assert.equal(crm.status, 'dispatched');
-    assert.equal(mem.prepare("SELECT COUNT(*) AS n FROM system_jobs WHERE type='linkedin_journey_repair'").get().n, 1);
-    assert.equal(mem.prepare("SELECT COUNT(*) AS n FROM system_jobs WHERE type='crm_knowledge_repair'").get().n, 1);
-  } finally {
-    db.hub = originalHub;
-    mem.close();
-  }
-});
-
 test('remediation is idempotent — never stacks a duplicate job when one is already pending', async () => {
   const db = require('../lib/db');
   const originalHub = db.hub;
@@ -816,37 +787,6 @@ test('remediation escalates instead of dispatching forever after repeated unreso
     assert.equal(outcome.reason, 'repeated_dispatch_unresolved');
     const jobs = mem.prepare("SELECT COUNT(*) AS n FROM system_jobs WHERE type='flight_backfill'").get();
     assert.equal(jobs.n, 0, 'must not dispatch another retry once the limit is hit');
-  } finally {
-    db.hub = originalHub;
-    mem.close();
-  }
-});
-
-test('remediation keeps draining a shrinking purpose-aware backlog', async () => {
-  const db = require('../lib/db');
-  const originalHub = db.hub;
-  const mem = remediationTestDb();
-  mem.exec(`
-    CREATE TABLE knowledge_receipts (
-      id TEXT PRIMARY KEY, user TEXT, source_kind TEXT, source_id TEXT,
-      stage TEXT, status TEXT, summary TEXT, payload TEXT,
-      model_key TEXT, model_id TEXT, created_at INTEGER
-    )
-  `);
-  const nowTs = 1783526400;
-  const ins = mem.prepare(`INSERT INTO knowledge_receipts (id,user,source_kind,source_id,stage,status,summary,payload,created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
-  ins.run('d1', 'douglas', 'hub_remediation', 'crm_knowledge_journey_outcomes', 'agent:remediation:crm', 'warn', 'retry', JSON.stringify({ check_details: { issue_count: 12 } }), nowTs - 3600);
-  ins.run('d2', 'douglas', 'hub_remediation', 'crm_knowledge_journey_outcomes', 'agent:remediation:crm', 'warn', 'retry', JSON.stringify({ check_details: { issue_count: 8 } }), nowTs - 1800);
-  db.hub = () => mem;
-  try {
-    const outcome = await remediateCheck({
-      capoKey: 'crm',
-      check: { name: 'crm_knowledge_journey_outcomes', verdict: 'fail', evidence: '4 repairable journeys remain', details: { issue_count: 4 } },
-      useModel: false,
-      nowTs,
-    });
-    assert.equal(outcome.status, 'dispatched');
-    assert.equal(mem.prepare("SELECT COUNT(*) AS n FROM system_jobs WHERE type='crm_knowledge_repair'").get().n, 1);
   } finally {
     db.hub = originalHub;
     mem.close();

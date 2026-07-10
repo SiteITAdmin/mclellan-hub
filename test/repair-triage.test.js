@@ -2,11 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const Database = require('better-sqlite3');
-const { classifyError, errorSignature, sourceForJobType, mineSnapshot } = require('../lib/repair-reproducer');
+const { classifyError, errorSignature } = require('../lib/repair-reproducer');
 const { triageDeterministic, withinAllowedScope } = require('../lib/repair-triage');
 
 function reproducerFixture(overrides = {}) {
@@ -48,43 +44,6 @@ test('classifyError routes model garbage and infra noise away from code repair',
 
   const timeout = classifyError('The operation was aborted due to timeout');
   assert.equal(timeout.verdictHint, 'skip');
-
-  const credits = classifyError('CRM source triage OpenRouter 402');
-  assert.equal(credits.error_class, 'upstream_permanent_http');
-  assert.equal(credits.verdictHint, 'config_fix');
-});
-
-test('repair reproducer attributes journey repair jobs to their existing Capos', () => {
-  assert.equal(sourceForJobType('linkedin_journey_repair').capo, 'linkedin_content');
-  assert.equal(sourceForJobType('crm_knowledge_repair').capo, 'crm');
-  assert.equal(sourceForJobType('synthesis_run').capo, 'knowledge');
-});
-
-test('repair venue mines caught CRM and LinkedIn errors from journey receipts', t => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-repair-receipts-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const snapshot = new Database(path.join(dir, 'hub.db'));
-  snapshot.exec(`
-    CREATE TABLE knowledge_receipts (
-      id TEXT PRIMARY KEY, user TEXT, source_kind TEXT, source_id TEXT,
-      stage TEXT, status TEXT, summary TEXT, payload TEXT, created_at INTEGER
-    )
-  `);
-  const insert = snapshot.prepare(`
-    INSERT INTO knowledge_receipts
-      (id,user,source_kind,source_id,stage,status,summary,payload,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?)
-  `);
-  const ts = Math.floor(Date.now() / 1000);
-  insert.run('crm-error', 'douglas', 'email_summary', 'source-1', 'crm_source_triage', 'error',
-    'CRM source triage response must be a JSON object', JSON.stringify({ error: 'CRM source triage response must be a JSON object' }), ts);
-  insert.run('li-error', 'douglas', 'linkedin_post', 'post-1', 'agent:linkedin_artifact', 'error',
-    'Carousel renderer must be a JSON object', JSON.stringify({ error: 'Carousel renderer must be a JSON object' }), ts);
-  snapshot.close();
-
-  const mined = mineSnapshot({ snapshotDir: dir });
-  assert(mined.candidates.some(candidate => candidate.origin === 'knowledge_receipts' && candidate.capo === 'crm'));
-  assert(mined.candidates.some(candidate => candidate.origin === 'knowledge_receipts' && candidate.capo === 'linkedin_content'));
 });
 
 test('errorSignature collapses log-line wrappers onto the bare failure', () => {
