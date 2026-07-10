@@ -424,7 +424,7 @@
 <section class="admin-section" id="topics">
   <h2>Content topics</h2>
   <p style="font-size:13px;color:var(--text-dim);margin:0 0 14px;">
-    These labels power the Content screen filters and the content type picker. The description is the working meaning of the topic. The search focus overrides the default research query — use it to add geographic or sector focus (e.g. "NHS Ireland digital health clinical systems").
+    These labels power the Content screen filters and the content type picker. The description is the working meaning of the topic. The search focus overrides the default research query — use it to add geographic or sector focus (e.g. "NHS Ireland digital health clinical systems"). <strong>Min score %</strong> sets the quality bar the post must clear before it can be scheduled or published — set it lower for topics where the audience is forgiving (e.g. AI news at 50%) and higher for career-defining topics (e.g. M365 at 85%). Blank = default <%= typeof DEFAULT_MIN_SCORE_PCT !== 'undefined' ? DEFAULT_MIN_SCORE_PCT : 70 %>%.
   </p>
   <div class="topic-admin-list">
     <% for (const topic of contentTopics) { %>
@@ -434,6 +434,9 @@
       <div class="topic-fields">
         <textarea name="description" placeholder="What this topic means"><%= topic.description || '' %></textarea>
         <textarea name="searchQuery" placeholder="Search focus (optional) — e.g. 'NHS Ireland digital health' or 'EU AI Act compliance enterprise'" style="font-size:12px;color:var(--text-dim);min-height:38px;"><%= topic.searchQuery || '' %></textarea>
+        <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:6px;">Min score %
+          <input type="number" name="minScorePct" min="0" max="100" step="5" value="<%= topic.minScorePct != null ? topic.minScorePct : '' %>" placeholder="<%= typeof DEFAULT_MIN_SCORE_PCT !== 'undefined' ? DEFAULT_MIN_SCORE_PCT : 70 %>" style="width:72px;">
+        </label>
       </div>
       <div class="topic-admin-actions">
         <button type="submit" class="btn-sm primary">Save</button>
@@ -446,6 +449,9 @@
       <div class="topic-fields">
         <textarea name="description" placeholder="What this topic means"></textarea>
         <textarea name="searchQuery" placeholder="Search focus (optional) — e.g. 'Ireland EU policy' or 'global enterprise' or 'NHS HSE Ireland'" style="font-size:12px;color:var(--text-dim);min-height:38px;"></textarea>
+        <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:6px;">Min score %
+          <input type="number" name="minScorePct" min="0" max="100" step="5" placeholder="<%= typeof DEFAULT_MIN_SCORE_PCT !== 'undefined' ? DEFAULT_MIN_SCORE_PCT : 70 %>" style="width:72px;">
+        </label>
       </div>
       <div class="topic-admin-actions">
         <button type="submit" class="btn-sm primary">Add topic</button>

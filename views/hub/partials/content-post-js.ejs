@@ -58,6 +58,48 @@ window.editTitle = async function(id) {
   else alert((await r.json().catch(() => ({}))).error || 'Failed to update title');
 };
 
+// ── Quality gate: override + regenerate ───────────────────────────────────────
+window.overrideVeto = async function(id) {
+  const reason = prompt('Publish anyway — the quality board flagged this as below the bar. Optional note (why you\'re overriding):', '');
+  if (reason === null) return;
+  const r = await fetch('/api/content/posts/' + id + '/override', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: reason.trim() }),
+  });
+  if (r.ok) window.location.reload();
+  else alert((await r.json().catch(() => ({}))).error || 'Failed to override');
+};
+
+window.liftOverride = async function(id) {
+  const r = await fetch('/api/content/posts/' + id + '/override', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clear: true }),
+  });
+  if (r.ok) window.location.reload();
+  else alert((await r.json().catch(() => ({}))).error || 'Failed to lift override');
+};
+
+window.regeneratePost = async function(id) {
+  if (!confirm('Re-run the pipeline on this post? It will regenerate research, draft and score, then be re-reviewed.')) return;
+  const btn = document.getElementById('regen-btn-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = 'Regenerating…'; }
+  const r = await fetch('/api/content/posts/' + id + '/regenerate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+  });
+  if (r.ok) {
+    const poll = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/content/posts/' + id);
+        const pd = await pr.json();
+        if (pd.post?.status !== 'processing') { clearInterval(poll); window.location.reload(); }
+      } catch (_) {}
+    }, 3000);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Regenerate'; }
+    alert((await r.json().catch(() => ({}))).error || 'Failed to regenerate');
+  }
+};
+
 // ── Schedule ──────────────────────────────────────────────────────────────────
 window.schedulePost = async function(id) {
   const date = document.getElementById('date-' + id)?.value;

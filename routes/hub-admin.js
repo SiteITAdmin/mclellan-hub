@@ -2184,7 +2184,7 @@ router.post('/nakai/briefing-request', async (req, res) => {
 
 
 router.get('/admin/linkedin', requireHubAdmin, (req, res) => {
-  const { getContentTopics, listContentTopicNames } = require('../lib/content-taxonomy');
+  const { getContentTopics, listContentTopicNames, DEFAULT_MIN_SCORE_PCT } = require('../lib/content-taxonomy');
   const posts = db.hub().prepare(
     `SELECT id, user, topic, content_type, score_json, carousel_url, image_url,
             sheet_url, scheduled_date, status, created_at, published_at,
@@ -2203,6 +2203,7 @@ router.get('/admin/linkedin', requireHubAdmin, (req, res) => {
     posts: parsed,
     contentTypes: listContentTopicNames(req.hubUser),
     contentTopics: getContentTopics(req.hubUser),
+    DEFAULT_MIN_SCORE_PCT,
   });
 });
 
@@ -2230,6 +2231,7 @@ router.post('/admin/linkedin/topics/add', requireHubAdmin, (req, res) => {
     name: req.body.name,
     description: req.body.description,
     searchQuery: req.body.searchQuery,
+    minScorePct: req.body.minScorePct,
   });
   res.redirect('/admin/linkedin#topics');
 });
@@ -2240,6 +2242,7 @@ router.post('/admin/linkedin/topics/update', requireHubAdmin, (req, res) => {
     name: req.body.name,
     description: req.body.description,
     searchQuery: req.body.searchQuery,
+    minScorePct: req.body.minScorePct,
   });
   res.redirect('/admin/linkedin#topics');
 });
@@ -2255,8 +2258,7 @@ router.post('/admin/linkedin/:id/status', requireHubAdmin, (req, res) => {
   const allowed = ['draft', 'needs_revision', 'scheduled', 'published', 'archived'];
   if (!allowed.includes(status)) return res.redirect('/admin/linkedin');
   if (['scheduled', 'published'].includes(status)) {
-    const latestQuality = require('../lib/hub-quality-board').latestLinkedInQualityReceipt(req.hubUser, req.params.id);
-    if (latestQuality?.payload_json?.quality_veto) return res.redirect('/admin/linkedin');
+    if (require('../lib/hub-quality-board').qualityVetoBlocks(req.hubUser, req.params.id)) return res.redirect('/admin/linkedin');
   }
   db.hub().prepare(`
     UPDATE linkedin_posts
@@ -2291,8 +2293,7 @@ router.post('/admin/linkedin/:id/status', requireHubAdmin, (req, res) => {
 router.post('/admin/linkedin/:id/schedule', requireHubAdmin, (req, res) => {
   const { scheduled_date } = req.body;
   if (scheduled_date) {
-    const latestQuality = require('../lib/hub-quality-board').latestLinkedInQualityReceipt(req.hubUser, req.params.id);
-    if (latestQuality?.payload_json?.quality_veto) return res.redirect('/admin/linkedin');
+    if (require('../lib/hub-quality-board').qualityVetoBlocks(req.hubUser, req.params.id)) return res.redirect('/admin/linkedin');
   }
   db.hub().prepare('UPDATE linkedin_posts SET scheduled_date = ?, status = ? WHERE id = ? AND user = ?')
     .run(scheduled_date || '', scheduled_date ? 'scheduled' : 'draft', req.params.id, req.hubUser);

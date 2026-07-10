@@ -7,28 +7,26 @@ const {
 } = require('./hub-shared');
 
 function activeLinkedInQualityVeto(user, postId) {
-  const latest = require('../lib/hub-quality-board').latestLinkedInQualityReceipt(user, postId);
-  return Boolean(latest?.payload_json?.quality_veto);
+  return require('../lib/hub-quality-board').qualityVetoBlocks(user, postId);
 }
 
 function activeLinkedInNonArtifactQualityVeto(user, postId) {
-  const latest = require('../lib/hub-quality-board').latestLinkedInQualityReceipt(user, postId);
-  if (!latest?.payload_json?.quality_veto) return false;
-  const retryableArtifactBlockers = new Set(['artifact_is_usable_when_present', 'pipeline_completed_cleanly']);
-  return (latest.payload_json.blocking_checks || [])
-    .some(name => !retryableArtifactBlockers.has(name));
+  return require('../lib/hub-quality-board').qualityVetoBlocks(user, postId, { artifactOnlyOk: true });
 }
 
 function getContentPosts(user) {
   const posts = db.hub().prepare(
     `SELECT id, topic, display_title, content_type, spiciness, score_json, carousel_url, sheet_url,
-            scheduled_date, status, created_at, published_at,
+            scheduled_date, status, created_at, published_at, quality_override,
             substr(refined_draft, 1, 300) AS preview
      FROM linkedin_posts WHERE user = ? ORDER BY created_at DESC LIMIT 200`
   ).all(user);
+  const { qualityVetoBlocks } = require('../lib/hub-quality-board');
   return posts.map(p => ({
     ...p,
     score: (() => { try { return JSON.parse(p.score_json || '{}'); } catch { return {}; } })(),
+    quality_veto: p.status !== 'published' ? qualityVetoBlocks(user, p.id) : false,
+    quality_override: Boolean(p.quality_override),
   }));
 }
 
@@ -383,6 +381,63 @@ router.post('/api/content/posts/:id/retry-carousel', requireAuth, requireSameOri
     }
   });
   res.json({ ok: true });
+});
+
+// Override an active quality veto: Douglas has read the post and chooses to ship
+// it anyway. Recorded on the post and in a receipt for audit. Pass { clear: true }
+// to lift a previous override (the board's verdict governs again).
+router.post('/api/content/posts/:id/override', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const post = db.hub().prepare('SELECT id FROM linkedin_posts WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!post) return res.status(404).json({ error: 'Not found' });
+  const clear = Boolean(req.body?.clear);
+  const reason = String(req.body?.reason || '').trim().slice(0, 500);
+  if (clear) {
+    db.hub().prepare("UPDATE linkedin_posts SET quality_override = NULL, quality_override_reason = '' WHERE id = ? AND user = ?")
+      .run(req.params.id, req.hubUser);
+  } else {
+    db.hub().prepare('UPDATE linkedin_posts SET quality_override = unixepoch(), quality_override_reason = ? WHERE id = ? AND user = ?')
+      .run(reason, req.params.id, req.hubUser);
+  }
+  try {
+    require('../lib/agent-receipts').writeAgentReceipt({
+      user: req.hubUser,
+      sourceKind: 'linkedin_post',
+      sourceId: req.params.id,
+      stage: 'agent:linkedin_quality_override',
+      status: clear ? 'pass' : 'warn',
+      summary: clear
+        ? 'Quality veto override lifted — board verdict governs again'
+        : `Quality veto overridden by Douglas${reason ? `: ${reason}` : ''}`,
+      payload: { overridden: !clear, reason, at: new Date().toISOString() },
+    });
+  } catch (err) {
+    console.warn('[content] override receipt failed:', err.message);
+  }
+  res.json({ ok: true, overridden: !clear });
+});
+
+// Regenerate an existing post in place: re-run the pipeline on the same post so a
+// vetoed draft can actually improve and be re-reviewed, instead of forcing a
+// delete-and-start-over. Clears any prior override so the fresh review governs.
+router.post('/api/content/posts/:id/regenerate', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const post = db.hub().prepare(
+    'SELECT id, topic, spiciness, status FROM linkedin_posts WHERE id = ? AND user = ?'
+  ).get(req.params.id, req.hubUser);
+  if (!post) return res.status(404).json({ error: 'Not found' });
+  if (post.status === 'processing') return res.status(409).json({ error: 'Post is still processing' });
+  if (!post.topic) return res.status(400).json({ error: 'Post has no topic to regenerate from' });
+  const { runPipeline } = require('../lib/linkedin-pipeline');
+  db.hub().prepare("UPDATE linkedin_posts SET status = 'processing', quality_override = NULL, quality_override_reason = '' WHERE id = ?")
+    .run(req.params.id);
+  setImmediate(async () => {
+    try {
+      await runPipeline(req.hubUser, post.topic, s => console.log('[content-regen]', s), req.params.id, null, post.spiciness || 'professional');
+    } catch (err) {
+      console.error('[content-regen] pipeline error:', err.message);
+      try { db.hub().prepare("UPDATE linkedin_posts SET status = 'error' WHERE id = ?").run(req.params.id); } catch (_) {}
+    }
+  });
+  res.json({ ok: true, postId: req.params.id });
 });
 
 router.post('/api/content/posts/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
