@@ -128,6 +128,23 @@
       </div>
     </div>
 
+    <!-- Quality gate -->
+    <% if (p.quality_veto || p.quality_override || (p.status !== 'processing' && p.status !== 'published')) { %>
+    <div class="panel-section">
+      <div class="panel-label">Quality gate</div>
+      <% if (p.quality_veto) { %>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Blocked by the quality board — below the score bar for this content type. Improve it, or publish anyway.</div>
+      <% } else if (p.quality_override) { %>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">⚠ Veto overridden — the board's block is bypassed for this post.</div>
+      <% } %>
+      <div class="status-row">
+        <% if (!['processing'].includes(p.status)) { %><button class="btn-sm" id="regen-btn-<%= p.id %>" onclick="regeneratePost('<%= p.id %>')" title="Re-run the pipeline on this post so it can improve and be re-reviewed">↻ Regenerate</button><% } %>
+        <% if (p.quality_veto) { %><button class="btn-sm" onclick="overrideVeto('<%= p.id %>')">Publish anyway</button><% } %>
+        <% if (p.quality_override) { %><button class="btn-sm" onclick="liftOverride('<%= p.id %>')">Lift override</button><% } %>
+      </div>
+    </div>
+    <% } %>
+
   </div>
   <% } %>
 </div>

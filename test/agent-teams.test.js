@@ -842,3 +842,46 @@ test('consigliere fallback brief renders readable markdown with no UUIDs and pro
   assert(markdown.includes('LinkedIn'), 'correction should surface in handled');
   assert(!/[0-9a-f]{8}-[0-9a-f]{4}/.test(markdown), 'no UUIDs in the rendered brief');
 });
+
+const { getMinScoreForType } = require('../lib/content-taxonomy');
+
+test('LinkedIn quality board respects a per-type score bar', () => {
+  const basePost = {
+    research: 'r'.repeat(260),
+    refined_draft: 'd'.repeat(460),
+    score_json: JSON.stringify({ overall_score: 3.0, axis_scores: { demonstrated_expertise: 4 } }),
+    carousel_url: 'https://drive.google.com/file/d/x/view',
+    content_type: 'AI News',
+  };
+  const receipts = {
+    'agent:linkedin_research': { id: 'r1', status: 'pass' },
+    'agent:linkedin_draft_critic': { id: 'd1', status: 'pass' },
+    'agent:linkedin_artifact': { id: 'a1', status: 'pass' },
+    'agent:linkedin_managing_editor': { id: 'm1', status: 'pass' },
+  };
+  // A 3.0 post is BELOW the default 3.5 bar → vetoed.
+  const strict = buildLinkedInQualityReview({ post: basePost, receipts, minScore: 3.5 });
+  assert.equal(strict.quality_veto, true);
+  assert(strict.blocking_checks.includes('post_has_specific_voice'));
+  // Same post CLEARS a 50% (2.5/5) bar → no veto.
+  const lenient = buildLinkedInQualityReview({ post: basePost, receipts, minScore: 2.5 });
+  assert.equal(lenient.quality_veto, false);
+});
+
+test('per-type min score maps percentages and falls back to default', () => {
+  const dbMod = require('../lib/db');
+  const originalHub = dbMod.hub;
+  dbMod.hub = () => ({
+    prepare: () => ({
+      get: () => ({ value: JSON.stringify([{ name: 'AI News', minScorePct: 50 }, { name: 'M365' }]) }),
+    }),
+  });
+  try {
+    assert.equal(getMinScoreForType('douglas', 'AI News'), 2.5);   // 50% of 5
+    assert.equal(getMinScoreForType('douglas', 'M365'), 3.5);       // unset → default 70%
+    assert.equal(getMinScoreForType('douglas', 'Unknown'), 3.5);    // not in taxonomy → default
+    assert.equal(getMinScoreForType('douglas', ''), 3.5);           // no type → default
+  } finally {
+    dbMod.hub = originalHub;
+  }
+});
