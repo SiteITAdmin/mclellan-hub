@@ -374,7 +374,7 @@ router.post('/api/content/posts/:id/retry-carousel', requireAuth, requireSameOri
   db.hub().prepare(`UPDATE linkedin_posts SET status = 'processing' WHERE id = ?`).run(req.params.id);
   setImmediate(async () => {
     try {
-      await resumePost(req.params.id, req.hubUser, s => console.log('[carousel-retry]', s), { originalStatus: post.status });
+      await resumePost(req.params.id, req.hubUser, s => console.log('[carousel-retry]', s));
     } catch (err) {
       console.error('[carousel-retry] error:', err.message);
       try { db.hub().prepare(`UPDATE linkedin_posts SET status = 'draft' WHERE id = ?`).run(req.params.id); } catch (_) {}
