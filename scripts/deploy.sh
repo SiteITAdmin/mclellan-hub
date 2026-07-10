@@ -74,6 +74,7 @@ rsync -avz --no-perms --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r --progress -e "
   --exclude .git \
   --exclude .claude \
   --exclude .tools \
+  --exclude .repair-worktrees \
   --exclude .next \
   --exclude node_modules \
   --exclude data \

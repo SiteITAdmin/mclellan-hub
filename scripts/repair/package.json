@@ -1,0 +1,10 @@
+{
+  "name": "mclellan-hub-repair-venue",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated Pi SDK install for the Mac-mini self-repair venue. Deliberately separate from the Hub's package.json so `npm install --production` on the VPS never pulls the coding agent.",
+  "type": "commonjs",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.5"
+  }
+}
