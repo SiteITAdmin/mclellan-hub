@@ -27,3 +27,9 @@ token-burn-dashboard/deploy-data/openrouter-activity.summary.json
 # One-off deliverable workspaces (Beacon roadmap etc.) — local only
 outputs/
 tools/
+
+# Self-repair venue (Mac mini only) — throwaway worktrees and the isolated
+# Pi SDK install that must never reach the prod package.json. The queue and
+# receipts live under data/ which is already ignored.
+.repair-worktrees/
+scripts/repair/node_modules/
