@@ -635,7 +635,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'admin_synthesiser',scope: 'system', label: 'Test synthesiser',    note: 'Synthesises multi-search results in the admin test arena.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'remediation_advisor', scope: 'system', label: 'Remediation advisor', note: 'When a family health check fails with no deterministic fix, this model picks a reversible action from the remediation whitelist or declines and escalates to the consigliere. Cheap model is fine — it chooses from a menu, it does not write.', fallback: 'google/gemini-2.5-flash' },
     { feature: 'repair_triage', scope: 'system', label: 'Self-repair triage reviewer', note: 'Sanity-checks fixable-narrow verdicts in the Mac-mini repair venue. Can only confirm a verdict or downgrade it to config-fix/escalate — never widens the venue\'s reach. Cheap model is fine.', fallback: 'google/gemini-2.5-flash' },
-    { feature: 'repair_agent', scope: 'system', label: 'Self-repair coding agent', note: 'The model Pi runs on inside the Mac-mini repair venue when writing bounded fixes for narrow errors. Isolated git worktree, $2/attempt cost cap, human-reviewed via GitHub PR before any deploy. Use a strong coding model.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'repair_agent', scope: 'system', label: 'Self-repair coding agent', note: 'The model Pi runs on inside the Mac-mini repair venue when writing bounded fixes for narrow errors. Isolated git worktree, $2/attempt cost cap, human-reviewed via GitHub PR before any deploy. Use a strong coding model.', fallback: 'z-ai/glm-5.2' },
     { feature: 'consigliere_brief', scope: 'system', label: 'Consigliere brief', note: 'Writes the plain-English daily brief at the top of the Consigliere report — translates the escalations into what needs you / handled / watching, with a recommended fix per problem. This is the voice Douglas reads each day; use a strong model.', fallback: 'anthropic/claude-sonnet-4-6' },
   ]},
   { id: 'suggestions', label: 'Suggestion engine', slots: [
@@ -777,9 +777,38 @@ router.get('/admin/models', requireHubAdmin, (req, res) => {
   res.render('hub-admin/models', { user: req.hubUser, models, tiers, defaultModel });
 });
 
+function repairVenueEnabled() {
+  try {
+    const row = db.hub().prepare(
+      "SELECT value FROM crm_context WHERE user = 'system' AND key = 'repair_venue_enabled'"
+    ).get();
+    return row?.value === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
 router.get('/admin/models/system', requireHubAdmin, (req, res) => {
   const models = getAdminModels(req);
-  res.render('hub-admin/models-system', { user: req.hubUser, models, systemGroups: getResolvedSystemGroups(req) });
+  res.render('hub-admin/models-system', {
+    user: req.hubUser,
+    models,
+    systemGroups: getResolvedSystemGroups(req),
+    repairVenueEnabled: repairVenueEnabled(),
+  });
+});
+
+// Master switch for the Mac-mini self-repair venue. The value is written to
+// prod crm_context here and travels to the Mac mini in the nightly snapshot,
+// so a change takes effect on the next 04:30 run — not instantly.
+router.post('/admin/repair-venue/_toggle', requireHubAdmin, (req, res) => {
+  const enable = req.body.enabled === '1' ? '1' : '0';
+  db.hub().prepare(`
+    INSERT INTO crm_context (id, user, key, value)
+    VALUES (?, 'system', 'repair_venue_enabled', ?)
+    ON CONFLICT(user, key) DO UPDATE SET value = excluded.value
+  `).run(uuidId(), enable);
+  res.redirect('/admin/models/system#repair-venue');
 });
 
 router.get('/admin/models/prompts', requireHubAdmin, (req, res) => {
