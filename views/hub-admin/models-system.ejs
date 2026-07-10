@@ -41,6 +41,27 @@
     Prompts for these slots are edited on the <a href="/admin/models/prompts">Prompts</a> page.
   </p>
 
+  <div class="model-card" id="repair-venue" style="margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <div style="min-width:0">
+      <div class="model-card-name">Self-repair venue
+        <span class="badge <%= repairVenueEnabled ? 'badge-default' : 'badge-search-none' %>" style="margin-left:8px"><%= repairVenueEnabled ? 'enabled' : 'disabled' %></span>
+      </div>
+      <div class="model-card-id" style="margin-top:4px">
+        Master switch for the Mac-mini coding agent. When enabled, the nightly 04:30 run may fix
+        narrow errors and open GitHub PRs for review (never deploys). When disabled, it still mines,
+        triages, and emails diagnoses. Changes ride the nightly snapshot — they take effect on the
+        next 04:30 run, not immediately.
+      </div>
+    </div>
+    <form method="POST" action="/admin/repair-venue/_toggle">
+      <input type="hidden" name="enabled" value="<%= repairVenueEnabled ? '0' : '1' %>">
+      <button class="btn-sm <%= repairVenueEnabled ? 'danger' : '' %>" type="submit"
+        <%- repairVenueEnabled ? '' : 'style="background:var(--accent);color:#fff;border-color:var(--accent)"' %>>
+        <%= repairVenueEnabled ? 'Disable venue' : 'Enable venue' %>
+      </button>
+    </form>
+  </div>
+
   <div class="sys-layout">
     <nav class="sys-sidebar" id="sys-sidebar" aria-label="System model groups">
       <% for (const group of systemGroups) { %>
