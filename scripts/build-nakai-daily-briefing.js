@@ -17,6 +17,8 @@ const STORE_DIR = path.join(ROOT, 'data', 'nakai-briefings');
 const OUT_DIR = process.env.NAKAI_DAILY_BRIEFING_WORK_DIR || path.join(STORE_DIR, '.work');
 const START_DATE = process.env.NAKAI_DAILY_BRIEFING_START_DATE || '2026-06-19';
 const MODEL_TIMEOUT_MS = parseInt(process.env.NAKAI_DAILY_BRIEFING_TIMEOUT_MS || '180000', 10);
+const FALLBACK_MODEL_ID = process.env.NAKAI_DAILY_BRIEFING_FALLBACK_MODEL || 'google/gemini-2.5-flash';
+const FALLBACK_TIMEOUT_MS = parseInt(process.env.NAKAI_DAILY_BRIEFING_FALLBACK_TIMEOUT_MS || '120000', 10);
 
 function briefingMeta(date = new Date()) {
   const now = date instanceof Date ? date : new Date(date);
@@ -245,6 +247,69 @@ This edition could not be generated — the OpenRouter API key is not set or the
 Check OPENROUTER_API_KEY in the Hub environment and retry via the admin resend action.`;
 }
 
+function briefingModelAttempts(primaryModelId) {
+  const attempts = [
+    {
+      modelId: primaryModelId,
+      timeout: Number.isFinite(MODEL_TIMEOUT_MS) ? MODEL_TIMEOUT_MS : 180000,
+      role: 'primary',
+    },
+    {
+      modelId: FALLBACK_MODEL_ID,
+      timeout: Number.isFinite(FALLBACK_TIMEOUT_MS) ? FALLBACK_TIMEOUT_MS : 120000,
+      role: 'fallback',
+    },
+  ];
+  return attempts.filter((attempt, index) => (
+    attempt.modelId && attempts.findIndex(candidate => candidate.modelId === attempt.modelId) === index
+  ));
+}
+
+async function requestBriefingMarkdown({ prompt, userContent, primaryModelId }) {
+  const failures = [];
+  for (const attempt of briefingModelAttempts(primaryModelId)) {
+    try {
+      const started = Date.now();
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        timeout: attempt.timeout,
+        headers: openRouterHeaders(TASK_CODES.NAKAI_DAILY_BRIEFING),
+        body: JSON.stringify({
+          model: attempt.modelId,
+          temperature: 0.2,
+          messages: [
+            { role: 'system', content: prompt },
+            { role: 'user', content: userContent },
+          ],
+        }),
+      });
+      if (!r.ok) throw new Error(`OpenRouter HTTP ${r.status}`);
+      const data = await r.json();
+      logUsageFromResponse({
+        user: 'nakai',
+        feature: 'nakai-daily-briefing',
+        modelKey: 'nakai_daily_briefing',
+        fallbackModelId: attempt.modelId,
+        data,
+        durationMs: Date.now() - started,
+        taskCode: TASK_CODES.NAKAI_DAILY_BRIEFING,
+      });
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (!text || !/^# Daily Briefing/m.test(text)) {
+        throw new Error('Model response did not contain a Daily Briefing');
+      }
+      if (attempt.role === 'fallback') {
+        console.warn(`[nakai-briefing] recovered with fallback model ${attempt.modelId}`);
+      }
+      return text;
+    } catch (err) {
+      failures.push(`${attempt.modelId}: ${err.message}`);
+      console.warn(`[nakai-briefing] ${attempt.role} model ${attempt.modelId} failed: ${err.message}`);
+    }
+  }
+  throw new Error(`Briefing generation failed after model fallback (${failures.join('; ')})`);
+}
+
 async function generateMarkdown(meta = briefingMeta()) {
   loadDotEnv();
   if (process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD && fs.existsSync(process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD)) {
@@ -266,33 +331,11 @@ async function generateMarkdown(meta = briefingMeta()) {
   if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set');
 
   try {
-    const started = Date.now();
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      timeout: Number.isFinite(MODEL_TIMEOUT_MS) ? MODEL_TIMEOUT_MS : 180000,
-      headers: openRouterHeaders(TASK_CODES.NAKAI_DAILY_BRIEFING),
-      body: JSON.stringify({
-        model: modelId,
-        temperature: 0.2,
-        messages: [
-          { role: 'system', content: prompt },
-          { role: 'user', content: `Current date: ${meta.label}\n${editionContext}${previousContext}\nSource pack:\n\n${pack.text}` },
-        ],
-      }),
+    const text = await requestBriefingMarkdown({
+      prompt,
+      userContent: `Current date: ${meta.label}\n${editionContext}${previousContext}\nSource pack:\n\n${pack.text}`,
+      primaryModelId: modelId,
     });
-    if (!r.ok) throw new Error(`OpenRouter HTTP ${r.status}`);
-    const data = await r.json();
-    logUsageFromResponse({
-      user: 'nakai',
-      feature: 'nakai-daily-briefing',
-      modelKey: 'nakai_daily_briefing',
-      fallbackModelId: modelId,
-      data,
-      durationMs: Date.now() - started,
-      taskCode: TASK_CODES.NAKAI_DAILY_BRIEFING,
-    });
-    const text = data.choices?.[0]?.message?.content?.trim();
-    if (!text || !/^# Daily Briefing/m.test(text)) throw new Error('Model response did not contain a Daily Briefing');
     return { text, liveIds: pack.liveIds };
   } catch (err) {
     if (process.env.NAKAI_DAILY_BRIEFING_ALLOW_STATIC_FALLBACK === '1') {
@@ -621,5 +664,6 @@ module.exports = {
   _test: {
     alertIntelMarkdown,
     sourcePackMarkdown,
+    briefingModelAttempts,
   },
 };
