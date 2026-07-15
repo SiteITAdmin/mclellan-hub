@@ -1395,6 +1395,26 @@ const accentFor = (id, theme) => {
 function ChatApp() {
   const [tweaks, setTweak] = window.useTweaks(window.TWEAK_DEFAULTS);
 
+  // Keep <html data-theme> (and the nav Theme button) in sync with the
+  // in-page theme radio, in both directions — the nav toggle and this
+  // panel are two views onto the same 'hub-theme' localStorage value.
+  React.useEffect(() => {
+    const theme = tweaks.theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+    try { localStorage.setItem('hub-theme', theme); } catch (e) {}
+    const label = document.getElementById('hub-nav-theme-label');
+    if (label) label.textContent = theme === 'dark' ? 'Dark' : 'Light';
+  }, [tweaks.theme]);
+  React.useEffect(() => {
+    const onNav = (e) => {
+      const theme = e.detail && e.detail.theme;
+      if ((theme === 'light' || theme === 'dark') && theme !== tweaks.theme) setTweak('theme', theme);
+    };
+    window.addEventListener('hub-theme-set', onNav);
+    return () => window.removeEventListener('hub-theme-set', onNav);
+  }, [setTweak, tweaks.theme]);
+
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
@@ -1985,6 +2005,24 @@ function CrmMain() {
 
 function CrmApp() {
   const [tweaks, setTweak] = window.useTweaks(window.TWEAK_DEFAULTS || {});
+
+  React.useEffect(() => {
+    const theme = tweaks.theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+    try { localStorage.setItem('hub-theme', theme); } catch (e) {}
+    const label = document.getElementById('hub-nav-theme-label');
+    if (label) label.textContent = theme === 'dark' ? 'Dark' : 'Light';
+  }, [tweaks.theme]);
+  React.useEffect(() => {
+    const onNav = (e) => {
+      const theme = e.detail && e.detail.theme;
+      if ((theme === 'light' || theme === 'dark') && theme !== tweaks.theme) setTweak('theme', theme);
+    };
+    window.addEventListener('hub-theme-set', onNav);
+    return () => window.removeEventListener('hub-theme-set', onNav);
+  }, [setTweak, tweaks.theme]);
+
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
