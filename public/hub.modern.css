@@ -43,6 +43,8 @@ html {
   --ok-bg: #e8f7f0;
   --ok-fg: #0f6b3a;
   --ok-line: #a8dfc4;
+  --bg-card: var(--bg-elev);
+  --border: var(--line);
 }
 
 /* ── Theme: dark ─────────────────────────────────────────────────────────── */
@@ -67,6 +69,8 @@ html {
   --ok-bg: #0a2318;
   --ok-fg: #4edea3;
   --ok-line: #1a4030;
+  --bg-card: var(--bg-elev);
+  --border: var(--line);
 }
 
 body {

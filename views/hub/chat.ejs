@@ -36,7 +36,10 @@
   window.CONV_ID = '<%- locals.convId || "" %>';
   window.PROJECT_SLUG = '<%- locals.activeProject?.slug || "" %>';
   window.TWEAK_DEFAULTS = {
-    theme: 'light',
+    theme: (function () {
+      try { return localStorage.getItem('hub-theme') || document.documentElement.getAttribute('data-theme') || 'light'; }
+      catch (e) { return 'light'; }
+    })(),
     accent: 'violet',
     density: 'comfortable',
     bubbles: 'mixed',
@@ -53,7 +56,7 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 <script type="text/babel" src="/tweaks-panel.jsx?v=20260515d"></script>
-<script type="text/babel" src="/hub-modern.jsx?v=20260615a"></script>
+<script type="text/babel" src="/hub-modern.jsx?v=20260715a"></script>
 
 </body>
 </html>

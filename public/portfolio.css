@@ -21,6 +21,24 @@
   --accent-soft: #f0efff;
   --on-accent: #ffffff;
   --success: #2e7d5f;
+  /* Independent literal, not var(--accent): some admin pages define their
+     own :root { --accent: var(--primary, ...) }, which would create a
+     circular reference if --primary aliased back to --accent. */
+  --primary: #4648d4;
+  --primary-hover: #6063ee;
+  /* Aliases: several admin pages reference these names with hardcoded
+     light-only fallbacks (var(--x, #fff) etc). Defining them here means
+     the fallback never fires and the page follows the real theme instead. */
+  --bg-soft: var(--surface-low);
+  --border-strong: var(--outline);
+  --card-bg: var(--surface);
+  --card-border: var(--border);
+  --danger: #c4342b;
+  --input-bg: var(--surface);
+  --line: var(--border);
+  --surface-2: var(--surface-low);
+  --surface-raised: var(--surface-low);
+  --text-2: var(--text-dim);
   --font-serif: 'Noto Serif', Georgia, serif;
   --font: 'Manrope', system-ui, -apple-system, sans-serif;
   --max-w: 1100px;
@@ -43,6 +61,18 @@ html[data-theme="dark"] {
   --accent-light: rgba(138, 140, 255, 0.18);
   --accent-soft: rgba(138, 140, 255, 0.1);
   --on-accent: #0f0e1a;
+  --primary: #8a8cff;
+  --primary-hover: #a5a7ff;
+  --bg-soft: var(--surface-low);
+  --border-strong: var(--outline);
+  --card-bg: var(--surface);
+  --card-border: var(--border);
+  --danger: #ff8a80;
+  --input-bg: var(--surface);
+  --line: var(--border);
+  --surface-2: var(--surface-low);
+  --surface-raised: var(--surface-low);
+  --text-2: var(--text-dim);
 }
 html[data-theme="dark"] body {
   background: radial-gradient(circle at 80% -10%, rgba(138,140,255,0.12) 0%, transparent 45%), var(--bg);
