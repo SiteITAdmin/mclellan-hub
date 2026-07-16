@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content — Cadence — McLellan Hub</title>
+<link rel="stylesheet" href="/hub.css">
+<%- include('partials/content-styles') %>
+</head>
+<body class="hub-page" style="background: var(--bg, #fcf8ff); min-height: 100vh;">
+<%- include('partials/top-nav') %>
+<main>
+<div class="content-wrap">
+
+  <h1 class="page-title">Content — Cadence</h1>
+  <p class="page-sub">Posting and research schedules. Day-by-day topics live on the Plan tab.</p>
+
+  <%- include('partials/content-tabs', { contentTab: 'cadence' }) %>
+
+  <section class="cadence-box">
+    <div class="cadence-head">
+      <h2 class="cadence-title">Cadence policy</h2>
+      <a href="/admin/models/system#sys-linkedin_planner" class="cadence-link">Models &amp; prompts</a>
+    </div>
+    <form id="cadence-form">
+      <div class="cadence-grid">
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">LinkedIn posting</div>
+            <label class="switch"><input type="checkbox" name="linkedinEnabled" <%= cadencePolicy.linkedin.enabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Cadence days</label>
+              <input type="number" min="1" max="60" name="linkedinCadenceDays" value="<%= cadencePolicy.linkedin.cadenceDays %>">
+            </div>
+            <div class="cadence-field">
+              <label>Reminder schedule</label>
+              <input type="hidden" name="linkedinRecur" id="linkedinRecur" value="<%= cadencePolicy.linkedin.recur %>">
+              <div class="recur-controls" data-field="linkedinRecur" data-value="<%= cadencePolicy.linkedin.recur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.linkedin.recur) %></span>
+            <% const liRow = cadenceRows.find(r => r.dedup_key && r.dedup_key.startsWith('content-linkedin:')); %>
+            <% if (liRow) { %>
+              <span class="badge badge-<%= liRow.status %>"><%= liRow.status %></span>
+              <% if (liRow.due_label) { %><span class="badge badge-date"><%= liRow.due_label %></span><% } %>
+              <% if (liRow.needs_action) { %><span class="badge badge-processing">needs action</span><% } %>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">Newsletter topics</div>
+            <label class="switch"><input type="checkbox" name="newsletterEnabled" <%= cadencePolicy.newsletter.enabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Minimum topics</label>
+              <input type="number" min="1" max="25" name="newsletterMinTopics" value="<%= cadencePolicy.newsletter.minTopics %>">
+            </div>
+            <div class="cadence-field">
+              <label>Reminder schedule</label>
+              <input type="hidden" name="newsletterRecur" id="newsletterRecur" value="<%= cadencePolicy.newsletter.recur %>">
+              <div class="recur-controls" data-field="newsletterRecur" data-value="<%= cadencePolicy.newsletter.recur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.newsletter.recur) %></span>
+            <% const nlRow = cadenceRows.find(r => r.dedup_key && r.dedup_key.startsWith('content-nl-midweek:')); %>
+            <% if (nlRow) { %>
+              <span class="badge badge-<%= nlRow.status %>"><%= nlRow.status %></span>
+              <% if (nlRow.due_label) { %><span class="badge badge-date"><%= nlRow.due_label %></span><% } %>
+              <% if (nlRow.needs_action) { %><span class="badge badge-processing">needs action</span><% } %>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="cadence-panel">
+          <div class="cadence-panel-head">
+            <div class="cadence-panel-title">Topic research</div>
+            <label class="switch"><input type="checkbox" name="topicPlanResearchEnabled" <%= cadencePolicy.topicPlan.researchEnabled ? 'checked' : '' %>> On</label>
+          </div>
+          <div class="cadence-fields">
+            <div class="cadence-field">
+              <label>Research schedule</label>
+              <input type="hidden" name="topicPlanResearchRecur" id="topicPlanResearchRecur" value="<%= cadencePolicy.topicPlan.researchRecur %>">
+              <div class="recur-controls" data-field="topicPlanResearchRecur" data-value="<%= cadencePolicy.topicPlan.researchRecur %>"></div>
+            </div>
+          </div>
+          <div class="cadence-state">
+            <span class="badge badge-type"><%= describeRecur(cadencePolicy.topicPlan.researchRecur) %></span>
+            <span class="badge badge-type">Runs the topic set on the Plan tab</span>
+          </div>
+        </div>
+      </div>
+      <div class="cadence-actions">
+        <button class="btn-sm primary" type="submit">Save cadence</button>
+        <span class="cadence-msg" id="cadence-msg"></span>
+      </div>
+    </form>
+  </section>
+
+</div>
+</main>
+
+<script>
+const cadenceForm = document.getElementById('cadence-form');
+const cadenceMsg = document.getElementById('cadence-msg');
+
+function parseRecurSpec(spec) {
+  const parts = String(spec || '').split(':');
+  if (parts[0] === 'weekly') return { frequency: 'weekly', day: parts[1] || 'wed', time: `${parts[2] || '10'}:${parts[3] || '00'}` };
+  return { frequency: 'daily', day: 'wed', time: `${parts[1] || '10'}:${parts[2] || '00'}` };
+}
+
+function composeRecurSpec(control) {
+  const frequency = control.querySelector('[data-recur-frequency]')?.value || 'daily';
+  const day = control.querySelector('[data-recur-day]')?.value || 'wed';
+  const time = control.querySelector('[data-recur-time]')?.value || '10:00';
+  return frequency === 'weekly' ? `weekly:${day}:${time}` : `daily:${time}`;
+}
+
+function syncRecurFields() {
+  document.querySelectorAll('.recur-controls').forEach(control => {
+    const hidden = document.getElementById(control.dataset.field);
+    if (hidden) hidden.value = composeRecurSpec(control);
+  });
+}
+
+document.querySelectorAll('.recur-controls').forEach(control => {
+  const current = parseRecurSpec(control.dataset.value);
+  control.innerHTML = `
+    <select data-recur-frequency aria-label="Frequency">
+      <option value="daily">Daily</option>
+      <option value="weekly">Weekly</option>
+    </select>
+    <select data-recur-day aria-label="Day">
+      <option value="mon">Mon</option>
+      <option value="tue">Tue</option>
+      <option value="wed">Wed</option>
+      <option value="thu">Thu</option>
+      <option value="fri">Fri</option>
+      <option value="sat">Sat</option>
+      <option value="sun">Sun</option>
+    </select>
+    <input type="time" data-recur-time aria-label="Time">
+  `;
+  control.querySelector('[data-recur-frequency]').value = current.frequency;
+  control.querySelector('[data-recur-day]').value = current.day;
+  control.querySelector('[data-recur-time]').value = current.time;
+  const daySelect = control.querySelector('[data-recur-day]');
+  const updateDayVisibility = () => { daySelect.style.visibility = control.querySelector('[data-recur-frequency]').value === 'weekly' ? 'visible' : 'hidden'; };
+  control.addEventListener('change', () => { updateDayVisibility(); syncRecurFields(); });
+  updateDayVisibility();
+});
+syncRecurFields();
+
+cadenceForm?.addEventListener('submit', async e => {
+  e.preventDefault();
+  syncRecurFields();
+  const data = Object.fromEntries(new FormData(cadenceForm));
+  data.linkedinEnabled = cadenceForm.elements.linkedinEnabled.checked;
+  data.newsletterEnabled = cadenceForm.elements.newsletterEnabled.checked;
+  data.topicPlanResearchEnabled = cadenceForm.elements.topicPlanResearchEnabled.checked;
+  cadenceMsg.textContent = 'Saving...';
+  try {
+    const r = await fetch('/api/content/cadence-policy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not save cadence');
+    cadenceMsg.textContent = 'Saved';
+    setTimeout(() => window.location.reload(), 500);
+  } catch (err) {
+    cadenceMsg.textContent = err.message;
+  }
+});
+</script>
+
+</body>
+</html>
