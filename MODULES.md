@@ -389,6 +389,8 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Core capability (must be present):** a successful research run produces suggestions that cite specific, real, checkable evidence (URL, stat, quote) — not generic "AI is changing X" filler. At least one suggestion per run should typically cite a source last30days reaches that plain web search cannot.
 
+**User switch:** the Plan tab (`/lin/plan`) has a "Use last30days" toggle (`topicPlan.useLast30Days`, default on). Off = plain web search for that user regardless of the host driver below. The Plan and Cadence (`/lin/cadence`) pages save through `mergeContentCadencePolicy()` key-level merges - a cadence save can never wipe day topics and vice versa (the old whole-object save silently destroyed `dayPrefs` on every cadence submit).
+
 **Drivers (`CONTENT_RESEARCH_DRIVER`):**
 - *(empty)* — web search on the Hub host (safe default everywhere).
 - `grok` — run Grok+last30days **on this host** (needs Python 3.12+ engine at `LAST30DAYS_ENGINE_PATH`, default `~/.claude/skills/last30days`). Use on the Mac mini for local Hub, or anywhere the engine is installed.

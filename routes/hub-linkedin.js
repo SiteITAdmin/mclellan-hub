@@ -47,12 +47,26 @@ router.get('/lin', requireAuth, (req, res) => {
 
 // Plan — cadence policy + topic plan
 router.get('/lin/plan', requireAuth, (req, res) => {
-  const { getContentCadencePolicy, describeRecur } = require('../lib/content-cadence-policy');
+  const { getContentCadencePolicy } = require('../lib/content-cadence-policy');
   const { buildContentTopicPlan } = require('../lib/content-topic-plan');
   const { listContentTopicNames } = require('../lib/content-taxonomy');
-  const { evaluateCheck } = require('../lib/content-reminders');
   const policy = getContentCadencePolicy(req.hubUser);
   const topicPlan = buildContentTopicPlan(req.hubUser, policy.topicPlan);
+  const allPosts = getContentPosts(req.hubUser);
+  res.render('hub/content-plan', {
+    user: req.hubUser,
+    contentTypes: listContentTopicNames(req.hubUser),
+    cadencePolicy: policy,
+    topicPlan,
+    queueCount: allPosts.filter(p => p.status !== 'published').length,
+  });
+});
+
+// Cadence — posting/newsletter/research schedules (split out of the Plan page)
+router.get('/lin/cadence', requireAuth, (req, res) => {
+  const { getContentCadencePolicy, describeRecur } = require('../lib/content-cadence-policy');
+  const { evaluateCheck } = require('../lib/content-reminders');
+  const policy = getContentCadencePolicy(req.hubUser);
   const cadenceRows = db.hub().prepare(`
     SELECT * FROM reminders
     WHERE user = ? AND kind = 'content'
@@ -65,12 +79,10 @@ router.get('/lin/plan', requireAuth, (req, res) => {
     needs_action: Boolean(evaluateCheck(r).message),
   }));
   const allPosts = getContentPosts(req.hubUser);
-  res.render('hub/content-plan', {
+  res.render('hub/content-cadence', {
     user: req.hubUser,
-    contentTypes: listContentTopicNames(req.hubUser),
     cadencePolicy: policy,
     cadenceRows,
-    topicPlan,
     describeRecur,
     queueCount: allPosts.filter(p => p.status !== 'published').length,
   });
@@ -108,10 +120,13 @@ router.get('/api/mobile/content', requireAuth, (req, res) => {
   res.json({ posts: getContentPosts(req.hubUser) });
 });
 
+// Cadence page save: schedules and toggles ONLY. Merge-saved so it can never
+// touch the topic plan's dayPrefs (the old whole-object save silently wiped
+// day topics whenever the cadence form was submitted).
 router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
-  const { setContentCadencePolicy } = require('../lib/content-cadence-policy');
+  const { mergeContentCadencePolicy } = require('../lib/content-cadence-policy');
   const bool = (value) => value === true || value === 'true' || value === 'on' || value === '1';
-  const policy = setContentCadencePolicy(req.hubUser, {
+  const policy = mergeContentCadencePolicy(req.hubUser, {
     linkedin: {
       enabled: bool(req.body?.linkedinEnabled),
       cadenceDays: req.body?.linkedinCadenceDays,
@@ -123,12 +138,8 @@ router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, write
       recur: req.body?.newsletterRecur,
     },
     topicPlan: {
-      days: req.body?.topicPlanDays,
-      suggestionsPerDay: req.body?.topicPlanSuggestionsPerDay,
       researchEnabled: bool(req.body?.topicPlanResearchEnabled),
       researchRecur: req.body?.topicPlanResearchRecur,
-      showIntelFallback: bool(req.body?.topicPlanShowIntelFallback),
-      dayPrefs: req.body?.topicPlanDayPrefs,
     },
   });
   try {
@@ -136,6 +147,23 @@ router.post('/api/content/cadence-policy', requireAuth, requireSameOrigin, write
   } catch (err) {
     console.warn('[content] cadence policy saved but reminder sync failed:', err.message);
   }
+  res.json({ ok: true, policy });
+});
+
+// Plan page save: topic plan settings and day topics ONLY. Merge-saved so it
+// never resets schedules owned by the cadence page.
+router.post('/api/content/topic-plan', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const { mergeContentCadencePolicy } = require('../lib/content-cadence-policy');
+  const bool = (value) => value === true || value === 'true' || value === 'on' || value === '1';
+  const policy = mergeContentCadencePolicy(req.hubUser, {
+    topicPlan: {
+      days: req.body?.topicPlanDays,
+      suggestionsPerDay: req.body?.topicPlanSuggestionsPerDay,
+      showIntelFallback: bool(req.body?.topicPlanShowIntelFallback),
+      useLast30Days: bool(req.body?.topicPlanUseLast30Days),
+      dayPrefs: req.body?.topicPlanDayPrefs,
+    },
+  });
   res.json({ ok: true, policy });
 });
 
