@@ -383,3 +383,23 @@ These are the tools the system runs on. They are not features — they are the f
 **Does not own:** Deploys (`scripts/deploy.sh`, human-run after PR review), the VPS nightly flow (`lib/system-report.js` untouched), remediation (`lib/hub-remediation.js` — the venue mines error tables directly, not remediation escalations), and the Consigliere brief (repairs surface via PR + email, and the next nightly cycle stops escalating once the fix is deployed).
 
 **Health check:** `node scripts/run-repair.js --dry-run` mines and triages against the latest snapshot without repairing, emailing, or spending.
+
+## LinkedIn Content Research (Mac pull-worker for production)
+**Purpose:** Generates daily LinkedIn content-topic suggestions (`content_research_suggestions` table, read by the content cadence UI). Default path (`lib/content-research.js` → web search) is one flat Exa/Brave query per topic — thin, no engagement signal. Richer path: Grok (OpenRouter `content_research_driver`, fallback `x-ai/grok-4.5`) plans research, shells out to the last30days multi-source engine (Reddit/HN/GitHub/Digg/TikTok/Instagram/YouTube), and writes 3 evidence-grounded angle suggestions.
+
+**Core capability (must be present):** a successful research run produces suggestions that cite specific, real, checkable evidence (URL, stat, quote) — not generic "AI is changing X" filler. At least one suggestion per run should typically cite a source last30days reaches that plain web search cannot.
+
+**Drivers (`CONTENT_RESEARCH_DRIVER`):**
+- *(empty)* — web search on the Hub host (safe default everywhere).
+- `grok` — run Grok+last30days **on this host** (needs Python 3.12+ engine at `LAST30DAYS_ENGINE_PATH`, default `~/.claude/skills/last30days`). Use on the Mac mini for local Hub, or anywhere the engine is installed.
+- `mac` — **production VPS path.** Hub only enqueues rows in `content_research_jobs`; the always-on Mac mini runs `scripts/content-research-worker.js` (launchd every 180s), claims jobs via `POST /api/content-research/worker/*` with `CONTENT_RESEARCH_WORKER_SECRET`, runs Grok+last30days locally, and POSTs suggestions back. Stale claims re-queue; jobs older than `CONTENT_RESEARCH_FALLBACK_AFTER_SEC` (default 2h) get deliberate web-search fallback.
+
+**Files:** `lib/content-research.js`, `lib/content-research-core.js`, `lib/content-research-jobs.js`, `lib/grok-research-driver.js`, `scripts/content-research-worker.js`, `scripts/install-content-research-worker.sh`, `scripts/launchd/com.mclellan.hub.content-research-worker.plist`.
+
+**Hard dependency (engine still Mac-local):** last30days is not vendored into this repo. The pull-worker keeps it on the Mac mini so the VPS does not need Python 3.12+ or the skill tree. Alternative later: vendor engine onto VPS and set `CONTENT_RESEARCH_DRIVER=grok` there instead.
+
+**Known upstream bug (workaround in place):** last30days' `--json-profile=agent` returns an empty `candidates` array on real (non-mock) runs — only `--json-profile=raw`'s `results`/`clusters` keys are actually populated. `runLast30DaysEngine()` reads whichever key has data; full engine JSON still goes to Grok.
+
+**Does not own:** Full post drafting (`lib/linkedin-pipeline.js` slots — later stage once a suggestion is picked).
+
+**Health check:** when `CONTENT_RESEARCH_DRIVER=mac`, the daily system report flags missing worker secret, no/stale Mac heartbeat (>30m), and jobs stuck past the fallback window. Worker heartbeats write `crm_context` key `content_research_worker_heartbeat` (user `system`).

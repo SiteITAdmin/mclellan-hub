@@ -3,6 +3,7 @@ const router = express.Router();
 const { listNotes, readNote, searchNotes, writeNote, vaultRoot } = require('../lib/obsidian-vault');
 const {
   writeLimiter, requireAuth, requireSameOrigin, requireHermesAuth,
+  requireContentResearchWorkerAuth,
 } = require('./hub-shared');
 
 // ── YouTube / URL ingest ──────────────────────────────────────────────────────
@@ -92,6 +93,76 @@ router.post('/api/obsidian/note', requireHermesAuth, writeLimiter, (req, res) =>
     writeNote({ notePath, content, mode: mode || 'create' });
     res.json({ ok: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Content research Mac pull-worker ──────────────────────────────────────────
+// VPS enqueues jobs when CONTENT_RESEARCH_DRIVER=mac. The always-on Mac mini
+// polls these endpoints, runs Grok+last30days locally, and posts suggestions.
+// Auth: Authorization: Bearer <CONTENT_RESEARCH_WORKER_SECRET>
+
+router.post('/api/content-research/worker/heartbeat', requireContentResearchWorkerAuth, writeLimiter, (req, res) => {
+  try {
+    const { recordWorkerHeartbeat, jobStats, useMacWorkerDriver } = require('../lib/content-research-jobs');
+    recordWorkerHeartbeat({
+      workerId: req.body?.worker_id || 'mac',
+      detail: req.body?.detail || null,
+    });
+    res.json({
+      ok: true,
+      driver: useMacWorkerDriver() ? 'mac' : (process.env.CONTENT_RESEARCH_DRIVER || ''),
+      stats: jobStats(),
+    });
+  } catch (err) {
+    console.error('[content-research worker heartbeat]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/content-research/worker/claim', requireContentResearchWorkerAuth, writeLimiter, (req, res) => {
+  try {
+    const { claimContentResearchJobs, recordWorkerHeartbeat } = require('../lib/content-research-jobs');
+    recordWorkerHeartbeat({ workerId: req.body?.worker_id || 'mac' });
+    const result = claimContentResearchJobs({
+      workerId: req.body?.worker_id || 'mac',
+      limit: req.body?.limit || 1,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[content-research worker claim]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/content-research/worker/complete', requireContentResearchWorkerAuth, writeLimiter, (req, res) => {
+  try {
+    const { completeContentResearchJob } = require('../lib/content-research-jobs');
+    const result = completeContentResearchJob({
+      jobId: req.body?.job_id,
+      claimToken: req.body?.claim_token,
+      suggestions: req.body?.suggestions,
+    });
+    if (!result.ok) return res.status(result.status || 400).json(result);
+    res.json(result);
+  } catch (err) {
+    console.error('[content-research worker complete]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/content-research/worker/fail', requireContentResearchWorkerAuth, writeLimiter, (req, res) => {
+  try {
+    const { failContentResearchJob } = require('../lib/content-research-jobs');
+    const result = failContentResearchJob({
+      jobId: req.body?.job_id,
+      claimToken: req.body?.claim_token,
+      error: req.body?.error,
+    });
+    if (!result.ok) return res.status(result.status || 400).json(result);
+    res.json(result);
+  } catch (err) {
+    console.error('[content-research worker fail]', err);
     res.status(500).json({ error: err.message });
   }
 });
