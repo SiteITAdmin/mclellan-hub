@@ -85,6 +85,7 @@ async function processJob(job) {
     tone: job.tone,
     planDate: job.plan_date,
     saveDir,
+    limit: job.limit_n,
   });
 
   if (!driven.ok || !driven.suggestions?.length) {
