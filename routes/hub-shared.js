@@ -74,6 +74,15 @@ function requireHermesAuth(req, res, next) {
   next();
 }
 
+// Mac mini content-research pull-worker (Bearer CONTENT_RESEARCH_WORKER_SECRET).
+function requireContentResearchWorkerAuth(req, res, next) {
+  const secret = process.env.CONTENT_RESEARCH_WORKER_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Content research worker auth not configured' });
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
 module.exports = {
   upload,
   audioUpload,
@@ -85,5 +94,6 @@ module.exports = {
   requireSameOrigin,
   requireWorkdayWebhookAuth,
   requireHermesAuth,
+  requireContentResearchWorkerAuth,
   validWorkdayWebhookAuth,
 };

@@ -50,6 +50,13 @@ else
   fail "Mac cron jobs missing — check crontab -l"
 fi
 
+if launchctl print "gui/$(id -u)/com.mclellan.hub.content-research-worker" >/dev/null 2>&1; then
+  ok "Content research Mac worker launchd loaded"
+else
+  # Not a hard fail: only required when VPS uses CONTENT_RESEARCH_DRIVER=mac
+  echo "  · Content research Mac worker not loaded (ok if VPS driver is not mac)"
+fi
+
 SYNTHADOC_PY="$ROOT/.tools/synthadoc-venv/bin/python"
 if [ -x "$SYNTHADOC_PY" ] && "$SYNTHADOC_PY" --version >/dev/null 2>&1; then
   ok "Synthadoc Python venv ($("$SYNTHADOC_PY" --version 2>&1))"

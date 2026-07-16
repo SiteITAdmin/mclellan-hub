@@ -661,6 +661,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'debrief_tts_voice',  scope: 'system', label: 'Debrief voice name', note: 'Voice preset passed to the TTS model (Kokoro British voices: bf_emma, bf_isabella, bm_george, bm_lewis). Prompt only — the text IS the voice name.', fallback: 'prompt only (voice: bf_emma)' },
   ]},
   { id: 'linkedin', label: 'LinkedIn pipeline', slots: [
+    { feature: 'content_research_driver', scope: 'user', label: 'Content research driver', note: 'Drives the last30days multi-source research engine via native web/X search + tool calling for daily topic suggestions. Must support tool calling. Active on the host that runs Grok (CONTENT_RESEARCH_DRIVER=grok, or Mac worker when VPS uses CONTENT_RESEARCH_DRIVER=mac).', fallback: 'x-ai/grok-4.5' },
     { feature: 'linkedin_planner',    scope: 'user', label: 'Query planner',          note: 'Generates search queries for a LinkedIn topic.', fallback: 'deepseek/deepseek-v3.2' },
     { feature: 'linkedin_synthesiser',scope: 'user', label: 'Research synthesiser',   note: 'Writes a research briefing from gathered sources.', fallback: 'anthropic/claude-sonnet-4-6' },
     { feature: 'linkedin_drafter',    scope: 'user', label: 'Post drafter',           note: 'Writes the initial teaser post.', fallback: 'deepseek/deepseek-v4-flash' },
