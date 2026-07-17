@@ -44,7 +44,7 @@ test('token burn auditor fails stale imported data and stale OpenRouter exports'
   const now = Date.parse('2026-07-08T12:00:00Z');
   const summary = {
     importedRows: [
-      { date: '2026-07-01', codex_tokens: 10, claude_code_tokens: 20, antigravity_tokens: 0, api_tokens: 5 },
+      { date: '2026-07-01', codex_tokens: 10, claude_code_tokens: 20, antigravity_tokens: 0, grok_build_tokens: 0, api_tokens: 5 },
     ],
     firstDate: '2026-07-01',
     lastDate: '2026-07-01',
@@ -69,7 +69,7 @@ test('token burn auditor accepts fresh OpenRouter management summary over stale 
   const now = Date.parse('2026-07-08T12:00:00Z');
   const summary = {
     importedRows: [
-      { date: '2026-07-08', codex_tokens: 10, claude_code_tokens: 20, antigravity_tokens: 0, api_tokens: 5 },
+      { date: '2026-07-08', codex_tokens: 10, claude_code_tokens: 20, antigravity_tokens: 0, grok_build_tokens: 0, api_tokens: 5 },
     ],
     firstDate: '2026-07-08',
     lastDate: '2026-07-08',
