@@ -9,7 +9,12 @@ const {
   looksLikeOpportunityEmail,
   storeOpportunitySignal,
 } = require('../lib/opportunity-engine');
-const { SUGGESTERS } = require('../lib/suggestion-engine');
+const {
+  SUGGESTERS,
+  buildOpportunitySuggestionEmail,
+  isActionableOpportunitySignal,
+  isAdmissibleOpportunitySuggestion,
+} = require('../lib/suggestion-engine');
 const { uuid } = require('../lib/id');
 
 const USER = '__test_opportunity';
@@ -98,4 +103,42 @@ test('activeOpportunitySignals expires old opportunities', () => {
 
 test('suggestion engine registers the opportunity suggester', () => {
   assert.equal(typeof SUGGESTERS.opportunity, 'function');
+});
+
+test('opportunity admission requires an action and a direct causal join', () => {
+  assert.equal(isAdmissibleOpportunitySuggestion({
+    action_required: true,
+    relevance_basis: 'travel_utility',
+    causal_connection: 'The travel privacy benefit directly applies on public networks.',
+  }), true);
+  assert.equal(isAdmissibleOpportunitySuggestion({
+    action_required: true,
+    relevance_basis: 'generic_timing',
+    causal_connection: 'Douglas will be away before the promotion ends.',
+  }), false);
+  assert.equal(isAdmissibleOpportunitySuggestion({
+    action_required: false,
+    relevance_basis: 'known_need',
+    causal_connection: 'The account limits were increased automatically.',
+  }), false);
+});
+
+test('legacy and automatic-benefit signals cannot enter salience synthesis', () => {
+  assert.equal(isActionableOpportunitySignal({ details: {} }), false);
+  assert.equal(isActionableOpportunitySignal({
+    details: { action_required: false, required_action: '' },
+  }), false);
+  assert.equal(isActionableOpportunitySignal({
+    details: { action_required: true, required_action: 'Redeem the member voucher' },
+  }), true);
+});
+
+test('standalone CRM email contains only opportunity suggestions', () => {
+  const email = buildOpportunitySuggestionEmail([
+    { domain: 'content', short_code: 1, title: 'Content idea', body: 'Skip this.' },
+    { domain: 'opportunity', short_code: 2, title: 'Scottish shop offer', body: 'This is usable during the trip.' },
+  ]);
+  assert.equal(email.subject, 'Suggestion from CRM');
+  assert.match(email.text, /Scottish shop offer/);
+  assert.doesNotMatch(email.text, /Content idea/);
 });
