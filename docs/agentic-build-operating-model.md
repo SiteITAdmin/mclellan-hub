@@ -107,10 +107,22 @@ Do not:
 
 **Existing paths:** `lib/token-burn.js`, `scripts/update-token-burn-data.sh`, `scripts/generate-daily-burn.mjs`, token burn dashboard deploy data, `request_logs`.
 
+**Exact coding-agent lanes (measured, not estimated):**
+
+| Lane | Source | How it reports |
+|---|---|---|
+| Codex | `~/.codex/sessions/**/*.jsonl` | Session `token_count` events |
+| Claude Code | `~/.claude/projects/**/*.jsonl` | Per-message `usage` |
+| Antigravity | `~/.agy-usage/statusline-events.jsonl` | Status-line hook → jsonl (silent if unused) |
+| Grok Build | `~/.grok/logs/unified.jsonl` | `shell.turn.inference_done` (uncached prompt + completion per turn) |
+| API / OpenRouter | exports + Hub `request_logs` + Synthadoc audits | Runtime product spend |
+
+Grok Build is scraped the same way as Codex/Claude — native logs, not OpenRouter attribution. Coding spend and Hub product spend stay separate lanes.
+
 **Checks:**
 
 - generated daily burn JSON parses and contains recent dates;
-- imported totals equal component totals;
+- imported totals equal component totals (including `grok_build_tokens`);
 - OpenRouter exported totals and Hub live request logs reconcile within a documented tolerance;
 - stale OpenRouter exports are flagged;
 - dashboard deploy files changed only when data changed;

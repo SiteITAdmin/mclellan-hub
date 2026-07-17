@@ -64,7 +64,7 @@ export default function TokenBurnDashboard() {
           <p className="eyebrow">Token burn dashboard</p>
           <h1>AI usage by day, source, and work driver.</h1>
           <p className="lead">
-            Exact Codex, Claude Code, Antigravity, and OpenRouter usage in one operational view.
+            Exact Codex, Claude Code, Antigravity, Grok Build, and OpenRouter usage in one operational view.
             No raw prompts, no private paths, and no chat estimates mixed into measured totals.
           </p>
         </div>
@@ -303,6 +303,7 @@ export default function TokenBurnDashboard() {
                 value={`${today.antigravityEstimated ? "~" : ""}${formatTokens(today.antigravity)}`}
                 note={today.antigravityEstimated ? "rough" : "exact"}
               />
+              <Metric label="Grok Build" value={formatTokens(today.grokBuild)} note="exact" />
             </div>
           ) : (
             <EmptyExact />
@@ -316,7 +317,7 @@ export default function TokenBurnDashboard() {
             <p className="label">Moving-average table</p>
             <h2>Last 30 days</h2>
           </div>
-          <p>Exact Codex, Claude Code, Antigravity, API, and OpenRouter export totals by day.</p>
+          <p>Exact Codex, Claude Code, Antigravity, Grok Build, API, and OpenRouter export totals by day.</p>
         </div>
         <div className="tableWrap">
           <table className="table">
@@ -328,6 +329,7 @@ export default function TokenBurnDashboard() {
                 <th>Codex</th>
                 <th>Claude Code</th>
                 <th>Antigravity</th>
+                <th>Grok Build</th>
                 <th>API</th>
                 <th>OpenRouter</th>
                 <th>Driver</th>
@@ -363,6 +365,9 @@ export default function TokenBurnDashboard() {
                       </span>
                     </td>
                     <td>
+                      <span className="pill exact">{formatTokens(row.grok_build_tokens)}</span>
+                    </td>
+                    <td>
                       <span className="pill exact">{formatTokens(row.api_tokens)}</span>
                     </td>
                     <td>
@@ -383,7 +388,7 @@ export default function TokenBurnDashboard() {
 
       <p className="footerNote">
         Replace <code>data/daily-burn.sample.json</code> with your normalized daily rows.
-        Exact tokens come from logs, Antigravity status telemetry, and OpenRouter exports. Keep raw exports, prompts,
+        Exact tokens come from logs, Antigravity status telemetry, Grok Build unified log inference turns, and OpenRouter exports. Keep raw exports, prompts,
         private paths, client names, and project names out of anything deployed or shared.
       </p>
     </main>
@@ -514,6 +519,7 @@ function buildNextActions(selectedRows: BurnRow[]) {
   const recentClaude = selectedRows.slice(-7).reduce((sum, row) => sum + row.claude_code_tokens, 0);
   const recentCodex = selectedRows.slice(-7).reduce((sum, row) => sum + row.codex_tokens, 0);
   const recentAntigravity = selectedRows.slice(-7).reduce((sum, row) => sum + row.antigravity_tokens, 0);
+  const recentGrokBuild = selectedRows.slice(-7).reduce((sum, row) => sum + row.grok_build_tokens, 0);
   const recentApi = selectedRows.slice(-7).reduce((sum, row) => sum + row.api_tokens, 0);
 
   const actions = [
@@ -539,6 +545,14 @@ function buildNextActions(selectedRows: BurnRow[]) {
       fidelity: "exact",
       title: "Watch Antigravity workspace scans",
       body: "Recent exact burn is dominated by Antigravity. Keep the status-line log enabled and split agent work before context gets bulky.",
+    });
+  }
+
+  if (recentGrokBuild > recentCodex + recentClaude + recentAntigravity && recentGrokBuild > 0) {
+    actions.push({
+      fidelity: "exact",
+      title: "Watch Grok Build context growth",
+      body: "Recent exact burn is dominated by Grok Build. Prefer shorter sessions or branch-scoped work so uncached prompt deltas stay smaller.",
     });
   }
 

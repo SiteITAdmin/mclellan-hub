@@ -34,6 +34,9 @@ const sources = {
   codex: join(home, ".codex", "sessions"),
   claudeCode: join(home, ".claude", "projects"),
   antigravity: join(home, ".agy-usage", "statusline-events.jsonl"),
+  // Grok Build / Grok CLI: native unified log (shell.turn.inference_done carries per-turn tokens).
+  // Same role as Codex sessions / Claude projects — scrape measured usage, do not invent estimates.
+  grokBuild: join(home, ".grok", "logs", "unified.jsonl"),
   downloads: join(home, "Downloads"),
   hubImportDb: join(hubRoot, "data", "dchat-import", "db", "hub.db"),
   hubCurrentDb: join(hubRoot, "data", "hub.db"),
@@ -68,6 +71,7 @@ const manualBackfills = [
 collectCodex();
 collectClaudeCode();
 collectAntigravity();
+collectGrokBuild();
 const openRouterExportRows = collectOpenRouterExports();
 if (openRouterExportRows === 0) collectHubApi();
 collectSynthadocApi();
@@ -82,6 +86,8 @@ const normalized = Array.from(rows.values())
     antigravity_tokens: row.antigravity_tokens,
     antigravity_events: row.antigravity_events,
     antigravity_estimated: row.antigravity_estimated,
+    grok_build_tokens: row.grok_build_tokens,
+    grok_build_events: row.grok_build_events,
     api_tokens: row.api_tokens,
     chatgpt_conversations: 0,
     chatgpt_messages: 0,
@@ -94,7 +100,7 @@ const normalized = Array.from(rows.values())
     driver: inferDriver(row),
     evidence: buildEvidence(row),
   }))
-  .filter((row) => row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens + row.api_tokens > 0)
+  .filter((row) => row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens + row.grok_build_tokens + row.api_tokens > 0)
   .sort((a, b) => a.date.localeCompare(b.date));
 
 const dailyJson = `${JSON.stringify(normalized, null, 2)}\n`;
@@ -106,7 +112,7 @@ writeFileSync(deployOutputPath, dailyJson);
 writeFileSync(deployOpenRouterSummaryPath, openRouterJson);
 
 const exactTotal = normalized.reduce(
-  (sum, row) => sum + row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens + row.api_tokens,
+  (sum, row) => sum + row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens + row.grok_build_tokens + row.api_tokens,
   0,
 );
 
@@ -215,6 +221,52 @@ function collectAntigravity() {
     const row = rowFor(date);
     row.antigravity_tokens += total;
     row.antigravity_events += 1;
+  }
+}
+
+/**
+ * Grok Build / Grok CLI coding sessions.
+ * Each shell.turn.inference_done event reports the full prompt size for that
+ * turn (including cache hits). Counting full prompt_tokens would massively
+ * double-count a growing context window. Billable work is the uncached prompt
+ * delta plus new completion tokens — the same spirit as Claude Code's
+ * per-message usage sums, not Codex's max-session counter.
+ */
+function collectGrokBuild() {
+  if (!existsSync(sources.grokBuild)) return;
+
+  const seen = new Set();
+
+  for (const event of readJsonLines(sources.grokBuild)) {
+    if (event?.msg !== "shell.turn.inference_done") continue;
+
+    const ctx = event.ctx && typeof event.ctx === "object" ? event.ctx : {};
+    const prompt = Number(ctx.prompt_tokens || 0);
+    const cached = Number(ctx.cached_prompt_tokens || 0);
+    const completion = Number(ctx.completion_tokens || 0);
+    // reasoning_tokens is usually a subset of completion; do not add it again.
+    const uncachedPrompt = Math.max(0, prompt - cached);
+    const total = uncachedPrompt + completion;
+    if (total <= 0) continue;
+
+    const date = toLocalDate(event.ts || event.timestamp || "");
+    if (!date) continue;
+
+    // Dedup if the unified log is re-appended or we re-process the same turn.
+    const key = [
+      event.sid || "",
+      event.pid || "",
+      event.ts || "",
+      ctx.loop_index ?? "",
+      prompt,
+      completion,
+    ].join(":");
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const row = rowFor(date);
+    row.grok_build_tokens += total;
+    row.grok_build_events += 1;
   }
 }
 
@@ -383,6 +435,8 @@ function rowFor(date) {
       antigravity_tokens: 0,
       antigravity_events: 0,
       antigravity_estimated: false,
+      grok_build_tokens: 0,
+      grok_build_events: 0,
       api_tokens: 0,
       hub_api_days: 0,
       openrouter_export_rows: 0,
@@ -395,9 +449,15 @@ function rowFor(date) {
 }
 
 function inferDriver(row) {
-  const codeAgentTokens = row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens;
+  const codeAgentTokens = row.codex_tokens + row.claude_code_tokens + row.antigravity_tokens + row.grok_build_tokens;
   const total = codeAgentTokens + row.api_tokens;
   if (row.api_tokens > codeAgentTokens) return "hub ingestion";
+  if (
+    row.grok_build_tokens >= row.codex_tokens &&
+    row.grok_build_tokens >= row.claude_code_tokens &&
+    row.grok_build_tokens >= row.antigravity_tokens &&
+    row.grok_build_tokens > 0
+  ) return "Grok Build development";
   if (row.antigravity_tokens >= row.codex_tokens && row.antigravity_tokens >= row.claude_code_tokens && row.antigravity_tokens > 0) return "Antigravity development";
   if (row.codex_tokens >= row.claude_code_tokens && row.codex_tokens > 0) return "shipping";
   if (row.claude_code_tokens > 0 && total >= 100_000) return "Hub Development";
@@ -410,6 +470,7 @@ function buildEvidence(row) {
   if (row.codex_tokens > 0) parts.push("Codex session token counters");
   if (row.claude_code_tokens > 0) parts.push("Claude Code message usage");
   if (row.antigravity_events > 0) parts.push("Antigravity status line telemetry");
+  if (row.grok_build_events > 0) parts.push("Grok Build unified log inference turns");
   if (row.manual_evidence.length) parts.push(...row.manual_evidence);
   if (row.hub_api_days > 0) parts.push("McLellan hub request logs");
   if (row.openrouter_export_rows > 0) parts.push("OpenRouter activity export");
