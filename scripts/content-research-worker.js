@@ -86,6 +86,9 @@ async function processJob(job) {
     planDate: job.plan_date,
     saveDir,
     limit: job.limit_n,
+    description: job.description || job.topic_context?.description || '',
+    searchQuery: job.searchQuery || job.topic_context?.searchQuery || '',
+    topicContext: job.topic_context || null,
   });
 
   if (!driven.ok || !driven.suggestions?.length) {

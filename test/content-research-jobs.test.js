@@ -28,12 +28,27 @@ function cleanup() {
 
 cleanup();
 
-// Enqueue
-const q1 = enqueueContentResearchJob(USER, { planDate: DATE, topic: TOPIC, tone: 'professional', limit: 3 });
+// Enqueue with topic context (description + searchQuery for the Mac worker)
+const q1 = enqueueContentResearchJob(USER, {
+  planDate: DATE,
+  topic: TOPIC,
+  tone: 'professional',
+  limit: 3,
+  topicContext: {
+    description: 'EU and Ireland policy, data regulation, AI governance.',
+    searchQuery: 'EU AI Act GDPR DORA NIS2',
+  },
+});
 assert.strictEqual(q1.ok, true);
 assert.strictEqual(q1.queued, true);
 assert.ok(q1.jobId);
 assert.strictEqual(q1.existing, false);
+
+const storedCtx = hub.prepare(
+  'SELECT topic_context FROM content_research_jobs WHERE id = ?'
+).get(q1.jobId);
+assert.ok(storedCtx.topic_context);
+assert.match(storedCtx.topic_context, /EU AI Act/);
 
 // Idempotent while pending
 const q2 = enqueueContentResearchJob(USER, { planDate: DATE, topic: TOPIC, tone: 'professional', limit: 3 });
@@ -46,6 +61,8 @@ assert.strictEqual(claimed.ok, true);
 assert.strictEqual(claimed.jobs.length, 1);
 assert.strictEqual(claimed.jobs[0].id, q1.jobId);
 assert.ok(claimed.jobs[0].claim_token);
+assert.strictEqual(claimed.jobs[0].searchQuery, 'EU AI Act GDPR DORA NIS2');
+assert.match(claimed.jobs[0].description, /Ireland policy/);
 const token = claimed.jobs[0].claim_token;
 
 // Second claim finds nothing for same job
