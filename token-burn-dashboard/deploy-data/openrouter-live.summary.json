@@ -1,25 +1,25 @@
 {
   "source": "openrouter_management_api",
-  "fetched_at": "2026-07-16T01:00:16.253Z",
+  "fetched_at": "2026-07-17T01:00:13.769Z",
   "time_range": {
     "label": "Since 10 Apr 2026",
     "start": "2026-04-10T00:00:00.000Z",
-    "end": "2026-07-16T01:00:12.068Z"
+    "end": "2026-07-17T01:00:09.578Z"
   },
-  "requests": 17774,
-  "tokens": 31409733,
-  "cost_usd": 54.386399,
-  "cache_hit_rate": 0.08738169145168335,
+  "requests": 18015,
+  "tokens": 33299919,
+  "cost_usd": 58.086197,
+  "cache_hit_rate": 0.11089457256141282,
   "by_app": [
     {
       "label": "McLellan Auto: Cross-Entity Knowledge Synthesis",
-      "tokens": 5778128,
-      "tokens_in": 4975485,
-      "tokens_out": 802643,
-      "tokens_reasoning": 447032,
-      "cost_usd": 12.752713999999997,
-      "calls": 1239,
-      "cache_hit_rate": 0.10725987414432059
+      "tokens": 6022630,
+      "tokens_in": 5185741,
+      "tokens_out": 836889,
+      "tokens_reasoning": 468516,
+      "cost_usd": 13.185334999999998,
+      "calls": 1286,
+      "cache_hit_rate": 0.10520579626049645
     },
     {
       "label": "McLellan Hub Nakai Daily Briefing",
@@ -43,62 +43,72 @@
     },
     {
       "label": "McLellan Auto: Intelligence Email Topic Extraction",
-      "tokens": 2637342,
-      "tokens_in": 1942139,
-      "tokens_out": 695203,
+      "tokens": 2710235,
+      "tokens_in": 2002039,
+      "tokens_out": 708196,
       "tokens_reasoning": 9804,
-      "cost_usd": 0.570862,
-      "calls": 367,
-      "cache_hit_rate": 0.00009198331345731451
+      "cost_usd": 0.58747,
+      "calls": 378,
+      "cache_hit_rate": 0.00009124982443076126
     },
     {
       "label": "McLellan Auto: Knowledge Synthesis",
-      "tokens": 2308579,
-      "tokens_in": 1960275,
-      "tokens_out": 348304,
-      "tokens_reasoning": 31349,
-      "cost_usd": 1.0033239999999999,
-      "calls": 1456,
-      "cache_hit_rate": 0.03882258266039826
+      "tokens": 2316472,
+      "tokens_in": 1967232,
+      "tokens_out": 349240,
+      "tokens_reasoning": 31482,
+      "cost_usd": 1.0077219999999998,
+      "calls": 1463,
+      "cache_hit_rate": 0.038636828676377216
+    },
+    {
+      "label": "McLellan User: LinkedIn Research Planning",
+      "tokens": 1626563,
+      "tokens_in": 1475545,
+      "tokens_out": 151018,
+      "tokens_reasoning": 145982,
+      "cost_usd": 3.448291,
+      "calls": 40,
+      "cache_hit_rate": 0.42305195638028675
     },
     {
       "label": "McLellan Auto: Knowledge Embeddings",
-      "tokens": 1487579,
-      "tokens_in": 1487579,
+      "tokens": 1496898,
+      "tokens_in": 1496898,
       "tokens_out": 0,
       "tokens_reasoning": 0,
-      "cost_usd": 0.025812,
-      "calls": 8036,
+      "cost_usd": 0.025955,
+      "calls": 8127,
       "cache_hit_rate": 0
     },
     {
       "label": "Unknown",
-      "tokens": 1461485,
-      "tokens_in": 1040364,
-      "tokens_out": 421121,
+      "tokens": 1476593,
+      "tokens_in": 1052784,
+      "tokens_out": 423809,
       "tokens_reasoning": 158873,
-      "cost_usd": 1.845436,
-      "calls": 1154,
-      "cache_hit_rate": 0.04069771300181699
+      "cost_usd": 1.8524999999999998,
+      "calls": 1157,
+      "cache_hit_rate": 0.04059218738469905
     },
     {
       "label": "McLellan Auto: Email Routing and CRM Classification",
-      "tokens": 1335971,
-      "tokens_in": 1061796,
-      "tokens_out": 274175,
-      "tokens_reasoning": 60934,
-      "cost_usd": 0.9433860000000002,
-      "calls": 794,
-      "cache_hit_rate": 0.07374208733208222
+      "tokens": 1380022,
+      "tokens_in": 1096251,
+      "tokens_out": 283771,
+      "tokens_reasoning": 68065,
+      "cost_usd": 1.015353,
+      "calls": 816,
+      "cache_hit_rate": 0.07621884589117921
     },
     {
       "label": "McLellan Auto: Nakai Daily Briefing",
-      "tokens": 1083939,
-      "tokens_in": 795136,
-      "tokens_out": 288803,
-      "tokens_reasoning": 18110,
-      "cost_usd": 8.623804,
-      "calls": 49,
+      "tokens": 1105890,
+      "tokens_in": 811036,
+      "tokens_out": 294854,
+      "tokens_reasoning": 19803,
+      "cost_usd": 8.672198999999999,
+      "calls": 50,
       "cache_hit_rate": 0
     },
     {
@@ -122,14 +132,24 @@
       "cache_hit_rate": 0.5127787089676099
     },
     {
+      "label": "McLellan Auto: Regulatory Monitor",
+      "tokens": 447407,
+      "tokens_in": 360891,
+      "tokens_out": 86516,
+      "tokens_reasoning": 36652,
+      "cost_usd": 0.6391830000000001,
+      "calls": 189,
+      "cache_hit_rate": 0.12857304585381654
+    },
+    {
       "label": "McLellan User: Intelligence Briefing Writing",
-      "tokens": 408414,
-      "tokens_in": 373999,
-      "tokens_out": 34415,
+      "tokens": 419766,
+      "tokens_in": 384598,
+      "tokens_out": 35168,
       "tokens_reasoning": 7251,
-      "cost_usd": 0.065639,
-      "calls": 34,
-      "cache_hit_rate": 0.00008948955848587755
+      "cost_usd": 0.067173,
+      "calls": 35,
+      "cache_hit_rate": 0.00008693271395770962
     },
     {
       "label": "Hermes Agent",
@@ -142,24 +162,14 @@
       "cache_hit_rate": 0.5734997476948267
     },
     {
-      "label": "McLellan Auto: Regulatory Monitor",
-      "tokens": 388682,
-      "tokens_in": 313311,
-      "tokens_out": 75371,
-      "tokens_reasoning": 30663,
-      "cost_usd": 0.5502819999999999,
-      "calls": 167,
-      "cache_hit_rate": 0.12854122066157062
-    },
-    {
-      "label": "McLellan User: LinkedIn Research Planning",
-      "tokens": 320253,
-      "tokens_in": 309454,
-      "tokens_out": 10799,
-      "tokens_reasoning": 8802,
-      "cost_usd": 0.562544,
-      "calls": 23,
-      "cache_hit_rate": 0.2630605029854967
+      "label": "McLellan User: Intelligence Briefing Source Selection",
+      "tokens": 301496,
+      "tokens_in": 278989,
+      "tokens_out": 22507,
+      "tokens_reasoning": 0,
+      "cost_usd": 0.04643099999999999,
+      "calls": 37,
+      "cache_hit_rate": 0.0001726844488047934
     },
     {
       "label": "pi",
@@ -172,24 +182,14 @@
       "cache_hit_rate": 0.6171178642792257
     },
     {
-      "label": "McLellan User: Intelligence Briefing Source Selection",
-      "tokens": 289841,
-      "tokens_in": 268012,
-      "tokens_out": 21829,
-      "tokens_reasoning": 0,
-      "cost_usd": 0.044532999999999996,
-      "calls": 36,
-      "cache_hit_rate": 0.0001673590644013696
-    },
-    {
       "label": "McLellan Auto: Content Suggestions",
-      "tokens": 287919,
-      "tokens_in": 48258,
-      "tokens_out": 239661,
-      "tokens_reasoning": 110061,
-      "cost_usd": 0.8877339999999999,
-      "calls": 35,
-      "cache_hit_rate": 0.019988445984979782
+      "tokens": 294387,
+      "tokens_in": 49906,
+      "tokens_out": 244481,
+      "tokens_reasoning": 115803,
+      "cost_usd": 0.9083709999999999,
+      "calls": 36,
+      "cache_hit_rate": 0.0194332113742859
     },
     {
       "label": "McLellan Auto: StyleDistiller",
@@ -203,13 +203,23 @@
     },
     {
       "label": "McLellan Auto: AgentMail Work/CRM Extraction",
-      "tokens": 239424,
-      "tokens_in": 217593,
-      "tokens_out": 21831,
+      "tokens": 244880,
+      "tokens_in": 222507,
+      "tokens_out": 22373,
       "tokens_reasoning": 0,
-      "cost_usd": 0.084162,
-      "calls": 80,
-      "cache_hit_rate": 0.006820011473342348
+      "cost_usd": 0.095482,
+      "calls": 82,
+      "cache_hit_rate": 0.006653669730090096
+    },
+    {
+      "label": "McLellan Auto: Daily Digest",
+      "tokens": 223054,
+      "tokens_in": 197829,
+      "tokens_out": 25225,
+      "tokens_reasoning": 17321,
+      "cost_usd": 0.19426399999999996,
+      "calls": 36,
+      "cache_hit_rate": 0
     },
     {
       "label": "McLellan User: Meeting Transcript Intake",
@@ -222,14 +232,14 @@
       "cache_hit_rate": 0.009115927375038467
     },
     {
-      "label": "McLellan Auto: Daily Digest",
-      "tokens": 202283,
-      "tokens_in": 177805,
-      "tokens_out": 24478,
-      "tokens_reasoning": 17321,
-      "cost_usd": 0.19198699999999996,
-      "calls": 34,
-      "cache_hit_rate": 0
+      "label": "McLellan User: Hub Chat",
+      "tokens": 213056,
+      "tokens_in": 174092,
+      "tokens_out": 38964,
+      "tokens_reasoning": 9884,
+      "cost_usd": 0.27749199999999996,
+      "calls": 38,
+      "cache_hit_rate": 0.027762437099613423
     },
     {
       "label": "McLellan User: Admin Testbench",
@@ -240,16 +250,6 @@
       "cost_usd": 0.420184,
       "calls": 194,
       "cache_hit_rate": 0.2045956891270026
-    },
-    {
-      "label": "McLellan User: Hub Chat",
-      "tokens": 186999,
-      "tokens_in": 151266,
-      "tokens_out": 35733,
-      "tokens_reasoning": 9520,
-      "cost_usd": 0.24362899999999998,
-      "calls": 34,
-      "cache_hit_rate": 0.030368883768972805
     },
     {
       "label": "McLellan User: Debrief",
@@ -263,23 +263,23 @@
     },
     {
       "label": "McLellan Auto: Travel Suggestions",
-      "tokens": 119601,
-      "tokens_in": 29086,
-      "tokens_out": 90515,
-      "tokens_reasoning": 86315,
-      "cost_usd": 0.350277,
-      "calls": 33,
-      "cache_hit_rate": 0.007537354913440612
+      "tokens": 125308,
+      "tokens_in": 30214,
+      "tokens_out": 95094,
+      "tokens_reasoning": 91033,
+      "cost_usd": 0.366472,
+      "calls": 34,
+      "cache_hit_rate": 0.0073156680042217705
     },
     {
       "label": "McLellan User: CRM Note Parser",
-      "tokens": 117380,
-      "tokens_in": 85667,
-      "tokens_out": 31713,
-      "tokens_reasoning": 4335,
-      "cost_usd": 0.249703,
-      "calls": 15,
-      "cache_hit_rate": 0.1208980611727
+      "tokens": 124445,
+      "tokens_in": 90789,
+      "tokens_out": 33656,
+      "tokens_reasoning": 4656,
+      "cost_usd": 0.26370899999999997,
+      "calls": 16,
+      "cache_hit_rate": 0.11334193234940625
     },
     {
       "label": "McLellan Auto: Travel Price Email Extraction",
@@ -303,13 +303,23 @@
     },
     {
       "label": "McLellan User: Prompt Adapter",
-      "tokens": 85386,
-      "tokens_in": 67078,
-      "tokens_out": 18308,
+      "tokens": 87560,
+      "tokens_in": 68870,
+      "tokens_out": 18690,
       "tokens_reasoning": 1650,
-      "cost_usd": 0.24120299999999997,
-      "calls": 26,
+      "cost_usd": 0.24669999999999997,
+      "calls": 27,
       "cache_hit_rate": 0
+    },
+    {
+      "label": "McLellan Auto: Suggestions",
+      "tokens": 85684,
+      "tokens_in": 39552,
+      "tokens_out": 46132,
+      "tokens_reasoning": 42664,
+      "cost_usd": 0.235004,
+      "calls": 21,
+      "cache_hit_rate": 0.07153578129187886
     },
     {
       "label": "McLellan User: LinkedIn Research Synthesis",
@@ -320,16 +330,6 @@
       "cost_usd": 0.6290530000000001,
       "calls": 19,
       "cache_hit_rate": 0
-    },
-    {
-      "label": "McLellan Auto: Suggestions",
-      "tokens": 76517,
-      "tokens_in": 36478,
-      "tokens_out": 40039,
-      "tokens_reasoning": 36888,
-      "cost_usd": 0.205049,
-      "calls": 18,
-      "cache_hit_rate": 0.083458411507192
     },
     {
       "label": "McLellan Hub Benchmark",
@@ -423,12 +423,12 @@
     },
     {
       "label": "McLellan User: Admin",
-      "tokens": 26460,
-      "tokens_in": 20081,
-      "tokens_out": 6379,
+      "tokens": 28891,
+      "tokens_in": 21952,
+      "tokens_out": 6939,
       "tokens_reasoning": 0,
-      "cost_usd": 0.06725500000000001,
-      "calls": 16,
+      "cost_usd": 0.071879,
+      "calls": 17,
       "cache_hit_rate": 0
     },
     {
@@ -472,6 +472,16 @@
       "cache_hit_rate": 0
     },
     {
+      "label": "McLellan Auto: Recall Tagging",
+      "tokens": 12457,
+      "tokens_in": 6930,
+      "tokens_out": 5527,
+      "tokens_reasoning": 5175,
+      "cost_usd": 0.0051860000000000005,
+      "calls": 18,
+      "cache_hit_rate": 0.014184397163120567
+    },
+    {
       "label": "McLellan User: Wiki",
       "tokens": 11854,
       "tokens_in": 8939,
@@ -480,16 +490,6 @@
       "cost_usd": 0.003031,
       "calls": 6,
       "cache_hit_rate": 0.13070157359209575
-    },
-    {
-      "label": "McLellan Auto: Recall Tagging",
-      "tokens": 11326,
-      "tokens_in": 5878,
-      "tokens_out": 5448,
-      "tokens_reasoning": 5175,
-      "cost_usd": 0.003038,
-      "calls": 16,
-      "cache_hit_rate": 0.015957446808510637
     },
     {
       "label": "McLellan User: Prompt Optimizer",
@@ -585,43 +585,53 @@
   "by_model": [
     {
       "label": "z-ai/glm-5.2-20260616",
-      "tokens": 6069964,
-      "tokens_in": 5094915,
-      "tokens_out": 975049,
-      "tokens_reasoning": 629487,
-      "cost_usd": 8.777090999999999,
-      "calls": 1585,
-      "cache_hit_rate": 0.1641815529376287
+      "tokens": 6443671,
+      "tokens_in": 5406882,
+      "tokens_out": 1036789,
+      "tokens_reasoning": 666276,
+      "cost_usd": 9.430288999999998,
+      "calls": 1681,
+      "cache_hit_rate": 0.15893700856340431
     },
     {
       "label": "google/gemma-4-31b-it-20260402",
-      "tokens": 4938476,
-      "tokens_in": 3891652,
-      "tokens_out": 1046824,
+      "tokens": 5034376,
+      "tokens_in": 3973128,
+      "tokens_out": 1061248,
       "tokens_reasoning": 11666,
-      "cost_usd": 1.0049979999999996,
-      "calls": 1280,
-      "cache_hit_rate": 0.023426548277019378
+      "cost_usd": 1.0250379999999997,
+      "calls": 1293,
+      "cache_hit_rate": 0.023192001735569536
     },
     {
       "label": "google/gemini-2.5-flash-lite",
-      "tokens": 4289125,
-      "tokens_in": 3153590,
-      "tokens_out": 1135535,
+      "tokens": 4315101,
+      "tokens_in": 3178321,
+      "tokens_out": 1136780,
       "tokens_reasoning": 0,
-      "cost_usd": 0.7614099999999998,
-      "calls": 1381,
-      "cache_hit_rate": 0.01638222147300606
+      "cost_usd": 0.7643479999999998,
+      "calls": 1387,
+      "cache_hit_rate": 0.016311353896338407
     },
     {
       "label": "google/gemini-2.5-pro",
-      "tokens": 2693854,
-      "tokens_in": 1773007,
-      "tokens_out": 920847,
-      "tokens_reasoning": 775427,
-      "cost_usd": 11.101899000000003,
-      "calls": 568,
-      "cache_hit_rate": 0.03699836503765479
+      "tokens": 2695446,
+      "tokens_in": 1773854,
+      "tokens_out": 921592,
+      "tokens_reasoning": 776168,
+      "cost_usd": 11.110322000000004,
+      "calls": 569,
+      "cache_hit_rate": 0.036933341549012164
+    },
+    {
+      "label": "x-ai/grok-4.5-20260708",
+      "tokens": 1607594,
+      "tokens_in": 1461397,
+      "tokens_out": 146197,
+      "tokens_reasoning": 142608,
+      "cost_usd": 3.445681,
+      "calls": 21,
+      "cache_hit_rate": 0.6406336717807923
     },
     {
       "label": "anthropic/claude-4.8-opus-20260528",
@@ -635,12 +645,12 @@
     },
     {
       "label": "openai/text-embedding-3-small",
-      "tokens": 1487633,
-      "tokens_in": 1487633,
+      "tokens": 1496952,
+      "tokens_in": 1496952,
       "tokens_out": 0,
       "tokens_reasoning": 0,
-      "cost_usd": 0.025812,
-      "calls": 8040,
+      "cost_usd": 0.025955,
+      "calls": 8131,
       "cache_hit_rate": 0
     },
     {
@@ -675,33 +685,33 @@
     },
     {
       "label": "moonshotai/kimi-k2.6-20260420",
-      "tokens": 950603,
-      "tokens_in": 527434,
-      "tokens_out": 423169,
-      "tokens_reasoning": 268641,
-      "cost_usd": 1.8224790000000006,
-      "calls": 128,
-      "cache_hit_rate": 0.20612595816345755
+      "tokens": 970353,
+      "tokens_in": 532437,
+      "tokens_out": 437916,
+      "tokens_reasoning": 284136,
+      "cost_usd": 1.8808430000000003,
+      "calls": 132,
+      "cache_hit_rate": 0.19987971700698914
     },
     {
       "label": "anthropic/claude-4.5-haiku-20251001",
-      "tokens": 918112,
-      "tokens_in": 799793,
-      "tokens_out": 118319,
+      "tokens": 930076,
+      "tokens_in": 808262,
+      "tokens_out": 121814,
       "tokens_reasoning": 0,
-      "cost_usd": 1.381553,
-      "calls": 468,
+      "cost_usd": 1.407237,
+      "calls": 470,
       "cache_hit_rate": 0
     },
     {
       "label": "mistralai/mistral-medium-3.5-20260430",
-      "tokens": 620017,
-      "tokens_in": 516831,
-      "tokens_out": 103186,
+      "tokens": 632281,
+      "tokens_in": 527722,
+      "tokens_out": 104559,
       "tokens_reasoning": 0,
-      "cost_usd": 1.5630789999999997,
-      "calls": 182,
-      "cache_hit_rate": 0.018842816200887617
+      "cost_usd": 1.594443,
+      "calls": 188,
+      "cache_hit_rate": 0.018241449726391204
     },
     {
       "label": "deepseek/deepseek-v4-flash-20260423",
@@ -742,16 +752,6 @@
       "cost_usd": 0.103186,
       "calls": 67,
       "cache_hit_rate": 0.3229161577759137
-    },
-    {
-      "label": "x-ai/grok-4.5-20260708",
-      "tokens": 301284,
-      "tokens_in": 295306,
-      "tokens_out": 5978,
-      "tokens_reasoning": 5428,
-      "cost_usd": 0.559934,
-      "calls": 4,
-      "cache_hit_rate": 0.6454051052128978
     },
     {
       "label": "google/gemini-2.5-flash",
@@ -805,13 +805,13 @@
     },
     {
       "label": "minimax/minimax-m3-20260531",
-      "tokens": 115991,
-      "tokens_in": 100532,
-      "tokens_out": 15459,
-      "tokens_reasoning": 9168,
-      "cost_usd": 0.058460000000000005,
-      "calls": 17,
-      "cache_hit_rate": 0.028598613258724676
+      "tokens": 134287,
+      "tokens_in": 117223,
+      "tokens_out": 17064,
+      "tokens_reasoning": 9494,
+      "cost_usd": 0.065293,
+      "calls": 19,
+      "cache_hit_rate": 0.026395475394313833
     },
     {
       "label": "perplexity/sonar-pro",
@@ -854,6 +854,16 @@
       "cache_hit_rate": 0
     },
     {
+      "label": "google/gemini-3.1-flash-lite-preview-20260303",
+      "tokens": 64832,
+      "tokens_in": 53936,
+      "tokens_out": 10896,
+      "tokens_reasoning": 0,
+      "cost_usd": 0.029524,
+      "calls": 12,
+      "cache_hit_rate": 0
+    },
+    {
       "label": "anthropic/claude-4.7-opus-20260416",
       "tokens": 60534,
       "tokens_in": 56749,
@@ -882,16 +892,6 @@
       "cost_usd": 0.034622,
       "calls": 19,
       "cache_hit_rate": 0.02112939168526363
-    },
-    {
-      "label": "google/gemini-3.1-flash-lite-preview-20260303",
-      "tokens": 49724,
-      "tokens_in": 41516,
-      "tokens_out": 8208,
-      "tokens_reasoning": 0,
-      "cost_usd": 0.02246,
-      "calls": 9,
-      "cache_hit_rate": 0
     },
     {
       "label": "poolside/laguna-xs.2-20260421",
@@ -1264,7 +1264,7 @@
       "cache_hit_rate": 0
     },
     {
-      "label": "openai/text-embedding-ada-002",
+      "label": "openai/text-embedding-3-large",
       "tokens": 1,
       "tokens_in": 1,
       "tokens_out": 0,
@@ -1274,7 +1274,7 @@
       "cache_hit_rate": 0
     },
     {
-      "label": "openai/text-embedding-3-large",
+      "label": "openai/text-embedding-ada-002",
       "tokens": 1,
       "tokens_in": 1,
       "tokens_out": 0,
