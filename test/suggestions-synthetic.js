@@ -22,7 +22,7 @@ function check(label, fn) {
 
 function cleanup() {
   hub.prepare("DELETE FROM travel_price_points WHERE gmail_message_id LIKE 'synthtest%'").run();
-  hub.prepare("DELETE FROM suggestions WHERE user = ? AND (dedup_key LIKE 'travel:%' OR dedup_key LIKE 'content:%') AND created_at > unixepoch() - 600").run(USER);
+  hub.prepare("DELETE FROM suggestions WHERE user = ? AND (dedup_key LIKE 'travel:%' OR dedup_key LIKE 'content:%' OR dedup_key LIKE 'opportunity:synthtest-%') AND created_at > unixepoch() - 600").run(USER);
   for (const id of factIds) hub.prepare('DELETE FROM crm_facts WHERE id = ?').run(id);
   hub.prepare("DELETE FROM google_tasks WHERE source = 'suggestion' AND created_at > unixepoch() - 600").run();
 }
@@ -97,14 +97,15 @@ You're receiving this because you set up a Price Alert for this route.`,
     assert.strictEqual(hub.prepare('SELECT status FROM suggestions WHERE id = ?').get(s.id).status, 'dismissed');
   });
 
-  console.log('4. Briefing + chat list formatting');
+  console.log('4. Standalone email formatting');
   const fresh = engine.createSuggestion(USER, {
-    domain: 'content', title: 'synthtest list item', body: 'test body',
-    dedupKey: 'content:synthtest-' + Date.now(),
+    domain: 'opportunity', title: 'synthtest list item', body: 'test body',
+    dedupKey: 'opportunity:synthtest-' + Date.now(),
   });
-  check('briefing lines include short code and actions', () => {
-    const lines = engine.briefingSuggestionLines(USER).join('\n');
-    assert(lines.includes(`#${fresh.short_code}`) && lines.includes('accept'));
+  check('standalone email includes the opportunity and fixed subject', () => {
+    const email = engine.buildOpportunitySuggestionEmail([fresh]);
+    assert.strictEqual(email.subject, 'Suggestion from CRM');
+    assert(email.text.includes(`Suggestion #${fresh.short_code}`));
   });
 
   cleanup();
