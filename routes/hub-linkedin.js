@@ -50,16 +50,31 @@ router.get('/lin/plan', requireAuth, (req, res) => {
   const { getContentCadencePolicy } = require('../lib/content-cadence-policy');
   const { buildContentTopicPlan } = require('../lib/content-topic-plan');
   const { listContentTopicNames } = require('../lib/content-taxonomy');
+  const { openJobsForUser } = require('../lib/content-research-jobs');
+  const { dublinDate } = require('../lib/content-research');
   const policy = getContentCadencePolicy(req.hubUser);
   const topicPlan = buildContentTopicPlan(req.hubUser, policy.topicPlan);
   const allPosts = getContentPosts(req.hubUser);
+  const openJobsByDate = {};
+  for (const job of openJobsForUser(req.hubUser)) {
+    if (!openJobsByDate[job.plan_date]) openJobsByDate[job.plan_date] = job;
+  }
   res.render('hub/content-plan', {
     user: req.hubUser,
     contentTypes: listContentTopicNames(req.hubUser),
     cadencePolicy: policy,
     topicPlan,
+    openJobsByDate,
+    today: dublinDate(),
     queueCount: allPosts.filter(p => p.status !== 'published').length,
   });
+});
+
+// Lightweight poll target for the Plan page: which research jobs are still
+// open, so the UI can show live "Researching…" state and refresh on finish.
+router.get('/api/content/topic-plan/research-status', requireAuth, (req, res) => {
+  const { openJobsForUser } = require('../lib/content-research-jobs');
+  res.json({ ok: true, open: openJobsForUser(req.hubUser) });
 });
 
 // Cadence — posting/newsletter/research schedules (split out of the Plan page)
