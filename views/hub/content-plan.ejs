@@ -63,24 +63,32 @@
         <div class="topic-days">
           <input type="hidden" name="topicPlanDayPrefs" id="topicPlanDayPrefs" value="">
           <% for (const day of topicPlan.days) { %>
-            <div class="topic-day">
-              <div class="topic-day-title"><%= day.label %></div>
+            <% const openJob = openJobsByDate[day.date]; %>
+            <div class="topic-day" <%= day.date === today ? 'style="outline:2px solid rgba(124,93,250,.45); outline-offset:-2px; border-radius:10px;"' : '' %>>
+              <div class="topic-day-title"><%= day.label %><%= day.date === today ? ' · today' : '' %></div>
               <div class="topic-day-controls" data-plan-date="<%= day.date %>">
-                <select data-plan-topic aria-label="Topic for <%= day.label %>">
+                <select data-plan-topic aria-label="Topic for <%= day.label %>" <%= openJob ? 'disabled' : '' %>>
                   <option value="">Any topic</option>
                   <% for (const t of contentTypes) { %>
                     <option value="<%= t %>" <%= day.preference.topic === t ? 'selected' : '' %>><%= t %></option>
                   <% } %>
                 </select>
-                <select data-plan-tone aria-label="Tone for <%= day.label %>">
+                <select data-plan-tone aria-label="Tone for <%= day.label %>" <%= openJob ? 'disabled' : '' %>>
                   <option value="professional" <%= day.preference.tone === 'professional' ? 'selected' : '' %>>Professional</option>
                   <option value="challenging" <%= day.preference.tone === 'challenging' ? 'selected' : '' %>>Challenging</option>
                   <option value="provocative" <%= day.preference.tone === 'provocative' ? 'selected' : '' %>>Provocative</option>
                 </select>
-                <button class="btn-sm" type="button" data-plan-research title="Select a topic above, then click to research sources for that day now">Research now</button>
+                <% if (openJob) { %>
+                  <span class="badge badge-processing" data-researching-badge>Researching <%= openJob.topic %>…</span>
+                <% } else { %>
+                  <button class="btn-sm" type="button" data-plan-research title="Researches this day's topic immediately (the morning job runs saved topics automatically)">Research <%= day.label.split(' ')[0] %> now</button>
+                <% } %>
               </div>
-              <% if (!day.suggestions.length) { %>
+              <% if (!day.suggestions.length && !openJob) { %>
                 <div class="topic-summary">No researched suggestions yet<%= day.preference.topic ? ` for ${day.preference.topic}` : '' %>.</div>
+              <% } %>
+              <% if (openJob) { %>
+                <div class="topic-summary">Research running on the Mac worker (~4 min) — this page will refresh itself when it lands.</div>
               <% } %>
               <% for (const topic of day.suggestions) { %>
                 <div class="topic-item">
@@ -124,6 +132,25 @@ document.querySelectorAll('[data-plan-date]').forEach(row => {
   row.querySelector('[data-plan-research]')?.addEventListener('click', () => researchPlanDate(row));
 });
 syncTopicPlanPrefs();
+
+// While research jobs are open, poll until they finish, then refresh so the
+// suggestions appear without a manual reload.
+let researchPollTimer = null;
+function startResearchPolling() {
+  if (researchPollTimer) return;
+  researchPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/content/topic-plan/research-status');
+      const j = await r.json();
+      if (j.ok && (!j.open || j.open.length === 0)) {
+        clearInterval(researchPollTimer);
+        topicPlanMsg.textContent = 'Research finished — refreshing…';
+        setTimeout(() => window.location.reload(), 600);
+      }
+    } catch (_) { /* transient poll failure: keep trying */ }
+  }, 15000);
+}
+if (document.querySelector('[data-researching-badge]')) startResearchPolling();
 
 topicPlanForm?.addEventListener('submit', async e => {
   e.preventDefault();
@@ -179,9 +206,10 @@ async function researchPlanDate(row) {
     }, 2500);
     return;
   }
+  const buttonLabel = button.textContent;
   button.disabled = true;
-  button.textContent = 'Researching...';
-  topicPlanMsg.textContent = `Researching "${topic}"… (one-off run for this day — Save topic plan to keep it for the morning job)`;
+  button.textContent = 'Starting…';
+  topicPlanMsg.textContent = `Researching "${topic}" for ${row.dataset.planDate}…`;
   try {
     const r = await fetch('/api/content/topic-plan/research', {
       method: 'POST',
@@ -191,8 +219,14 @@ async function researchPlanDate(row) {
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || 'Research failed');
     if (j.result?.queued) {
-      topicPlanMsg.textContent = 'Queued for the Mac research worker — suggestions land in a few minutes. Reloading…';
-      setTimeout(() => window.location.reload(), 2500);
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-processing';
+      badge.setAttribute('data-researching-badge', '');
+      badge.textContent = `Researching ${topic}…`;
+      button.replaceWith(badge);
+      row.querySelectorAll('select').forEach(s => { s.disabled = true; });
+      topicPlanMsg.textContent = `"${topic}" queued for ${row.dataset.planDate} — takes ~4 minutes, this page refreshes itself when done.`;
+      startResearchPolling();
     } else {
       topicPlanMsg.textContent = `Found ${j.result.count || 0} suggestions — reloading…`;
       setTimeout(() => window.location.reload(), 800);
@@ -200,7 +234,7 @@ async function researchPlanDate(row) {
   } catch (err) {
     topicPlanMsg.textContent = err.message;
     button.disabled = false;
-    button.textContent = 'Research now';
+    button.textContent = buttonLabel;
   }
 }
 
