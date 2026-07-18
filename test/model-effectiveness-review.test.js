@@ -25,6 +25,8 @@ test('monthly review becomes due at 05:00 on the 18th, catches up later, and run
   assert.equal(isMonthlyEffectivenessReviewDue(new Date(2026, 6, 19, 12, 0, 0), null), true);
   assert.equal(isMonthlyEffectivenessReviewDue(due, { month: '2026-07' }), false);
   assert.equal(isMonthlyEffectivenessReviewDue(due, { month: '2026-06' }), true);
+  assert.equal(isMonthlyEffectivenessReviewDue(due, null, { month: '2026-07', retry_after: '2026-07-19T05:00:00.000Z' }), false);
+  assert.equal(isMonthlyEffectivenessReviewDue(due, null, { month: '2026-07', retry_after: '2026-07-18T04:00:00.000Z' }), true);
 });
 
 test('review validation recomputes the total and rejects invalid axis scores', () => {

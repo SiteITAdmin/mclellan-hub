@@ -37,7 +37,7 @@ const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPrompt, 
 const { PROMPTS } = require('../lib/prompts');
 const { familyFromModelId, shapePromptForFamily, listStyleProfiles } = require('../lib/model-style-profiles');
 const { readGovernanceReport, runGovernanceReview } = require('../lib/model-governance-review');
-const { readEffectivenessReport, runModelEffectivenessReview } = require('../lib/model-effectiveness-review');
+const { readEffectivenessReport, readEffectivenessProgress, runModelEffectivenessReview } = require('../lib/model-effectiveness-review');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -828,11 +828,13 @@ router.get('/admin/models/review', requireHubAdmin, (req, res) => {
     error: effectivenessReadError,
     path: effectivenessReportPath,
   } = readEffectivenessReport();
+  const { progress: effectivenessProgress } = readEffectivenessProgress();
   res.render('hub-admin/models-review', {
     user: req.hubUser,
     report,
     reportPath,
     effectivenessReport,
+    effectivenessProgress,
     effectivenessReportPath,
     message: req.query.ran === '1'
       ? 'Weekly governance review completed.'
