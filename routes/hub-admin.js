@@ -646,6 +646,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'suggestion_opportunity',scope: 'system', label: 'Opportunity salience synthesiser', note: 'Decides whether opportunity signals are worth surfacing given retrieved context. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
     { feature: 'salience_search_plan',  scope: 'system', label: 'Salience search planner', note: 'Plans semantic-search queries to investigate whether signals matter. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
     { feature: 'travel_price_extract',  scope: 'system', label: 'Travel price extractor',  note: 'Extracts flight prices from Skyscanner alert emails. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
+    { feature: 'suggestion_rule_learner', scope: 'system', label: 'Suggestion rule learner', note: 'Learns a reusable relevance rule when a suggestion is marked wrong. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
   ]},
   { id: 'daily-reports', label: 'Daily & weekly reports', slots: [
     { feature: 'work_daily_brief',  scope: 'system', label: 'Work daily brief model', note: 'Model for all Work Daily Brief LLM calls: yesterday recap, today line, project signals.', fallback: 'anthropic/claude-haiku-4-5' },
@@ -712,6 +713,8 @@ const SYSTEM_MODEL_GROUPS = [
   ]},
   { id: 'newsletter', label: 'Newsletter intelligence', slots: [
     { feature: 'newsletter_extractor', scope: 'system', label: 'Topic extractor', note: 'Extracts structured topics from newsletter emails. Runs on every newsletter received.', fallback: 'google/gemini-2.5-flash-lite' },
+    { feature: 'newsletter_extractor_full', scope: 'system', label: 'Full-capture extraction prompt', note: 'Full-capture newsletter mode. Prompt only — runs on the Topic extractor model.', fallback: 'prompt only (Topic extractor model)' },
+    { feature: 'newsletter_extractor_minimal', scope: 'system', label: 'Minimal extraction prompt', note: 'Minimal newsletter mode. Prompt only — runs on the Topic extractor model.', fallback: 'prompt only (Topic extractor model)' },
     { feature: 'newsletter_briefing',  scope: 'user',   label: 'Briefing writer',  note: 'Writes the weekly intelligence briefing from selected topics.', fallback: 'anthropic/claude-sonnet-4-6' },
   ]},
   { id: 'writing', label: 'Writing tools', slots: [
