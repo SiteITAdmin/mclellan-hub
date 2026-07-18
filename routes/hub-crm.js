@@ -232,6 +232,7 @@ function crmPageData(user) {
       { href: '/crm/meetings', label: 'Meetings' },
       { href: '/crm/meeting-intake', label: 'Intake' },
       { href: '/crm/tasks', label: 'Tasks' },
+      { href: '/crm/suggestions', label: 'Suggestions' },
       { href: '/crm/reminders', label: 'Reminders' },
       { href: '/crm/projects', label: 'Projects' },
       { href: '/crm/project-report', label: 'Project Report' },
@@ -1756,6 +1757,47 @@ router.get('/crm/tasks', requireAuth, async (req, res) => {
   const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const projects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
   res.render('hub/crm-tasks', { ...crmPageData(req.hubUser), tasks, showHistory, contacts, companies, projects, syncError });
+});
+
+router.get('/crm/suggestions', requireAuth, (req, res) => {
+  const { listSuggestions } = require('../lib/suggestion-engine');
+  const suggestions = listSuggestions(req.hubUser).map(suggestion => {
+    let evidence = null;
+    try { evidence = JSON.parse(suggestion.evidence || 'null'); } catch (_) {
+      evidence = suggestion.evidence || null;
+    }
+    return { ...suggestion, evidenceParsed: evidence };
+  });
+  const counts = suggestions.reduce((result, suggestion) => {
+    result.all++;
+    result[suggestion.status] = (result[suggestion.status] || 0) + 1;
+    return result;
+  }, { all: 0 });
+  res.render('hub/crm-suggestions', {
+    ...crmPageData(req.hubUser), suggestions, counts,
+  });
+});
+
+router.post('/api/suggestions/:id/wrong', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { learnFromWrongSuggestion } = require('../lib/suggestion-learning');
+    const learned = await learnFromWrongSuggestion(
+      req.hubUser,
+      req.params.id,
+      String(req.body?.reason || '').trim(),
+    );
+    res.json({
+      ok: true,
+      lesson: learned.lesson.rule,
+      evidenceCount: learned.lesson.evidence_count,
+      usedFallback: learned.usedFallback,
+    });
+  } catch (err) {
+    console.error('[suggestions] wrong-learning error:', err);
+    const status = err.message === 'Suggestion not found' ? 404
+      : err.message.startsWith('Please explain') ? 400 : 500;
+    res.status(status).json({ error: err.message });
+  }
 });
 
 router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {

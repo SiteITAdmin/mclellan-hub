@@ -1,0 +1,149 @@
+<%- include('partials/crm-head', { title: 'Suggestions', active: 'suggestions' }) %>
+
+<style>
+  .suggestion-toolbar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .suggestion-card { margin-top:14px; border-left:4px solid var(--crm-border,#dfe3e8); }
+  .suggestion-card[data-domain="opportunity"] { border-left-color:#7c3aed; }
+  .suggestion-card[data-domain="travel"] { border-left-color:#0284c7; }
+  .suggestion-card[data-domain="content"] { border-left-color:#d97706; }
+  .suggestion-card.is-wrong { opacity:.76; }
+  .suggestion-card-head { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
+  .suggestion-title { margin:4px 0 8px; font-size:1.08rem; }
+  .suggestion-number { color:var(--crm-muted,#667085); font-variant-numeric:tabular-nums; }
+  .suggestion-actions { flex:0 0 auto; }
+  .suggestion-body { line-height:1.55; white-space:pre-line; }
+  .suggestion-feedback { margin-top:12px; padding:12px; border-radius:8px; background:rgba(192,57,43,.08); }
+  .suggestion-feedback p { margin:4px 0; }
+  .suggestion-evidence { margin-top:12px; }
+  .suggestion-evidence summary { cursor:pointer; color:var(--crm-muted,#667085); }
+  .suggestion-evidence pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:420px; overflow:auto; font-size:12px; line-height:1.45; padding:12px; border-radius:8px; background:rgba(127,127,127,.08); }
+  @media (max-width:680px) { .suggestion-card-head { flex-direction:column; } }
+</style>
+
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Opportunity radar &amp; advisory history</p>
+    <h1>Suggestions</h1>
+    <p><%= counts.all %> suggestions retained. Marking one Wrong stores your explanation and teaches the relevant suggestion process.</p>
+  </div>
+</section>
+
+<section class="section-card">
+  <div class="suggestion-toolbar" aria-label="Suggestion filters">
+    <% for (const [key, label] of [['all','All'],['open','Open'],['wrong','Wrong'],['expired','Expired'],['accepted','Accepted'],['dismissed','Dismissed']]) { %>
+      <% if (key === 'all' || counts[key]) { %>
+        <button type="button" class="btn btn-sm <%= key === 'all' ? '' : 'btn-ghost' %> suggestion-filter" data-status="<%= key %>">
+          <%= label %> (<%= counts[key] || 0 %>)
+        </button>
+      <% } %>
+    <% } %>
+    <select id="suggestion-domain" style="margin-left:auto;font-size:13px;padding:5px 8px;">
+      <option value="all">All types</option>
+      <option value="opportunity">Opportunities</option>
+      <option value="travel">Travel</option>
+      <option value="content">Content</option>
+    </select>
+  </div>
+  <p class="crm-muted" id="suggestion-visible-count" style="margin:12px 0 0;"></p>
+</section>
+
+<section id="suggestion-list">
+  <% if (!suggestions.length) { %>
+    <div class="section-card" style="margin-top:14px;"><p class="crm-muted">No suggestions have been created yet.</p></div>
+  <% } %>
+  <% for (const s of suggestions) { %>
+    <article class="section-card suggestion-card <%= s.status === 'wrong' ? 'is-wrong' : '' %>"
+             data-status="<%= s.status %>" data-domain="<%= s.domain %>">
+      <div class="suggestion-card-head">
+        <div>
+          <div class="crm-task-meta">
+            <span class="suggestion-number">Suggestion #<%= s.short_code || '—' %></span>
+            <span class="crm-badge"><%= s.domain %></span>
+            <span class="crm-badge subtle"><%= s.status %></span>
+            <span class="crm-muted"><%= new Date(s.created_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></span>
+          </div>
+          <h2 class="suggestion-title"><%= s.title %></h2>
+        </div>
+        <div class="suggestion-actions">
+          <% if (s.status !== 'wrong') { %>
+            <button type="button" class="btn btn-sm btn-ghost" style="color:var(--crm-danger,#c0392b);" onclick="markSuggestionWrong('<%= s.id %>')">Wrong</button>
+          <% } else { %>
+            <span class="crm-badge" style="background:#fee2e2;color:#991b1b;">Wrong · learned</span>
+          <% } %>
+        </div>
+      </div>
+      <div class="suggestion-body"><%= s.body %></div>
+
+      <% if (s.feedback_reason || s.learned_rule) { %>
+        <div class="suggestion-feedback">
+          <% if (s.feedback_reason) { %><p><strong>Your explanation:</strong> <%= s.feedback_reason %></p><% } %>
+          <% if (s.learned_rule) { %><p><strong>Learned rule:</strong> <%= s.learned_rule %></p><% } %>
+        </div>
+      <% } %>
+
+      <% if (s.evidenceParsed) { %>
+        <details class="suggestion-evidence">
+          <summary>Why this was suggested · source evidence</summary>
+          <pre><%= typeof s.evidenceParsed === 'string' ? s.evidenceParsed : JSON.stringify(s.evidenceParsed, null, 2) %></pre>
+        </details>
+      <% } %>
+    </article>
+  <% } %>
+</section>
+
+<script>
+let suggestionStatus = 'all';
+let suggestionDomain = 'all';
+
+function filterSuggestions() {
+  let visible = 0;
+  document.querySelectorAll('.suggestion-card').forEach(card => {
+    const show = (suggestionStatus === 'all' || card.dataset.status === suggestionStatus)
+      && (suggestionDomain === 'all' || card.dataset.domain === suggestionDomain);
+    card.hidden = !show;
+    if (show) visible++;
+  });
+  document.getElementById('suggestion-visible-count').textContent = `${visible} suggestion${visible === 1 ? '' : 's'} shown`;
+}
+
+document.querySelectorAll('.suggestion-filter').forEach(button => {
+  button.addEventListener('click', () => {
+    suggestionStatus = button.dataset.status;
+    document.querySelectorAll('.suggestion-filter').forEach(item => {
+      item.classList.toggle('btn-ghost', item !== button);
+    });
+    filterSuggestions();
+  });
+});
+document.getElementById('suggestion-domain').addEventListener('change', event => {
+  suggestionDomain = event.target.value;
+  filterSuggestions();
+});
+filterSuggestions();
+
+async function markSuggestionWrong(id) {
+  const reason = prompt('Why is this suggestion wrong? Your explanation will be used to improve future suggestions.');
+  if (reason === null) return;
+  if (!reason.trim()) {
+    alert('Please give a short explanation so the Hub has something reliable to learn from.');
+    return;
+  }
+  if (!confirm('Mark this suggestion Wrong and teach the suggestion system from your explanation?')) return;
+  try {
+    const response = await fetch(`/api/suggestions/${id}/wrong`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Learning failed');
+    const fallback = result.usedFallback ? '\n\nA conservative fallback rule was saved because model analysis was unavailable.' : '';
+    alert(`Learned rule:\n${result.lesson}\n\nEvidence count: ${result.evidenceCount}${fallback}`);
+    location.reload();
+  } catch (err) {
+    alert('Could not learn from this suggestion: ' + err.message);
+  }
+}
+</script>
+
+<%- include('partials/crm-foot') %>
