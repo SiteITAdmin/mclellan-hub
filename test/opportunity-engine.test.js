@@ -15,6 +15,8 @@ const {
   compileOpportunitySuggestionAtom,
   isActionableOpportunitySignal,
   isAdmissibleOpportunitySuggestion,
+  relevanceWindowEnd,
+  retireExpiredOpportunityKnowledge,
 } = require('../lib/suggestion-engine');
 const { appraisePromotionEmails } = require('../lib/email-processor');
 const { fetchNewPromotionEmails } = require('../lib/gmail');
@@ -164,6 +166,27 @@ test('an admitted suggestion compiles the candidate into a source-backed atom', 
   const refs = JSON.parse(atom.source_refs);
   assert.ok(refs.some(ref => ref.kind === 'suggestion' && ref.id === suggestion.id));
   assert.ok(refs.some(ref => ref.kind === 'opportunity_signal' && ref.id === signalId));
+});
+
+test('relevance windows expose their final date for short-lived knowledge retirement', () => {
+  assert.equal(relevanceWindowEnd('2099-01-01'), '2099-01-01');
+  assert.equal(relevanceWindowEnd('2099-01-01..2099-01-03'), '2099-01-03');
+  assert.equal(relevanceWindowEnd(null), null);
+});
+
+test('expired relevance windows retire compiled offer atoms', async () => {
+  const suggestion = db.hub().prepare(`
+    INSERT INTO suggestions (id, user, domain, title, body, evidence, status)
+    VALUES (?, ?, 'opportunity', 'Past offer', 'Past body', ?, 'open')
+    RETURNING *
+  `).get(uuid(), USER, JSON.stringify({ relevanceWindow: '2000-01-01' }));
+  const atomId = await compileOpportunitySuggestionAtom(USER, suggestion, [uuid()], {
+    causal_connection: 'This was relevant only during the past event window.',
+    relevance_window: '2000-01-01',
+    confidence: 0.8,
+  }, { index: async () => 1 });
+  assert.equal(retireExpiredOpportunityKnowledge(USER), 1);
+  assert.equal(db.hub().prepare('SELECT status FROM knowledge_atoms WHERE id = ?').get(atomId).status, 'retired');
 });
 
 test('promotion fetch uses an independent cursor and the Gmail promotions category', async () => {
