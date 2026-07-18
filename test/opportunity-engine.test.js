@@ -12,9 +12,12 @@ const {
 const {
   SUGGESTERS,
   buildOpportunitySuggestionEmail,
+  compileOpportunitySuggestionAtom,
   isActionableOpportunitySignal,
   isAdmissibleOpportunitySuggestion,
 } = require('../lib/suggestion-engine');
+const { appraisePromotionEmails } = require('../lib/email-processor');
+const { fetchNewPromotionEmails } = require('../lib/gmail');
 const { uuid } = require('../lib/id');
 
 const USER = '__test_opportunity';
@@ -24,6 +27,8 @@ function cleanup() {
   hub.prepare('DELETE FROM opportunity_signals WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM knowledge_atoms WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM suggestions WHERE user = ?').run(USER);
+  hub.prepare("DELETE FROM crm_context WHERE user = ? AND key = '_gmail_promotions_last_check_ts'").run(USER);
+  hub.prepare("DELETE FROM processing_failures WHERE source = 'gmail_promotion' AND external_id LIKE 'promo-test-%'").run();
 }
 
 test.before(cleanup);
@@ -52,7 +57,7 @@ test('offer detection accepts canonical offer labels and offer-looking retail ma
   }), false);
 });
 
-test('storing an opportunity signal compiles a source-backed atom', () => {
+test('storing an opportunity signal creates a candidate without prematurely atomising it', () => {
   const email = {
     id: `opp-email-${Date.now()}`,
     fromName: 'Co-op Membership',
@@ -77,13 +82,10 @@ test('storing an opportunity signal compiles a source-backed atom', () => {
 
   const atom = db.hub().prepare(`
     SELECT * FROM knowledge_atoms
-    WHERE user = ? AND subject_kind = 'opportunity' AND predicate = 'retail_offer'
+    WHERE user = ? AND subject_kind = 'opportunity'
     LIMIT 1
   `).get(USER);
-  assert.ok(atom);
-  assert.match(atom.value, /GBP|sterling/i);
-  const refs = JSON.parse(atom.source_refs);
-  assert.ok(refs.some(r => r.kind === 'opportunity_signal' && r.id === signal.id));
+  assert.equal(atom, undefined);
 });
 
 test('activeOpportunitySignals expires old opportunities', () => {
@@ -141,4 +143,75 @@ test('standalone CRM email contains only opportunity suggestions', () => {
   assert.equal(email.subject, 'Suggestion from CRM');
   assert.match(email.text, /Scottish shop offer/);
   assert.doesNotMatch(email.text, /Content idea/);
+});
+
+test('an admitted suggestion compiles the candidate into a source-backed atom', async () => {
+  const suggestion = {
+    id: uuid(),
+    domain: 'opportunity',
+    title: 'Opportunity radar: Asda match-night meal deal',
+    body: 'The meal deal is usable while Douglas is visiting Dad in Kelty.',
+  };
+  const signalId = uuid();
+  const atomId = await compileOpportunitySuggestionAtom(USER, suggestion, [signalId], {
+    causal_connection: 'The UK shop offer is usable at the destination during the visit.',
+    relevance_window: '2099-01-31',
+    confidence: 0.9,
+  }, { index: async () => 1 });
+  const atom = db.hub().prepare('SELECT * FROM knowledge_atoms WHERE id = ?').get(atomId);
+  assert.equal(atom.predicate, 'relevant_offer');
+  assert.equal(atom.derived_by, 'suggestion_opportunity');
+  const refs = JSON.parse(atom.source_refs);
+  assert.ok(refs.some(ref => ref.kind === 'suggestion' && ref.id === suggestion.id));
+  assert.ok(refs.some(ref => ref.kind === 'opportunity_signal' && ref.id === signalId));
+});
+
+test('promotion fetch uses an independent cursor and the Gmail promotions category', async () => {
+  let query = '';
+  const fakeGmail = { users: { messages: {
+    list: async options => {
+      query = options.q;
+      return { data: { messages: [{ id: 'promo-test-fetch' }] } };
+    },
+    get: async () => ({ data: {
+      internalDate: String(Date.now()),
+      payload: {
+        headers: [
+          { name: 'From', value: 'Asda <asda@example.test>' },
+          { name: 'Subject', value: 'Match-night meal deal' },
+        ],
+        body: { data: Buffer.from('Buy a pizza meal deal for Sunday.').toString('base64url') },
+      },
+    } }),
+  } } };
+  const result = await fetchNewPromotionEmails(USER, fakeGmail);
+  assert.match(query, /category:promotions/);
+  assert.equal(result.emails.length, 1);
+  assert.equal(result.emails[0].fromName, 'Asda');
+  assert.ok(db.hub().prepare("SELECT 1 FROM crm_context WHERE user = ? AND key = '_gmail_promotions_last_check_ts'").get(USER));
+});
+
+test('generic promotions stop after appraisal', async () => {
+  let synthesised = false;
+  let delivered = false;
+  const result = await appraisePromotionEmails(USER, [{ id: 'promo-test-generic', subject: 'Brand news' }], {
+    extract: async () => 0,
+    synthesise: async () => { synthesised = true; return []; },
+    deliver: async () => { delivered = true; },
+  });
+  assert.deepEqual(result, { appraised: 1, candidates: 0, suggestions: 0 });
+  assert.equal(synthesised, false);
+  assert.equal(delivered, false);
+});
+
+test('an actionable promotion triggers immediate synthesis and delivery', async () => {
+  let deliveredRows = null;
+  const suggestion = { id: 'suggestion-1', domain: 'opportunity' };
+  const result = await appraisePromotionEmails(USER, [{ id: 'promo-test-asda', subject: 'Match-night meal deal' }], {
+    extract: async () => 1,
+    synthesise: async () => [suggestion],
+    deliver: async (_user, rows) => { deliveredRows = rows; },
+  });
+  assert.deepEqual(result, { appraised: 1, candidates: 1, suggestions: 1 });
+  assert.deepEqual(deliveredRows, [suggestion]);
 });
