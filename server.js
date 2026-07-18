@@ -28,6 +28,11 @@ const {
   isWeeklyReviewDue,
   runGovernanceReview,
 } = require('./lib/model-governance-review');
+const {
+  readEffectivenessReport,
+  isMonthlyEffectivenessReviewDue,
+  runModelEffectivenessReview,
+} = require('./lib/model-effectiveness-review');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -216,6 +221,19 @@ setInterval(() => {
   runGovernanceReview({ reason: 'scheduled' })
     .then(result => console.log('[model-governance] weekly review complete:', result))
     .catch(err => console.error('[model-governance] weekly review error:', err.message));
+}, 60 * 1000);
+
+// ── Prompt/model effectiveness board (18th 05:00 Europe/Dublin) ─────────────
+// One frontier reviewer rotates monthly. Scores below the threshold are sent
+// independently to the other two panel models; only unanimous recommendations
+// are emailed. The board is advisory and never changes prompts or assignments.
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  const { report } = readEffectivenessReport();
+  if (!isMonthlyEffectivenessReviewDue(now, report)) return;
+  runModelEffectivenessReview({ reason: 'scheduled', now })
+    .then(result => console.log('[model-effectiveness] monthly review complete:', result.summary))
+    .catch(err => console.error('[model-effectiveness] monthly review error:', err.message));
 }, 60 * 1000);
 
 // ── RSS feed ingest (09:30 Europe/Dublin, daily) ──────────────────────────────

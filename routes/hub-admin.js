@@ -37,6 +37,7 @@ const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPrompt, 
 const { PROMPTS } = require('../lib/prompts');
 const { familyFromModelId, shapePromptForFamily, listStyleProfiles } = require('../lib/model-style-profiles');
 const { readGovernanceReport, runGovernanceReview } = require('../lib/model-governance-review');
+const { readEffectivenessReport, runModelEffectivenessReview } = require('../lib/model-effectiveness-review');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -822,12 +823,25 @@ router.get('/admin/models/prompts', requireHubAdmin, (req, res) => {
 
 router.get('/admin/models/review', requireHubAdmin, (req, res) => {
   const { report, error: readError, path: reportPath } = readGovernanceReport();
+  const {
+    report: effectivenessReport,
+    error: effectivenessReadError,
+    path: effectivenessReportPath,
+  } = readEffectivenessReport();
   res.render('hub-admin/models-review', {
     user: req.hubUser,
     report,
     reportPath,
-    message: req.query.ran === '1' ? 'Review completed.' : req.query.started === '1' ? 'Review started.' : null,
-    error: req.query.error || readError,
+    effectivenessReport,
+    effectivenessReportPath,
+    message: req.query.ran === '1'
+      ? 'Weekly governance review completed.'
+      : req.query.effectiveness === '1'
+        ? 'Monthly effectiveness review completed.'
+        : req.query.started === 'effectiveness'
+          ? 'Monthly effectiveness review started. It runs in the background; refresh this page for results.'
+          : req.query.started === '1' ? 'Review started.' : null,
+    error: req.query.error || readError || effectivenessReadError,
   });
 });
 
@@ -839,6 +853,13 @@ router.post('/admin/models/review/_run', requireHubAdmin, async (req, res) => {
     console.error('[model-governance] manual review error:', err.message);
     res.redirect('/admin/models/review?error=' + encodeURIComponent(err.message.slice(0, 500)));
   }
+});
+
+router.post('/admin/models/review/_run-effectiveness', requireHubAdmin, (req, res) => {
+  runModelEffectivenessReview({ reason: 'manual-admin' })
+    .then(report => console.log('[model-effectiveness] manual review complete:', report.summary))
+    .catch(err => console.error('[model-effectiveness] manual review error:', err.message));
+  res.redirect('/admin/models/review?started=effectiveness');
 });
 
 router.get('/admin/models/tiers', requireHubAdmin, (req, res) => {

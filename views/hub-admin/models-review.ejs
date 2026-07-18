@@ -29,6 +29,13 @@
   .review-candidate small { display:block; color:var(--text-dim); margin-top:3px; }
   .review-section-title { font-size:16px; margin:22px 0 10px; color:var(--text); }
   details.review-slots summary { cursor:pointer; font-weight:700; color:var(--text); margin-bottom:10px; }
+  .review-score { font-size:18px; font-weight:800; white-space:nowrap; }
+  .review-score.strong { color:#1f9d69; }
+  .review-score.watch { color:#b7791f; }
+  .review-score.low { color:#d24141; }
+  .review-panel { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 16px; }
+  .review-panel span { border:1px solid var(--card-border); border-radius:999px; padding:5px 9px; font-size:11px; color:var(--text-dim); }
+  .review-panel span.primary { border-color:rgba(124,106,245,.45); color:var(--text); background:rgba(124,106,245,.08); }
   @media (max-width:850px) { .review-grid { grid-template-columns:repeat(2,minmax(120px,1fr)); } }
 </style>
 </head>
@@ -38,6 +45,91 @@
 <%- include('partials/models-subnav', { modelsTab: 'review' }) %>
 
 <section class="admin-section">
+  <div class="review-head">
+    <p>
+      Monthly effectiveness board for every governed prompt/model pairing. The primary reviewer rotates between GPT-5.6 Luna, Grok 4.5 and Claude Sonnet 5. Scores below <strong>75/100</strong> go to the other two models independently. A recommendation is emailed only when all three agree on the problem and remedy.
+      Scheduled for the <strong>18th at 05:00 Europe/Dublin</strong>.
+    </p>
+    <form method="POST" action="/admin/models/review/_run-effectiveness">
+      <button class="btn-sm" type="submit" style="background:var(--accent);color:#fff;border-color:var(--accent)">Run monthly review now</button>
+    </form>
+  </div>
+
+  <div class="review-note">
+    <strong>100-point rating:</strong> observed effectiveness 30 · prompt quality 25 · model-task fit 20 · reliability 10 · cost/latency 10 · governance 5. Current benchmark search is compiled once per monthly run; real Hub calls and receipts carry more weight.
+  </div>
+
+  <% if (!effectivenessReport) { %>
+    <div class="review-note">No monthly effectiveness review exists yet. Output: <code><%= effectivenessReportPath %></code></div>
+  <% } else { %>
+    <%
+      const effectivenessSummary = effectivenessReport.summary || {};
+      const effectivenessGenerated = effectivenessReport.generated_at ? new Date(effectivenessReport.generated_at) : null;
+      const primaryReviewer = effectivenessReport.primary_reviewer || {};
+      const evidenceByFeature = Object.fromEntries((effectivenessReport.evidence || []).map(row => [row.feature, row]));
+      const unanimousAppeals = (effectivenessReport.appeals || []).filter(row => row.unanimous);
+    %>
+    <p style="font-size:11px;color:var(--text-dim);margin:0 0 8px">
+      Last monthly run: <strong><%= effectivenessGenerated && !isNaN(effectivenessGenerated) ? effectivenessGenerated.toLocaleString('en-GB', { timeZone: 'Europe/Dublin' }) : 'unknown' %></strong>
+      · Month: <%= effectivenessReport.month %>
+      · Trigger: <%= effectivenessReport.reason || 'unknown' %>
+      · Benchmark dossier: <%= effectivenessReport.benchmark_dossier?.status || 'unknown' %>
+      · Email: <%= effectivenessReport.email?.status || 'not required' %>
+    </p>
+    <div class="review-panel">
+      <span class="primary">Primary: <%= primaryReviewer.label || primaryReviewer.key %><%= primaryReviewer.substituted ? ` → ${primaryReviewer.resolvedModelId}` : '' %></span>
+      <% for (const reviewer of effectivenessReport.secondary_reviewers || []) { %><span>Appeal: <%= reviewer.label %><%= reviewer.substituted ? ` → ${reviewer.resolvedModelId}` : '' %></span><% } %>
+    </div>
+    <div class="review-grid">
+      <div class="review-metric"><strong><%= effectivenessSummary.scored_count || 0 %></strong><span>Pairings scored</span></div>
+      <div class="review-metric"><strong><%= effectivenessSummary.mean_score == null ? '—' : effectivenessSummary.mean_score %></strong><span>Mean score</span></div>
+      <div class="review-metric"><strong><%= effectivenessSummary.appeal_count || 0 %></strong><span>Appeals</span></div>
+      <div class="review-metric"><strong><%= effectivenessSummary.unanimous_recommendation_count || 0 %></strong><span>Unanimous</span></div>
+      <div class="review-metric"><strong><%= effectivenessSummary.insufficient_evidence_count || 0 %></strong><span>Insufficient evidence</span></div>
+    </div>
+
+    <% if (unanimousAppeals.length) { %>
+      <h2 class="review-section-title">Unanimous recommendations</h2>
+      <div class="review-table-wrap"><table class="review-table">
+        <thead><tr><th>Pairing</th><th>Three scores</th><th>Agreed issue</th><th>Recommendation</th><th>Admin</th></tr></thead>
+        <tbody><% for (const appeal of unanimousAppeals) { const packet = evidenceByFeature[appeal.feature] || {}; %>
+          <tr>
+            <td><strong><%= packet.label || appeal.feature %></strong><br><code><%= packet.model_id || 'unresolved' %></code></td>
+            <td><%= [appeal.primary, ...(appeal.secondary || [])].map(row => `${row.reviewer.label}: ${row.total_score}`).join(' · ') %></td>
+            <td><%= appeal.agreed_failure_category %><br><small><%= appeal.agreed_remedy_class %></small></td>
+            <td><%= appeal.primary.recommendation || appeal.primary.rationale %></td>
+            <td><div class="review-links"><a href="<%= packet.admin_links?.system_slot || '/admin/models/system' %>">Model</a><a href="<%= packet.admin_links?.prompt || '/admin/models/prompts' %>">Prompt</a></div></td>
+          </tr>
+        <% } %></tbody>
+      </table></div>
+    <% } %>
+
+    <details class="review-slots" open>
+      <summary>Monthly scores (<%= (effectivenessReport.reviews || []).length %>)</summary>
+      <div class="review-table-wrap"><table class="review-table">
+        <thead><tr><th>Group</th><th>Prompt/model pairing</th><th>Evidence</th><th>Score</th><th>Assessment</th><th>Admin</th></tr></thead>
+        <tbody><% for (const review of effectivenessReport.reviews || []) { const packet = evidenceByFeature[review.feature] || {}; %>
+          <tr>
+            <td><%= packet.group?.label || '' %></td>
+            <td><strong><%= packet.label || review.feature %></strong><br><code><%= review.feature %></code><br><small><%= packet.model_id || 'unresolved model' %></small></td>
+            <td><%= review.evidence_status %><br><small><%= packet.observed?.direct_call_count || 0 %> calls · <%= packet.observed?.receipt_count || 0 %> receipts</small></td>
+            <td><span class="review-score <%= review.total_score == null ? '' : review.total_score >= 85 ? 'strong' : review.total_score >= 75 ? 'watch' : 'low' %>"><%= review.total_score == null ? '—' : `${review.total_score}/100` %></span><br><small><%= review.band %></small></td>
+            <td><%= review.rationale || '—' %><% if (review.recommendation) { %><br><strong>Recommendation:</strong> <%= review.recommendation %><% } %></td>
+            <td><div class="review-links"><a href="<%= packet.admin_links?.system_slot || '/admin/models/system' %>">Model</a><a href="<%= packet.admin_links?.prompt || '/admin/models/prompts' %>">Prompt</a></div></td>
+          </tr>
+        <% } %></tbody>
+      </table></div>
+    </details>
+
+    <% if ((effectivenessReport.benchmark_dossier?.sources || []).length) { %>
+      <details class="review-slots">
+        <summary>Benchmark sources (<%= effectivenessReport.benchmark_dossier.sources.length %>)</summary>
+        <div class="review-note"><% for (const source of effectivenessReport.benchmark_dossier.sources) { %><div><a href="<%= source.url %>" rel="noopener"><%= source.title %></a> <small>· checked <%= source.checked_at ? new Date(source.checked_at).toLocaleDateString('en-GB') : 'this run' %></small></div><% } %></div>
+      </details>
+    <% } %>
+  <% } %>
+
+  <h2 class="review-section-title" style="margin-top:32px">Weekly governance and model availability</h2>
   <div class="review-head">
     <p>
       Weekly governance check for every declared prompt and model slot. It compares current Hub declarations and overrides with OpenRouter's live capability catalogue, reports missing Admin locations, and finds the nearest capability-compatible replacement for unavailable or deprecated models.
