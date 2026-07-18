@@ -30,6 +30,7 @@ const {
 } = require('./lib/model-governance-review');
 const {
   readEffectivenessReport,
+  readEffectivenessProgress,
   isMonthlyEffectivenessReviewDue,
   runModelEffectivenessReview,
 } = require('./lib/model-effectiveness-review');
@@ -230,7 +231,8 @@ setInterval(() => {
 setInterval(() => {
   const now = nowIn('Europe/Dublin');
   const { report } = readEffectivenessReport();
-  if (!isMonthlyEffectivenessReviewDue(now, report)) return;
+  const { progress } = readEffectivenessProgress();
+  if (!isMonthlyEffectivenessReviewDue(now, report, progress)) return;
   runModelEffectivenessReview({ reason: 'scheduled', now })
     .then(result => console.log('[model-effectiveness] monthly review complete:', result.summary))
     .catch(err => console.error('[model-effectiveness] monthly review error:', err.message));

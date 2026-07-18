@@ -11,6 +11,10 @@ test('prompt and model review admin page renders a compiled report', async () =>
     error: null,
     reportPath: '/app/data/model-governance-review.json',
     effectivenessReportPath: '/app/data/model-effectiveness-review.json',
+    effectivenessProgress: {
+      last_error: 'OpenRouter 402', retry_after: '2026-07-19T13:00:00.000Z',
+      primary_reviews: [{ feature: 'worker', total_score: 68 }],
+    },
     effectivenessReport: {
       generated_at: '2026-07-18T13:00:00.000Z',
       month: '2026-07',
@@ -68,4 +72,6 @@ test('prompt and model review admin page renders a compiled report', async () =>
   assert.match(html, /OpenAI GPT-5\.6 Luna/);
   assert.match(html, /Unanimous recommendations/);
   assert.match(html, /68\/100/);
+  assert.match(html, /Monthly review paused/);
+  assert.match(html, /OpenRouter 402/);
 });

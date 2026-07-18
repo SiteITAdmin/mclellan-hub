@@ -59,6 +59,14 @@
     <strong>100-point rating:</strong> observed effectiveness 30 · prompt quality 25 · model-task fit 20 · reliability 10 · cost/latency 10 · governance 5. Current benchmark search is compiled once per monthly run; real Hub calls and receipts carry more weight.
   </div>
 
+  <% if (effectivenessProgress?.last_error) { %>
+    <div class="review-note error">
+      <strong>Monthly review paused:</strong> <%= effectivenessProgress.last_error %>
+      <% if (effectivenessProgress.retry_after) { %> · Scheduled retry after <%= new Date(effectivenessProgress.retry_after).toLocaleString('en-GB', { timeZone: 'Europe/Dublin' }) %>.<% } %>
+      Completed receipts are checkpointed (<%= (effectivenessProgress.primary_reviews || []).filter(row => row.total_score != null).length %> primary scores); the next run resumes instead of starting over.
+    </div>
+  <% } %>
+
   <% if (!effectivenessReport) { %>
     <div class="review-note">No monthly effectiveness review exists yet. Output: <code><%= effectivenessReportPath %></code></div>
   <% } else { %>
