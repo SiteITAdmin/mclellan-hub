@@ -69,6 +69,7 @@ test('missing panel model resolves to closest same-provider equivalent and recor
 
 test('appeal calls carry identical raw evidence without a primary score or recommendation', async () => {
   const calls = [];
+  const checkpoints = [];
   const reviewer = { key: 'grok', label: 'Grok', modelId: 'x-ai/grok-4.5', resolvedModelId: 'x-ai/grok-4.5', substituted: false };
   const packet = {
     feature: 'worker', label: 'Worker', reviewable: true, prompt: { text: 'Return JSON.', sha256: 'abc' },
@@ -84,10 +85,16 @@ test('appeal calls carry identical raw evidence without a primary score or recom
       }],
     };
   };
-  const reviews = await reviewPackets([packet], reviewer, { status: 'available', sources: [] }, { appeal: true, request });
+  const reviews = await reviewPackets([packet], reviewer, { status: 'available', sources: [] }, {
+    appeal: true,
+    request,
+    onBatch: rows => checkpoints.push(rows),
+  });
   assert.equal(reviews[0].total_score, 73);
   assert.match(calls[0].messages[0].content, /independent appeal/i);
   assert.match(calls[0].messages[1].content, /Return JSON\./);
   assert.doesNotMatch(calls[0].messages[1].content, /primary_score|primary recommendation/i);
   assert.deepEqual(calls[0].extraBody, { reasoning: { effort: 'high' } });
+  assert.equal(checkpoints.length, 1);
+  assert.equal(checkpoints[0][0].feature, 'worker');
 });
