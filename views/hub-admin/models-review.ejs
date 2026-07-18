@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt &amp; model review — Chat Admin — <%= user %></title>
+<link rel="stylesheet" href="/portfolio.css">
+<%- include('partials/models-styles') %>
+<style>
+  .review-head { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; flex-wrap:wrap; margin-bottom:18px; }
+  .review-head p { max-width:760px; margin:0; font-size:13px; line-height:1.55; color:var(--text-dim); }
+  .review-grid { display:grid; grid-template-columns:repeat(5,minmax(110px,1fr)); gap:10px; margin:16px 0 22px; }
+  .review-metric { border:1px solid var(--card-border); border-radius:var(--card-radius); background:var(--card-bg); padding:14px; }
+  .review-metric strong { display:block; font-size:24px; line-height:1; color:var(--text); margin-bottom:6px; }
+  .review-metric span { font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; }
+  .review-note { border:1px solid var(--card-border); border-radius:10px; padding:12px 14px; margin:0 0 16px; font-size:12px; line-height:1.5; color:var(--text-dim); background:var(--card-bg); }
+  .review-note.ok { border-color:rgba(31,157,105,.35); background:rgba(31,157,105,.06); }
+  .review-note.error { border-color:rgba(210,65,65,.4); background:rgba(210,65,65,.07); color:var(--text); }
+  .review-table-wrap { overflow:auto; border:1px solid var(--card-border); border-radius:var(--card-radius); background:var(--card-bg); margin-bottom:20px; }
+  .review-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .review-table th, .review-table td { padding:10px 12px; border-bottom:1px solid var(--card-border); text-align:left; vertical-align:top; }
+  .review-table th { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-dim); background:rgba(124,106,245,.04); white-space:nowrap; }
+  .review-table tr:last-child td { border-bottom:0; }
+  .review-table code { font-size:11px; color:var(--text); }
+  .review-links { display:flex; flex-wrap:wrap; gap:6px; }
+  .review-links a { font-size:11px; text-decoration:none; }
+  .review-candidate { min-width:210px; }
+  .review-candidate small { display:block; color:var(--text-dim); margin-top:3px; }
+  .review-section-title { font-size:16px; margin:22px 0 10px; color:var(--text); }
+  details.review-slots summary { cursor:pointer; font-weight:700; color:var(--text); margin-bottom:10px; }
+  @media (max-width:850px) { .review-grid { grid-template-columns:repeat(2,minmax(120px,1fr)); } }
+</style>
+</head>
+<body class="admin-page">
+
+<%- include('partials/admin-header', { title: `Prompt & model review — ${user}` }) %>
+<%- include('partials/models-subnav', { modelsTab: 'review' }) %>
+
+<section class="admin-section">
+  <div class="review-head">
+    <p>
+      Weekly governance check for every declared prompt and model slot. It compares current Hub declarations and overrides with OpenRouter's live capability catalogue, reports missing Admin locations, and finds the nearest capability-compatible replacement for unavailable or deprecated models.
+      Scheduled for <strong>Sunday at 04:15 Europe/Dublin</strong>.
+    </p>
+    <form method="POST" action="/admin/models/review/_run">
+      <button class="btn-sm" type="submit" style="background:var(--accent);color:#fff;border-color:var(--accent)">Run review now</button>
+    </form>
+  </div>
+
+  <% if (message) { %><div class="review-note ok"><%= message %></div><% } %>
+  <% if (error) { %><div class="review-note error"><strong>Review error:</strong> <%= error %></div><% } %>
+
+  <div class="review-note">
+    <strong>Safe automation boundary:</strong> high-confidence candidates (score 0.72+) may be added to the Catalogue as <strong>disabled</strong>. The review never activates a model, reassigns a live slot, or edits a prompt. Medium-confidence matches remain recommendations for human review.
+  </div>
+
+  <% if (!report) { %>
+    <div class="review-note">No compiled review exists yet. Run it now, or wait for the next scheduled review. Output: <code><%= reportPath %></code></div>
+  <% } else { %>
+    <%
+      const summary = report.summary || {};
+      const run = report.run || {};
+      const installations = run.installations || [];
+      const installationByModel = Object.fromEntries(installations.map(row => [row.model_id, row]));
+      const generated = report.generated_at ? new Date(report.generated_at) : null;
+    %>
+    <p style="font-size:11px;color:var(--text-dim);margin:0 0 8px">
+      Last run: <strong><%= generated && !isNaN(generated) ? generated.toLocaleString('en-GB', { timeZone: 'Europe/Dublin' }) : 'unknown' %></strong>
+      · OpenRouter catalogue: <%= report.catalog_model_count || 0 %> models
+      · Trigger: <%= run.reason || 'legacy/read-only review' %>
+    </p>
+
+    <div class="review-grid">
+      <div class="review-metric"><strong><%= summary.slot_count || 0 %></strong><span>Admin slots</span></div>
+      <div class="review-metric"><strong><%= summary.error_count || 0 %></strong><span>Errors</span></div>
+      <div class="review-metric"><strong><%= summary.warning_count || 0 %></strong><span>Warnings</span></div>
+      <div class="review-metric"><strong><%= summary.auto_installable_count || 0 %></strong><span>Safe candidates</span></div>
+      <div class="review-metric"><strong><%= run.inserted_disabled_count || 0 %></strong><span>Added disabled</span></div>
+    </div>
+
+    <div class="review-links" style="margin-bottom:18px">
+      <a class="btn-sm" href="<%= report.admin_locations?.catalogue || '/admin/models' %>">Catalogue</a>
+      <a class="btn-sm" href="<%= report.admin_locations?.system_slots || '/admin/models/system' %>">System models</a>
+      <a class="btn-sm" href="<%= report.admin_locations?.prompts || '/admin/models/prompts' %>">Prompts</a>
+      <a class="btn-sm" href="<%= report.admin_locations?.tiers || '/admin/models/tiers' %>">Tiers</a>
+    </div>
+
+    <h2 class="review-section-title">Findings</h2>
+    <% if (!(report.issues || []).length) { %>
+      <div class="review-note ok">No governance issues found.</div>
+    <% } else { %>
+      <div class="review-table-wrap">
+        <table class="review-table">
+          <thead><tr><th>Level</th><th>Feature</th><th>Finding</th><th>Nearest equivalent</th><th>Admin location</th></tr></thead>
+          <tbody>
+          <% for (const issue of report.issues || []) { %>
+            <% const candidate = (issue.recommendations || [])[0]; const installed = candidate && installationByModel[candidate.id]; %>
+            <tr>
+              <td><span class="badge <%= issue.severity === 'error' ? 'badge-search-none' : 'badge-tier' %>"><%= issue.severity %></span></td>
+              <td><code><%= issue.feature || '—' %></code></td>
+              <td><%= issue.message %></td>
+              <td class="review-candidate">
+                <% if (candidate) { %>
+                  <code><%= candidate.id %></code>
+                  <small>score <%= Number(candidate.score || 0).toFixed(2) %> · <%= candidate.confidence || 'unknown' %><%= installed ? ` · ${installed.action === 'inserted_disabled' ? 'added disabled' : 'already in catalogue'}` : '' %></small>
+                <% } else { %>—<% } %>
+              </td>
+              <td><div class="review-links">
+                <% if (issue.admin_links?.system_slot) { %><a href="<%= issue.admin_links.system_slot %>">Model slot</a><% } %>
+                <% if (issue.admin_links?.prompt) { %><a href="<%= issue.admin_links.prompt %>">Prompt</a><% } %>
+                <% if (issue.admin_links?.catalogue) { %><a href="<%= issue.admin_links.catalogue %>">Catalogue</a><% } %>
+              </div></td>
+            </tr>
+          <% } %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+
+    <details class="review-slots">
+      <summary>Full slot inventory (<%= (report.slots || []).length %>)</summary>
+      <div class="review-table-wrap">
+        <table class="review-table">
+          <thead><tr><th>Group</th><th>Feature</th><th>Effective model</th><th>Health</th><th>Admin location</th></tr></thead>
+          <tbody>
+          <% for (const slot of report.slots || []) { %>
+            <tr>
+              <td><%= slot.group?.label || '' %></td>
+              <td><code><%= slot.feature %></code></td>
+              <td><code><%= slot.effective_model_id || 'prompt only' %></code></td>
+              <td><span class="badge <%= slot.live_health === 'healthy' ? 'badge-default' : 'badge-search-none' %>"><%= slot.live_health %></span></td>
+              <td><div class="review-links"><a href="<%= slot.admin_links.system_slot %>">Model</a><a href="<%= slot.admin_links.prompt %>">Prompt</a></div></td>
+            </tr>
+          <% } %>
+          </tbody>
+        </table>
+      </div>
+    </details>
+  <% } %>
+</section>
+</body>
+</html>
