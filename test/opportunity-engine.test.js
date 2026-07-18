@@ -13,11 +13,17 @@ const {
   SUGGESTERS,
   buildOpportunitySuggestionEmail,
   compileOpportunitySuggestionAtom,
+  createSuggestion,
   isActionableOpportunitySignal,
   isAdmissibleOpportunitySuggestion,
+  listSuggestions,
   relevanceWindowEnd,
   retireExpiredOpportunityKnowledge,
 } = require('../lib/suggestion-engine');
+const {
+  formatSuggestionLessons,
+  learnFromWrongSuggestion,
+} = require('../lib/suggestion-learning');
 const { appraisePromotionEmails } = require('../lib/email-processor');
 const { fetchNewPromotionEmails } = require('../lib/gmail');
 const { uuid } = require('../lib/id');
@@ -28,6 +34,8 @@ function cleanup() {
   const hub = db.hub();
   hub.prepare('DELETE FROM opportunity_signals WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM knowledge_atoms WHERE user = ?').run(USER);
+  hub.prepare('DELETE FROM suggestion_feedback WHERE user = ?').run(USER);
+  hub.prepare('DELETE FROM suggestion_lessons WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM suggestions WHERE user = ?').run(USER);
   hub.prepare("DELETE FROM crm_context WHERE user = ? AND key = '_gmail_promotions_last_check_ts'").run(USER);
   hub.prepare("DELETE FROM processing_failures WHERE source = 'gmail_promotion' AND external_id LIKE 'promo-test-%'").run();
@@ -148,7 +156,6 @@ test('standalone CRM email contains only opportunity suggestions', () => {
 });
 
 test('suggestion evidence remains valid JSON when context exceeds 4,000 characters', () => {
-  const { createSuggestion } = require('../lib/suggestion-engine');
   const row = createSuggestion(USER, {
     domain: 'opportunity',
     title: 'Large evidence test',
@@ -159,6 +166,62 @@ test('suggestion evidence remains valid JSON when context exceeds 4,000 characte
   const parsed = JSON.parse(row.evidence);
   assert.equal(parsed.context.length, 6000);
   assert.equal(parsed.relevanceWindow, '2099-01-01');
+});
+
+test('suggestion history retains every status and never reuses a number', () => {
+  const first = createSuggestion(USER, {
+    domain: 'content', title: 'Historical suggestion', body: 'Keep this in history.',
+    dedupKey: `history-first-${uuid()}`,
+  });
+  db.hub().prepare("UPDATE suggestions SET status = 'wrong' WHERE id = ?").run(first.id);
+  const second = createSuggestion(USER, {
+    domain: 'content', title: 'Later suggestion', body: 'This needs a later number.',
+    dedupKey: `history-second-${uuid()}`,
+  });
+  assert.equal(second.short_code, first.short_code + 1);
+  const history = listSuggestions(USER);
+  assert.ok(history.some(item => item.id === first.id && item.status === 'wrong'));
+  assert.ok(history.some(item => item.id === second.id && item.status === 'open'));
+  assert.throws(() => db.hub().prepare(`
+    INSERT INTO suggestions (id, user, domain, title, body, short_code)
+    VALUES (?, ?, 'content', 'Duplicate code', 'Must fail.', ?)
+  `).run(uuid(), USER, second.short_code), /UNIQUE constraint failed/);
+});
+
+test('Wrong feedback records evidence, learns a rule, and retires compiled relevance', async () => {
+  const suggestion = createSuggestion(USER, {
+    domain: 'opportunity',
+    title: 'Opportunity radar: irrelevant product',
+    body: 'This product was joined to a trip without a causal reason.',
+    evidence: { relevanceWindow: '2099-01-31', signals: [{ title: 'Offer' }] },
+    dedupKey: `wrong-feedback-${uuid()}`,
+  });
+  const atomId = await compileOpportunitySuggestionAtom(USER, suggestion, [uuid()], {
+    causal_connection: 'The model claimed the trip changed the offer value.',
+    relevance_window: '2099-01-31',
+    confidence: 0.8,
+  }, { index: async () => 1 });
+
+  const learned = await learnFromWrongSuggestion(
+    USER,
+    suggestion.id,
+    'Travel alone does not make an unrelated software offer useful.',
+    { derive: async () => ({
+      lesson_key: 'travel-needs-causal-product-fit',
+      category: 'weak_connection',
+      rule: 'Do not treat travel as making an unrelated product offer relevant; require evidence that the product serves a demonstrated travel need.',
+      applies_to: { domain: 'opportunity', signals: ['travel coincidence'] },
+      explanation: 'The trip and offer only coincided in time.',
+    }) },
+  );
+
+  assert.equal(learned.usedFallback, false);
+  assert.equal(db.hub().prepare('SELECT status FROM suggestions WHERE id = ?').get(suggestion.id).status, 'wrong');
+  assert.equal(db.hub().prepare('SELECT status FROM knowledge_atoms WHERE id = ?').get(atomId).status, 'retired');
+  assert.match(formatSuggestionLessons(USER, 'opportunity'), /require evidence that the product serves a demonstrated travel need/i);
+  const history = listSuggestions(USER).find(item => item.id === suggestion.id);
+  assert.match(history.feedback_reason, /Travel alone/);
+  assert.match(history.learned_rule, /unrelated product offer/);
 });
 
 test('an admitted suggestion compiles the candidate into a source-backed atom', async () => {
