@@ -147,6 +147,20 @@ test('standalone CRM email contains only opportunity suggestions', () => {
   assert.doesNotMatch(email.text, /Content idea/);
 });
 
+test('suggestion evidence remains valid JSON when context exceeds 4,000 characters', () => {
+  const { createSuggestion } = require('../lib/suggestion-engine');
+  const row = createSuggestion(USER, {
+    domain: 'opportunity',
+    title: 'Large evidence test',
+    body: 'Evidence must remain parseable.',
+    evidence: { context: 'x'.repeat(6000), relevanceWindow: '2099-01-01' },
+    dedupKey: `large-evidence-${uuid()}`,
+  });
+  const parsed = JSON.parse(row.evidence);
+  assert.equal(parsed.context.length, 6000);
+  assert.equal(parsed.relevanceWindow, '2099-01-01');
+});
+
 test('an admitted suggestion compiles the candidate into a source-backed atom', async () => {
   const suggestion = {
     id: uuid(),
