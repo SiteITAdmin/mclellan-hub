@@ -36,6 +36,7 @@ const { getAllWikiTags, getWikiPagesByTags } = require('../lib/wiki-tags');
 const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPrompt, getSystemPromptOverride, setSystemPromptOverride } = require('../lib/settings');
 const { PROMPTS } = require('../lib/prompts');
 const { familyFromModelId, shapePromptForFamily, listStyleProfiles } = require('../lib/model-style-profiles');
+const { readGovernanceReport, runGovernanceReview } = require('../lib/model-governance-review');
 
 // Ensure test_jobs table exists (safe to run every startup)
 try {
@@ -814,6 +815,27 @@ router.post('/admin/repair-venue/_toggle', requireHubAdmin, (req, res) => {
 
 router.get('/admin/models/prompts', requireHubAdmin, (req, res) => {
   res.render('hub-admin/models-prompts', { user: req.hubUser, systemGroups: getResolvedSystemGroups(req), styleProfiles: listStyleProfiles() });
+});
+
+router.get('/admin/models/review', requireHubAdmin, (req, res) => {
+  const { report, error: readError, path: reportPath } = readGovernanceReport();
+  res.render('hub-admin/models-review', {
+    user: req.hubUser,
+    report,
+    reportPath,
+    message: req.query.ran === '1' ? 'Review completed.' : req.query.started === '1' ? 'Review started.' : null,
+    error: req.query.error || readError,
+  });
+});
+
+router.post('/admin/models/review/_run', requireHubAdmin, async (req, res) => {
+  try {
+    await runGovernanceReview({ reason: 'manual' });
+    res.redirect('/admin/models/review?ran=1');
+  } catch (err) {
+    console.error('[model-governance] manual review error:', err.message);
+    res.redirect('/admin/models/review?error=' + encodeURIComponent(err.message.slice(0, 500)));
+  }
 });
 
 router.get('/admin/models/tiers', requireHubAdmin, (req, res) => {

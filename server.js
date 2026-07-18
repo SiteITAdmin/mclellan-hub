@@ -23,6 +23,11 @@ const { ingestAllFeeds } = require('./lib/rss-ingest');
 const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
 const { sendWorkDailyBrief } = require('./lib/work-daily-brief');
+const {
+  readGovernanceReport,
+  isWeeklyReviewDue,
+  runGovernanceReview,
+} = require('./lib/model-governance-review');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -199,6 +204,18 @@ setInterval(() => {
   for (const user of BRIEFING_USERS) {
     sendWeeklyDigest(user).catch(err => console.error(`[weekly] digest error for ${user}:`, err));
   }
+}, 60 * 1000);
+
+// ── Prompt/model governance review (Sunday 04:15 Europe/Dublin) ──────────────
+// Produces a compiled admin report and stages only high-confidence catalogue
+// candidates as disabled. It never changes a live slot assignment or prompt.
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  const { report } = readGovernanceReport();
+  if (!isWeeklyReviewDue(now, report)) return;
+  runGovernanceReview({ reason: 'scheduled' })
+    .then(result => console.log('[model-governance] weekly review complete:', result))
+    .catch(err => console.error('[model-governance] weekly review error:', err.message));
 }, 60 * 1000);
 
 // ── RSS feed ingest (09:30 Europe/Dublin, daily) ──────────────────────────────
