@@ -19,63 +19,71 @@ Do **not** use `/api/crm/webhook` + `processCrmCommand` as the bulk path for fam
 - Hub reachable at `https://dchat.mclellan.scot` with `HERMES_WEBHOOK_SECRET` matching Hermes env
 - Phone with WhatsApp for QR pairing
 
-## 1. Pair WhatsApp
+## Already applied on this Mac (2026-07-19)
+
+| Item | Location |
+|---|---|
+| WhatsApp + Hub env | `~/.hermes/.env` (`WHATSAPP_ENABLED`, self-chat, capture URL) |
+| Gateway config | `~/.hermes/config.yaml` (ignore strangers, groups disabled) |
+| Capture hook | `~/.hermes/hooks/hub-whatsapp-capture/` |
+| Capture skill | `~/.hermes/skills/hub-whatsapp-capture/` |
+| SOUL guidance | `~/.hermes/SOUL.md` |
+| Bridge npm deps | `~/hermes/scripts/whatsapp-bridge/node_modules` |
+| Evening helper | `~/bin/hermes-whatsapp-evening.sh` |
+
+**Only remaining human step:** QR pair + leave gateway running.
+
+```bash
+~/bin/hermes-whatsapp-evening.sh
+```
+
+That probes Hub capture, runs `hermes whatsapp` if no session, then `hermes gateway`.
+
+## 1. Pair WhatsApp (if helper not used)
 
 ```bash
 hermes whatsapp
 ```
 
-Choose mode:
-
-| Mode | When to use tonight |
+| Mode | When to use |
 |---|---|
-| **self-chat** | Fastest: message *yourself* to capture notes (“Aunt asked me to get Dad’s things”). |
-| **bot** | Dedicated number; Aunt/Uncle can message the bot directly. |
+| **self-chat** | Fastest: message *yourself* (“Aunt asked me to get Dad’s things”). Configured default. |
+| **bot** | Dedicated number; Aunt/Uncle message the bot. |
 
 Scan QR: WhatsApp → Linked Devices → Link a device.
 
 ## 2. Hermes env (`~/.hermes/.env`)
 
+Already written. To tighten after first success, set your number:
+
 ```bash
-WHATSAPP_ENABLED=true
-WHATSAPP_MODE=self-chat          # or bot
-# Start narrow: only your number. Add Aunt/Uncle later.
-WHATSAPP_ALLOWED_USERS=353XXXXXXXXX
-# Optional later:
-# WHATSAPP_GROUP_POLICY=allowlist
-# WHATSAPP_REQUIRE_MENTION=true   # groups: only when @bot
+WHATSAPP_ALLOWED_USERS=353XXXXXXXXX   # country code, no +
+```
 
-# Already present for dchat-crm:
-# HERMES_WEBHOOK_SECRET=...
-# DCHAT_USER=douglas
+Capture URL:
 
-# Capture target (defaults to production if unset)
+```bash
 HUB_MESSAGING_CAPTURE_URL=https://dchat.mclellan.scot/api/messaging/capture
 ```
 
-Phone numbers: country code, **no** `+` or spaces.
+## 3. Bridge deps
 
-## 3. Install bridge deps (once)
+Installed. Re-run only if missing:
 
 ```bash
-cd ~/hermes/scripts/whatsapp-bridge   # or your hermes checkout path
-npm install
+cd ~/hermes/scripts/whatsapp-bridge && npm install
 ```
 
 ## 4. Capture hook (auto)
 
-Installed under `~/.hermes/hooks/hub-whatsapp-capture/`:
-
-- On every WhatsApp message Hermes processes (`agent:start`), posts body + sender to Hub capture.
-- Failures never block the agent.
+`~/.hermes/hooks/hub-whatsapp-capture/` — on WhatsApp `agent:start`, posts body to Hub. Failures never block the agent.
 
 ## 5. Start gateway
 
 ```bash
+~/bin/hermes-whatsapp-evening.sh
+# or:
 hermes gateway
-# or install as a service:
-# hermes gateway install
-# hermes gateway start
 ```
 
 ## 6. Smoke test (no Aunt required)
