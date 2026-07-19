@@ -261,16 +261,21 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## Suggestions
-**Purpose:** A daily LLM pass (07:00 Dublin) that looks across calendar, CRM notes, flights, price alerts, RSS, and newsletter topics and *suggests* — never acts. Flagship: travel booking timing (unbooked travel windows × Skyscanner price history). Also: LinkedIn post topics from converging signals.
+**Purpose:** A daily LLM action radar (07:00 Dublin) that proposes reviewable next actions from source-backed Hub context but never acts on its own. Current streams: travel booking timing (unbooked travel windows × Skyscanner price history), short-lived opportunities, and one experimental outreach reason for every CRM person who has no open contact-linked task. LinkedIn topic ideas belong to the dedicated LinkedIn Plan/research pipeline, not this module.
 
-**Interaction:** Max 2 new suggestions pushed to Google Chat per run; all open ones appear in the morning briefing. Replies: "accept 2" (creates a task), "dismiss 2", "why 2" (shows the stored evidence). Suggestions expire after 14 days.
+**Interaction:** `/crm/suggestions` puts Accept, Dismiss, Why, and Wrong on every open card. Accept creates a linked Google Task; Dismiss closes the candidate; Why shows its stored evidence; Wrong records Douglas's explanation and learns a reusable rule for that stream. Suggestions expire after 14 days.
+
+**Knowledge boundary:** A generated suggestion is a candidate cache, not knowledge. It may contain a clearly labelled model hypothesis when the Hub evidence is thin. No suggestion-derived atom is active before Douglas accepts. Acceptance may compile the accepted rationale as `accepted_outreach_reason`/`relevant_offer` with provenance back to the suggestion; Wrong retires any legacy compiled suggestion atom.
 
 **Owns:** `suggestions` and `travel_price_points` tables. Skyscanner price-alert emails are LLM-extracted into price points by the email processor before generic skip rules.
 
 **Healthy looks like:**
 - `suggestion_run` always has a pending job
 - Re-runs never duplicate (dedup keys)
-- Every suggestion's evidence is inspectable via "why N"
+- Every eligible non-self contact without an open task gets at most one open outreach candidate per month
+- Contact suggestions cite Hub source keys or explicitly say that the angle is exploratory
+- Every suggestion's evidence is inspectable via Why
+- No active atom with `derived_by='suggestion_opportunity'` or `suggestion_contact_accepted` exists for an unaccepted suggestion
 
 ---
 

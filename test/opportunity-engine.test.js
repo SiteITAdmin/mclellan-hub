@@ -113,8 +113,11 @@ test('activeOpportunitySignals expires old opportunities', () => {
   assert.equal(active.some(s => s.title === 'Co-op weekly member offers'), true);
 });
 
-test('suggestion engine registers the opportunity suggester', () => {
+test('suggestion engine registers action streams and retires the old content stream', () => {
   assert.equal(typeof SUGGESTERS.opportunity, 'function');
+  assert.equal(typeof SUGGESTERS.travel, 'function');
+  assert.equal(typeof SUGGESTERS.contact, 'function');
+  assert.equal(SUGGESTERS.content, undefined);
 });
 
 test('opportunity admission requires an action and a direct causal join', () => {
@@ -170,12 +173,12 @@ test('suggestion evidence remains valid JSON when context exceeds 4,000 characte
 
 test('suggestion history retains every status and never reuses a number', () => {
   const first = createSuggestion(USER, {
-    domain: 'content', title: 'Historical suggestion', body: 'Keep this in history.',
+    domain: 'contact', title: 'Historical suggestion', body: 'Keep this in history.',
     dedupKey: `history-first-${uuid()}`,
   });
   db.hub().prepare("UPDATE suggestions SET status = 'wrong' WHERE id = ?").run(first.id);
   const second = createSuggestion(USER, {
-    domain: 'content', title: 'Later suggestion', body: 'This needs a later number.',
+    domain: 'contact', title: 'Later suggestion', body: 'This needs a later number.',
     dedupKey: `history-second-${uuid()}`,
   });
   assert.equal(second.short_code, first.short_code + 1);
@@ -184,7 +187,7 @@ test('suggestion history retains every status and never reuses a number', () => 
   assert.ok(history.some(item => item.id === second.id && item.status === 'open'));
   assert.throws(() => db.hub().prepare(`
     INSERT INTO suggestions (id, user, domain, title, body, short_code)
-    VALUES (?, ?, 'content', 'Duplicate code', 'Must fail.', ?)
+    VALUES (?, ?, 'contact', 'Duplicate code', 'Must fail.', ?)
   `).run(uuid(), USER, second.short_code), /UNIQUE constraint failed/);
 });
 
@@ -224,7 +227,7 @@ test('Wrong feedback records evidence, learns a rule, and retires compiled relev
   assert.match(history.learned_rule, /unrelated product offer/);
 });
 
-test('an admitted suggestion compiles the candidate into a source-backed atom', async () => {
+test('an accepted opportunity can be compiled into a source-backed atom', async () => {
   const suggestion = {
     id: uuid(),
     domain: 'opportunity',
