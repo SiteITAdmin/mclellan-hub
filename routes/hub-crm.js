@@ -1800,6 +1800,39 @@ router.post('/api/suggestions/:id/wrong', requireAuth, requireSameOrigin, writeL
   }
 });
 
+router.post('/api/suggestions/:id/accept', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { acceptSuggestionById } = require('../lib/suggestion-engine');
+    const result = await acceptSuggestionById(req.hubUser, req.params.id);
+    res.status(result.ok ? 200 : (result.notFound ? 404 : 502)).json(result);
+  } catch (err) {
+    console.error('[suggestions] accept error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/suggestions/:id/dismiss', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const { dismissSuggestionById } = require('../lib/suggestion-engine');
+    const result = dismissSuggestionById(req.hubUser, req.params.id);
+    res.status(result.ok ? 200 : 404).json(result);
+  } catch (err) {
+    console.error('[suggestions] dismiss error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/suggestions/contact-reasons/run', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { runContactSuggester } = require('../lib/suggestion-engine');
+    const suggestions = await runContactSuggester(req.hubUser);
+    res.json({ ok: true, created: suggestions.length });
+  } catch (err) {
+    console.error('[suggestions] contact reason run error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   const title = String(req.body.title || '').trim();
   if (!title) return res.status(400).json({ error: 'title required' });
