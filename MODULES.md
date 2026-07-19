@@ -169,6 +169,8 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Interest radar:** `lib/interest-synthesis.js`, job `interest_synthesis_run` (daily 05:45, before the work brief). Joins recent meeting intakes with the upcoming meetings/calendar and asks the model which work topics Douglas is actively engaged with; writes `interest`-kind atoms (predicate `active_interest`) with provenance to the signals, plus a compiled radar cache in `crm_context` (`interest_radar`). The work daily brief reads the radar and pulls recent stories per topic (Exa search) into an "On your radar" section, each with the "why" naming the meeting or calendar entry that earned it. Interests fade from the brief 45 days after their last reconfirmation; the atoms live on.
 
+**WhatsApp / messaging capture:** Hermes (Baileys) posts allowlisted chat evidence to `POST /api/messaging/capture` (`lib/messaging-capture.js` → `messaging_messages`). Source kind `messaging_message` is consumed by `crm_knowledge_engine` like email/meetings — triage, duplicate review, atoms, high-confidence task projection. Setup: `docs/whatsapp-hermes-capture.md`. Intentional `/crm` notes still use the Hermes `dchat-crm` skill → `/api/crm/webhook`; family chat bulk path must not.
+
 **Health check:** `knowledge_atoms` and `embeddings` counts are non-zero and growing; open a contact page and confirm the Knowledge panel shows claims with click-through sources; `/admin/knowledge` shows the review queue; the daily system report's KNOWLEDGE section shows atom counts and the last lint run.
 
 ---

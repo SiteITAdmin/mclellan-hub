@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { listNotes, readNote, searchNotes, writeNote, vaultRoot } = require('../lib/obsidian-vault');
 const {
+  captureMessagingMessage,
+  recentMessagingMessages,
+  buildEvidenceText,
+} = require('../lib/messaging-capture');
+const {
   writeLimiter, requireAuth, requireSameOrigin, requireHermesAuth,
   requireContentResearchWorkerAuth,
 } = require('./hub-shared');
@@ -92,6 +97,44 @@ router.post('/api/obsidian/note', requireHermesAuth, writeLimiter, (req, res) =>
   try {
     writeNote({ notePath, content, mode: mode || 'create' });
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Messaging capture (WhatsApp via Hermes) ───────────────────────────────────
+// Raw evidence only. Hermes posts allowlisted WhatsApp messages here; the CRM
+// knowledge engine (source kind messaging_message) decides atoms/tasks.
+// Auth: Authorization: Bearer <HERMES_WEBHOOK_SECRET>
+
+router.post('/api/messaging/capture', requireHermesAuth, writeLimiter, (req, res) => {
+  try {
+    const user = String(req.body?.user || req.hubUser || process.env.DCHAT_USER || 'douglas').trim();
+    if (!user) return res.status(400).json({ error: 'user required' });
+
+    const result = captureMessagingMessage(user, req.body || {});
+    const evidence = result.row ? buildEvidenceText(result.row) : '';
+    res.json({
+      ok: true,
+      id: result.id,
+      created: result.created,
+      duplicate: !!result.duplicate,
+      platform: result.row?.platform || req.body?.platform || 'whatsapp',
+      evidence_preview: evidence.slice(0, 240),
+    });
+  } catch (err) {
+    console.error('[messaging capture]', err);
+    const status = /required/i.test(err.message) ? 400 : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+router.get('/api/messaging/recent', requireHermesAuth, (req, res) => {
+  try {
+    const user = String(req.query.user || process.env.DCHAT_USER || 'douglas').trim();
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const rows = recentMessagingMessages(user, { limit });
+    res.json({ ok: true, count: rows.length, messages: rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
