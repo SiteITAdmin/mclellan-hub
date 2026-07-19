@@ -27,6 +27,9 @@ const { logUsageFromResponse } = require('../lib/openrouter-usage');
 const { PROMPTS } = require('../lib/prompts');
 const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 const { sendEmail: amSendEmail } = require('../lib/agentmail');
+const { getCrmKnowledgeHealth } = require('../lib/crm-knowledge-health');
+
+const knowledgeRetryUsers = new Set();
 
 
 function todayIso() {
@@ -2640,14 +2643,7 @@ router.get('/crm/knowledge', requireAuth, async (req, res) => {
     browseFilters = { kind, status, minConf };
   }
 
-  // Engine panel: run recency and failures compiled from knowledge_receipts —
-  // no runs table, just a GROUP BY over what the engine already writes.
-  const engineStages = hub.prepare(`
-    SELECT stage, MAX(created_at) AS last_at, COUNT(*) AS total,
-      SUM(CASE WHEN status != 'done' THEN 1 ELSE 0 END) AS failures
-    FROM knowledge_receipts WHERE user = ?
-    GROUP BY stage ORDER BY last_at DESC
-  `).all(req.hubUser);
+  const engineHealth = getCrmKnowledgeHealth(req.hubUser);
   const health = {
     duplicateEmails: hub.prepare(`
       SELECT COUNT(*) AS n FROM (
@@ -2665,7 +2661,11 @@ router.get('/crm/knowledge', requireAuth, async (req, res) => {
   res.render('hub/crm-knowledge', {
     ...crmPageData(req.hubUser),
     query, result, error, insights,
-    browse, browseAtoms, browseFilters, engineStages, health,
+    browse, browseAtoms, browseFilters,
+    engineStages: engineHealth.stages,
+    engineErrors: engineHealth.currentErrors.slice(0, 12),
+    engineErrorSourceCount: engineHealth.erroredSourceCount,
+    health,
   });
 });
 
@@ -2681,6 +2681,25 @@ router.post('/api/crm/knowledge/run', requireAuth, requireSameOrigin, writeLimit
     }
   });
   res.json({ ok: true, message: 'Engine run started — receipts will appear as sources are processed.' });
+});
+
+router.post('/api/crm/knowledge/retry-errors', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  if (knowledgeRetryUsers.has(req.hubUser)) {
+    return res.status(409).json({ error: 'A knowledge retry batch is already running.' });
+  }
+  const { retryCrmKnowledgeErrors } = require('../lib/crm-knowledge-engine');
+  knowledgeRetryUsers.add(req.hubUser);
+  setImmediate(async () => {
+    try {
+      const out = await retryCrmKnowledgeErrors(req.hubUser, { limit: 8, linkBudget: 12 });
+      console.log(`[crm] knowledge error retry for ${req.hubUser}:`, out);
+    } catch (err) {
+      console.error('[crm] knowledge error retry failed:', err.message);
+    } finally {
+      knowledgeRetryUsers.delete(req.hubUser);
+    }
+  });
+  return res.json({ ok: true, message: 'Retrying up to 8 errored sources through the full knowledge pipeline.' });
 });
 
 // User feedback on atoms: dispute / mark stale / restore. The status change is

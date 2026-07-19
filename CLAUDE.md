@@ -44,6 +44,8 @@ raw source -> crm_source_triage -> crm_duplicate_review -> synthesis/provenance 
 
 The implementation lives in `lib/crm-knowledge-engine.js` and runs through the `crm_knowledge_engine` job. It reads evidence from email summaries, AgentMail records, meeting intake, documents, CRM facts, and Google Tasks; it writes model decision receipts to `knowledge_receipts`; it projects only high-confidence actions into Google Tasks.
 
+`/crm/knowledge` is the operator surface for this pipeline. Its health panel must derive current state from the latest receipt per source and CRM stage, classify skipped/warning/error outcomes separately, and exclude unrelated governance-agent receipts. Historical errors remain immutable audit evidence. Retry actions must be bounded and must send the original raw source back through the prompt-led pipeline; never delete receipts or write replacement atoms directly.
+
 Do not reintroduce old direct CRM write paths. Gmail, AgentMail, and meeting intake should store source evidence and let the CRM knowledge engine decide whether something is knowledge, a duplicate, a supersession, or an action. `CRM_LEGACY_DIRECT_WRITES=1` exists only as a temporary rollback switch, not as a design pattern.
 
 When changing CRM behavior, update `ARCHITECTURE.md`, this file, and any affected docs so future agents see the prompt operating system before they see the tables.
