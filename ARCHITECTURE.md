@@ -148,6 +148,8 @@ runCrmKnowledgeEngine({ user, limit })
 
 Scheduled via `crm_knowledge_engine` in `lib/job-queue.js`. The job reviews raw and intermediate source evidence, records prompt decisions in `knowledge_receipts`, merges provenance into existing atoms when the source confirms or supersedes known knowledge, and projects only high-confidence required actions into Google Tasks.
 
+`/crm/knowledge` reports the latest receipt per source for these four stages, separating processed, skipped, warning, and error outcomes. It does not treat governance-agent receipts or historical superseded errors as current CRM failures. The operator can retry genuine current errors in bounded batches; retries re-enter the same prompt pipeline, retain the old receipts as audit evidence, avoid duplicating compiled synthesis, and write a newer outcome receipt.
+
 Current CRM source kinds:
 
 | Source kind | Meaning |
@@ -170,7 +172,7 @@ Important rules:
 
 ### User feedback on atoms (6 Jul 2026)
 
-Atoms can be disputed, marked stale, or restored from every surface that renders them (contact/company/project pages and the atom browser at `/crm/knowledge?browse=1`). The action sets `knowledge_atoms.status` and writes a `knowledge_receipts` row (`stage='user_feedback'`, payload carries the reason and previous status) — corrections enter the same evidence stream the engine already consumes. Engine run recency, per-stage failure counts, and data-health badges (duplicate emails, orphaned facts, stale/disputed atoms) are compiled live from `knowledge_receipts`/`knowledge_atoms` on `/crm/knowledge`; a manual "Process sources now" trigger calls `runCrmKnowledgeEngine` directly.
+Atoms can be disputed, marked stale, or restored from every surface that renders them (contact/company/project pages and the atom browser at `/crm/knowledge?browse=1`). The action sets `knowledge_atoms.status` and writes a `knowledge_receipts` row (`stage='user_feedback'`, payload carries the reason and previous status) — corrections enter the same evidence stream the engine already consumes. Engine run recency, latest per-source stage outcomes, and data-health badges (duplicate emails, orphaned facts, stale/disputed atoms) are compiled live from `knowledge_receipts`/`knowledge_atoms` on `/crm/knowledge`; manual controls process new sources or retry a bounded batch of current errors through the same engine.
 
 ### Manual project declarations (6 Jul 2026)
 

@@ -35,6 +35,7 @@
       <% if (health.staleAtoms) { %><span class="crm-badge subtle"><%= health.staleAtoms %> stale atom<%= health.staleAtoms === 1 ? '' : 's' %></span><% } %>
       <% if (health.disputedAtoms) { %><span class="crm-badge subtle"><%= health.disputedAtoms %> disputed</span><% } %>
       <button class="btn btn-sm" id="engine-run-btn">Process sources now</button>
+      <% if (engineErrorSourceCount > 0) { %><button class="btn btn-sm btn-ghost" id="engine-retry-btn">Retry 8 errors</button><% } %>
       <span class="crm-muted" id="engine-run-msg" style="font-size:12px;"></span>
     </div>
   </div>
@@ -42,14 +43,34 @@
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;">
       <% for (const s of engineStages) { %>
         <span style="font-size:12px;" class="crm-muted">
-          <strong style="color:var(--crm-text,inherit);"><%= s.stage.replace(/_/g,' ') %></strong>
+          <strong style="color:var(--crm-text,inherit);"><%= s.label %></strong>
           · last <%= new Date(s.last_at * 1000).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Dublin' }) %>
-          · <%= s.total %> receipts<% if (s.failures > 0) { %> · <span style="color:var(--crm-danger,#c0392b);"><%= s.failures %> failed</span><% } %>
+          · <%= s.total %> sources
+          · <span style="color:var(--crm-success,#287a4b);"><%= s.processed %> processed</span>
+          <% if (s.skipped > 0) { %> · <%= s.skipped %> skipped<% } %>
+          <% if (s.warnings > 0) { %> · <span style="color:#b8860b;"><%= s.warnings %> warning<%= s.warnings === 1 ? '' : 's' %></span><% } %>
+          <% if (s.errors > 0) { %> · <span style="color:var(--crm-danger,#c0392b);"><%= s.errors %> error<%= s.errors === 1 ? '' : 's' %></span><% } %>
         </span>
       <% } %>
     </div>
   <% } else { %>
     <p class="crm-muted" style="font-size:12px;margin:10px 0 0;">No receipts yet — the engine has not processed any sources for this account.</p>
+  <% } %>
+  <% if (engineErrorSourceCount > 0) { %>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;font-size:12px;color:var(--crm-danger,#c0392b);"><%= engineErrorSourceCount %> source<%= engineErrorSourceCount === 1 ? '' : 's' %> currently have an errored stage</summary>
+      <div style="margin-top:8px;display:grid;gap:7px;">
+        <% for (const failure of engineErrors) { %>
+          <div style="font-size:12px;padding:7px 9px;border-left:3px solid var(--crm-danger,#c0392b);background:var(--crm-subtle-bg,rgba(0,0,0,.025));">
+            <strong><%= failure.stage.replace(/^crm_/,'').replace(/_/g,' ') %></strong>
+            · <%= failure.source_kind.replace(/_/g,' ') %>
+            · <%= new Date(failure.created_at * 1000).toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', timeZone:'Europe/Dublin' }) %>
+            <div class="crm-muted" style="margin-top:2px;"><%= failure.summary || 'No error detail recorded.' %></div>
+          </div>
+        <% } %>
+        <% if (engineErrorSourceCount > engineErrors.length) { %><div class="crm-muted" style="font-size:11px;">Showing the 12 most recent errored stages.</div><% } %>
+      </div>
+    </details>
   <% } %>
 </section>
 
@@ -185,6 +206,18 @@ document.getElementById('engine-run-btn').addEventListener('click', async e => {
     const r = await fetch('/api/crm/knowledge/run', { method: 'POST' });
     const j = await r.json();
     msg.textContent = j.ok ? j.message : (j.error || 'Error');
+  } catch (err) { msg.textContent = err.message; e.target.disabled = false; }
+});
+
+document.getElementById('engine-retry-btn')?.addEventListener('click', async e => {
+  const msg = document.getElementById('engine-run-msg');
+  e.target.disabled = true;
+  msg.textContent = 'Starting retry batch…';
+  try {
+    const r = await fetch('/api/crm/knowledge/retry-errors', { method: 'POST' });
+    const j = await r.json();
+    msg.textContent = j.ok ? `${j.message} Refresh in a minute to see the new outcomes.` : (j.error || 'Error');
+    if (!j.ok) e.target.disabled = false;
   } catch (err) { msg.textContent = err.message; e.target.disabled = false; }
 });
 
