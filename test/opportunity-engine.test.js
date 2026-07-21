@@ -14,15 +14,18 @@ const {
   buildOpportunitySuggestionEmail,
   compileOpportunitySuggestionAtom,
   createSuggestion,
+  dismissSuggestionById,
   isActionableOpportunitySignal,
   isAdmissibleOpportunitySuggestion,
   listSuggestions,
+  notThisTimeSuggestionById,
   relevanceWindowEnd,
   retireExpiredOpportunityKnowledge,
 } = require('../lib/suggestion-engine');
 const {
   formatSuggestionLessons,
   learnFromWrongSuggestion,
+  suggestionOutcomeSummary,
 } = require('../lib/suggestion-learning');
 const { appraisePromotionEmails } = require('../lib/email-processor');
 const { fetchNewPromotionEmails } = require('../lib/gmail');
@@ -156,6 +159,8 @@ test('standalone CRM email contains only opportunity suggestions', () => {
   assert.equal(email.subject, 'Suggestion from CRM');
   assert.match(email.text, /Scottish shop offer/);
   assert.doesNotMatch(email.text, /Content idea/);
+  assert.match(email.text, /Review in the Hub:/);
+  assert.match(email.text, /Not this time/);
 });
 
 test('suggestion evidence remains valid JSON when context exceeds 4,000 characters', () => {
@@ -189,6 +194,45 @@ test('suggestion history retains every status and never reuses a number', () => 
     INSERT INTO suggestions (id, user, domain, title, body, short_code)
     VALUES (?, ?, 'contact', 'Duplicate code', 'Must fail.', ?)
   `).run(uuid(), USER, second.short_code), /UNIQUE constraint failed/);
+});
+
+test('deliberate outcomes record ordered implicit scores and calibrate future synthesis', async () => {
+  const make = suffix => createSuggestion(USER, {
+    domain: 'travel',
+    title: `Scored suggestion ${suffix}`,
+    body: `Scored outcome fixture ${suffix}.`,
+    dedupKey: `scored-${suffix}-${uuid()}`,
+  });
+  const accepted = make('task');
+  const later = make('later');
+  const dismissed = make('dismiss');
+
+  const acceptedResult = await require('../lib/suggestion-engine').acceptSuggestionById(USER, accepted.id, {
+    createTaskFn: async () => ({ id: 'scored-task' }),
+    promote: async () => null,
+  });
+  const laterResult = notThisTimeSuggestionById(USER, later.id);
+  const dismissedResult = dismissSuggestionById(USER, dismissed.id);
+
+  assert.equal(acceptedResult.ok, true);
+  assert.equal(laterResult.ok, true);
+  assert.equal(dismissedResult.ok, true);
+  assert.equal(dismissSuggestionById(USER, later.id).ok, false);
+  const feedback = db.hub().prepare(`
+    SELECT suggestion_id, outcome, quality_score
+    FROM suggestion_feedback
+    WHERE suggestion_id IN (?, ?, ?)
+    ORDER BY quality_score DESC
+  `).all(accepted.id, later.id, dismissed.id);
+  assert.deepEqual(feedback.map(row => [row.outcome, row.quality_score]), [
+    ['accepted', 100],
+    ['not_this_time', 60],
+    ['dismissed', 25],
+  ]);
+  const summary = suggestionOutcomeSummary(USER, 'travel');
+  assert.ok(summary.count >= 3);
+  assert.match(formatSuggestionLessons(USER, 'travel'), /Not this time: 1 at 60\/100/);
+  assert.match(formatSuggestionLessons(USER, 'travel'), /Scored suggestion task/);
 });
 
 test('Wrong feedback records evidence, learns a rule, and retires compiled relevance', async () => {
@@ -225,6 +269,14 @@ test('Wrong feedback records evidence, learns a rule, and retires compiled relev
   const history = listSuggestions(USER).find(item => item.id === suggestion.id);
   assert.match(history.feedback_reason, /Travel alone/);
   assert.match(history.learned_rule, /unrelated product offer/);
+  const feedback = db.hub().prepare(`
+    SELECT outcome, quality_score FROM suggestion_feedback WHERE suggestion_id = ?
+  `).get(suggestion.id);
+  assert.deepEqual(feedback, { outcome: 'wrong', quality_score: 0 });
+  await assert.rejects(
+    learnFromWrongSuggestion(USER, suggestion.id, 'Trying to score the same suggestion twice.'),
+    /Suggestion not found/,
+  );
 });
 
 test('an accepted opportunity can be compiled into a source-backed atom', async () => {

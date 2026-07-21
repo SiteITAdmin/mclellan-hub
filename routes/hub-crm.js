@@ -1825,6 +1825,17 @@ router.post('/api/suggestions/:id/dismiss', requireAuth, requireSameOrigin, writ
   }
 });
 
+router.post('/api/suggestions/:id/not-this-time', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const { notThisTimeSuggestionById } = require('../lib/suggestion-engine');
+    const result = notThisTimeSuggestionById(req.hubUser, req.params.id);
+    res.status(result.ok ? 200 : 404).json(result);
+  } catch (err) {
+    console.error('[suggestions] not-this-time error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/suggestions/contact-reasons/run', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   try {
     const { runContactSuggester } = require('../lib/suggestion-engine');

@@ -95,6 +95,7 @@ You're receiving this because you set up a Price Alert for this route.`,
   check('dismiss closes suggestion', () => {
     assert(dismissed.ok);
     assert.strictEqual(hub.prepare('SELECT status FROM suggestions WHERE id = ?').get(s.id).status, 'dismissed');
+    assert.strictEqual(hub.prepare('SELECT quality_score FROM suggestion_feedback WHERE suggestion_id = ?').get(s.id).quality_score, 25);
   });
 
   console.log('4. Standalone email formatting');
@@ -106,6 +107,7 @@ You're receiving this because you set up a Price Alert for this route.`,
     const email = engine.buildOpportunitySuggestionEmail([fresh]);
     assert.strictEqual(email.subject, 'Suggestion from CRM');
     assert(email.text.includes(`Suggestion #${fresh.short_code}`));
+    assert(email.text.includes('Not this time'));
   });
 
   cleanup();
