@@ -58,7 +58,7 @@ Subjects matching `SILENT_SUBJECT_RE` (email-processor.js:21) are dropped before
 ```js
 // lib/google-chat.js
 buildReminderCard(reminder)     // escalating reminder with action buttons
-buildSuggestionCard(suggestion) // accept/dismiss/why buttons
+buildSuggestionCard(suggestion) // accept/dismiss/why buttons (web review also offers Not this time and Wrong)
 ```
 Auth: service account at `config/google-service-account.json`. Posts to Douglas/Nakai's spaces via Hermes bot.
 
@@ -392,7 +392,9 @@ Route prefix: `/admin` — see `routes/hub-admin.js`.
 | `synthesis_state` | Checkpoints for synthesis/knowledge jobs |
 | `inbound_email_records` | AgentMail source messages and processing state |
 | `reminders` | Escalating reminders with fire count + status |
-| `suggestions` | Action suggestions (domain, title, body, status) |
+| `suggestions` | Compiled action-suggestion candidates (domain, title, body, status) |
+| `suggestion_feedback` | Scored human outcomes used to calibrate later suggestion synthesis |
+| `suggestion_lessons` | Explicit reusable rules derived only from explained Wrong outcomes |
 | `messages` | Chat history per user/project |
 | `contacts` / `companies` | CRM entities |
 | `crm_facts` | Curated facts (source for atom derivation) |

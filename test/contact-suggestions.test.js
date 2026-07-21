@@ -21,6 +21,7 @@ const SERVICE_ID = uuid();
 function cleanup() {
   const hub = db.hub();
   hub.prepare('DELETE FROM knowledge_atoms WHERE user = ?').run(USER);
+  hub.prepare('DELETE FROM suggestion_feedback WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM suggestions WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM google_tasks WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM contacts WHERE user = ?').run(USER);
@@ -106,6 +107,10 @@ test('contact reasons stay candidates until acceptance, then create a linked tas
   assert.equal(accepted.ok, true);
   assert.equal(taskInput.contactId, ELIGIBLE_ID);
   assert.equal(db.hub().prepare('SELECT status FROM suggestions WHERE id = ?').get(suggestion.id).status, 'accepted');
+  assert.deepEqual(
+    db.hub().prepare('SELECT outcome, quality_score FROM suggestion_feedback WHERE suggestion_id = ?').get(suggestion.id),
+    { outcome: 'accepted', quality_score: 100 },
+  );
   const atom = db.hub().prepare(`
     SELECT * FROM knowledge_atoms
     WHERE user = ? AND derived_by = 'suggestion_contact_accepted'

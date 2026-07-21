@@ -6,6 +6,9 @@
   .suggestion-card[data-domain="opportunity"] { border-left-color:#7c3aed; }
   .suggestion-card[data-domain="travel"] { border-left-color:#0284c7; }
   .suggestion-card[data-domain="contact"] { border-left-color:#059669; }
+  .suggestion-card.is-accepted { background:color-mix(in srgb, var(--crm-success,#16865b) 8%, var(--crm-card,#fff)); border-left-color:var(--crm-success,#16865b); }
+  .suggestion-card.is-not-this-time { background:color-mix(in srgb, #d97706 7%, var(--crm-card,#fff)); }
+  .suggestion-card.is-dismissed { opacity:.86; }
   .suggestion-card.is-wrong { opacity:.76; }
   .suggestion-card-head { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
   .suggestion-title { margin:4px 0 8px; font-size:1.08rem; }
@@ -24,7 +27,7 @@
   <div>
     <p class="crm-eyebrow">Action radar &amp; review queue</p>
     <h1>Suggestions you can act on</h1>
-    <p>Accept creates a task. Dismiss closes the suggestion. Wrong stores your explanation and teaches that suggestion stream. Nothing becomes knowledge before you accept it.</p>
+    <p>Create task is the strongest positive signal. Not this time says the idea was sound but the timing or scope missed. Dismiss is a weaker signal; Wrong stores your explanation and teaches a hard correction. Nothing becomes knowledge before you create a task.</p>
   </div>
   <div>
     <button type="button" class="btn" id="generate-contact-reasons" onclick="generateContactReasons()">Suggest reasons to contact people</button>
@@ -34,7 +37,7 @@
 
 <section class="section-card">
   <div class="suggestion-toolbar" aria-label="Suggestion filters">
-    <% for (const [key, label] of [['all','All'],['open','Open'],['wrong','Wrong'],['expired','Expired'],['accepted','Accepted'],['dismissed','Dismissed']]) { %>
+    <% for (const [key, label] of [['all','All'],['open','Open'],['accepted','Task created'],['not_this_time','Not this time'],['dismissed','Dismissed'],['wrong','Wrong'],['expired','Expired']]) { %>
       <% if (key === 'all' || counts[key]) { %>
         <button type="button" class="btn btn-sm <%= key === 'all' ? '' : 'btn-ghost' %> suggestion-filter" data-status="<%= key %>">
           <%= label %> (<%= counts[key] || 0 %>)
@@ -56,14 +59,14 @@
     <div class="section-card" style="margin-top:14px;"><p class="crm-muted">No action suggestions yet. Generate contact reasons above, or wait for the next opportunity/travel run.</p></div>
   <% } %>
   <% for (const s of suggestions) { %>
-    <article class="section-card suggestion-card <%= s.status === 'wrong' ? 'is-wrong' : '' %>"
+    <article class="section-card suggestion-card <%= s.status === 'accepted' ? 'is-accepted' : s.status === 'not_this_time' ? 'is-not-this-time' : s.status === 'dismissed' ? 'is-dismissed' : s.status === 'wrong' ? 'is-wrong' : '' %>"
              data-status="<%= s.status %>" data-domain="<%= s.domain %>">
       <div class="suggestion-card-head">
         <div>
           <div class="crm-task-meta">
             <span class="suggestion-number">Suggestion #<%= s.short_code || '—' %></span>
             <span class="crm-badge"><%= s.domain === 'contact' ? 'person' : s.domain %></span>
-            <span class="crm-badge subtle"><%= s.status %></span>
+            <span class="crm-badge subtle"><%= s.status === 'accepted' ? 'task created' : s.status === 'not_this_time' ? 'not this time' : s.status %></span>
             <% if (s.domain === 'contact' && s.status === 'open') { %><span class="crm-badge subtle">candidate · not knowledge</span><% } %>
             <span class="crm-muted"><%= new Date(s.created_at * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></span>
           </div>
@@ -71,10 +74,17 @@
         </div>
         <div class="suggestion-actions">
           <% if (s.status === 'open') { %>
-            <button type="button" class="btn btn-sm" onclick="acceptSuggestion('<%= s.id %>')">Accept · create task</button>
+            <button type="button" class="btn btn-sm" onclick="acceptSuggestion('<%= s.id %>')">Create task</button>
+            <button type="button" class="btn btn-sm btn-ghost" onclick="notThisTimeSuggestion('<%= s.id %>')">Not this time</button>
             <button type="button" class="btn btn-sm btn-ghost" onclick="dismissSuggestion('<%= s.id %>')">Dismiss</button>
             <% if (s.evidenceParsed) { %><button type="button" class="btn btn-sm btn-ghost" onclick="showSuggestionWhy('<%= s.id %>')">Why?</button><% } %>
             <button type="button" class="btn btn-sm btn-ghost" style="color:var(--crm-danger,#c0392b);" onclick="markSuggestionWrong('<%= s.id %>')">Wrong</button>
+          <% } else if (s.status === 'accepted') { %>
+            <span class="crm-badge" style="background:#dcfce7;color:#166534;" title="Strongest positive learning signal: 100/100">Task created · strong positive signal</span>
+          <% } else if (s.status === 'not_this_time') { %>
+            <span class="crm-badge" style="background:#fef3c7;color:#92400e;" title="Positive timing/scope signal: 60/100">Good idea · not this time</span>
+          <% } else if (s.status === 'dismissed') { %>
+            <span class="crm-badge subtle" title="Weak implicit learning signal: 25/100">Dismissed · signal recorded</span>
           <% } else if (s.status === 'wrong') { %>
             <span class="crm-badge" style="background:#fee2e2;color:#991b1b;">Wrong · learned</span>
           <% } %>
@@ -152,6 +162,15 @@ async function dismissSuggestion(id) {
     location.reload();
   } catch (err) {
     alert('Could not dismiss this suggestion: ' + err.message);
+  }
+}
+
+async function notThisTimeSuggestion(id) {
+  try {
+    await postSuggestionAction(id, 'not-this-time');
+    location.reload();
+  } catch (err) {
+    alert('Could not close this as Not this time: ' + err.message);
   }
 }
 

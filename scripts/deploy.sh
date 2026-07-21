@@ -4,7 +4,7 @@ set -euo pipefail
 
 VPS_IP="${1:-178.104.235.142}"
 VPS_USER="root"
-APP_DIR="/Users/dm_mini/Documents/mclellan hub"
+APP_DIR="${MCLELLAN_APP_DIR:-/Users/dm_mini/Documents/mclellan hub}"
 SSH_CONTROL="/tmp/mclellan-deploy-$$"
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o "ControlPath=${SSH_CONTROL}" -o ControlPersist=120)
 
