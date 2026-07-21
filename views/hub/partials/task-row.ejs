@@ -4,7 +4,9 @@
      data-task-due="<%= t.due ? String(t.due).slice(0, 10) : '' %>"
      data-task-overdue="<%= t.due && t.status === 'needsAction' && !t.deleted_at && String(t.due).slice(0, 10) < _todayIso ? '1' : '0' %>"
      data-task-priority="<%= t.priority || '' %>"
-     data-task-effort="<%= t.effort_minutes || '' %>">
+     data-task-effort="<%= t.effort_minutes || '' %>"
+     data-task-project="<%= t.project_slug || '' %>"
+     data-task-project-name="<%= (t.project_name || t.project_slug || '').toLowerCase() %>">
   <div class="crm-task-main">
     <a class="crm-task-title" href="/crm/tasks/<%= t.id %>"><%= t.title %></a>
     <% const notesLine = t.notes_preview !== undefined ? t.notes_preview : (t.notes ? t.notes.split('\n')[0].slice(0, 120) : ''); %>
@@ -27,7 +29,7 @@
         <a class="crm-badge subtle" href="/crm/company/<%= t.company_id %>"><%= t.company_name %></a>
       <% } %>
       <% if (t.project_slug) { %>
-        <a class="crm-badge subtle" href="/c/<%= t.project_slug %>"><%= t.project_slug %></a>
+        <a class="crm-badge subtle" href="/c/<%= t.project_slug %>"><%= t.project_name || t.project_slug %></a>
       <% } %>
       <% if (!t.contact_name && !t.company_name && !t.project_slug && t.status === 'needsAction' && !t.deleted_at) { %>
         <a class="crm-badge subtle" href="/crm/tasks/<%= t.id %>" style="opacity:.7;" title="No person, company, or project linked — open to add context">+ add context</a>

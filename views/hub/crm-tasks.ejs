@@ -78,10 +78,16 @@
       <% for (const [key, label] of [['all','All'],['overdue','Overdue'],['due-soon','Due soon'],['high','High priority'],['unsized','No due/size']]) { %>
         <button class="btn btn-sm btn-ghost task-filter" data-filter="<%= key %>" <%= key === 'all' ? 'style="font-weight:600;"' : '' %>><%= label %></button>
       <% } %>
+      <select id="task-filter-project" style="font-size:12px;padding:3px 6px;" title="Filter by project">
+        <option value="">Project: all</option>
+        <option value="__none__">No project</option>
+        <% for (const p of projects) { %><option value="<%= p.slug %>"><%= p.name %></option><% } %>
+      </select>
       <select id="task-sort" style="font-size:12px;padding:3px 6px;">
         <option value="due">Sort: due date</option>
         <option value="priority">Sort: priority</option>
         <option value="effort">Sort: effort</option>
+        <option value="project">Sort: project</option>
       </select>
     </div>
   </div>
@@ -143,29 +149,55 @@ async function taskAction(id, action) {
 // Client-side filter + sort over the open list, driven by task-row data attrs
 const openSection = document.querySelector('.task-filter')?.closest('.section-card');
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2, '': 3 };
+let activeFilter = 'all';
+const projectFilterEl = document.getElementById('task-filter-project');
+const openCountEl = openSection?.querySelector('h2');
+
+function applyTaskFilters() {
+  if (!openSection) return;
+  const project = projectFilterEl?.value || '';
+  const soonCutoff = new Date(Date.now() + 7 * 86400000).toLocaleDateString('sv-SE');
+  let visible = 0;
+  openSection.querySelectorAll('.crm-task-row[data-task-status=open]').forEach(row => {
+    const due = row.dataset.taskDue;
+    const overdue = row.dataset.taskOverdue === '1';
+    let show = true;
+    if (activeFilter === 'overdue') show = overdue;
+    else if (activeFilter === 'due-soon') show = Boolean(due) && !overdue && due <= soonCutoff;
+    else if (activeFilter === 'high') show = row.dataset.taskPriority === 'high';
+    else if (activeFilter === 'unsized') show = !due || !row.dataset.taskEffort;
+    if (show && project === '__none__') show = !row.dataset.taskProject;
+    else if (show && project) show = row.dataset.taskProject === project;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  if (openCountEl) {
+    const total = openSection.querySelectorAll('.crm-task-row[data-task-status=open]').length;
+    openCountEl.textContent = visible === total ? `Open (${total})` : `Open (${visible} of ${total})`;
+  }
+}
+
 document.querySelectorAll('.task-filter').forEach(btn => {
   btn.addEventListener('click', () => {
-    const mode = btn.dataset.filter;
+    activeFilter = btn.dataset.filter;
     document.querySelectorAll('.task-filter').forEach(b => b.style.fontWeight = b === btn ? '600' : '');
-    const soonCutoff = new Date(Date.now() + 7 * 86400000).toLocaleDateString('sv-SE');
-    openSection.querySelectorAll('.crm-task-row[data-task-status=open]').forEach(row => {
-      const due = row.dataset.taskDue;
-      const overdue = row.dataset.taskOverdue === '1';
-      let show = true;
-      if (mode === 'overdue') show = overdue;
-      else if (mode === 'due-soon') show = Boolean(due) && !overdue && due <= soonCutoff;
-      else if (mode === 'high') show = row.dataset.taskPriority === 'high';
-      else if (mode === 'unsized') show = !due || !row.dataset.taskEffort;
-      row.style.display = show ? '' : 'none';
-    });
+    applyTaskFilters();
   });
 });
+projectFilterEl?.addEventListener('change', applyTaskFilters);
+
 document.getElementById('task-sort')?.addEventListener('change', e => {
   const mode = e.target.value;
   const rows = [...openSection.querySelectorAll('.crm-task-row[data-task-status=open]')];
   rows.sort((a, b) => {
     if (mode === 'priority') return (PRIORITY_RANK[a.dataset.taskPriority] ?? 3) - (PRIORITY_RANK[b.dataset.taskPriority] ?? 3);
     if (mode === 'effort') return (parseInt(a.dataset.taskEffort, 10) || 9999) - (parseInt(b.dataset.taskEffort, 10) || 9999);
+    if (mode === 'project') {
+      const an = a.dataset.taskProjectName || 'zzz';
+      const bn = b.dataset.taskProjectName || 'zzz';
+      if (an !== bn) return an < bn ? -1 : 1;
+      return (a.dataset.taskDue || '9999') < (b.dataset.taskDue || '9999') ? -1 : 1;
+    }
     return (a.dataset.taskDue || '9999') < (b.dataset.taskDue || '9999') ? -1 : 1;
   });
   for (const row of rows) openSection.appendChild(row);
