@@ -62,6 +62,8 @@ buildSuggestionCard(suggestion) // accept/dismiss/why buttons (web review also o
 ```
 Auth: service account at `config/google-service-account.json`. Posts to Douglas/Nakai's spaces via Hermes bot.
 
+Opportunity suggestions follow `source signal → salience synthesis → stable source-ID gate → semantic duplicate review against authoritative task/suggestion history → candidate/email`. Scored outcomes teach transferable relevance qualities; they are terminal history and never permission to repeat the accepted action.
+
 ### Reminders (escalation ladder)
 ```js
 // lib/reminders.js
