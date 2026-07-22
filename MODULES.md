@@ -267,6 +267,8 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Feedback calibration:** Every deliberate outcome is stored in `suggestion_feedback` as an implicit quality signal: task created 100, Not this time 60, Dismiss 25, Wrong 0. Per-stream outcome statistics and recent scored titles are supplied to later synthesis runs. These implicit choices calibrate selection but do not become facts or hard rules. Only Wrong invokes the LLM rule learner and requires an explanation.
 
+**Duplicate boundary:** A scored example is terminal history, not a template to repeat. Opportunity signals are admitted only once using their stable source IDs, regardless of title wording or relevance-window formatting. New proposals then pass a separate semantic duplicate review against open/completed/deleted/Wrong task history and prior suggestion decisions; if that review fails or is uncertain, the proposal does not surface.
+
 **Knowledge boundary:** A generated suggestion is a candidate cache, not knowledge. It may contain a clearly labelled model hypothesis when the Hub evidence is thin. No suggestion-derived atom is active before Douglas accepts. Acceptance may compile the accepted rationale as `accepted_outreach_reason`/`relevant_offer` with provenance back to the suggestion; Wrong retires any legacy compiled suggestion atom.
 
 **Owns:** `suggestions`, `suggestion_feedback`, `suggestion_lessons`, and `travel_price_points` tables. Skyscanner price-alert emails are LLM-extracted into price points by the email processor before generic skip rules.
@@ -278,6 +280,7 @@ These are the tools the system runs on. They are not features — they are the f
 - Contact suggestions cite Hub source keys or explicitly say that the angle is exploratory
 - Every suggestion's evidence is inspectable via Why
 - Every deliberate review outcome has exactly one scored feedback event
+- No opportunity source signal appears in more than one open suggestion, and no suggestion repeats an existing task action
 - No active atom with `derived_by='suggestion_opportunity'` or `suggestion_contact_accepted` exists for an unaccepted suggestion
 
 ---

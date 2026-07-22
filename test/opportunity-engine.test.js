@@ -15,12 +15,17 @@ const {
   compileOpportunitySuggestionAtom,
   createSuggestion,
   dismissSuggestionById,
+  filterOpportunityDuplicateDecisions,
   isActionableOpportunitySignal,
   isAdmissibleOpportunitySuggestion,
   listSuggestions,
   notThisTimeSuggestionById,
+  opportunitySignalIds,
   relevanceWindowEnd,
+  retireRepeatedOpportunitySuggestions,
   retireExpiredOpportunityKnowledge,
+  reviewOpportunityDuplicates,
+  unseenOpportunitySignals,
 } = require('../lib/suggestion-engine');
 const {
   formatSuggestionLessons,
@@ -40,6 +45,7 @@ function cleanup() {
   hub.prepare('DELETE FROM suggestion_feedback WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM suggestion_lessons WHERE user = ?').run(USER);
   hub.prepare('DELETE FROM suggestions WHERE user = ?').run(USER);
+  hub.prepare('DELETE FROM google_tasks WHERE user = ?').run(USER);
   hub.prepare("DELETE FROM crm_context WHERE user = ? AND key = '_gmail_promotions_last_check_ts'").run(USER);
   hub.prepare("DELETE FROM processing_failures WHERE source = 'gmail_promotion' AND external_id LIKE 'promo-test-%'").run();
 }
@@ -233,6 +239,70 @@ test('deliberate outcomes record ordered implicit scores and calibrate future sy
   assert.ok(summary.count >= 3);
   assert.match(formatSuggestionLessons(USER, 'travel'), /Not this time: 1 at 60\/100/);
   assert.match(formatSuggestionLessons(USER, 'travel'), /Scored suggestion task/);
+});
+
+test('a source signal can surface only once even if the model changes its wording or window', () => {
+  const signalId = uuid();
+  const first = createSuggestion(USER, {
+    domain: 'opportunity',
+    title: 'Book airport priority for the early flight',
+    body: 'First wording.',
+    evidence: { signals: [{ id: signalId }], relevanceWindow: '2099-01-01' },
+    dedupKey: `legacy-windowed-${uuid()}`,
+  });
+  db.hub().prepare("UPDATE suggestions SET status = 'accepted' WHERE id = ?").run(first.id);
+  const repeat = createSuggestion(USER, {
+    domain: 'opportunity',
+    title: 'Buy fast-track security for the morning departure',
+    body: 'Paraphrased repeat with a shifted window.',
+    evidence: { signals: [{ id: signalId }], relevanceWindow: '2099-01-02..2099-01-03' },
+    dedupKey: `another-windowed-${uuid()}`,
+  });
+
+  assert.deepEqual(opportunitySignalIds(repeat), [signalId]);
+  assert.deepEqual(unseenOpportunitySignals(USER, [{ id: signalId }, { id: 'genuinely-new' }]), [
+    { id: 'genuinely-new' },
+  ]);
+  assert.equal(retireRepeatedOpportunitySuggestions(USER), 1);
+  assert.equal(db.hub().prepare('SELECT status FROM suggestions WHERE id = ?').get(repeat.id).status, 'retired');
+});
+
+test('duplicate review fails closed unless a candidate is confidently kept', () => {
+  const candidates = [{ title: 'repeat' }, { title: 'new' }, { title: 'unclear' }];
+  const kept = filterOpportunityDuplicateDecisions(candidates, [
+    { candidate_index: 0, decision: 'already_handled', confidence: 0.99 },
+    { candidate_index: 1, decision: 'keep', confidence: 0.91 },
+    { candidate_index: 2, decision: 'keep', confidence: 0.4 },
+  ]);
+  assert.deepEqual(kept, [{ title: 'new' }]);
+});
+
+test('duplicate review receives authoritative open-task evidence and blocks the repeat', async () => {
+  const taskId = uuid();
+  db.hub().prepare(`
+    INSERT INTO google_tasks
+      (id, user, google_task_id, task_list_id, title, notes, status, source)
+    VALUES (?, ?, ?, '@default', ?, ?, 'needsAction', 'suggestion')
+  `).run(
+    taskId, USER, `google-${uuid()}`,
+    'Book Dublin Airport Fast Track for the Scotland flight',
+    'Use the €5.99 offer for the early August departure.',
+  );
+  let reviewPrompt = '';
+  const kept = await reviewOpportunityDuplicates(USER, [{
+    title: 'Buy airport priority security for the early Scotland departure',
+    body: 'The Fast Track offer closes soon.',
+  }], { review: async (_user, _feature, prompt) => {
+    reviewPrompt = prompt;
+    return { decisions: [{
+      candidate_index: 0,
+      decision: 'already_handled',
+      matched_task_id: taskId,
+      confidence: 0.99,
+    }] };
+  } });
+  assert.match(reviewPrompt, /Book Dublin Airport Fast Track/);
+  assert.equal(kept.length, 0);
 });
 
 test('Wrong feedback records evidence, learns a rule, and retires compiled relevance', async () => {
