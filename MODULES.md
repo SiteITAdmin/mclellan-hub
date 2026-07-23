@@ -421,7 +421,7 @@ These are the tools the system runs on. They are not features — they are the f
 **Drivers (`CONTENT_RESEARCH_DRIVER`):**
 - *(empty)* — web search on the Hub host (safe default everywhere).
 - `grok` — run Grok+last30days **on this host** (needs Python 3.12+ engine at `LAST30DAYS_ENGINE_PATH`, default `~/.claude/skills/last30days`). Use on the Mac mini for local Hub, or anywhere the engine is installed.
-- `mac` — **production VPS path.** Hub only enqueues rows in `content_research_jobs`; the always-on Mac mini runs `scripts/content-research-worker.js` (launchd every 180s), claims jobs via `POST /api/content-research/worker/*` with `CONTENT_RESEARCH_WORKER_SECRET`, runs Grok+last30days locally, and POSTs suggestions back. Stale claims re-queue; jobs older than `CONTENT_RESEARCH_FALLBACK_AFTER_SEC` (default 2h) get deliberate web-search fallback.
+- `mac` — **production VPS path.** Hub only enqueues rows in `content_research_jobs`; the always-on Mac mini runs `scripts/content-research-worker.js` (launchd every 180s), claims jobs via `POST /api/content-research/worker/*` with `CONTENT_RESEARCH_WORKER_SECRET`, runs the locally authenticated Grok CLI plus last30days, and POSTs suggestions back. It does not use OpenRouter for this flow. Stale claims re-queue; jobs older than `CONTENT_RESEARCH_FALLBACK_AFTER_SEC` (default 2h) get deliberate web-search fallback.
 
 **Files:** `lib/content-research.js`, `lib/content-research-core.js`, `lib/content-research-jobs.js`, `lib/grok-research-driver.js`, `scripts/content-research-worker.js`, `scripts/install-content-research-worker.sh`, `scripts/launchd/com.mclellan.hub.content-research-worker.plist`.
 

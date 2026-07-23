@@ -35,7 +35,6 @@ fi
 
 printf '[%s] Regenerating local token-burn data...\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 cd "$DASHBOARD_DIR"
-"$NODE_BIN" scripts/generate-daily-burn.mjs
 "$NODE_BIN" scripts/sync-openrouter-activity.mjs || {
   status=$?
   if [ "$status" -eq 2 ]; then
@@ -44,6 +43,7 @@ cd "$DASHBOARD_DIR"
     exit "$status"
   fi
 }
+"$NODE_BIN" scripts/generate-daily-burn.mjs
 cd "$APP_DIR"
 "$NODE_BIN" scripts/audit-token-burn.js || true
 
@@ -53,6 +53,7 @@ rsync -az -e "ssh ${SSH_OPTS[*]}" \
   "$DASHBOARD_DIR/deploy-data/daily-burn.sample.json" \
   "$DASHBOARD_DIR/deploy-data/openrouter-activity.summary.json" \
   "$DASHBOARD_DIR/deploy-data/openrouter-live.summary.json" \
+  "$DASHBOARD_DIR/deploy-data/openrouter-live.daily.json" \
   "${VPS_USER}@${VPS_IP}:${REMOTE_DIR}/"
 
 printf '[%s] Done. The Hub reads these files on request; no service restart needed.\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"

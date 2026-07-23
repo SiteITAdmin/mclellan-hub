@@ -6,8 +6,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
 const hubRoot = join(projectRoot, "..");
 const outputPath = join(projectRoot, "data", "openrouter-live.summary.json");
+const dailyOutputPath = join(projectRoot, "data", "openrouter-live.daily.json");
 const deployDataDir = join(projectRoot, "deploy-data");
 const deployOutputPath = join(deployDataDir, "openrouter-live.summary.json");
+const deployDailyOutputPath = join(deployDataDir, "openrouter-live.daily.json");
 
 loadDotEnv(join(hubRoot, ".env"));
 
@@ -33,6 +35,14 @@ const total = await queryAnalytics({ metrics });
 const byApp = await queryAnalytics({ dimensions: ["app"], metrics, limit: 5000 });
 const byModel = await queryAnalytics({ dimensions: ["model"], metrics, limit: 5000 });
 const byProvider = await queryAnalytics({ dimensions: ["provider"], metrics, limit: 5000, optional: true });
+const dailyStart = new Date(end.getTime() - 30 * 86400000);
+const daily = await queryAnalytics({
+  start: dailyStart,
+  end,
+  granularity: "day",
+  metrics,
+  limit: 100,
+});
 
 const row = total[0] || {};
 const summary = {
@@ -51,29 +61,55 @@ const summary = {
   by_model: normalizeRows(byModel, "model"),
   by_provider: normalizeRows(byProvider, "provider"),
 };
+const dailySummary = {
+  source: "openrouter_management_api",
+  fetched_at: summary.fetched_at,
+  time_range: {
+    label: "Latest 31 days",
+    start: dailyStart.toISOString(),
+    end: end.toISOString(),
+  },
+  days: daily
+    .map((row) => ({
+      date: String(row.date__day || row.date || "").slice(0, 10),
+      tokens: Number(row.tokens_total || 0),
+      tokens_in: Number(row.tokens_prompt || 0),
+      tokens_out: Number(row.tokens_completion || 0),
+      tokens_reasoning: Number(row.reasoning_tokens || 0),
+      calls: Number(row.request_count || 0),
+      cost_usd: Number(row.total_usage || 0),
+      cache_hit_rate: Number(row.cache_hit_rate || 0),
+    }))
+    .filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(row.date))
+    .sort((a, b) => a.date.localeCompare(b.date)),
+};
 
 mkdirSync(join(projectRoot, "data"), { recursive: true });
 mkdirSync(deployDataDir, { recursive: true });
 const json = `${JSON.stringify(summary, null, 2)}\n`;
+const dailyJson = `${JSON.stringify(dailySummary, null, 2)}\n`;
 writeFileSync(outputPath, json);
 writeFileSync(deployOutputPath, json);
+writeFileSync(dailyOutputPath, dailyJson);
+writeFileSync(deployDailyOutputPath, dailyJson);
 
 console.log(`Wrote live OpenRouter summary to ${outputPath}`);
+console.log(`Wrote ${dailySummary.days.length} daily OpenRouter rows to ${dailyOutputPath}`);
 console.log(`Live OpenRouter: ${summary.requests} requests, ${summary.tokens} tokens, $${summary.cost_usd.toFixed(4)}`);
 
-async function queryAnalytics({ dimensions, metrics, orderBy, limit = 1000, optional = false }) {
+async function queryAnalytics({ dimensions, metrics, orderBy, limit = 1000, optional = false, start: queryStart = start, end: queryEnd = end, granularity }) {
   const body = {
     time_range: {
-      start: start.toISOString(),
-      end: end.toISOString(),
+      start: queryStart.toISOString(),
+      end: queryEnd.toISOString(),
     },
     metrics,
     limit,
   };
   if (dimensions) {
     body.dimensions = dimensions;
-    body.granularity = "day";
   }
+  if (granularity || dimensions) body.granularity = granularity || "day";
   if (orderBy) body.order_by = { field: orderBy, direction: "desc" };
 
   const response = await fetch("https://openrouter.ai/api/v1/analytics/query", {
