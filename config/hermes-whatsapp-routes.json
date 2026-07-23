@@ -7,9 +7,9 @@
         "chat_type": "group",
         "chat_names": ["Dad Information Group"]
       },
-      "project_slug": "alister",
-      "project_name": "Alister",
-      "note": "Douglas explicitly routes this family group to the Alister project.",
+      "project_slug": "dad",
+      "project_name": "Dad",
+      "note": "Douglas explicitly routes this family group to the Dad project.",
       "participant_contacts": [
         { "contact_name": "Catriona McLellan", "sender_names": ["Catriona McLellan", "Catriona"] },
         { "contact_name": "Iain Clark", "sender_names": ["Iain Clark", "Iain"] },
@@ -25,9 +25,9 @@
         "chat_names": ["Catriona McLellan", "Catriona"]
       },
       "contact_name": "Catriona McLellan",
-      "project_slug": "alister",
-      "project_name": "Alister",
-      "note": "Douglas explicitly routes this family conversation to Catriona and the Alister project."
+      "project_slug": "dad",
+      "project_name": "Dad",
+      "note": "Douglas explicitly routes this family conversation to Catriona and the Dad project."
     },
     {
       "id": "iain-clark",
@@ -36,9 +36,9 @@
         "chat_names": ["Iain Clark", "Iain"]
       },
       "contact_name": "Iain Clark",
-      "project_slug": "alister",
-      "project_name": "Alister",
-      "note": "Douglas explicitly routes this family conversation to Iain Clark and the Alister project."
+      "project_slug": "dad",
+      "project_name": "Dad",
+      "note": "Douglas explicitly routes this family conversation to Iain Clark and the Dad project."
     },
     {
       "id": "liz-walker",
@@ -47,9 +47,9 @@
         "chat_names": ["Liz Walker", "Aunt Liz Walker", "Aunt Liz", "Liz"]
       },
       "contact_name": "Liz Walker",
-      "project_slug": "alister",
-      "project_name": "Alister",
-      "note": "Douglas explicitly routes this family conversation to Liz Walker and the Alister project."
+      "project_slug": "dad",
+      "project_name": "Dad",
+      "note": "Douglas explicitly routes this family conversation to Liz Walker and the Dad project."
     },
     {
       "id": "all-incoming-whatsapp",

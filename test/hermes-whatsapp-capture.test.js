@@ -12,7 +12,7 @@ test('Hermes WhatsApp routes resolve family chats without conflating Iain with D
     chat_name: 'Dad Information Group',
     sender_name: 'Iain',
   });
-  assert.equal(groupRoute.project_slug, 'alister');
+  assert.equal(groupRoute.project_slug, 'dad');
   assert.equal(groupRoute.contact_name, 'Iain Clark');
 
   const groupLizRoute = resolveRoute(config, {
@@ -49,7 +49,7 @@ test('Hermes WhatsApp routes resolve family chats without conflating Iain with D
     sender_name: 'Aunt Liz',
   });
   assert.equal(lizRoute.contact_name, 'Liz Walker');
-  assert.equal(lizRoute.project_slug, 'alister');
+  assert.equal(lizRoute.project_slug, 'dad');
 
   const iainRoute = resolveRoute(config, {
     chat_type: 'dm',
@@ -57,7 +57,7 @@ test('Hermes WhatsApp routes resolve family chats without conflating Iain with D
     sender_name: 'Iain',
   });
   assert.equal(iainRoute.contact_name, 'Iain Clark');
-  assert.equal(iainRoute.project_slug, 'alister');
+  assert.equal(iainRoute.project_slug, 'dad');
 
   const unrelatedInbound = resolveRoute(config, {
     chat_type: 'dm',
@@ -94,7 +94,7 @@ test('Hermes WhatsApp routes resolve family chats without conflating Iain with D
     body: 'Dad needs milk.',
     timestamp: 1784738000,
   }, groupRoute);
-  assert.equal(payload.project_slug, 'alister');
+  assert.equal(payload.project_slug, 'dad');
   assert.equal(payload.contact_name, 'Iain Clark');
   assert.equal(payload.raw.source, 'hermes_whatsapp_bridge_passive_capture');
 });

@@ -87,13 +87,13 @@ unwanted agent responses.
 
 Current routes:
 
-- `Dad Information Group` → Alister project; Catriona, Iain Clark, Liz Walker,
+- `Dad Information Group` → Dad project; Catriona, Iain Clark, Liz Walker,
   Nakai McLellan, and Liz Smith (`Wee Lizzie`) are resolved as their own
   contacts when their sender names match.
-- `Catriona` / `Catriona McLellan` DM → Catriona contact + Alister project.
-- `Iain` / `Iain Clark` DM → Iain Clark contact + Alister project.
+- `Catriona` / `Catriona McLellan` DM → Catriona contact + Dad project.
+- `Iain` / `Iain Clark` DM → Iain Clark contact + Dad project.
 - `Liz`, `Liz Walker`, `Aunt Liz`, or `Aunt Liz Walker` DM → Liz Walker
-  contact + Alister project.
+  contact + Dad project.
 - Every other new inbound DM or group message → raw Hub evidence without a
   predetermined contact or project. The knowledge engine must infer meaning from
   the message and existing CRM knowledge.
@@ -134,7 +134,7 @@ node --test test/hermes-whatsapp-capture.test.js test/messaging-capture.test.js
 **B. Live routed-chat check**
 
 Send a fresh message in `Dad Information Group`, or receive a message in another
-chat. Family evidence should include the Alister route; other incoming messages
+chat. Family evidence should include the Dad route; other incoming messages
 should use route `all-incoming-whatsapp` with no forced contact or project.
 
 **C. Knowledge compile**
@@ -142,7 +142,7 @@ should use route `all-incoming-whatsapp` with no forced contact or project.
 The scheduled `crm_knowledge_engine` compiles new evidence. Check:
 
 - `/admin/knowledge` receipts for `messaging_message`
-- Alister contact knowledge panel
+- Dad project report and Alister contact knowledge panel
 - Tasks if confidence was high
 
 ## 8. Family identity mapping

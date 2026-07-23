@@ -107,7 +107,7 @@ test('messaging evidence preserves explicit contact and project routing metadata
   hub.prepare(`INSERT OR IGNORE INTO contacts (id, user, name, aliases) VALUES (?, ?, ?, ?)`)
     .run('contact-catriona', 'test-douglas', 'Catriona McLellan', '[]');
   hub.prepare(`INSERT OR IGNORE INTO projects (id, user, name, slug) VALUES (?, ?, ?, ?)`)
-    .run('project-alister', 'test-douglas', 'Alister', 'alister');
+    .run('project-dad', 'test-douglas', 'Dad', 'dad');
 
   const captured = captureMessagingMessage('test-douglas', {
     platform: 'whatsapp',
@@ -117,13 +117,13 @@ test('messaging evidence preserves explicit contact and project routing metadata
     chat_name: 'Catriona',
     body: 'Dad needs a new prescription collected tomorrow.',
     contact_name: 'Catriona McLellan',
-    project_slug: 'alister',
-    project_name: 'Alister',
+    project_slug: 'dad',
+    project_name: 'Dad',
     route: {
       id: 'catriona-mclellan',
       contact_name: 'Catriona McLellan',
-      project_slug: 'alister',
-      project_name: 'Alister',
+      project_slug: 'dad',
+      project_name: 'Dad',
       note: 'Douglas explicitly routed this chat.',
     },
     raw: {
@@ -133,11 +133,11 @@ test('messaging evidence preserves explicit contact and project routing metadata
   });
 
   const evidence = buildEvidenceText(captured.row);
-  assert.match(evidence, /Explicit project route: Alister \(alister\)/);
+  assert.match(evidence, /Explicit project route: Dad \(dad\)/);
   assert.match(evidence, /Explicit contact route: Catriona McLellan/);
   assert.deepEqual(sourceContext('test-douglas', 'messaging_message', captured.row), {
     contactId: 'contact-catriona',
-    projectId: 'project-alister',
+    projectId: 'project-dad',
     preferKind: 'project',
   });
 });
@@ -150,7 +150,7 @@ test('messaging evidence marks historical backfills as non-current evidence', ()
     body: 'Call the council tomorrow.',
     received_at: 1720000000,
     raw_json: JSON.stringify({
-      project_slug: 'alister',
+      project_slug: 'dad',
       raw: { source: 'whatsapp_chat_export', historical_backfill: true },
     }),
   });
