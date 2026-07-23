@@ -7,7 +7,7 @@
 // Env (Mac):
 //   HUB_URL                         e.g. https://dchat.mclellan.scot
 //   CONTENT_RESEARCH_WORKER_SECRET  shared with VPS .env
-//   OPENROUTER_API_KEY              for Grok driver
+//   GROK_CLI_PATH                   optional authenticated Grok CLI path
 //   LAST30DAYS_ENGINE_PATH          optional; defaults to ~/.claude/skills/last30days
 //   LAST30DAYS_PYTHON               optional Python 3.12+ binary
 //   CONTENT_RESEARCH_WORKER_ID      optional label (default: mac)
@@ -35,12 +35,11 @@ function die(msg, code = 1) {
 
 if (!HUB_URL) die('HUB_URL (or CONTENT_RESEARCH_HUB_URL) is required');
 if (!SECRET) die('CONTENT_RESEARCH_WORKER_SECRET is required');
-if (!process.env.OPENROUTER_API_KEY) {
-  console.warn('[content-research-worker] OPENROUTER_API_KEY not set — Grok driver will fail');
-}
-
-// Force local Grok path for the driver regardless of VPS driver mode.
+// Force the locally authenticated Grok CLI path regardless of VPS driver mode.
+// This is intentionally not an OpenRouter/API call: the Mac mini owns the
+// subscription-backed model execution and the last30days engine.
 process.env.CONTENT_RESEARCH_DRIVER = 'grok';
+process.env.GROK_RESEARCH_TRANSPORT = 'cli';
 
 const { driveLast30DaysResearch } = require('../lib/grok-research-driver');
 

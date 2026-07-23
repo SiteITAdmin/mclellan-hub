@@ -27,6 +27,7 @@ tmp/
 # Generated nightly by com.mclellan.token-burn-refresh (launchd) and rsynced to the VPS directly — not tracked
 token-burn-dashboard/deploy-data/daily-burn.sample.json
 token-burn-dashboard/deploy-data/openrouter-activity.summary.json
+token-burn-dashboard/deploy-data/openrouter-live.daily.json
 
 # One-off deliverable workspaces (Beacon roadmap etc.) — local only
 outputs/

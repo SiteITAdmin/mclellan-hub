@@ -10,6 +10,7 @@ const timezone = process.env.TOKEN_BURN_TIMEZONE || "Europe/Dublin";
 
 const outputPath = join(projectRoot, "data", "daily-burn.sample.json");
 const openRouterSummaryPath = join(projectRoot, "data", "openrouter-activity.summary.json");
+const openRouterLiveDailyPath = join(projectRoot, "data", "openrouter-live.daily.json");
 const deployDataDir = join(projectRoot, "deploy-data");
 const deployOutputPath = join(deployDataDir, "daily-burn.sample.json");
 const deployOpenRouterSummaryPath = join(deployDataDir, "openrouter-activity.summary.json");
@@ -73,6 +74,7 @@ collectClaudeCode();
 collectAntigravity();
 collectGrokBuild();
 const openRouterExportRows = collectOpenRouterExports();
+collectOpenRouterManagementDaily();
 if (openRouterExportRows === 0) collectHubApi();
 collectSynthadocApi();
 applyManualBackfills();
@@ -345,6 +347,32 @@ function collectOpenRouterExports() {
   return imported;
 }
 
+function collectOpenRouterManagementDaily() {
+  if (!existsSync(openRouterLiveDailyPath)) return 0;
+  let payload;
+  try {
+    payload = JSON.parse(readFileSync(openRouterLiveDailyPath, "utf8"));
+  } catch {
+    return 0;
+  }
+  if (payload?.source !== "openrouter_management_api" || !Array.isArray(payload.days)) return 0;
+
+  const exportLastDate = String(openRouterSummary.export_last_at || "").slice(0, 10);
+  let imported = 0;
+  for (const item of payload.days) {
+    const date = String(item?.date || "").slice(0, 10);
+    const tokens = Number(item?.tokens || 0);
+    // The downloaded CSV remains the historical baseline. Management data owns
+    // each later daily bucket, so the two sources never double-count.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || tokens <= 0 || (exportLastDate && date <= exportLastDate)) continue;
+    const row = rowFor(date);
+    row.api_tokens += tokens;
+    row.openrouter_management_days += 1;
+    imported += 1;
+  }
+  return imported;
+}
+
 function addOpenRouterSummary(bucket, key, tokens, cost) {
   const safeKey = String(key || "unknown").slice(0, 120);
   openRouterSummary[bucket][safeKey] ||= { label: safeKey, tokens: 0, cost_usd: 0, calls: 0 };
@@ -440,6 +468,7 @@ function rowFor(date) {
       api_tokens: 0,
       hub_api_days: 0,
       openrouter_export_rows: 0,
+      openrouter_management_days: 0,
       openrouter_cost_usd: 0,
       synthadoc_days: 0,
       manual_evidence: [],
@@ -474,6 +503,7 @@ function buildEvidence(row) {
   if (row.manual_evidence.length) parts.push(...row.manual_evidence);
   if (row.hub_api_days > 0) parts.push("McLellan hub request logs");
   if (row.openrouter_export_rows > 0) parts.push("OpenRouter activity export");
+  if (row.openrouter_management_days > 0) parts.push("OpenRouter management API daily activity");
   if (row.synthadoc_days > 0) parts.push("Synthadoc audit logs");
   return parts.join("; ");
 }
