@@ -1,0 +1,20 @@
+{
+  "slots": {
+    "content_research_driver": {
+      "required_parameters": ["tools"],
+      "input_modalities": ["text"],
+      "output_modalities": ["text"],
+      "min_context": 131072,
+      "max_cost_multiplier": 2.0
+    },
+    "linkedin_carousel": {
+      "parameter_any": [["structured_outputs", "response_format"]],
+      "input_modalities": ["text"],
+      "output_modalities": ["text"]
+    },
+    "wiki_image_vision": {
+      "input_modalities": ["image", "text"],
+      "output_modalities": ["text"]
+    }
+  }
+}

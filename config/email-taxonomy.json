@@ -23,6 +23,7 @@
     "Action/Waiting",
     "Action/Review",
     "People/Alister McLellan",
+    "People/Iain Clark",
     "People/Nakai McLellan",
     "Organisations/Beacon Hospital",
     "Organisations/Wicklow Dementia Support",
@@ -46,8 +47,14 @@
   "people": [
     {
       "canonical_name": "Alister McLellan",
-      "aliases": ["Dad", "Iain"],
+      "aliases": ["Dad"],
       "gmail_label": "People/Alister McLellan",
+      "confidence": "confirmed"
+    },
+    {
+      "canonical_name": "Iain Clark",
+      "aliases": ["Iain"],
+      "gmail_label": "People/Iain Clark",
       "confidence": "confirmed"
     },
     {
@@ -61,7 +68,8 @@
   "legacy_mappings": {
     "Dad": "People/Alister McLellan",
     "Alister McLellan": "People/Alister McLellan",
-    "Iain": "People/Alister McLellan",
+    "Iain": "People/Iain Clark",
+    "Iain Clark": "People/Iain Clark",
     "Kai": "People/Nakai McLellan",
     "Nakai McLellan": "People/Nakai McLellan",
     "Nakai Mutenga": "People/Nakai McLellan",

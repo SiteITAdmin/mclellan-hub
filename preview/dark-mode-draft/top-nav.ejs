@@ -1,0 +1,387 @@
+<style>
+  /* DRAFT copy of top-nav — tokenized for light/dark via html[data-theme] */
+  :root, html[data-theme="light"] {
+    --nav-bg: rgba(255,255,255,.94);
+    --nav-border: rgba(73,69,101,.14);
+    --nav-text: #171526;
+    --nav-muted: #666275;
+    --nav-menu-bg: #fff;
+    --nav-menu-border: rgba(73,69,101,.16);
+    --nav-hover-bg: rgba(86,83,232,.09);
+    --nav-accent: #5653e8;
+    --nav-label: #9995ab;
+    --nav-shadow: 0 10px 30px rgba(23,21,38,.12);
+    --nav-palette-overlay: rgba(23,21,38,.35);
+    --nav-search-bg: rgba(255,255,255,.7);
+  }
+  html[data-theme="dark"] {
+    --nav-bg: rgba(19,27,46,.92);
+    --nav-border: #1e2a42;
+    --nav-text: #dae2fd;
+    --nav-muted: #8a94aa;
+    --nav-menu-bg: #131b2e;
+    --nav-menu-border: #2d3a52;
+    --nav-hover-bg: rgba(128,131,255,.14);
+    --nav-accent: #a594ff;
+    --nav-label: #8a94aa;
+    --nav-shadow: 0 12px 32px rgba(0,0,0,.45);
+    --nav-palette-overlay: rgba(0,0,0,.55);
+    --nav-search-bg: rgba(23,31,51,.8);
+  }
+
+  .draft-note {
+    flex-shrink: 0;
+    padding: 7px 16px;
+    background: color-mix(in srgb, var(--nav-accent) 12%, transparent);
+    border-bottom: 1px solid var(--nav-border);
+    color: var(--nav-muted);
+    font: 500 12.5px Inter, Geist, system-ui, sans-serif;
+  }
+  .draft-note strong { color: var(--nav-accent); }
+
+  .hub-global-nav {
+    position: sticky; top: 0; z-index: 100;
+    min-height: 58px; padding: 8px max(16px, calc((100vw - 1180px) / 2));
+    display: flex; align-items: center; gap: 14px;
+    background: var(--nav-bg); border-bottom: 1px solid var(--nav-border);
+    backdrop-filter: blur(14px); font-family: Inter, Geist, system-ui, sans-serif;
+  }
+  .hub-global-brand-wrap { position: relative; }
+  .hub-global-brand {
+    color: var(--nav-text) !important; text-decoration: none !important; font-weight: 750;
+    white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;
+    background: none; border: none; font-size: 15px; font-family: inherit; cursor: pointer; padding: 0;
+  }
+  .hub-global-brand .nav-caret { font-size: 10px; color: var(--nav-muted); }
+  .hub-global-links { display: flex; align-items: center; gap: 3px; }
+  .hub-nav-group { position: relative; }
+  .hub-global-links a, .hub-nav-group > button {
+    color: var(--nav-muted) !important; text-decoration: none !important; padding: 7px 9px;
+    border-radius: 8px; font-size: 13px; font-weight: 500; white-space: nowrap;
+    background: none; border: none; cursor: pointer; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .hub-nav-group > button .nav-caret { font-size: 9px; transition: transform .15s; }
+  .hub-nav-group.open > button .nav-caret { transform: rotate(180deg); }
+  .hub-global-links a:hover, .hub-global-links a.active,
+  .hub-nav-group > button:hover, .hub-nav-group.open > button, .hub-nav-group > button.active {
+    color: var(--nav-accent) !important; background: var(--nav-hover-bg);
+  }
+  .hub-nav-menu {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; min-width: 185px;
+    background: var(--nav-menu-bg); border: 1px solid var(--nav-menu-border); border-radius: 12px;
+    box-shadow: var(--nav-shadow); padding: 6px; z-index: 120;
+  }
+  .hub-nav-group.open > .hub-nav-menu { display: flex; flex-direction: column; }
+  .hub-nav-menu a {
+    display: block; padding: 7px 10px !important; border-radius: 8px; font-size: 13px;
+  }
+  .hub-nav-menu .nav-menu-sep { border-top: 1px solid var(--nav-border); margin: 5px 4px; }
+  .hub-nav-menu .nav-menu-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--nav-label); padding: 6px 10px 2px; }
+  .hub-nav-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .hub-nav-search, .hub-nav-theme {
+    display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px;
+    border: 1px solid var(--nav-menu-border); border-radius: 9px; background: var(--nav-search-bg);
+    color: var(--nav-muted); font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .hub-nav-search:hover, .hub-nav-theme:hover { border-color: var(--nav-accent); color: var(--nav-accent); }
+  .hub-nav-search kbd {
+    font-family: inherit; font-size: 10px; border: 1px solid var(--nav-menu-border);
+    border-radius: 4px; padding: 1px 4px; background: color-mix(in srgb, var(--nav-muted) 10%, transparent);
+  }
+  .hub-nav-burger {
+    display: none; background: none; border: none; cursor: pointer; padding: 6px;
+    color: var(--nav-text); font-size: 20px; line-height: 1;
+  }
+  body.hub-page.hub-global-page { flex-direction: column; }
+  body { background: var(--bg, #f8faff); color: var(--text, #0f172a); }
+
+  .hub-palette-overlay {
+    display: none; position: fixed; inset: 0; z-index: 300;
+    background: var(--nav-palette-overlay); backdrop-filter: blur(3px);
+    align-items: flex-start; justify-content: center; padding: 12vh 16px 16px;
+  }
+  .hub-palette-overlay.open { display: flex; }
+  .hub-palette {
+    width: 100%; max-width: 520px; background: var(--nav-menu-bg); border-radius: 14px;
+    border: 1px solid var(--nav-menu-border); box-shadow: 0 24px 60px rgba(0,0,0,.25);
+    overflow: hidden; font-family: Inter, Geist, system-ui, sans-serif;
+  }
+  .hub-palette input {
+    width: 100%; border: none; outline: none; padding: 15px 17px; font-size: 15px;
+    font-family: inherit; color: var(--nav-text); background: transparent;
+    border-bottom: 1px solid var(--nav-border);
+  }
+  .hub-palette-results { max-height: 46vh; overflow-y: auto; padding: 6px; }
+  .hub-palette-item {
+    display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-radius: 9px;
+    cursor: pointer; font-size: 13.5px; color: var(--nav-text); text-decoration: none;
+  }
+  .hub-palette-item .pal-kind { margin-left: auto; font-size: 10.5px; color: var(--nav-label); text-transform: uppercase; letter-spacing: .05em; }
+  .hub-palette-item.sel, .hub-palette-item:hover { background: var(--nav-hover-bg); color: var(--nav-accent); }
+  .hub-palette-empty { padding: 18px; font-size: 13px; color: var(--nav-label); text-align: center; }
+
+  @media (max-width: 760px) {
+    .hub-nav-burger { display: block; }
+    .hub-nav-search span.hub-nav-search-label, .hub-nav-search kbd { display: none; }
+    .hub-global-links {
+      display: none; position: absolute; top: 100%; left: 0; right: 0;
+      flex-direction: column; align-items: stretch; gap: 0;
+      background: var(--nav-menu-bg); border-bottom: 1px solid var(--nav-border);
+      box-shadow: var(--nav-shadow); padding: 8px 12px 14px; max-height: 75vh; overflow-y: auto;
+    }
+    .hub-global-nav.mobile-open .hub-global-links { display: flex; }
+    .hub-nav-group > button { width: 100%; justify-content: space-between; }
+    .hub-nav-menu { position: static; display: none; border: none; box-shadow: none; padding: 0 0 4px 14px; min-width: 0; }
+    .hub-nav-group.open > .hub-nav-menu { display: flex; }
+  }
+</style>
+<div class="draft-note"><strong>Local draft</strong> — copies of chat UI files · no auth · use Theme in the nav or the Tweaks panel (bottom-right)</div>
+<header class="hub-global-nav" id="hub-global-nav">
+  <div class="hub-nav-group hub-global-brand-wrap">
+    <button class="hub-global-brand" type="button" data-nav-toggle aria-haspopup="true" aria-expanded="false">
+      McLellan Hub <span class="nav-caret">▾</span>
+    </button>
+    <div class="hub-nav-menu">
+      <a href="/">Hub home</a>
+      <div class="nav-menu-sep"></div>
+      <div class="nav-menu-label">Other apps</div>
+      <a href="https://wiki.mclellan.scot">Wiki ↗</a>
+      <a href="https://prompt.mclellan.scot">Prompt library ↗</a>
+      <a href="https://douglas.mclellan.scot">Portfolio ↗</a>
+    </div>
+  </div>
+  <button class="hub-nav-burger" type="button" id="hub-nav-burger" aria-label="Menu">☰</button>
+  <nav class="hub-global-links" aria-label="Main navigation">
+    <a href="/c" data-match="/c">Chat</a>
+    <div class="hub-nav-group" data-group="crm">
+      <button type="button" data-nav-toggle aria-haspopup="true" aria-expanded="false">CRM <span class="nav-caret">▾</span></button>
+      <div class="hub-nav-menu">
+        <a href="/crm/contacts">Contacts</a>
+        <a href="/crm/companies">Companies</a>
+        <a href="/crm/meetings">Meetings</a>
+        <a href="/crm/projects">Projects</a>
+        <a href="/crm/tasks">Tasks</a>
+        <a href="/crm/reminders">Reminders</a>
+        <a href="/crm/knowledge">Knowledge</a>
+        <a href="/crm/meeting-intake">Meeting intake</a>
+      </div>
+    </div>
+    <div class="hub-nav-group" data-group="content">
+      <button type="button" data-nav-toggle aria-haspopup="true" aria-expanded="false">Content <span class="nav-caret">▾</span></button>
+      <div class="hub-nav-menu">
+        <a href="/lin">LinkedIn</a>
+        <a href="/humanizer">Humaniser</a>
+      </div>
+    </div>
+    <a href="/debrief" data-match="/debrief">Debrief</a>
+    <div class="hub-nav-group" data-group="intel">
+      <button type="button" data-nav-toggle aria-haspopup="true" aria-expanded="false">Intelligence <span class="nav-caret">▾</span></button>
+      <div class="hub-nav-menu">
+        <a href="/newsletter">Newsletter</a>
+        <a href="/flights">Flights</a>
+        <a href="/token-burn">Usage</a>
+      </div>
+    </div>
+    <div class="hub-nav-group" data-group="admin">
+      <button type="button" data-nav-toggle aria-haspopup="true" aria-expanded="false">Admin <span class="nav-caret">▾</span></button>
+      <div class="hub-nav-menu">
+        <a href="/admin">Overview</a>
+        <a href="/admin/models">Models &amp; prompts</a>
+        <a href="/admin/jobs">Jobs</a>
+        <a href="/admin/knowledge">Knowledge</a>
+        <a href="/admin/connectivity">Connectivity</a>
+        <div class="nav-menu-sep"></div>
+        <a href="/settings">Settings</a>
+        <a href="/logs">Logs</a>
+      </div>
+    </div>
+  </nav>
+  <div class="hub-nav-right">
+    <button class="hub-nav-theme" type="button" id="hub-nav-theme" aria-label="Toggle theme" title="Toggle light/dark">
+      <span id="hub-nav-theme-label">Theme</span>
+    </button>
+    <button class="hub-nav-search" type="button" id="hub-nav-search" aria-label="Jump to page">
+      🔍 <span class="hub-nav-search-label">Jump to…</span> <kbd>⌘K</kbd>
+    </button>
+  </div>
+</header>
+
+<div class="hub-palette-overlay" id="hub-palette-overlay" role="dialog" aria-label="Jump to page">
+  <div class="hub-palette">
+    <input type="text" id="hub-palette-input" placeholder="Jump to a page, contact, or project…" autocomplete="off" />
+    <div class="hub-palette-results" id="hub-palette-results"></div>
+  </div>
+</div>
+
+<script>
+  (() => {
+    document.body.classList.add('hub-global-page');
+    const nav = document.getElementById('hub-global-nav');
+    const path = window.location.pathname;
+
+    // Dropdown open/close
+    nav.querySelectorAll('[data-nav-toggle]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const group = btn.parentElement;
+        const wasOpen = group.classList.contains('open');
+        nav.querySelectorAll('.hub-nav-group.open').forEach((g) => { g.classList.remove('open'); g.querySelector('[data-nav-toggle]').setAttribute('aria-expanded', 'false'); });
+        if (!wasOpen) { group.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
+      });
+    });
+    document.addEventListener('click', () => {
+      nav.querySelectorAll('.hub-nav-group.open').forEach((g) => { g.classList.remove('open'); g.querySelector('[data-nav-toggle]').setAttribute('aria-expanded', 'false'); });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        nav.querySelectorAll('.hub-nav-group.open').forEach((g) => g.classList.remove('open'));
+        nav.classList.remove('mobile-open');
+        closePalette();
+      }
+    });
+    document.getElementById('hub-nav-burger').addEventListener('click', (e) => {
+      e.stopPropagation();
+      nav.classList.toggle('mobile-open');
+    });
+
+    // Active state: highlight exact links and the group containing the current path
+    let best = null;
+    for (const link of nav.querySelectorAll('.hub-global-links a')) {
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('http')) continue;
+      const matches = path === href || path.startsWith(href + '/') || (href === '/c' && path.startsWith('/c/'));
+      if (matches && (!best || href.length > best.getAttribute('href').length)) best = link;
+    }
+    if (best) {
+      best.classList.add('active');
+      const group = best.closest('.hub-nav-group');
+      if (group) group.querySelector('[data-nav-toggle]').classList.add('active');
+    }
+
+    // ── Command palette ──
+    const overlay = document.getElementById('hub-palette-overlay');
+    const input = document.getElementById('hub-palette-input');
+    const results = document.getElementById('hub-palette-results');
+    const staticItems = [
+      { t: 'Home', u: '/', k: 'page' },
+      { t: 'Chat', u: '/c', k: 'page' },
+      { t: 'CRM contacts', u: '/crm/contacts', k: 'page' },
+      { t: 'CRM companies', u: '/crm/companies', k: 'page' },
+      { t: 'CRM meetings', u: '/crm/meetings', k: 'page' },
+      { t: 'CRM projects', u: '/crm/projects', k: 'page' },
+      { t: 'Tasks', u: '/crm/tasks', k: 'page' },
+      { t: 'Reminders', u: '/crm/reminders', k: 'page' },
+      { t: 'Knowledge', u: '/crm/knowledge', k: 'page' },
+      { t: 'Meeting intake', u: '/crm/meeting-intake', k: 'page' },
+      { t: 'LinkedIn content — create', u: '/lin', k: 'page' },
+      { t: 'LinkedIn content — plan', u: '/lin/plan', k: 'page' },
+      { t: 'LinkedIn content — queue', u: '/lin/queue', k: 'page' },
+      { t: 'LinkedIn content — published', u: '/lin/published', k: 'page' },
+      { t: 'Humaniser', u: '/humanizer', k: 'page' },
+      { t: 'Debrief', u: '/debrief', k: 'page' },
+      { t: 'Newsletter intelligence', u: '/newsletter', k: 'page' },
+      { t: 'Newsletter sources', u: '/newsletter/sources', k: 'page' },
+      { t: 'Newsletter creators', u: '/newsletter/creators', k: 'page' },
+      { t: 'Flights', u: '/flights', k: 'page' },
+      { t: 'Usage / token burn', u: '/token-burn', k: 'page' },
+      { t: 'Settings', u: '/settings', k: 'page' },
+      { t: 'Logs', u: '/logs', k: 'page' },
+      { t: 'Admin overview', u: '/admin', k: 'admin' },
+      { t: 'Model catalogue', u: '/admin/models', k: 'admin' },
+      { t: 'System models', u: '/admin/models/system', k: 'admin' },
+      { t: 'Prompt editor', u: '/admin/models/prompts', k: 'admin' },
+      { t: 'Model tiers', u: '/admin/models/tiers', k: 'admin' },
+      { t: 'Admin jobs', u: '/admin/jobs', k: 'admin' },
+      { t: 'Admin knowledge review', u: '/admin/knowledge', k: 'admin' },
+      { t: 'Connectivity', u: '/admin/connectivity', k: 'admin' },
+      { t: 'Chat logs', u: '/admin/chatlogs', k: 'admin' },
+      { t: 'Debrief logs', u: '/admin/debrief', k: 'admin' },
+      { t: 'Email taxonomy', u: '/admin/email-taxonomy', k: 'admin' },
+      { t: 'Admin test arena', u: '/admin/test', k: 'admin' },
+      { t: 'Cards', u: '/admin/shortcuts', k: 'admin' },
+      { t: 'Wiki', u: 'https://wiki.mclellan.scot', k: 'app' },
+      { t: 'Prompt library', u: 'https://prompt.mclellan.scot', k: 'app' },
+    ];
+    let dynamicItems = null;
+    let sel = 0;
+    let current = [];
+
+    function openPalette() {
+      overlay.classList.add('open');
+      input.value = '';
+      render('');
+      input.focus();
+      if (dynamicItems === null) {
+        dynamicItems = [];
+        fetch('/api/palette-index').then((r) => (r.ok ? r.json() : { items: [] })).then((d) => {
+          dynamicItems = d.items || [];
+          render(input.value);
+        }).catch(() => {});
+      }
+    }
+    function closePalette() { overlay.classList.remove('open'); }
+    function render(q) {
+      const needle = q.trim().toLowerCase();
+      const pool = staticItems.concat(dynamicItems || []);
+      current = (needle
+        ? pool.filter((i) => i.t.toLowerCase().includes(needle))
+        : pool.slice(0, 12)
+      ).slice(0, 14);
+      sel = 0;
+      results.innerHTML = current.length
+        ? current.map((i, idx) => `<a class="hub-palette-item${idx === 0 ? ' sel' : ''}" href="${i.u}"><span>${i.t}</span><span class="pal-kind">${i.k}</span></a>`).join('')
+        : '<div class="hub-palette-empty">No matches</div>';
+    }
+    input.addEventListener('input', () => render(input.value));
+    input.addEventListener('keydown', (e) => {
+      const items = results.querySelectorAll('.hub-palette-item');
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!items.length) return;
+        items[sel] && items[sel].classList.remove('sel');
+        sel = e.key === 'ArrowDown' ? Math.min(sel + 1, items.length - 1) : Math.max(sel - 1, 0);
+        items[sel].classList.add('sel');
+        items[sel].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (items[sel]) window.location.href = items[sel].getAttribute('href');
+      }
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closePalette(); });
+    document.getElementById('hub-nav-search').addEventListener('click', openPalette);
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); overlay.classList.contains('open') ? closePalette() : openPalette(); }
+    });
+  })();
+
+  // Theme toggle (localStorage 'hub-theme'). Sets html[data-theme] so any
+  // stylesheet keyed off that attribute (hub.css, hub.modern.css, crm.css,
+  // admin pages) picks it up. Dispatches 'hub-theme-set' so the chat page's
+  // React tweaks panel can stay in sync in both directions.
+  (function themeToggle() {
+    const KEY = 'hub-theme';
+    const btn = document.getElementById('hub-nav-theme');
+    const label = document.getElementById('hub-nav-theme-label');
+    function current() {
+      try { return localStorage.getItem(KEY) || document.documentElement.getAttribute('data-theme') || 'light'; }
+      catch (e) { return 'light'; }
+    }
+    function apply(theme, { fromEvent = false } = {}) {
+      const t = theme === 'dark' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+      document.documentElement.style.colorScheme = t;
+      try { localStorage.setItem(KEY, t); } catch (e) {}
+      if (label) label.textContent = t === 'dark' ? 'Dark' : 'Light';
+      if (!fromEvent) window.dispatchEvent(new CustomEvent('hub-theme-set', { detail: { theme: t } }));
+    }
+    apply(current());
+    if (btn) btn.addEventListener('click', () => {
+      apply(current() === 'dark' ? 'light' : 'dark');
+    });
+    window.addEventListener('hub-theme-set', (e) => {
+      const t = e.detail && e.detail.theme;
+      if (t === 'light' || t === 'dark') apply(t, { fromEvent: true });
+    });
+  })();
+</script>

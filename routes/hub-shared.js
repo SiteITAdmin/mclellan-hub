@@ -6,6 +6,14 @@ const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize
 const chatLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 80, keyPrefix: 'hub-chat' });
 const uploadLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'hub-upload' });
 const writeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 40, keyPrefix: 'hub-write' });
+// WhatsApp capture is bearer-authenticated and may legitimately arrive in
+// bursts. Keep a separate safety ceiling so the generic UI write limit does
+// not silently discard message 41 from a busy group conversation.
+const messagingCaptureLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 2000,
+  keyPrefix: 'hub-messaging-capture',
+});
 
 // ── Mobile bearer bridge ──────────────────────────────────────────────────────
 // The native iOS element apps (chat, tasks, CRM, flights, …) authenticate the
@@ -89,6 +97,7 @@ module.exports = {
   chatLimiter,
   uploadLimiter,
   writeLimiter,
+  messagingCaptureLimiter,
   mobileBearerBridge,
   requireAuth,
   requireSameOrigin,

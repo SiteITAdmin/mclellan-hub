@@ -1,0 +1,56 @@
+{
+  "after_sha256": "4bb918619a2e4b691c7262086161271ce3e35cd974db6d090d5a30b0c0f79936",
+  "before_sha256": "24ec3ee94270fb2c5116352f8ba63efbe01db6439ad95a13b91bf9007f51725d",
+  "candidate": {
+    "canonical_slug": "x-ai/grok-4.5-20260708",
+    "capability_failures": [],
+    "confidence": "high",
+    "context_length": 500000,
+    "created": 1783523154,
+    "expiration_date": null,
+    "id": "x-ai/grok-4.5",
+    "input_modalities": [
+      "file",
+      "image",
+      "text"
+    ],
+    "name": "xAI: Grok 4.5",
+    "output_modalities": [
+      "text"
+    ],
+    "pricing": {
+      "completion": "0.000006",
+      "prompt": "0.000002"
+    },
+    "reasons": [
+      "current effective model is live and only needs catalogue installation"
+    ],
+    "score": 1.0,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "logprobs",
+      "max_tokens",
+      "presence_penalty",
+      "reasoning",
+      "reasoning_effort",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_logprobs",
+      "top_p"
+    ]
+  },
+  "database": "/Users/dm_mini/Documents/mclellan hub/automation-discovery-run/chatgpt/prompt-model-review/staging/hub.db",
+  "issue_id": "slot:content_research_driver:missing_from_admin_catalogue",
+  "result": {
+    "action": "inserted_disabled",
+    "enabled": 0,
+    "key": "x-ai-grok-4-5"
+  },
+  "slot_and_prompt_assignments_unchanged": true
+}

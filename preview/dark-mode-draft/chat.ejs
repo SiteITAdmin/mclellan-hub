@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= activeProject ? '/' + activeProject.slug : (conv?.title || 'Chat') %> — McLellan Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css">
+<link rel="stylesheet" href="/hub.modern.css?v=20260615a">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  body { display: flex; flex-direction: column; height: 100dvh; }
+  #root { flex: 1; min-height: 0; height: auto; overflow: hidden; }
+</style>
+</head>
+<body>
+<%- include('partials/top-nav') %>
+
+<script>
+  window.HUB_DATA = {
+    user: '<%- locals.user || "" %>',
+    activeProject: <%- JSON.stringify(locals.activeProject || null) %>,
+    conv: <%- JSON.stringify(locals.conv || null) %>,
+    messages: <%- JSON.stringify(locals.messages || []) %>,
+    projects: <%- JSON.stringify(locals.projects || []) %>,
+    recentConvs: <%- JSON.stringify(locals.recentConvs || []) %>,
+    availableModels: <%- JSON.stringify(locals.availableModels || []) %>,
+    shortcuts: <%- JSON.stringify(locals.shortcuts || []) %>,
+    projectDocs: <%- JSON.stringify(locals.projectDocs || []) %>,
+    projectHistoryCount: <%- locals.projectHistoryCount || 0 %>,
+    projectHistoryLoaded: <%- locals.projectHistoryLoaded || false %>,
+  };
+  window.CONV_ID = '<%- locals.convId || "" %>';
+  window.PROJECT_SLUG = '<%- locals.activeProject?.slug || "" %>';
+  window.TWEAK_DEFAULTS = {
+    theme: (function () {
+      try { return localStorage.getItem('hub-theme') || document.documentElement.getAttribute('data-theme') || 'light'; }
+      catch (e) { return 'light'; }
+    })(),
+    accent: 'violet',
+    density: 'comfortable',
+    bubbles: 'mixed',
+    font: 'manrope',
+    displayFont: 'sans',
+  };
+</script>
+
+<div id="root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script type="text/babel" src="/tweaks-panel.jsx?v=20260515d"></script>
+<script type="text/babel" src="/hub-modern.jsx?v=20260715a"></script>
+
+</body>
+</html>

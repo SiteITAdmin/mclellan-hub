@@ -98,7 +98,7 @@ router.get('/admin/auth/google', (req, res, next) =>
     callbackPath: '/admin/auth/google/callback',
     returnTo: '/admin',
     extraScopes: [
-      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/gmail.modify',
       'https://www.googleapis.com/auth/drive.readonly',
     ],

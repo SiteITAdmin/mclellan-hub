@@ -9,7 +9,11 @@ config/google-service-account.json
 mclellan-hub-*.json
 config/mclellan-hub-*.json
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
+__pycache__/
+*.pyc
 .DS_Store
 .claude/
 *.zip

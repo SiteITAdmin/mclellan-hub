@@ -17,6 +17,7 @@ const {
   buildEvidenceText,
   externalIdFromPayload,
 } = require('../lib/messaging-capture');
+const { sourceContext } = require('../lib/synthesis');
 
 before(() => {
   // Force schema init against temp DB if supported; otherwise use default path.
@@ -90,4 +91,70 @@ test('captureMessagingMessage stores once and dedups', () => {
   const evidence = buildEvidenceText(first.row);
   assert.match(evidence, /Aunt/);
   assert.match(evidence, /Dad his things/);
+});
+
+test('messaging evidence preserves explicit contact and project routing metadata', () => {
+  const hub = db.hub();
+  hub.exec(`
+    CREATE TABLE IF NOT EXISTS contacts (
+      id TEXT PRIMARY KEY, user TEXT NOT NULL, name TEXT NOT NULL,
+      aliases TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY, user TEXT NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL
+    );
+  `);
+  hub.prepare(`INSERT OR IGNORE INTO contacts (id, user, name, aliases) VALUES (?, ?, ?, ?)`)
+    .run('contact-catriona', 'test-douglas', 'Catriona McLellan', '[]');
+  hub.prepare(`INSERT OR IGNORE INTO projects (id, user, name, slug) VALUES (?, ?, ?, ?)`)
+    .run('project-alister', 'test-douglas', 'Alister', 'alister');
+
+  const captured = captureMessagingMessage('test-douglas', {
+    platform: 'whatsapp',
+    external_message_id: 'msg-catriona-1',
+    sender_name: 'Catriona',
+    sender_id: '353870000001@s.whatsapp.net',
+    chat_name: 'Catriona',
+    body: 'Dad needs a new prescription collected tomorrow.',
+    contact_name: 'Catriona McLellan',
+    project_slug: 'alister',
+    project_name: 'Alister',
+    route: {
+      id: 'catriona-mclellan',
+      contact_name: 'Catriona McLellan',
+      project_slug: 'alister',
+      project_name: 'Alister',
+      note: 'Douglas explicitly routed this chat.',
+    },
+    raw: {
+      source: 'hermes_whatsapp_bridge_passive_capture',
+      direction: 'inbound',
+    },
+  });
+
+  const evidence = buildEvidenceText(captured.row);
+  assert.match(evidence, /Explicit project route: Alister \(alister\)/);
+  assert.match(evidence, /Explicit contact route: Catriona McLellan/);
+  assert.deepEqual(sourceContext('test-douglas', 'messaging_message', captured.row), {
+    contactId: 'contact-catriona',
+    projectId: 'project-alister',
+    preferKind: 'project',
+  });
+});
+
+test('messaging evidence marks historical backfills as non-current evidence', () => {
+  const evidence = buildEvidenceText({
+    sender_name: 'Iain Clark',
+    chat_name: 'Dad Information Group',
+    is_group: 1,
+    body: 'Call the council tomorrow.',
+    received_at: 1720000000,
+    raw_json: JSON.stringify({
+      project_slug: 'alister',
+      raw: { source: 'whatsapp_chat_export', historical_backfill: true },
+    }),
+  });
+
+  assert.match(evidence, /Historical backfill: yes/);
+  assert.match(evidence, /do not assume old actions are still outstanding/);
 });
