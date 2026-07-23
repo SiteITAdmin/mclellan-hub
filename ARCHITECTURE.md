@@ -150,6 +150,8 @@ runCrmKnowledgeEngine({ user, limit })
 
 Scheduled via `crm_knowledge_engine` in `lib/job-queue.js`. The job reviews raw and intermediate source evidence, records prompt decisions in `knowledge_receipts`, merges provenance into existing atoms when the source confirms or supersedes known knowledge, and projects only high-confidence required actions into Google Tasks.
 
+Historical message exports use a separate sealed raw store: `messaging_archive_buckets` plus `messaging_archive_messages`. A database trigger prevents additions after sealing. Project reports may read this immutable evidence by each message's original timestamp and selected report window. The `messaging_archive_release` job releases at most ten messages per Dublin day into `messaging_messages`; those releases follow the ordinary CRM prompt pipeline and retain `historical_backfill=true`, so old requests cannot create current tasks without newer evidence.
+
 `/crm/knowledge` reports the latest receipt per source for these four stages, separating processed, skipped, warning, and error outcomes. It does not treat governance-agent receipts or historical superseded errors as current CRM failures. The operator can retry genuine current errors in bounded batches; retries re-enter the same prompt pipeline, retain the old receipts as audit evidence, avoid duplicating compiled synthesis, and write a newer outcome receipt.
 
 Current CRM source kinds:
@@ -162,6 +164,7 @@ Current CRM source kinds:
 | `open_task` | Current Google Tasks, used as operational evidence and duplicate context |
 | `completed_task` | Completed tasks, eligible for durable synthesis |
 | `crm_fact` | Existing curated facts, mostly legacy or manually entered context |
+| `messaging_message` | Live messages plus bounded releases from sealed historical archives |
 
 Prompt/model slots are visible in `/admin/models`: `crm_source_triage`, `crm_duplicate_review`, and `crm_action_projection`. Receipts are visible in `/admin/knowledge`. These receipts are the audit trail for "what did the model decide, using what source, and why?"
 
@@ -227,6 +230,7 @@ The 60-second tick in `server.js:242` drives all jobs. Jobs self-enqueue on comp
 ### Fixed daily schedules (already in server.js)
 | Time (Dublin) | Job |
 |---|---|
+| 06:40 | Release up to 10 messages from sealed historical archive |
 | 06:45 | CRM calendar sync |
 | 07:00 | RH stats email |
 | 07:30 | Nakai daily briefing |

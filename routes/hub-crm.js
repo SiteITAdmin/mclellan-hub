@@ -2109,6 +2109,7 @@ function sourceLabel(kind) {
     meeting_intake: 'meeting',
     crm_fact: 'fact',
     completed_task: 'task',
+    messaging_message: 'message',
   })[kind] || kind;
 }
 
@@ -2173,6 +2174,10 @@ function sourceEventTimestamp(hub, user, sources) {
       const row = hub.prepare('SELECT created_at FROM crm_facts WHERE id = ? AND user = ?').get(s.id, user);
       if (row) return row.created_at;
     }
+    if (s.kind === 'messaging_message') {
+      const row = hub.prepare('SELECT received_at FROM messaging_messages WHERE id = ? AND user = ?').get(s.id, user);
+      if (row) return row.received_at;
+    }
   }
   return null;
 }
@@ -2232,8 +2237,10 @@ function buildProjectReportEvidence(user, project, { days = 90 } = {}) {
   `).all(user, project.id);
 
   const atoms = atomRowsForProject(user, project.id).slice(0, 40);
+  const { archiveEvidenceForProject } = require('../lib/messaging-archive');
+  const archive = archiveEvidenceForProject(user, project.id, { sinceDay: since, limit: 120 });
 
-  return { project, days, since, tasks, meetings, emails, docs, atoms };
+  return { project, days, since, tasks, meetings, emails, docs, atoms, archive };
 }
 
 function evidenceText(evidence) {
@@ -2254,6 +2261,12 @@ function evidenceText(evidence) {
     `- ${a.predicate}: ${a.value} (${a.status}, ${Math.round(a.confidence * 100)}%, sources: ${a.sources.map(s => s.label).join(', ') || 'none'})`
   ).join('\n') || '- none';
   const docLines = evidence.docs.map(d => `- ${fmtTs(d.uploaded_at)}: ${d.filename}`).join('\n') || '- none';
+  const archiveLines = evidence.archive.messages.map(m =>
+    `- ${fmtTs(m.received_at)}: ${m.sender_name || 'unknown'} in ${m.chat_name || 'WhatsApp'} — ${String(m.body || '').slice(0, 220)}`
+  ).join('\n') || '- none';
+  const archiveHeader = evidence.archive.truncated
+    ? `ARCHIVED WHATSAPP TIMELINE (${evidence.archive.messages.length} most recent of ${evidence.archive.total} messages in window)`
+    : `ARCHIVED WHATSAPP TIMELINE (${evidence.archive.total} messages in window)`;
 
   return [
     `Project: ${evidence.project.name} /${evidence.project.slug}`,
@@ -2271,12 +2284,18 @@ function evidenceText(evidence) {
     'DOCUMENTS',
     docLines,
     '',
+    archiveHeader,
+    archiveLines,
+    '',
     'DERIVED KNOWLEDGE',
     atomLines,
   ].join('\n');
 }
 
 function fallbackProjectReport(evidence, error = null) {
+  const fmtTs = ts => ts ? new Date(ts * 1000).toLocaleDateString('en-GB', {
+    timeZone: 'Europe/Dublin', day: 'numeric', month: 'short', year: 'numeric',
+  }) : '';
   const open = evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at);
   const completed = evidence.tasks.filter(t => t.status === 'completed' && !t.deleted_at);
   const activeAtoms = evidence.atoms.filter(a => a.status === 'active');
@@ -2301,7 +2320,12 @@ function fallbackProjectReport(evidence, error = null) {
       ...open.slice(0, 6).map(t => `Open: ${t.title}${t.due ? ` due ${t.due}` : ''}`),
       ...completed.slice(0, 4).map(t => `Completed: ${t.title}`),
     ],
-    timeline: activeAtoms.slice(0, 8).map(a => `${a.predicate.replace(/_/g, ' ')}: ${a.value}`),
+    timeline: [
+      ...evidence.archive.messages.slice(0, 8).map(m =>
+        `${fmtTs(m.received_at)}: ${m.sender_name || 'WhatsApp'} — ${String(m.body || '').slice(0, 160)}`
+      ),
+      ...activeAtoms.slice(0, 8).map(a => `${a.predicate.replace(/_/g, ' ')}: ${a.value}`),
+    ].slice(0, 8),
     risks: evidence.meetings.length || evidence.tasks.length ? [] : ['No recent project meetings or tasks were found in the selected evidence window.'],
     next_actions: open.slice(0, 5).map(t => t.title),
   };
@@ -2319,7 +2343,7 @@ async function generateProjectReport(user, evidence) {
       model: modelId,
       messages: [
         { role: 'system', content: getSystemPrompt('project_report', 'system', PROMPTS.project_report) },
-        { role: 'user', content: evidenceText(evidence).slice(0, 16000) },
+        { role: 'user', content: evidenceText(evidence).slice(0, 30000) },
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2,
@@ -2544,6 +2568,11 @@ async function runDueProjectReportSchedules() {
   return { considered: rows.length, sent, errors };
 }
 router.runDueProjectReportSchedules = runDueProjectReportSchedules;
+router._test = {
+  buildProjectReportEvidence,
+  evidenceText,
+  fallbackProjectReport,
+};
 
 router.post('/api/crm/project-report/schedule', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();

@@ -126,6 +126,9 @@
         <span class="crm-badge subtle"><%= evidence.tasks.filter(t => t.status === 'needsAction' && !t.deleted_at).length %> open tasks</span>
         <span class="crm-badge subtle"><%= evidence.tasks.filter(t => t.status === 'completed' && !t.deleted_at).length %> completed</span>
         <span class="crm-badge subtle"><%= evidence.atoms.length %> knowledge claims</span>
+        <% if (evidence.archive && evidence.archive.total) { %>
+          <span class="crm-badge subtle"><%= evidence.archive.total %> archived WhatsApp messages in window</span>
+        <% } %>
       </div>
     </div>
   </section>
