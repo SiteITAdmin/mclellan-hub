@@ -120,9 +120,23 @@ These are the tools the system runs on. They are not features — they are the f
 - Manual capture is one pass: Add Person takes phone/company/role/how-we-met; touchpoints, milestones, and project status are recorded where they're seen (facts and manual atoms, not columns)
 - Meeting intake drafts are previewed (attendees/outcomes/actions/risk flags) before anything is committed; debriefs create CRM meeting rows with date/time/duration/channel
 
-**Does not own:** Tasks (those go to Google Tasks), document storage (that's Projects/Documents)
+**Does not own:** Tasks (those go to Google Tasks), calendar events (that's Calendar), document storage (that's Projects/Documents)
 
 **Health check:** `crm_facts` with `status='active'` created in the last 7 days > 0. Contacts with 0 facts are flagged in the connectivity report.
+
+---
+
+## Calendar
+**Purpose:** Be the source of truth for scheduled meetings, interviews, and appointments Douglas must personally attend, so he never has to add them to his calendar by hand after an email confirms a specific date and time.
+
+**Healthy looks like:**
+- A calendar event exists for every source (email, meeting_intake, etc.) that states both a specific date and a specific time Douglas must attend — not for plain due-by deadlines with no attendance component
+- No duplicate events for the same source event (enforced by `meetings.source` + `source_id`, mirroring Google Tasks' dedup pattern)
+- Created events appear in the Work Brief's Today/Coming Up sections the same day they're created, not only after the next 06:45 calendar sync — the create path (`lib/google-calendar.js`) upserts `meetings` directly rather than waiting on `syncCalendarMeetings`
+
+**Does not own:** The task list (that's Google Tasks — the same source event typically produces both a task and, when it has a specific time, an event), meeting debriefs/notes (that's CRM meeting intake)
+
+**Health check:** `/crm/knowledge`'s `crm_action_projected` stage receipts include an `event_projection` count; the daily system report's "Calendar events" line should be non-zero on days when time-specific meetings were confirmed by email.
 
 ---
 
@@ -169,7 +183,7 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Interest radar:** `lib/interest-synthesis.js`, job `interest_synthesis_run` (daily 05:45, before the work brief). Joins recent meeting intakes with the upcoming meetings/calendar and asks the model which work topics Douglas is actively engaged with; writes `interest`-kind atoms (predicate `active_interest`) with provenance to the signals, plus a compiled radar cache in `crm_context` (`interest_radar`). The work daily brief reads the radar and pulls recent stories per topic (Exa search) into an "On your radar" section, each with the "why" naming the meeting or calendar entry that earned it. Interests fade from the brief 45 days after their last reconfirmation; the atoms live on.
 
-**WhatsApp / messaging capture:** Hermes (Baileys) posts allowlisted chat evidence to `POST /api/messaging/capture` (`lib/messaging-capture.js` → `messaging_messages`). Source kind `messaging_message` is consumed by `crm_knowledge_engine` like email/meetings — triage, duplicate review, atoms, high-confidence task projection. Setup: `docs/whatsapp-hermes-capture.md`. Intentional `/crm` notes still use the Hermes `dchat-crm` skill → `/api/crm/webhook`; family chat bulk path must not.
+**WhatsApp / messaging capture:** Hermes (Baileys) passively posts only explicitly routed chat evidence to `POST /api/messaging/capture` (`lib/messaging-capture.js` → `messaging_messages`). The complete source envelope preserves chat/sender/message provenance plus operator-supplied contact/project routing hints. Source kind `messaging_message` is consumed by `crm_knowledge_engine` like email/meetings — triage, duplicate review, atoms, high-confidence task projection. Setup: `docs/whatsapp-hermes-capture.md`. Intentional `/crm` notes still use the Hermes `dchat-crm` skill → `/api/crm/webhook`; family chat bulk path must not.
 
 **Health check:** `knowledge_atoms` and `embeddings` counts are non-zero and growing; open a contact page and confirm the Knowledge panel shows claims with click-through sources; `/admin/knowledge` shows the review queue; the daily system report's KNOWLEDGE section shows atom counts and the last lint run.
 

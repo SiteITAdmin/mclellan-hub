@@ -162,7 +162,7 @@ router.get('/auth/google', (req, res, next) =>
     user: req.hubUser,
     callbackPath: '/auth/google/callback',
     extraScopes: [
-      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/gmail.modify',
       'https://www.googleapis.com/auth/drive.readonly',
       'https://www.googleapis.com/auth/drive.file',

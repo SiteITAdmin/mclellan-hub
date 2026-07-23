@@ -11,7 +11,7 @@ const LOG_PATH = process.argv[2] || '/tmp/gmail-taxonomy-finalize.jsonl';
 
 const CANONICAL_LABELS = [
   'Action/Reply', 'Action/Waiting', 'Action/Review',
-  'People/Alister McLellan', 'People/Nakai McLellan',
+  'People/Alister McLellan', 'People/Iain Clark', 'People/Nakai McLellan',
   'Organisations/Beacon Hospital', 'Organisations/Wicklow Dementia Support',
   'Projects/CV', 'Projects/Knowledge Base', 'Projects/Second Brain', 'Projects/VIPBackups',
   'Travel/Bookings', 'Travel/Price Alerts',
@@ -26,7 +26,8 @@ const CANONICAL_ROOTS = new Set(CANONICAL_LABELS.map(name => name.split('/')[0])
 const LEGACY_TARGETS = {
   Dad: 'People/Alister McLellan',
   'Alister McLellan': 'People/Alister McLellan',
-  Iain: 'People/Alister McLellan',
+  Iain: 'People/Iain Clark',
+  'Iain Clark': 'People/Iain Clark',
   Kai: 'People/Nakai McLellan',
   Beacon: 'Organisations/Beacon Hospital',
   'Wicklow Dementia': 'Organisations/Wicklow Dementia Support',
@@ -90,7 +91,8 @@ function classify({ from, subject, labelNames, unread }) {
 
   const text = `${from}\n${subject}`.toLowerCase();
   if (/kaimutenga@icloud\.com|nakai mclellan|nakai mutenga/.test(text)) return 'People/Nakai McLellan';
-  if (/alister|dad|iain/.test(text)) return 'People/Alister McLellan';
+  if (/iain(?:\s+clark)?/.test(text)) return 'People/Iain Clark';
+  if (/alister|dad/.test(text)) return 'People/Alister McLellan';
   if (/skyscanner/.test(text)) return 'Travel/Price Alerts';
   if (/ryanair|dublin airport|flightradar|aviationstack/.test(text)) return 'Travel/Bookings';
   if (/beaconhospital\.ie/.test(text)) return 'Organisations/Beacon Hospital';

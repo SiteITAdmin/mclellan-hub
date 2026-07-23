@@ -7,7 +7,7 @@ const {
   buildEvidenceText,
 } = require('../lib/messaging-capture');
 const {
-  writeLimiter, requireAuth, requireSameOrigin, requireHermesAuth,
+  writeLimiter, messagingCaptureLimiter, requireAuth, requireSameOrigin, requireHermesAuth,
   requireContentResearchWorkerAuth,
 } = require('./hub-shared');
 
@@ -107,7 +107,7 @@ router.post('/api/obsidian/note', requireHermesAuth, writeLimiter, (req, res) =>
 // knowledge engine (source kind messaging_message) decides atoms/tasks.
 // Auth: Authorization: Bearer <HERMES_WEBHOOK_SECRET>
 
-router.post('/api/messaging/capture', requireHermesAuth, writeLimiter, (req, res) => {
+router.post('/api/messaging/capture', requireHermesAuth, messagingCaptureLimiter, (req, res) => {
   try {
     const user = String(req.body?.user || req.hubUser || process.env.DCHAT_USER || 'douglas').trim();
     if (!user) return res.status(400).json({ error: 'user required' });
