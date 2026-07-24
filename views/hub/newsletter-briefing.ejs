@@ -36,7 +36,8 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   <% } %>
 
   <div class="action-row">
-    <button class="btn btn-primary" onclick="downloadPdf('/newsletter/briefing/<%= briefing.id %>/pdf', this)">Download PDF</button>
+    <button class="btn btn-primary" id="email-to-me-btn" onclick="emailToMe()"><%= briefing.sent_at ? 'Email again' : 'Email to me' %></button>
+    <button class="btn" onclick="downloadPdf('/newsletter/briefing/<%= briefing.id %>/pdf', this)">Download PDF</button>
     <button class="btn" id="wiki-btn" onclick="exportWiki()">Export to wiki</button>
     <button class="btn" id="notemax-btn" onclick="sendToNoteMax()">Send to NoteMax</button>
     <% if (!briefing.published_at) { %>
@@ -46,11 +47,38 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
     <% } %>
     <button class="btn btn-danger" onclick="deleteBriefing()">Delete</button>
   </div>
-  <p class="status" id="status-msg"><% if (briefing.wiki_slug) { %>Exported to wiki: <%= briefing.wiki_slug %><% } %></p>
+  <p class="status" id="status-msg"><% if (briefing.sent_at) { %>Last emailed <%= new Date(briefing.sent_at * 1000).toLocaleString('en-GB') %><% if (briefing.wiki_slug) { %> · <% } %><% } %><% if (briefing.wiki_slug) { %>Exported to wiki: <%= briefing.wiki_slug %><% } %></p>
 
   <div class="content-card"><%= briefing.text_content || '(No content)' %></div>
 </div>
 <script>
+async function emailToMe() {
+  const btn = document.getElementById('email-to-me-btn');
+  const msg = document.getElementById('status-msg');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    const r = await fetch('/newsletter/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'briefing_id=<%= briefing.id %>',
+    });
+    const j = await r.json();
+    if (r.ok) {
+      msg.textContent = 'Sent to ' + j.to;
+      btn.textContent = 'Email again';
+    } else {
+      msg.textContent = j.error || 'Email failed';
+      btn.textContent = orig;
+    }
+  } catch (e) {
+    msg.textContent = 'Email failed: ' + e.message;
+    btn.textContent = orig;
+  } finally {
+    btn.disabled = false;
+  }
+}
 async function downloadPdf(url, btn) {
   const orig = btn?.textContent;
   if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
