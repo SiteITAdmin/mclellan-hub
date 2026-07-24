@@ -14,6 +14,8 @@
   .q-row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
   .q-row label { display:grid; gap:4px; font-size:12px; color:var(--crm-muted,#667085); }
   .q-row select, .q-row input { font:inherit; padding:7px 9px; border-radius:8px; border:1px solid var(--crm-border,#dfe3e8); min-width:200px; }
+  .q-discard { margin-top:8px; }
+  .q-discard .btn { font-size:12px; padding:4px 10px; }
   .q-note { font-size:12px; color:var(--crm-muted,#667085); margin:6px 0 0; }
   .q-empty { padding:22px; text-align:center; color:var(--crm-muted,#667085); }
   .q-answered summary { cursor:pointer; color:var(--crm-muted,#667085); }
@@ -36,6 +38,12 @@
 <% if (saved) { %>
   <section class="section-card" style="border-left:4px solid var(--crm-success,#16865b);">
     <strong>Saved.</strong> <%= saved %>
+    <% if (restoreKey) { %>
+      <form method="post" action="/crm/questions/restore" style="display:inline;margin-left:8px;">
+        <input type="hidden" name="key" value="<%= restoreKey %>">
+        <button class="btn" type="submit">Undo</button>
+      </form>
+    <% } %>
   </section>
 <% } %>
 <% if (error) { %>
@@ -66,6 +74,14 @@
         <input type="hidden" name="question" value="<%= item.question %>">
         <textarea name="answer" placeholder="Answer it the way you'd tell a colleague — e.g. everyone gets 100GB" required></textarea>
         <div><button class="btn primary" type="submit">Save answer</button></div>
+      </form>
+      <form method="post" action="/crm/questions/discard" class="q-discard">
+        <input type="hidden" name="key" value="<%= item.key %>">
+        <input type="hidden" name="kind" value="meeting_question">
+        <input type="hidden" name="question" value="<%= item.question %>">
+        <input type="hidden" name="source_kind" value="meeting_intake">
+        <input type="hidden" name="source_id" value="<%= item.intake_id %>">
+        <button class="btn subtle" type="submit" title="Side chat, not a real question — never raise it again">Discard</button>
       </form>
     </section>
   <% } %>
@@ -102,6 +118,14 @@
           </label>
           <button class="btn primary" type="submit">Set owner</button>
         </div>
+      </form>
+      <form method="post" action="/crm/questions/discard" class="q-discard">
+        <input type="hidden" name="key" value="<%= item.key %>">
+        <input type="hidden" name="kind" value="task_owner">
+        <input type="hidden" name="question" value="<%= item.question %>">
+        <input type="hidden" name="source_kind" value="meeting_intake">
+        <input type="hidden" name="source_id" value="<%= item.intake_id %>">
+        <button class="btn subtle" type="submit" title="Side chat, not a real question — never raise it again">Discard</button>
       </form>
       <p class="q-note">"<%= item.owner %>" is kept as an alias on whoever you pick, so the next transcript matches them without asking.</p>
     </section>
@@ -142,6 +166,14 @@
           <button class="btn" type="submit" name="decision" value="same_person">Same person</button>
         </div>
       </form>
+      <form method="post" action="/crm/questions/discard" class="q-discard">
+        <input type="hidden" name="key" value="<%= item.key %>">
+        <input type="hidden" name="kind" value="person_alias">
+        <input type="hidden" name="question" value="<%= item.question %>">
+        <input type="hidden" name="source_kind" value="contacts">
+        <input type="hidden" name="source_id" value="<%= item.contact_ids.join(',') %>">
+        <button class="btn subtle" type="submit" title="Side chat, not a real question — never raise it again">Discard</button>
+      </form>
       <p class="q-note">Either answer stops the nightly flag. Merging two contact records is not automated — if they're the same person, the records still need combining by hand.</p>
     </section>
   <% } %>
@@ -151,11 +183,20 @@
   <details class="section-card q-answered" style="margin-top:26px;">
     <summary><%= answered.length %> already answered</summary>
     <ul>
-      <% for (const row of answered.slice(0, 40)) { %>
+      <% for (const row of answered.slice(0, 40)) {
+        let discarded = false;
+        try { discarded = JSON.parse(row.resolution || '{}').decision === 'discarded'; } catch (e) { discarded = false; }
+      %>
         <li>
           <strong><%= row.question %></strong><br>
           <%= row.answer %>
           <span class="crm-muted">· <%= new Date(row.created_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) %></span>
+          <% if (discarded) { %>
+            <form method="post" action="/crm/questions/restore" style="display:inline;margin-left:6px;">
+              <input type="hidden" name="key" value="<%= row.question_key %>">
+              <button class="btn subtle" type="submit" style="font-size:11px;padding:2px 8px;">Restore</button>
+            </form>
+          <% } %>
         </li>
       <% } %>
     </ul>

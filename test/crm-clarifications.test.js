@@ -26,6 +26,9 @@ const INTAKE = '__test_intake_1';
 const PROJECT = '__test_project_1';
 const QUESTION = 'What is the exact mailbox size limit for E3 licenses (50GB or 100GB)?';
 const ACTION = 'Send HLD draft for review by end of day.';
+// Side chat the transcriber picked up — the material for the discard tests.
+const NOISE_1 = 'Is the weather in Ireland relevant to the migration plan?';
+const NOISE_2 = 'Speaker 3 mentioned hay fever; unable to match to a known CRM person.';
 
 function cleanup() {
   const hub = db.hub();
@@ -48,7 +51,7 @@ function seed() {
     INSERT INTO meeting_intakes (id, user, project_slug, title, transcript, extraction, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, 'processed', ?)
   `).run(INTAKE, USER, '__test-m365', 'Test migration call', 'transcript', JSON.stringify({
-    open_questions: [QUESTION],
+    open_questions: [QUESTION, NOISE_1, NOISE_2],
     action_register: [
       { owner: 'Nick', owner_type: 'unknown_speaker', task: ACTION },
       { owner: 'Nick', owner_type: 'unknown_speaker', task: 'Chase Microsoft for the licensing agreement.' },
@@ -155,4 +158,44 @@ test('an alias-overlap answer removes the clashing alias and records the decisio
   const atom = db.hub().prepare('SELECT * FROM knowledge_atoms WHERE id = ?').get(result.atomId);
   assert.equal(atom.predicate, 'distinct_from');
   assert.equal(boards().people.clarification_requests.length, 0);
+});
+
+test('discarding drops a question for good, writes no knowledge, and can be undone', () => {
+  const { discardClarification, restoreClarification } = require('../lib/crm-clarifications');
+  const item = openClarifications(USER).find(i => i.question === NOISE_1);
+  assert.ok(item, 'need an open question to discard');
+  const atomsBefore = db.hub().prepare('SELECT COUNT(*) n FROM knowledge_atoms WHERE user = ?').get(USER).n;
+
+  discardClarification(USER, { key: item.key, kind: item.kind, question: item.question });
+  assert.equal(openClarifications(USER).some(i => i.key === item.key), false, 'a discarded question is gone');
+  assert.equal(
+    db.hub().prepare('SELECT COUNT(*) n FROM knowledge_atoms WHERE user = ?').get(USER).n,
+    atomsBefore,
+    'noise must not become knowledge',
+  );
+
+  assert.equal(restoreClarification(USER, item.key), true);
+  assert.equal(openClarifications(USER).some(i => i.key === item.key), true, 'undo puts it back');
+});
+
+test('"Delete this - not relevant" in the answer box is a discard, not a fact', async () => {
+  const { isDeleteIntent } = require('../lib/crm-clarifications');
+  assert.equal(isDeleteIntent('Delete this - not relevant'), true);
+  assert.equal(isDeleteIntent('Ignore'), true);
+  assert.equal(isDeleteIntent('irrelevant'), true);
+  // A real answer that merely contains the phrase must still become knowledge.
+  assert.equal(isDeleteIntent(
+    'The 50GB tier is not relevant any more because everyone was moved to 100GB in the July migration.'), false);
+
+  const item = openClarifications(USER).find(i => i.question === NOISE_2);
+  const before = db.hub().prepare('SELECT COUNT(*) n FROM knowledge_atoms WHERE user = ?').get(USER).n;
+  const result = await answerMeetingQuestion(USER, {
+    key: item.key, intakeId: INTAKE, question: item.question, answer: 'Delete this - not relevant',
+    projectSlug: '__test-m365', meetingTitle: 'Test migration call',
+  });
+  assert.equal(result.discarded, true);
+  assert.equal(result.atomId, null);
+  assert.equal(db.hub().prepare('SELECT COUNT(*) n FROM knowledge_atoms WHERE user = ?').get(USER).n, before,
+    'a deletion must never be written as a decision atom');
+  assert.equal(openClarifications(USER).some(i => i.key === item.key), false);
 });

@@ -1782,13 +1782,15 @@ router.get('/crm/questions', requireAuth, (req, res) => {
     contacts,
     saved: String(req.query.saved || '').slice(0, 300),
     error: String(req.query.error || '').slice(0, 300),
+    restoreKey: String(req.query.restore || '').slice(0, 64),
   });
 });
 
-function questionsRedirect(res, { saved, error, key }) {
+function questionsRedirect(res, { saved, error, key, restore }) {
   const params = new URLSearchParams();
   if (saved) params.set('saved', saved);
   if (error) params.set('error', error);
+  if (restore) params.set('restore', restore);
   const anchor = key && error ? `#q-${key}` : '';
   res.redirect(`/crm/questions?${params.toString()}${anchor}`);
 }
@@ -1802,7 +1804,7 @@ router.post('/crm/questions/answer', requireAuth, requireSameOrigin, writeLimite
   }
   try {
     const { answerMeetingQuestion } = require('../lib/crm-clarifications');
-    const { statement } = await answerMeetingQuestion(req.hubUser, {
+    const { statement, discarded } = await answerMeetingQuestion(req.hubUser, {
       key,
       intakeId: String(req.body.intake_id || '').trim() || null,
       question,
@@ -1810,7 +1812,9 @@ router.post('/crm/questions/answer', requireAuth, requireSameOrigin, writeLimite
       projectSlug: String(req.body.project_slug || '').trim() || null,
       meetingTitle: String(req.body.meeting_title || '').trim() || null,
     });
-    questionsRedirect(res, { saved: `Now in the knowledge layer: ${statement}` });
+    questionsRedirect(res, discarded
+      ? { saved: 'Read as a discard, so nothing was written to knowledge.', restore: key }
+      : { saved: `Now in the knowledge layer: ${statement}` });
   } catch (err) {
     console.error('[crm questions answer]', err);
     questionsRedirect(res, { error: err.message, key });
@@ -1859,6 +1863,38 @@ router.post('/crm/questions/alias', requireAuth, requireSameOrigin, writeLimiter
   } catch (err) {
     console.error('[crm questions alias]', err);
     questionsRedirect(res, { error: err.message, key });
+  }
+});
+
+router.post('/crm/questions/discard', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const key = String(req.body.key || '').trim();
+  try {
+    const { discardClarification } = require('../lib/crm-clarifications');
+    discardClarification(req.hubUser, {
+      key,
+      kind: String(req.body.kind || '').trim() || null,
+      question: String(req.body.question || '').trim(),
+      sourceKind: String(req.body.source_kind || '').trim() || null,
+      sourceId: String(req.body.source_id || '').trim() || null,
+    });
+    questionsRedirect(res, { saved: 'Discarded. It won\'t be raised again.', restore: key });
+  } catch (err) {
+    console.error('[crm questions discard]', err);
+    questionsRedirect(res, { error: err.message, key });
+  }
+});
+
+router.post('/crm/questions/restore', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const key = String(req.body.key || '').trim();
+  try {
+    const { restoreClarification } = require('../lib/crm-clarifications');
+    const restored = restoreClarification(req.hubUser, key);
+    questionsRedirect(res, restored
+      ? { saved: 'Back in the queue.' }
+      : { error: 'That one was answered, not discarded — nothing to restore.' });
+  } catch (err) {
+    console.error('[crm questions restore]', err);
+    questionsRedirect(res, { error: err.message });
   }
 });
 
