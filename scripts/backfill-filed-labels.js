@@ -24,7 +24,19 @@ const { uuid } = require('../lib/id');
 const { getEnabledEmailLabels } = require('../lib/email-taxonomy');
 const { classifyEmail } = require('../lib/email-processor');
 const { backfillFromLabels } = require('../lib/newsletter-pipeline');
-const { fetchEmailsByLabel } = require('../lib/gmail');
+const { getGmailClient, fetchEmailByIdWithClient } = require('../lib/gmail');
+
+// Paginate every message id under a label (ids only — cheap, no body fetch).
+async function listMessageIdsByLabel(gmail, labelId) {
+  const ids = [];
+  let pageToken;
+  do {
+    const res = await gmail.users.messages.list({ userId: 'me', labelIds: [labelId], maxResults: 500, pageToken });
+    for (const m of res.data.messages || []) ids.push(m.id);
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
+  return ids;
+}
 
 const USER = process.env.BACKFILL_USER || 'douglas';
 const COMMIT = process.argv.includes('--commit');
@@ -58,26 +70,32 @@ async function main() {
   console.log(`[backfill] user=${USER} mode=${COMMIT ? 'COMMIT' : 'DRY-RUN'}`);
   console.log(`[backfill] classification labels: ${classifyLabels.length}; intelligence labels: ${intelLabels.join(', ') || '(none)'} (last ${INTEL_WINDOW_DAYS}d)`);
 
-  // ── Classification labels: full history, summary + filed label ──────────────
-  let totalIngested = 0;
-  for (const label of classifyLabels) {
-    let emails;
-    try {
-      emails = await fetchEmailsByLabel(USER, label, 0);
-    } catch (err) {
-      console.warn(`[backfill] "${label}" fetch failed: ${err.message}`);
-      continue;
-    }
-    const missing = emails.filter(e => !processedIds.has(e.id));
-    if (!missing.length) {
-      console.log(`[backfill] ${label}: ${emails.length} filed, 0 missing`);
-      continue;
-    }
-    console.log(`[backfill] ${label}: ${emails.length} filed, ${missing.length} missing${emails.length >= 100 ? ' (label at 100-fetch cap — older mail may remain)' : ''}`);
-    if (!COMMIT) { totalIngested += missing.length; continue; }
+  const gmail = await getGmailClient(USER);
+  const labelList = (await gmail.users.labels.list({ userId: 'me' })).data.labels || [];
+  const idByName = new Map(labelList.map(l => [String(l.name || '').toLowerCase(), l.id]));
 
-    for (const email of missing) {
+  // ── Classification labels: full history (paginated), summary + filed label ──
+  let totalIngested = 0;
+  let totalMissing = 0;
+  for (const label of classifyLabels) {
+    const labelId = idByName.get(label.toLowerCase());
+    if (!labelId) { console.log(`[backfill] ${label}: label not present in Gmail`); continue; }
+    let allIds;
+    try {
+      allIds = await listMessageIdsByLabel(gmail, labelId);
+    } catch (err) {
+      console.warn(`[backfill] "${label}" id list failed: ${err.message}`);
+      continue;
+    }
+    const missingIds = allIds.filter(id => !processedIds.has(id));
+    totalMissing += missingIds.length;
+    console.log(`[backfill] ${label}: ${allIds.length} filed, ${missingIds.length} missing`);
+    if (!COMMIT || !missingIds.length) continue;
+
+    let done = 0;
+    for (const id of missingIds) {
       try {
+        const email = await fetchEmailByIdWithClient(gmail, id);
         const result = await classifyEmail(email, enrichedContacts, projects, emailLabels, USER, 'email');
         const validSlug = projects.some(p => p.slug === result.project_slug) ? result.project_slug : null;
         hub.prepare(`
@@ -90,12 +108,13 @@ async function main() {
           email.receivedAt, result.summary, validSlug, label
         );
         processedIds.add(email.id);
+        done++;
         totalIngested++;
       } catch (err) {
-        console.warn(`[backfill] classify failed for "${email.subject}": ${err.message}`);
+        console.warn(`[backfill] classify failed for ${id}: ${err.message}`);
       }
     }
-    console.log(`[backfill] ${label}: ingested ${missing.length}`);
+    console.log(`[backfill] ${label}: ingested ${done}/${missingIds.length}`);
   }
 
   // ── Intelligence labels: recent window into the briefing ────────────────────
@@ -113,7 +132,7 @@ async function main() {
     }
   }
 
-  console.log(`[backfill] DONE — ${COMMIT ? 'ingested' : 'would ingest'} ${totalIngested} classification email(s); intelligence topics: ${intelTopics}`);
+  console.log(`[backfill] DONE — ${COMMIT ? `ingested ${totalIngested}` : `would ingest ${totalMissing}`} classification email(s); intelligence topics: ${intelTopics}`);
   if (!COMMIT) console.log('[backfill] re-run with --commit to write.');
 }
 
