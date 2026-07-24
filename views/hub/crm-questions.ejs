@@ -1,0 +1,165 @@
+<%- include('partials/crm-head', { title: 'Questions', active: 'questions' }) %>
+
+<style>
+  .q-card { margin-top:14px; border-left:4px solid var(--crm-border,#dfe3e8); }
+  .q-card[data-kind="meeting_question"] { border-left-color:#7c3aed; }
+  .q-card[data-kind="task_owner"] { border-left-color:#0284c7; }
+  .q-card[data-kind="person_alias"] { border-left-color:#059669; }
+  .q-card:target { box-shadow:0 0 0 3px color-mix(in srgb, var(--accent,#7c6af5) 40%, transparent); }
+  .q-question { margin:2px 0 6px; font-size:1.05rem; font-weight:600; line-height:1.4; }
+  .q-context { color:var(--crm-muted,#667085); font-size:12px; margin:0 0 10px; }
+  .q-context a { color:inherit; }
+  .q-form { display:grid; gap:8px; }
+  .q-form textarea { width:100%; min-height:64px; font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--crm-border,#dfe3e8); }
+  .q-row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
+  .q-row label { display:grid; gap:4px; font-size:12px; color:var(--crm-muted,#667085); }
+  .q-row select, .q-row input { font:inherit; padding:7px 9px; border-radius:8px; border:1px solid var(--crm-border,#dfe3e8); min-width:200px; }
+  .q-note { font-size:12px; color:var(--crm-muted,#667085); margin:6px 0 0; }
+  .q-empty { padding:22px; text-align:center; color:var(--crm-muted,#667085); }
+  .q-answered summary { cursor:pointer; color:var(--crm-muted,#667085); }
+  .q-answered li { margin:8px 0; font-size:13px; line-height:1.5; }
+</style>
+
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Open questions</p>
+    <h1><%= groups.total %> thing<%= groups.total === 1 ? '' : 's' %> the Hub can't decide without you</h1>
+    <p>Every question here was raised by a nightly check against your own meetings and records. Answering one writes it into the knowledge layer with a link back to where it came from, and the checks stop asking.</p>
+    <% if (!showAll && groups.shown < groups.total) { %>
+      <p class="crm-muted">Showing the <%= groups.shown %> most recent. <a href="/crm/questions?all=1">Show all <%= groups.total %></a>.</p>
+    <% } else if (showAll && groups.total > 15) { %>
+      <p class="crm-muted">Showing all <%= groups.total %>. <a href="/crm/questions">Back to the recent ones</a>.</p>
+    <% } %>
+  </div>
+</section>
+
+<% if (saved) { %>
+  <section class="section-card" style="border-left:4px solid var(--crm-success,#16865b);">
+    <strong>Saved.</strong> <%= saved %>
+  </section>
+<% } %>
+<% if (error) { %>
+  <section class="section-card" style="border-left:4px solid var(--crm-danger,#c0392b);">
+    <strong>Not saved.</strong> <%= error %>
+  </section>
+<% } %>
+
+<% if (!groups.total) { %>
+  <section class="section-card q-empty">Nothing open. Every question the checks raised has an answer.</section>
+<% } %>
+
+<% if (groups.meeting_questions.length) { %>
+  <h2 style="margin:26px 0 0;font-size:15px;">From your meetings (<%= groups.counts.meeting_questions %>)</h2>
+  <% for (const item of groups.meeting_questions) { %>
+    <section class="section-card q-card" data-kind="meeting_question" id="q-<%= item.key %>">
+      <p class="q-question"><%= item.question %></p>
+      <p class="q-context">
+        <a href="/crm/meeting-intake?intake=<%= item.intake_id %>"><%= item.title %></a>
+        <% if (item.project_name) { %> · <a href="/crm/project/<%= item.project_slug %>"><%= item.project_name %></a><% } %>
+        · raised by the meeting-intake check
+      </p>
+      <form class="q-form" method="post" action="/crm/questions/answer">
+        <input type="hidden" name="key" value="<%= item.key %>">
+        <input type="hidden" name="intake_id" value="<%= item.intake_id %>">
+        <input type="hidden" name="project_slug" value="<%= item.project_slug || '' %>">
+        <input type="hidden" name="meeting_title" value="<%= item.title %>">
+        <input type="hidden" name="question" value="<%= item.question %>">
+        <textarea name="answer" placeholder="Answer it the way you'd tell a colleague — e.g. everyone gets 100GB" required></textarea>
+        <div><button class="btn primary" type="submit">Save answer</button></div>
+      </form>
+    </section>
+  <% } %>
+<% } %>
+
+<% if (groups.task_owners.length) { %>
+  <h2 style="margin:26px 0 0;font-size:15px;">Actions with no known owner (<%= groups.counts.task_owners %>)</h2>
+  <% for (const item of groups.task_owners) { %>
+    <section class="section-card q-card" data-kind="task_owner" id="q-<%= item.key %>">
+      <p class="q-question"><%= item.task %></p>
+      <p class="q-context">
+        transcript says <strong><%= item.owner %></strong>, who isn't a known person ·
+        <a href="/crm/meeting-intake?intake=<%= item.intake_id %>"><%= item.title %></a>
+        <% if (item.project_name) { %> · <a href="/crm/project/<%= item.project_slug %>"><%= item.project_name %></a><% } %>
+      </p>
+      <form class="q-form" method="post" action="/crm/questions/owner">
+        <input type="hidden" name="key" value="<%= item.key %>">
+        <input type="hidden" name="intake_id" value="<%= item.intake_id %>">
+        <input type="hidden" name="question" value="<%= item.question %>">
+        <input type="hidden" name="task" value="<%= item.task %>">
+        <input type="hidden" name="spoken_owner" value="<%= item.owner %>">
+        <input type="hidden" name="meeting_title" value="<%= item.title %>">
+        <div class="q-row">
+          <label>Existing person
+            <select name="contact_id">
+              <option value="">Choose…</option>
+              <% for (const contact of contacts) { %>
+                <option value="<%= contact.id %>"><%= contact.name %></option>
+              <% } %>
+            </select>
+          </label>
+          <label>Or add them
+            <input name="new_contact_name" placeholder="Full name">
+          </label>
+          <button class="btn primary" type="submit">Set owner</button>
+        </div>
+      </form>
+      <p class="q-note">"<%= item.owner %>" is kept as an alias on whoever you pick, so the next transcript matches them without asking.</p>
+    </section>
+  <% } %>
+<% } %>
+
+<% if (groups.person_aliases.length) { %>
+  <h2 style="margin:26px 0 0;font-size:15px;">People who may be the same person (<%= groups.counts.person_aliases %>)</h2>
+  <% for (const item of groups.person_aliases) { %>
+    <section class="section-card q-card" data-kind="person_alias" id="q-<%= item.key %>">
+      <p class="q-question"><%= item.question %></p>
+      <p class="q-context">
+        <% item.contact_ids.forEach((id, i) => { %>
+          <a href="/crm/contact/<%= id %>"><%= item.contacts[i] %></a><%= i < item.contact_ids.length - 1 ? ' · ' : '' %>
+        <% }) %>
+        <% if (item.shared_projects && item.shared_projects.length) { %> · both on <%= item.shared_projects.join(', ') %><% } %>
+        · flagged as <%= (item.reason || '').replace(/_/g, ' ') %>
+      </p>
+      <form class="q-form" method="post" action="/crm/questions/alias">
+        <input type="hidden" name="key" value="<%= item.key %>">
+        <input type="hidden" name="question" value="<%= item.question %>">
+        <input type="hidden" name="contact_ids" value="<%= item.contact_ids.join(',') %>">
+        <input type="hidden" name="contact_names" value="<%= item.contacts.join('|') %>">
+        <% if (item.alias_overlaps && item.alias_overlaps.length) { %>
+          <div class="q-row">
+            <label>Also remove the clashing alias
+              <select name="remove">
+                <option value="">Leave aliases alone</option>
+                <% for (const overlap of item.alias_overlaps) { %>
+                  <option value="<%= overlap.contact_id %>::<%= overlap.alias %>">Remove "<%= overlap.alias %>" from <%= overlap.contact_name %></option>
+                <% } %>
+              </select>
+            </label>
+          </div>
+        <% } %>
+        <div class="q-row">
+          <button class="btn primary" type="submit" name="decision" value="different_people">Different people</button>
+          <button class="btn" type="submit" name="decision" value="same_person">Same person</button>
+        </div>
+      </form>
+      <p class="q-note">Either answer stops the nightly flag. Merging two contact records is not automated — if they're the same person, the records still need combining by hand.</p>
+    </section>
+  <% } %>
+<% } %>
+
+<% if (answered.length) { %>
+  <details class="section-card q-answered" style="margin-top:26px;">
+    <summary><%= answered.length %> already answered</summary>
+    <ul>
+      <% for (const row of answered.slice(0, 40)) { %>
+        <li>
+          <strong><%= row.question %></strong><br>
+          <%= row.answer %>
+          <span class="crm-muted">· <%= new Date(row.created_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) %></span>
+        </li>
+      <% } %>
+    </ul>
+  </details>
+<% } %>
+
+<%- include('partials/crm-foot') %>

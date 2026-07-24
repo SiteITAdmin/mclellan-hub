@@ -234,6 +234,7 @@ function crmPageData(user) {
       { href: '/crm/companies', label: 'Companies' },
       { href: '/crm/meetings', label: 'Meetings' },
       { href: '/crm/meeting-intake', label: 'Intake' },
+      { href: '/crm/questions', label: 'Questions' },
       { href: '/crm/tasks', label: 'Tasks' },
       { href: '/crm/suggestions', label: 'Suggestions' },
       { href: '/crm/reminders', label: 'Reminders' },
@@ -1760,6 +1761,105 @@ router.get('/crm/tasks', requireAuth, async (req, res) => {
   const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const projects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
   res.render('hub/crm-tasks', { ...crmPageData(req.hubUser), tasks, showHistory, contacts, companies, projects, syncError });
+});
+
+// The answer side of the quality boards. Every question here was raised by a
+// nightly check; before this page existed there was nowhere to answer one, so
+// the same question was re-asked every night and the daily brief could only
+// link at the transcript it came from.
+router.get('/crm/questions', requireAuth, (req, res) => {
+  const { groupedClarifications, answeredRows } = require('../lib/crm-clarifications');
+  const { isPlaceholderPersonName } = require('../lib/meeting-intake');
+  const contacts = db.hub().prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name')
+    .all(req.hubUser)
+    .filter(contact => !isPlaceholderPersonName(contact.name));
+  const showAll = req.query.all === '1';
+  res.render('hub/crm-questions', {
+    ...crmPageData(req.hubUser),
+    groups: groupedClarifications(req.hubUser, { limit: showAll ? 0 : 15 }),
+    showAll,
+    answered: answeredRows(req.hubUser),
+    contacts,
+    saved: String(req.query.saved || '').slice(0, 300),
+    error: String(req.query.error || '').slice(0, 300),
+  });
+});
+
+function questionsRedirect(res, { saved, error, key }) {
+  const params = new URLSearchParams();
+  if (saved) params.set('saved', saved);
+  if (error) params.set('error', error);
+  const anchor = key && error ? `#q-${key}` : '';
+  res.redirect(`/crm/questions?${params.toString()}${anchor}`);
+}
+
+router.post('/crm/questions/answer', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const key = String(req.body.key || '').trim();
+  const answer = String(req.body.answer || '').trim();
+  const question = String(req.body.question || '').trim();
+  if (!key || !answer || !question) {
+    return questionsRedirect(res, { error: 'An answer is required.', key });
+  }
+  try {
+    const { answerMeetingQuestion } = require('../lib/crm-clarifications');
+    const { statement } = await answerMeetingQuestion(req.hubUser, {
+      key,
+      intakeId: String(req.body.intake_id || '').trim() || null,
+      question,
+      answer,
+      projectSlug: String(req.body.project_slug || '').trim() || null,
+      meetingTitle: String(req.body.meeting_title || '').trim() || null,
+    });
+    questionsRedirect(res, { saved: `Now in the knowledge layer: ${statement}` });
+  } catch (err) {
+    console.error('[crm questions answer]', err);
+    questionsRedirect(res, { error: err.message, key });
+  }
+});
+
+router.post('/crm/questions/owner', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const key = String(req.body.key || '').trim();
+  try {
+    const { answerTaskOwner } = require('../lib/crm-clarifications');
+    const { contact } = await answerTaskOwner(req.hubUser, {
+      key,
+      intakeId: String(req.body.intake_id || '').trim() || null,
+      question: String(req.body.question || '').trim(),
+      task: String(req.body.task || '').trim(),
+      spokenOwner: String(req.body.spoken_owner || '').trim(),
+      contactId: String(req.body.contact_id || '').trim() || null,
+      newContactName: String(req.body.new_contact_name || '').trim() || null,
+      meetingTitle: String(req.body.meeting_title || '').trim() || null,
+    });
+    questionsRedirect(res, { saved: `${contact.name} now owns that action.` });
+  } catch (err) {
+    console.error('[crm questions owner]', err);
+    questionsRedirect(res, { error: err.message, key });
+  }
+});
+
+router.post('/crm/questions/alias', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const key = String(req.body.key || '').trim();
+  try {
+    const { answerPersonAlias } = require('../lib/crm-clarifications');
+    const [removeFromContactId, removeAlias] = String(req.body.remove || '').split('::');
+    const result = answerPersonAlias(req.hubUser, {
+      key,
+      question: String(req.body.question || '').trim(),
+      decision: req.body.decision === 'same_person' ? 'same_person' : 'different_people',
+      contactIds: String(req.body.contact_ids || '').split(',').map(id => id.trim()).filter(Boolean),
+      contactNames: String(req.body.contact_names || '').split('|').map(name => name.trim()).filter(Boolean),
+      removeAlias: removeAlias || null,
+      removeFromContactId: removeFromContactId || null,
+    });
+    const removed = result.removed ? ` Removed alias "${result.removed.alias}" from ${result.removed.contact_name}.` : '';
+    questionsRedirect(res, {
+      saved: `${result.same ? 'Recorded as the same person — merge the records by hand.' : 'Recorded as different people.'}${removed}`,
+    });
+  } catch (err) {
+    console.error('[crm questions alias]', err);
+    questionsRedirect(res, { error: err.message, key });
+  }
 });
 
 router.get('/crm/suggestions', requireAuth, (req, res) => {
