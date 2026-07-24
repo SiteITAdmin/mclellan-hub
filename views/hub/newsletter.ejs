@@ -16,7 +16,8 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
   --card-radius: 12px;
   --card-border: var(--border, #dddaf0);
   --card-bg: var(--bg, #faf9fb);
-  --accent: var(--primary, #7c6af5);
+  /* Do not redefine --accent as var(--primary): hub.css sets
+     --primary: var(--accent), which would circularise and blank primary buttons. */
 }
 
 .week-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -49,8 +50,8 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 
 .btn { padding: 8px 16px; font-size: 13px; border-radius: 8px; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: var(--text, #15131e); font-family: inherit; font-weight: 600; transition: background 0.12s; }
 .btn:hover { background: rgba(0,0,0,0.05); }
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-primary:hover { background: #6a58e0; }
+.btn-primary { background: var(--accent, #8083ff); color: #fff; border-color: var(--accent, #8083ff); }
+.btn-primary:hover { background: var(--accent-hover, #6365e0); }
 .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: var(--text, #15131e); font-family: inherit; transition: background 0.12s; }
 .btn-sm:hover { background: rgba(0,0,0,0.05); }
 .btn-sm.danger { color: #ba1a1a; border-color: #ffdad6; }
@@ -207,8 +208,8 @@ details[open] > summary span[style*="18px"] { transform: rotate(90deg); display:
       <div class="preview-area">
         <iframe id="preview-frame" title="Briefing preview"></iframe>
       </div>
-      <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
-        <button class="btn btn-primary" id="send-btn" onclick="sendBriefing()">Send to email</button>
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="email-to-me-btn" onclick="sendBriefing()">Email to me</button>
         <span id="send-status" style="font-size:13px;color:var(--text-dim)"></span>
       </div>
     </div>
@@ -235,9 +236,7 @@ details[open] > summary span[style*="18px"] { transform: rotate(90deg); display:
         <div class="topic-summary"><%= briefingProvenanceText(b) %></div>
         <% } %>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <% if (!b.sent_at) { %>
-          <button class="btn-sm" onclick="resendBriefing('<%= b.id %>')">Send</button>
-          <% } %>
+          <button class="btn-sm" onclick="resendBriefing('<%= b.id %>')"><%= b.sent_at ? 'Email again' : 'Email to me' %></button>
           <button class="btn-sm" onclick="downloadPdf('/newsletter/briefing/<%= b.id %>/pdf', this)">PDF</button>
           <button class="btn-sm" onclick="exportToWiki('<%= b.id %>', this)" title="<%= b.wiki_slug ? 'Exported: ' + b.wiki_slug : 'Export to wiki' %>"><%= b.wiki_slug ? '✓ Wiki' : 'Wiki' %></button>
           <button class="btn-sm" onclick="togglePublish('<%= b.id %>', <%= b.published_at ? 'true' : 'false' %>, this)" style="<%= b.published_at ? 'background:var(--accent);color:#fff' : '' %>"><%= b.published_at ? 'Published' : 'Publish' %></button>
@@ -780,7 +779,7 @@ async function downloadPdf(url, btn) {
 
   window.sendBriefing = async function() {
     if (!currentBriefingId) return;
-    const btn = document.getElementById('send-btn');
+    const btn = document.getElementById('email-to-me-btn');
     const status = document.getElementById('send-status');
     btn.disabled = true;
     status.textContent = 'Sending…';
@@ -793,6 +792,8 @@ async function downloadPdf(url, btn) {
       const data = await r.json();
       if (!r.ok) { status.textContent = '⚠ ' + (data.error || 'Failed'); btn.disabled = false; return; }
       status.textContent = `✓ Sent to ${data.to}`;
+      btn.textContent = 'Email again';
+      btn.disabled = false;
     } catch (err) {
       status.textContent = '⚠ ' + err.message;
       btn.disabled = false;
