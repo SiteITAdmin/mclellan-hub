@@ -119,6 +119,7 @@ These are the tools the system runs on. They are not features — they are the f
 - Keep-warm-overdue contacts surface at the top of the People page with badges
 - Manual capture is one pass: Add Person takes phone/company/role/how-we-met; touchpoints, milestones, and project status are recorded where they're seen (facts and manual atoms, not columns)
 - Meeting intake drafts are previewed (attendees/outcomes/actions/risk flags) before anything is committed; debriefs create CRM meeting rows with date/time/duration/channel
+- Every question the nightly quality boards raise is answerable at `/crm/questions`, and answering one writes knowledge instead of only clearing a flag: a meeting question becomes a `decision` atom on its project, an unowned action becomes an `open_commitment` atom on a real person (with the transcript's name kept as an alias), an alias clash becomes a `distinct_from`/`same_person_as` atom. A board that asks something Douglas cannot answer anywhere is an incomplete feature
 
 **Does not own:** Tasks (those go to Google Tasks), calendar events (that's Calendar), document storage (that's Projects/Documents)
 
