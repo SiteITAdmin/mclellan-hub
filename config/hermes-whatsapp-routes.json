@@ -9,6 +9,7 @@
       },
       "project_slug": "dad",
       "project_name": "Dad",
+      "subject_contact_name": "Alister McLellan",
       "note": "Douglas explicitly routes this family group to the Dad project.",
       "participant_contacts": [
         { "contact_name": "Catriona McLellan", "sender_names": ["Catriona McLellan", "Catriona"] },

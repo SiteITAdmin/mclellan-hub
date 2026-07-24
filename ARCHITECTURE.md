@@ -174,6 +174,7 @@ Important rules:
 
 - Ingest paths store faithful source evidence. They must not directly create `crm_facts`, `contact_projects`, `company_projects`, or Google Tasks as their normal output.
 - `lib/email-processor.js`, `lib/agentmail-processor.js`, and `lib/meeting-intake.js` have a rollback switch only: `CRM_LEGACY_DIRECT_WRITES=1`. Do not use it as the normal architecture.
+- Entity type is enforced at the database boundary: a normalized company name cannot be inserted or renamed into `contacts`. Company-shaped evidence must resolve to the existing `companies` identity. Explicit messaging routes may name a `subject_contact_name` separately from the sender so pronoun-heavy group evidence links to the intended compiled contact without conflating participants.
 - Open tasks are operational state. They can inform triage and duplicate review, but durable knowledge should come from completed tasks or source evidence.
 - If a new CRM feature needs to connect people, projects, companies, tasks, documents, or emails, add a source kind or synthesis/projection step. Do not add a direct table copy path.
 
