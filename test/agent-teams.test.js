@@ -843,6 +843,60 @@ test('consigliere fallback brief renders readable markdown with no UUIDs and pro
   assert(!/[0-9a-f]{8}-[0-9a-f]{4}/.test(markdown), 'no UUIDs in the rendered brief');
 });
 
+const { buildLinkIndex, linksForBriefItem } = require('../lib/consigliere-brief');
+const { fixLinksForItem } = require('../lib/consigliere-links');
+
+const LINKED_REPORT = {
+  user: 'douglas',
+  asks_douglas: [
+    {
+      source_kind: 'hub_quality', source_id: 'crm:meeting_intake', severity: 'question',
+      summary: '2 meeting intake clarification(s) needed',
+      clarification_requests: [
+        { intake_id: 'intake-1', title: 'PST Migration', type: 'model_open_question', evidence: 'Is the E3 mailbox limit 50GB or 100GB?' },
+      ],
+    },
+    {
+      source_kind: 'hub_quality', source_id: 'crm:people', severity: 'question',
+      summary: '1 possible duplicate person pair(s)',
+      clarification_requests: [
+        { contacts: ['Nick F', 'Nicholas F'], contact_ids: ['contact-a', 'contact-b'], reason: 'alias_overlap' },
+      ],
+    },
+  ],
+  agent_corrections: [], monitoring: [],
+};
+
+test('every needs_you item carries a clickable Hub link to where the fix happens', () => {
+  const index = buildLinkIndex(LINKED_REPORT);
+  const { markdown } = fallbackBrief(LINKED_REPORT, {});
+  assert(markdown.includes('Go here:'), 'brief must offer a link line');
+  assert(markdown.includes('](https://dchat.mclellan.scot/crm/meeting-intake?intake=intake-1)'),
+    'meeting intake ask must deep-link to that intake');
+  assert(markdown.includes('[Nick F](https://dchat.mclellan.scot/crm/contact/contact-a)'),
+    'duplicate-person ask must link each contact record');
+  assert.equal(Object.keys(index).length, 2);
+});
+
+test('brief links come from the escalation payload, not from model text', () => {
+  const index = buildLinkIndex(LINKED_REPORT);
+  // Model invented a ref that was never issued: no link rather than a wrong one.
+  assert.deepEqual(linksForBriefItem({ title: 'Something else', detail: '', refs: ['A9'] }, index), []);
+  // Model dropped refs but named the area: fall back to that area's links.
+  const recovered = linksForBriefItem({ title: 'CRM people need merging', detail: '', refs: [] }, index);
+  assert(recovered.some(link => link.url.endsWith('/crm/contact/contact-a')));
+});
+
+test('link resolver never points at a project slug that no longer exists', () => {
+  // The project-context board flags rows whose slug is dangling; link the row.
+  const links = fixLinksForItem({
+    source_kind: 'hub_quality', source_id: 'crm:project_context',
+    clarification_requests: [{ source: 'google_tasks', id: 'task-9', project_slug: 'ghost-project' }],
+  });
+  assert(!links.some(link => link.url.includes('/crm/project/ghost-project')), 'must not link a dangling slug');
+  assert(links.some(link => link.url.endsWith('/crm/tasks/task-9')), 'must link the row that needs re-tagging');
+});
+
 const { getMinScoreForType } = require('../lib/content-taxonomy');
 
 test('LinkedIn quality board respects a per-type score bar', () => {
