@@ -50,6 +50,8 @@ Suggestion review is also evidence: Create task, Not this time, Dismiss, and Wro
 
 Do not reintroduce old direct CRM write paths. Gmail, AgentMail, and meeting intake should store source evidence and let the CRM knowledge engine decide whether something is knowledge, a duplicate, a supersession, or an action. `CRM_LEGACY_DIRECT_WRITES=1` exists only as a temporary rollback switch, not as a design pattern.
 
+Company identity is a hard database invariant: a normalized name already present in `companies` cannot be created or renamed as a `contacts` row. Resolve that evidence to the company identity. For explicitly routed group messages, keep the message sender (`contact_name`) distinct from the person the group is about (`subject_contact_name`).
+
 When changing CRM behavior, update `ARCHITECTURE.md`, this file, and any affected docs so future agents see the prompt operating system before they see the tables.
 
 ## The most important rules

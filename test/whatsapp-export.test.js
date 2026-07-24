@@ -12,6 +12,7 @@ const route = {
   match: { chat_type: 'group', chat_names: ['Dad Information Group'] },
   project_slug: 'dad',
   project_name: 'Dad',
+  subject_contact_name: 'Alister McLellan',
   note: 'Explicit group route.',
   participant_contacts: [
     { contact_name: 'Catriona McLellan', sender_names: ['Catriona McLellan', 'Catriona'] },
@@ -53,6 +54,7 @@ test('builds stable routed records while excluding system and omitted-media rows
   assert.equal(first.records[1].contact_name, 'Iain Clark');
   assert.equal(first.records[2].contact_name, 'Liz Walker');
   assert.equal(first.records[0].project_slug, 'dad');
+  assert.equal(first.records[0].route.subject_contact_name, 'Alister McLellan');
   assert.equal(first.records[0].raw.historical_backfill, true);
   assert.deepEqual(
     first.records.map(record => record.external_message_id),
