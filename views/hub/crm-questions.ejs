@@ -14,6 +14,10 @@
   .q-row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
   .q-row label { display:grid; gap:4px; font-size:12px; color:var(--crm-muted,#667085); }
   .q-row select, .q-row input { font:inherit; padding:7px 9px; border-radius:8px; border:1px solid var(--crm-border,#dfe3e8); min-width:200px; }
+  .q-excerpt { margin:0 0 12px; }
+  .q-excerpt-head { margin:0 0 4px; font-size:12px; color:var(--crm-muted,#667085); }
+  .q-excerpt blockquote { margin:0 0 6px; padding:8px 12px; border-left:3px solid var(--crm-border,#dfe3e8); background:rgba(127,127,127,.06); border-radius:0 6px 6px 0; font-size:13px; line-height:1.5; }
+  .q-time { color:var(--crm-muted,#667085); font-variant-numeric:tabular-nums; font-size:11px; margin-right:4px; }
   .q-discard { margin-top:8px; }
   .q-discard .btn { font-size:12px; padding:4px 10px; }
   .q-note { font-size:12px; color:var(--crm-muted,#667085); margin:6px 0 0; }
@@ -66,6 +70,17 @@
         <% if (item.project_name) { %> · <a href="/crm/project/<%= item.project_slug %>"><%= item.project_name %></a><% } %>
         · raised by the meeting-intake check
       </p>
+      <% if (item.context && item.context.quotes && item.context.quotes.length) { %>
+        <div class="q-excerpt">
+          <p class="q-excerpt-head">
+            <strong><%= item.context.speaker %></strong>
+            <% if (item.context.matched) { %>on this topic<% } else if (item.context.turn_count) { %>· <%= item.context.turn_count %> turn<%= item.context.turn_count === 1 ? '' : 's' %> in this meeting<% } %>
+          </p>
+          <% for (const quote of item.context.quotes) { %>
+            <blockquote><span class="q-time"><%= quote.time %></span> <%= quote.text %></blockquote>
+          <% } %>
+        </div>
+      <% } %>
       <form class="q-form" method="post" action="/crm/questions/answer">
         <input type="hidden" name="key" value="<%= item.key %>">
         <input type="hidden" name="intake_id" value="<%= item.intake_id %>">
@@ -97,6 +112,17 @@
         <a href="/crm/meeting-intake?intake=<%= item.intake_id %>"><%= item.title %></a>
         <% if (item.project_name) { %> · <a href="/crm/project/<%= item.project_slug %>"><%= item.project_name %></a><% } %>
       </p>
+      <% if (item.context && item.context.quotes && item.context.quotes.length) { %>
+        <div class="q-excerpt">
+          <p class="q-excerpt-head">
+            <strong><%= item.context.speaker %></strong>
+            <% if (item.context.matched) { %>on this topic<% } else if (item.context.turn_count) { %>· <%= item.context.turn_count %> turn<%= item.context.turn_count === 1 ? '' : 's' %> in this meeting<% } %>
+          </p>
+          <% for (const quote of item.context.quotes) { %>
+            <blockquote><span class="q-time"><%= quote.time %></span> <%= quote.text %></blockquote>
+          <% } %>
+        </div>
+      <% } %>
       <form class="q-form" method="post" action="/crm/questions/owner">
         <input type="hidden" name="key" value="<%= item.key %>">
         <input type="hidden" name="intake_id" value="<%= item.intake_id %>">
@@ -144,6 +170,14 @@
         <% if (item.shared_projects && item.shared_projects.length) { %> · both on <%= item.shared_projects.join(', ') %><% } %>
         · flagged as <%= (item.reason || '').replace(/_/g, ' ') %>
       </p>
+      <% if (item.people_context && item.people_context.length) { %>
+        <div class="q-excerpt">
+          <% for (const person of item.people_context) { %>
+            <p class="q-excerpt-head"><strong><%= person.name %></strong></p>
+            <blockquote><%= person.evidence || 'Nothing recorded about them yet.' %></blockquote>
+          <% } %>
+        </div>
+      <% } %>
       <form class="q-form" method="post" action="/crm/questions/alias">
         <input type="hidden" name="key" value="<%= item.key %>">
         <input type="hidden" name="question" value="<%= item.question %>">

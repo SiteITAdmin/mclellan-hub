@@ -29,6 +29,23 @@ const ACTION = 'Send HLD draft for review by end of day.';
 // Side chat the transcriber picked up — the material for the discard tests.
 const NOISE_1 = 'Is the weather in Ireland relevant to the migration plan?';
 const NOISE_2 = 'Speaker 3 mentioned hay fever; unable to match to a known CRM person.';
+const IDENTITY_Q = "The identity of the meeting lead (Speaker 3) is not mentioned in the transcript.";
+// Krisp puts "Name | 00:42" on its own line, then the turn beneath it.
+const TRANSCRIPT = [
+  '## Krisp Notes',
+  'Speaker 1 | 00:01',
+  'Morning all.',
+  'Speaker 3 | 00:49',
+  'Right, let me kick us off. I own the migration workstream end to end, so anything on sequencing '
+    + 'or batch sizing comes through me. We agreed the pilot cohort last week and I have asked Neil to '
+    + 'confirm the device list before Thursday so we are not guessing when the change window opens.',
+  'Ken | 01:20',
+  'Fine by me.',
+  'Speaker 3 | 02:05',
+  'One more thing on mailboxes.',
+  'Ken | 03:00',
+  'The E3 mailbox limit question is the one blocking the comms pack, everything else is drafted.',
+].join('\n');
 
 function cleanup() {
   const hub = db.hub();
@@ -50,8 +67,8 @@ function seed() {
   hub.prepare(`
     INSERT INTO meeting_intakes (id, user, project_slug, title, transcript, extraction, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, 'processed', ?)
-  `).run(INTAKE, USER, '__test-m365', 'Test migration call', 'transcript', JSON.stringify({
-    open_questions: [QUESTION, NOISE_1, NOISE_2],
+  `).run(INTAKE, USER, '__test-m365', 'Test migration call', TRANSCRIPT, JSON.stringify({
+    open_questions: [QUESTION, NOISE_1, NOISE_2, IDENTITY_Q],
     action_register: [
       { owner: 'Nick', owner_type: 'unknown_speaker', task: ACTION },
       { owner: 'Nick', owner_type: 'unknown_speaker', task: 'Chase Microsoft for the licensing agreement.' },
@@ -198,4 +215,29 @@ test('"Delete this - not relevant" in the answer box is a discard, not a fact', 
   assert.equal(db.hub().prepare('SELECT COUNT(*) n FROM knowledge_atoms WHERE user = ?').get(USER).n, before,
     'a deletion must never be written as a decision atom');
   assert.equal(openClarifications(USER).some(i => i.key === item.key), false);
+});
+
+test('a question about a speaker shows 50-100 words of that speaker, not the transcript link', () => {
+  const { attachContext, transcriptTurns } = require('../lib/crm-clarifications');
+  const turns = transcriptTurns(db.hub().prepare('SELECT transcript FROM meeting_intakes WHERE id = ?').get(INTAKE).transcript);
+  assert.equal(turns.length, 5, '"Name | 00:00" headers become turns');
+  assert.deepEqual(turns.map(t => t.speaker), ['Speaker 1', 'Speaker 3', 'Ken', 'Speaker 3', 'Ken']);
+
+  const item = openClarifications(USER).find(i => i.question === IDENTITY_Q);
+  attachContext(USER, [item]);
+  assert.equal(item.context.speaker, 'Speaker 3');
+  assert.equal(item.context.turn_count, 2, 'both of their turns are counted');
+  const words = item.context.quotes.map(q => q.text).join(' ').split(/\s+/).length;
+  assert.ok(words >= 40 && words <= 100, `expected a readable excerpt, got ${words} words`);
+  assert.match(item.context.quotes[0].text, /migration workstream end to end/);
+  assert.equal(item.context.quotes[0].time, '00:49');
+});
+
+test('with no speaker named, the excerpt is the turn that discusses the question', () => {
+  const { attachContext } = require('../lib/crm-clarifications');
+  const item = { kind: 'meeting_question', intake_id: INTAKE, question: QUESTION };
+  attachContext(USER, [item]);
+  assert.equal(item.context.matched, true);
+  assert.equal(item.context.speaker, 'Ken');
+  assert.match(item.context.quotes[0].text, /E3 mailbox limit question/);
 });
