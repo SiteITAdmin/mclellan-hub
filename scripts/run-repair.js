@@ -11,7 +11,7 @@
 // Kill switch: the venue is OFF unless REPAIR_VENUE_ENABLED=1 in the
 // environment, or crm_context key 'repair_venue_enabled' = '1' in the prod
 // snapshot (set it in prod; the nightly snapshot carries it here). Mining
-// and triage always run — they are read-only — but no Pi session starts and
+// and triage always run — they are read-only — but no Grok CLI session starts and
 // no branch/PR/email is produced while disabled, except escalation summaries.
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
