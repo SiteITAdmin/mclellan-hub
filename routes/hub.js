@@ -21,6 +21,8 @@ const {
 } = require('../lib/token-burn');
 const { TASK_CODES } = require('../lib/openrouter-attribution');
 const { buildPromptInjectionGuard, wrapUntrustedBlock } = require('../lib/security');
+const { getSystemPrompt } = require('../lib/settings');
+const { PROMPTS } = require('../lib/prompts');
 const {
   upload, audioUpload, chatLimiter, uploadLimiter, writeLimiter,
   requireAuth, requireSameOrigin,
@@ -43,26 +45,10 @@ function buildHubMsg(researchMode = false) {
   const base = [
     buildPromptInjectionGuard('the authenticated McClellan Hub chat'),
     `Today's date is ${today}.`,
-    'You have access to a web search tool. Use your own judgement about when to use it:',
-    '• USE search: queries needing current information (recent events, rulings, software versions, prices, new legislation), jurisdiction-specific context you may lack, or anything where your training data is likely stale or incomplete.',
-    '• SKIP search: summarising or analysing a document already provided in context, stable technical questions (regex, SQL syntax, standard PowerShell/bash commands), pure reasoning or maths tasks.',
-    '• If unclear whether current data would materially change the answer, err on the side of searching rather than asking.',
-    'When you do search, say so in one brief italicised line before your answer (e.g. "_Searching for recent CBI decisions…_"). Do not narrate each individual search step.',
-    'When your response draws on web search results, cite each source inline with [n] (e.g. "Starmer faced criticism this week [1][3]…") where n matches the numbered Sources list at the end of your response. Use dates from the live search results, not from training-data memory.',
-    'The Sources list must use Markdown links in this exact style: [1] [Source title](https://example.com/page). Do not list bare titles without a clickable URL when a URL is available.',
+    getSystemPrompt('hub_chat', 'system', PROMPTS.hub_chat),
   ];
   if (researchMode) {
-    base.push(
-      '',
-      'RESEARCH MODE — your response must be a comprehensive structured report:',
-      '• Open with a 2–3 sentence Executive Summary',
-      '• Use ## section headers to organise findings (Background, Current State, Key Considerations, Implications, etc.)',
-      '• Cite every factual claim inline with [n] references',
-      '• Be exhaustive — aim for depth over brevity, minimum 600 words',
-      '• Flag gaps, uncertainties, and conflicting sources explicitly',
-      '• Close with a numbered Sources list where each item is a Markdown link, e.g. [1] [Source title](https://example.com/page)',
-      'This is not a quick answer. Take the time to be thorough.',
-    );
+    base.push('', getSystemPrompt('hub_chat_research', 'system', PROMPTS.hub_chat_research));
   }
   return base.join('\n');
 }

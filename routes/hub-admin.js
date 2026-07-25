@@ -613,6 +613,8 @@ router.get('/admin/debrief/:id', requireHubAdmin, (req, res) => {
 // scope 'system' = shared across users; scope 'user' = per-user (stored under req.hubUser).
 const SYSTEM_MODEL_GROUPS = [
   { id: 'chat-infra', label: 'Chat infrastructure', slots: [
+    { feature: 'hub_chat',               scope: 'system', label: 'Hub chat system prompt', note: 'Base system instructions for authenticated Hub chat. Runs on whichever model you pick in the chat UI — this slot is prompt only. Injection-guard preamble and today\'s date are prepended at runtime.', fallback: 'prompt only (chat model picker)' },
+    { feature: 'hub_chat_research',      scope: 'system', label: 'Hub chat — research mode', note: 'Appended to the Hub chat system prompt when Research mode is on. Prompt only.', fallback: 'prompt only (chat model picker)' },
     { feature: 'recall_tagger',          scope: 'system', label: 'Recall tagger',          note: 'Fires silently after every chat turn — prefer cheapest available.', fallback: 'meta-llama/llama-3.1-8b-instruct:free' },
     { feature: 'multisearch_planner',    scope: 'system', label: 'Multi-search planner',   note: 'Plans search queries for orchestrated research.', fallback: 'deepseek/deepseek-v3.2' },
     { feature: 'multisearch_synthesiser',scope: 'system', label: 'Multi-search synthesiser',note: 'Writes the final report from gathered sources.', fallback: 'google/gemini-2.5-pro-preview' },
@@ -620,6 +622,7 @@ const SYSTEM_MODEL_GROUPS = [
   { id: 'background', label: 'Background processing', slots: [
     { feature: 'crm_parser',       scope: 'system', label: 'CRM intent parser',   note: 'Runs when you save a CRM note.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'email_classifier', scope: 'system', label: 'Email classifier',    note: 'Runs on Gmail ingestion.', fallback: 'google/gemini-2.5-pro-preview' },
+    { feature: 'email_classifier_sent', scope: 'system', label: 'Sent-email classifier', note: 'Classifies emails Douglas SENT (he is the author). Prompt only — runs on the Email classifier model.', fallback: 'prompt only (Email classifier model)' },
     { feature: 'meeting_intake',   scope: 'user',   label: 'Meeting intake',      note: 'Extracts summaries, attendees, CRM updates, actions, project notes and open questions from meeting transcripts.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'agentmail_extractor', scope: 'system', label: 'AgentMail extractor', note: 'Extracts people, facts and multiple actions from AgentMail messages.', fallback: 'google/gemini-3.1-pro-preview' },
     { feature: 'task_extractor',  scope: 'system', label: 'Task extractor',      note: 'Extracts follow-up tasks from documents and learns from rejected task suggestions.', fallback: 'google/gemini-2.5-pro-preview' },
@@ -637,6 +640,8 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'repair_triage', scope: 'system', label: 'Self-repair triage reviewer', note: 'Sanity-checks fixable-narrow verdicts in the Mac-mini repair venue. Can only confirm a verdict or downgrade it to config-fix/escalate — never widens the venue\'s reach. Cheap model is fine.', fallback: 'google/gemini-2.5-flash' },
     { feature: 'repair_agent', scope: 'system', label: 'Self-repair coding agent', note: 'The model Pi runs on inside the Mac-mini repair venue when writing bounded fixes for narrow errors. Isolated git worktree, $2/attempt cost cap, human-reviewed via GitHub PR before any deploy. Use a strong coding model.', fallback: 'z-ai/glm-5.2' },
     { feature: 'consigliere_brief', scope: 'system', label: 'Consigliere brief', note: 'Writes the plain-English daily brief at the top of the Consigliere report — translates the escalations into what needs you / handled / watching, with a recommended fix per problem. This is the voice Douglas reads each day; use a strong model.', fallback: 'anthropic/claude-sonnet-4-6' },
+    { feature: 'clarification_answer', scope: 'system', label: 'Clarification answer composer', note: 'Turns a CRM/governance clarification Q&A into one durable declarative knowledge sentence before writing an atom.', fallback: 'anthropic/claude-sonnet-4-6' },
+    { feature: 'model_effectiveness_review', scope: 'system', label: 'Model effectiveness reviewer', note: 'Monthly multi-model panel that scores every system prompt/model pairing. Prompt only for the shared rubric — the panel models (Luna/Grok/Sonnet) are fixed in code for independence.', fallback: 'prompt only (panel models in code)' },
   ]},
   { id: 'suggestions', label: 'Suggestion engine', slots: [
     { feature: 'suggestions',           scope: 'system', label: 'Suggestion engine model', note: 'Model for suggestion-engine calls: travel, contact outreach, salience planning and synthesis, price extraction.', fallback: 'google/gemini-2.5-flash' },
@@ -654,6 +659,7 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'work_brief_today',  scope: 'system', label: 'Work brief — today line', note: 'One-sentence summary of today\'s calendar. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
     { feature: 'work_brief_project_salience', scope: 'system', label: 'Work brief — project signals', note: 'Joins radar/briefing content to recent project evidence. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
     { feature: 'weekly_digest',     scope: 'system', label: 'Weekly digest writer', note: 'Writes the Sunday weekly digest sections from chats, emails and CRM updates.', fallback: 'DIGEST_MODEL env or google/gemini-2.5-pro-preview' },
+    { feature: 'daily_digest',      scope: 'system', label: 'Vault daily topic digest', note: 'Mac Mini vault job — summarises recent journal + email activity per project into a digest note.', fallback: 'deepseek/deepseek-v3.2' },
   ]},
   { id: 'debrief', label: 'Debrief', slots: [
     { feature: 'debrief_interviewer', scope: 'user', label: 'Debrief interviewer', note: 'Conducts the end-of-day voice debrief. Must be fast with short outputs.', fallback: 'anthropic/claude-haiku-4-5' },
@@ -684,6 +690,7 @@ const SYSTEM_MODEL_GROUPS = [
   ]},
   { id: 'workday', label: 'Workday', slots: [
     { feature: 'workday_narrative', scope: 'user', label: 'Narrative writer', note: 'Converts a workday voice transcript into a structured Markdown note.', fallback: 'free (or WORKDAY_NARRATIVE_MODEL env)' },
+    { feature: 'workday_transcription', scope: 'system', label: 'Workday transcriber (STT)', note: 'Speech-to-text for workday interview audio via OpenRouter audio/transcriptions. Must be an STT model.', fallback: 'openai/whisper-large-v3' },
   ]},
   { id: 'portfolio', label: 'Public portfolio', slots: [
     { feature: 'portfolio_chat', scope: 'user', label: '"Ask me" chat',  note: 'Public-facing portfolio chat — anyone can trigger. Prefer fast, cheap models.', fallback: 'free' },
@@ -710,11 +717,13 @@ const SYSTEM_MODEL_GROUPS = [
   { id: 'wiki', label: 'Wiki', slots: [
     { feature: 'wiki_page_writer', scope: 'system', label: 'Page writer',     note: 'Converts documents and Q&A into structured wiki pages.', fallback: 'google/gemini-2.5-pro-preview' },
     { feature: 'wiki_image_vision',scope: 'system', label: 'Image vision',    note: 'Describes uploaded images before converting them to wiki pages. Cheap vision model recommended.', fallback: 'google/gemini-2.0-flash-001' },
+    { feature: 'wiki_search',      scope: 'system', label: 'Wiki search synthesiser', note: 'Answers natural-language wiki search from retrieved private sources only; returns structured JSON (headline, summary, facts, gaps).', fallback: 'deepseek/deepseek-v3.2' },
   ]},
   { id: 'newsletter', label: 'Newsletter intelligence', slots: [
     { feature: 'newsletter_extractor', scope: 'system', label: 'Topic extractor', note: 'Extracts structured topics from newsletter emails. Runs on every newsletter received.', fallback: 'google/gemini-2.5-flash-lite' },
     { feature: 'newsletter_extractor_full', scope: 'system', label: 'Full-capture extraction prompt', note: 'Full-capture newsletter mode. Prompt only — runs on the Topic extractor model.', fallback: 'prompt only (Topic extractor model)' },
     { feature: 'newsletter_extractor_minimal', scope: 'system', label: 'Minimal extraction prompt', note: 'Minimal newsletter mode. Prompt only — runs on the Topic extractor model.', fallback: 'prompt only (Topic extractor model)' },
+    { feature: 'newsletter_retrieval', scope: 'system', label: 'Briefing source ranker', note: 'Ranks newsletter/publication candidates for a free-form briefing focus. Prompt only by default — runs on the Topic extractor model unless you assign a model here.', fallback: 'prompt only (Topic extractor model)' },
     { feature: 'newsletter_briefing',  scope: 'user',   label: 'Briefing writer',  note: 'Writes the weekly intelligence briefing from selected topics.', fallback: 'anthropic/claude-sonnet-4-6' },
   ]},
   { id: 'writing', label: 'Writing tools', slots: [
@@ -2515,4 +2524,6 @@ router.post('/admin/mycelium/run', requireHubAdmin, async (req, res) => {
   }
 });
 
+router.SYSTEM_MODEL_GROUPS = SYSTEM_MODEL_GROUPS;
 module.exports = router;
+module.exports.SYSTEM_MODEL_GROUPS = SYSTEM_MODEL_GROUPS;
