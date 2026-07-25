@@ -45,6 +45,13 @@ td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: 
 }
 .form-row textarea { min-width:260px; min-height:60px; resize:vertical; }
 .url-cell { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+dialog { border:1px solid var(--border); border-radius:10px; background:var(--bg,#fff); color:var(--text); width:min(560px, calc(100vw - 32px)); padding:20px; box-shadow:0 16px 48px rgba(0,0,0,.28); }
+dialog::backdrop { background:rgba(0,0,0,.42); }
+.edit-form { display:grid; gap:12px; }
+.edit-form label { font-size:12px; color:var(--text-dim); display:grid; gap:4px; }
+.edit-form input, .edit-form select, .edit-form textarea { width:100%; box-sizing:border-box; font-family:inherit; font-size:13px; padding:7px 8px; border:1px solid var(--border); border-radius:5px; background:var(--bg,#fff); color:var(--text); }
+.edit-form textarea { min-height:88px; resize:vertical; }
+.dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
 </style>
 </head>
 <body class="admin-page">
@@ -137,6 +144,7 @@ td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: 
           <% } %>
         </td>
         <td class="actions">
+          <button class="btn-sm" type="button" data-edit-site data-id="<%= s.id %>" data-name="<%= s.name %>" data-url="<%= s.url %>" data-cadence="<%= s.cadence %>">Edit</button>
           <form method="POST" action="/admin/nakai-briefings/sites/<%= s.id %>/toggle" style="display:inline">
             <button class="btn-sm" type="submit"><%= s.active ? 'Pause' : 'Activate' %></button>
           </form>
@@ -232,6 +240,7 @@ td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: 
           <% } %>
         </td>
         <td class="actions">
+          <button class="btn-sm" type="button" data-edit-source data-id="<%= s.id %>" data-key="<%= s.source_key %>" data-title="<%= s.title %>" data-url="<%= s.url %>" data-intent="<%= s.intent || '' %>">Edit</button>
           <% if (s.active) { %>
           <form method="POST" action="/admin/nakai-briefings/ref-sources/<%= s.id %>/synthesize" style="display:inline">
             <button class="btn-sm" type="submit">Synthesise</button>
@@ -278,6 +287,39 @@ td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: 
 
 </section>
 
+<dialog id="site-edit-dialog" aria-labelledby="site-edit-title">
+  <form method="POST" class="edit-form" id="site-edit-form">
+    <h2 id="site-edit-title" style="margin:0;font-size:18px;">Edit monitor site</h2>
+    <label>Name<input name="name" id="site-edit-name" required></label>
+    <label>URL<input name="url" id="site-edit-url" type="url" required></label>
+    <label>Cadence
+      <select name="cadence" id="site-edit-cadence">
+        <option value="daily">Daily</option>
+        <option value="fortnightly">Fortnightly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+    </label>
+    <div class="dialog-actions">
+      <button class="btn-sm" type="button" data-close-dialog="site-edit-dialog">Cancel</button>
+      <button class="btn-sm primary" type="submit">Save changes</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="source-edit-dialog" aria-labelledby="source-edit-title">
+  <form method="POST" class="edit-form" id="source-edit-form">
+    <h2 id="source-edit-title" style="margin:0;font-size:18px;">Edit reference source <span id="source-edit-key"></span></h2>
+    <label>Title<input name="title" id="source-edit-name" required></label>
+    <label>URL<input name="url" id="source-edit-url" type="url" required></label>
+    <label>Intent<textarea name="intent" id="source-edit-intent"></textarea></label>
+    <p class="dim" style="font-size:12px;margin:0;">Changing the URL or intent removes the old compiled atom. Use “Synthesise” afterwards to rebuild it from the corrected source.</p>
+    <div class="dialog-actions">
+      <button class="btn-sm" type="button" data-close-dialog="source-edit-dialog">Cancel</button>
+      <button class="btn-sm primary" type="submit">Save changes</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -290,6 +332,35 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     url.searchParams.set('tab', target);
     history.replaceState({}, '', url);
   });
+});
+
+const siteEditDialog = document.getElementById('site-edit-dialog');
+document.querySelectorAll('[data-edit-site]').forEach(button => {
+  button.addEventListener('click', () => {
+    const { id, name, url, cadence } = button.dataset;
+    document.getElementById('site-edit-form').action = `/admin/nakai-briefings/sites/${encodeURIComponent(id)}/edit`;
+    document.getElementById('site-edit-name').value = name;
+    document.getElementById('site-edit-url').value = url;
+    document.getElementById('site-edit-cadence').value = cadence;
+    siteEditDialog.showModal();
+  });
+});
+
+const sourceEditDialog = document.getElementById('source-edit-dialog');
+document.querySelectorAll('[data-edit-source]').forEach(button => {
+  button.addEventListener('click', () => {
+    const { id, key, title, url, intent } = button.dataset;
+    document.getElementById('source-edit-form').action = `/admin/nakai-briefings/ref-sources/${encodeURIComponent(id)}/edit`;
+    document.getElementById('source-edit-key').textContent = key;
+    document.getElementById('source-edit-name').value = title;
+    document.getElementById('source-edit-url').value = url;
+    document.getElementById('source-edit-intent').value = intent;
+    sourceEditDialog.showModal();
+  });
+});
+
+document.querySelectorAll('[data-close-dialog]').forEach(button => {
+  button.addEventListener('click', () => document.getElementById(button.dataset.closeDialog).close());
 });
 </script>
 </body>

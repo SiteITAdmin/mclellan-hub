@@ -2138,6 +2138,34 @@ router.post('/admin/nakai-briefings/sites/:id/toggle', requireHubAdmin, (req, re
   res.redirect('/admin/nakai-briefings?tab=sites&msg=' + encodeURIComponent(`${site.name} ${site.active ? 'paused' : 'activated'}`));
 });
 
+router.post('/admin/nakai-briefings/sites/:id/edit', requireHubAdmin, (req, res) => {
+  const { name, url, cadence } = req.body || {};
+  if (!name?.trim() || !url?.trim()) {
+    return res.redirect('/admin/nakai-briefings?tab=sites&error=' + encodeURIComponent('Name and URL are required'));
+  }
+  try {
+    new URL(url.trim());
+  } catch {
+    return res.redirect('/admin/nakai-briefings?tab=sites&error=' + encodeURIComponent('Invalid URL'));
+  }
+
+  const hub = db.hub();
+  const site = hub.prepare('SELECT * FROM nakai_reg_monitor_sites WHERE id = ?').get(req.params.id);
+  if (!site) return res.redirect('/admin/nakai-briefings?tab=sites&error=Site+not+found');
+  try {
+    // These are raw monitor entry points. Existing monitored items remain evidence
+    // of what was found previously; the next run fetches from the replacement URL.
+    hub.prepare(`
+      UPDATE nakai_reg_monitor_sites
+         SET name = ?, url = ?, cadence = ?, last_checked_at = NULL
+       WHERE id = ?
+    `).run(name.trim(), url.trim(), cadence || 'daily', site.id);
+    res.redirect('/admin/nakai-briefings?tab=sites&msg=' + encodeURIComponent(`Updated ${name.trim()}`));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?tab=sites&error=' + encodeURIComponent(err.message));
+  }
+});
+
 router.post('/admin/nakai-briefings/sites/:id/delete', requireHubAdmin, (req, res) => {
   const hub = db.hub();
   const site = hub.prepare('SELECT name FROM nakai_reg_monitor_sites WHERE id = ?').get(req.params.id);
@@ -2176,6 +2204,42 @@ router.post('/admin/nakai-briefings/ref-sources/:id/toggle', requireHubAdmin, (r
   if (!src) return res.redirect('/admin/nakai-briefings?tab=sources&error=Source+not+found');
   hub.prepare('UPDATE nakai_ref_sources SET active = ? WHERE id = ?').run(src.active ? 0 : 1, src.id);
   res.redirect('/admin/nakai-briefings?tab=sources&msg=' + encodeURIComponent(`${src.source_key} ${src.active ? 'paused' : 'activated'}`));
+});
+
+router.post('/admin/nakai-briefings/ref-sources/:id/edit', requireHubAdmin, (req, res) => {
+  const { title, url, intent } = req.body || {};
+  if (!title?.trim() || !url?.trim()) {
+    return res.redirect('/admin/nakai-briefings?tab=sources&error=' + encodeURIComponent('Title and URL are required'));
+  }
+  try {
+    new URL(url.trim());
+  } catch {
+    return res.redirect('/admin/nakai-briefings?tab=sources&error=' + encodeURIComponent('Invalid URL'));
+  }
+
+  const hub = db.hub();
+  const src = hub.prepare('SELECT * FROM nakai_ref_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.redirect('/admin/nakai-briefings?tab=sources&error=Source+not+found');
+  try {
+    const changed = src.url !== url.trim() || src.intent !== (intent?.trim() || null);
+    const update = hub.transaction(() => {
+      hub.prepare(`
+        UPDATE nakai_ref_sources
+           SET title = ?, url = ?, intent = ?,
+               last_fetched_at = CASE WHEN ? THEN NULL ELSE last_fetched_at END,
+               last_synthesized_at = CASE WHEN ? THEN NULL ELSE last_synthesized_at END
+         WHERE id = ?
+      `).run(title.trim(), url.trim(), intent?.trim() || null, changed ? 1 : 0, changed ? 1 : 0, src.id);
+      // A URL or extraction intent change makes the compiled atom stale. Remove it
+      // so the briefing cannot treat context from the previous evidence as current.
+      if (changed) hub.prepare('DELETE FROM nakai_ref_atoms WHERE source_key = ?').run(src.source_key);
+    });
+    update();
+    const suffix = changed ? '; re-synthesise it to rebuild its atom' : '';
+    res.redirect('/admin/nakai-briefings?tab=sources&msg=' + encodeURIComponent(`Updated ${src.source_key}${suffix}`));
+  } catch (err) {
+    res.redirect('/admin/nakai-briefings?tab=sources&error=' + encodeURIComponent(err.message));
+  }
 });
 
 router.post('/admin/nakai-briefings/ref-sources/:id/synthesize', requireHubAdmin, async (req, res) => {
