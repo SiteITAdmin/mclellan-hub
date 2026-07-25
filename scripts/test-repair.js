@@ -49,7 +49,7 @@ function main() {
     });
     // The synthetic test asserts the recorded error occurs for the bad input
     // class: exit 0 = error reproduced. This is Gate 1 (does the error
-    // exist?); the post-fix proof is Pi's own regression test (Gate 2), not
+    // exist?); the post-fix proof is Grok's own regression test (Gate 2), not
     // this file — throwing on a bad shape may remain the correct contract at
     // this layer while the caller learns to retry or fail visibly.
     reproduced = run.status === 0;
