@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../lib/db');
 const { DEFAULT_MODELS } = require('../lib/router');
+const { listProjects } = require('../lib/project-lifecycle');
 const {
   writeLimiter, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
@@ -254,9 +255,7 @@ router.post('/api/conversations/:convId/move', requireAuth, requireSameOrigin, w
 // ── Projects API ──────────────────────────────────────────────────────────────
 router.get('/api/projects', requireAuth, (req, res) => {
   const hub = db.hub();
-  const projects = hub.prepare(
-    'SELECT * FROM projects WHERE user = ? ORDER BY name'
-  ).all(req.hubUser);
+  const projects = listProjects(hub, req.hubUser);
   res.json(projects);
 });
 

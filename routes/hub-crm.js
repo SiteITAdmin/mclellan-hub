@@ -28,6 +28,7 @@ const { PROMPTS } = require('../lib/prompts');
 const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 const { sendEmail: amSendEmail } = require('../lib/agentmail');
 const { getCrmKnowledgeHealth } = require('../lib/crm-knowledge-health');
+const { closedProjectIds, isProjectClosed, renameProject } = require('../lib/project-lifecycle');
 
 const knowledgeRetryUsers = new Set();
 
@@ -245,8 +246,9 @@ function crmPageData(user) {
   };
 }
 
-function crmProjectsForUser(user) {
-  return db.hub().prepare(`
+function crmProjectsForUser(user, { includeClosed = false } = {}) {
+  const hub = db.hub();
+  const projects = hub.prepare(`
     SELECT p.*
       FROM projects p
      WHERE p.user = ?
@@ -265,17 +267,24 @@ function crmProjectsForUser(user) {
        )
      ORDER BY p.name
   `).all(user);
+  if (includeClosed) return projects;
+  const closed = closedProjectIds(hub, user);
+  return projects.filter(project => !closed.has(project.id));
 }
 
-function reportableWorkspacesForUser(user, crmProjects = crmProjectsForUser(user)) {
+function reportableWorkspacesForUser(user, crmProjects = crmProjectsForUser(user), { includeClosed = false } = {}) {
   const crmIds = new Set(crmProjects.map(p => p.id));
-  return db.hub().prepare(`
+  const hub = db.hub();
+  const projects = hub.prepare(`
     SELECT p.*
       FROM projects p
      WHERE p.user = ?
        AND COALESCE(p.project_kind, 'workspace') != 'crm'
      ORDER BY p.name
   `).all(user).filter(p => !crmIds.has(p.id));
+  if (includeClosed) return projects;
+  const closed = closedProjectIds(hub, user);
+  return projects.filter(project => !closed.has(project.id));
 }
 
 function safeBack(req, fallback) {
@@ -1986,6 +1995,13 @@ router.post('/api/suggestions/contact-reasons/run', requireAuth, requireSameOrig
 router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   const title = String(req.body.title || '').trim();
   if (!title) return res.status(400).json({ error: 'title required' });
+  const requestedProject = String(req.body.project_slug || '').trim();
+  if (requestedProject) {
+    const hub = db.hub();
+    const project = hub.prepare('SELECT id FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, requestedProject);
+    if (!project) return res.status(400).json({ error: 'Project not found' });
+    if (isProjectClosed(hub, req.hubUser, project.id)) return res.status(400).json({ error: 'Reopen the project before adding tasks' });
+  }
   try {
     const { withTaskTags } = require('../lib/google-tasks');
     const baseNotes = String(req.body.notes || '').trim();
@@ -2000,7 +2016,7 @@ router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (r
       source: 'manual',
       contactId: req.body.contact_id || null,
       companyId: req.body.company_id || null,
-      projectSlug: req.body.project_slug || null,
+      projectSlug: requestedProject || null,
     });
     res.json({ ok: true, task });
   } catch (err) {
@@ -2904,7 +2920,7 @@ router.post('/api/crm/atoms/:id/:action(dispute|stale|restore)', requireAuth, re
 // knowledge_atoms with derived_by='manual' — declared knowledge enters the
 // same compiled layer the synthesis engine writes to, instead of new columns.
 const PROJECT_META_PREDICATES = ['status', 'deadline', 'scope', 'milestone'];
-const PROJECT_STATUS_VALUES = ['planning', 'active', 'blocked', 'completed'];
+const PROJECT_STATUS_VALUES = ['planning', 'active', 'blocked', 'completed', 'closed'];
 
 function upsertManualProjectAtom(user, project, predicate, value) {
   const hub = db.hub();
@@ -3001,6 +3017,20 @@ router.post('/api/crm/project/:slug/meta', requireAuth, requireSameOrigin, write
   res.json({ ok: true });
 });
 
+router.post('/api/crm/project/:slug/rename', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const hub = db.hub();
+  const project = hub.prepare('SELECT id FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, req.params.slug);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  try {
+    const result = renameProject(hub, {
+      user: req.hubUser, projectId: project.id, name: req.body.name, slug: req.body.slug,
+    });
+    res.json({ ok: true, project: result.project, referencesUpdated: result.referencesUpdated });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/api/crm/project/:slug/milestones', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const project = hub.prepare('SELECT id, name FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, req.params.slug);
@@ -3037,7 +3067,9 @@ router.post('/api/crm/project-milestones/:id/:action', requireAuth, requireSameO
 
 router.get('/crm/projects', requireAuth, (req, res) => {
   const hub = db.hub();
-  const projects = crmProjectsForUser(req.hubUser);
+  const showClosed = req.query.show_closed === '1';
+  const projects = crmProjectsForUser(req.hubUser, { includeClosed: showClosed });
+  const closed = closedProjectIds(hub, req.hubUser);
 
   // Annotate each project with open task count, last activity, and health
   const metaByProject = projectMetaAtoms(req.hubUser, projects.map(p => p.id));
@@ -3051,13 +3083,13 @@ router.get('/crm/projects', requireAuth, (req, res) => {
     const meta = metaByProject.get(p.id) || {};
     return {
       ...p, openTasks, lastActivity: lastMsg,
-      health: deriveProjectHealth(meta.status, lastMsg),
+      health: closed.has(p.id) ? 'closed' : deriveProjectHealth(meta.status, lastMsg),
       manualStatus: meta.status || null,
       deadline: meta.deadline || null,
     };
   });
 
-  res.render('hub/crm-projects', { ...crmPageData(req.hubUser), projects: annotated });
+  res.render('hub/crm-projects', { ...crmPageData(req.hubUser), projects: annotated, showClosed, closedCount: closed.size });
 });
 
 router.get('/crm/project/:slug', requireAuth, (req, res) => {
@@ -3177,7 +3209,7 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
   `).all(req.hubUser, project.id);
 
   const lastMsg = hub.prepare('SELECT MAX(ts) AS ts FROM messages WHERE project_id = ?').get(project.id)?.ts;
-  const projectHealth = deriveProjectHealth(projectMeta.status, lastMsg);
+  const projectHealth = isProjectClosed(hub, req.hubUser, project.id) ? 'closed' : deriveProjectHealth(projectMeta.status, lastMsg);
 
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),

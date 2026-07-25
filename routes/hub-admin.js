@@ -33,6 +33,7 @@ const {
 const { resendBriefingFromRequest } = require('../lib/nakai-briefing-resolver');
 const { synthesizeRefSources } = require('../lib/nakai-ref-synthesis');
 const { getAllWikiTags, getWikiPagesByTags } = require('../lib/wiki-tags');
+const { renameProject } = require('../lib/project-lifecycle');
 const { getSystemModelId, setSystemModel, getSystemModelLabel, getSystemPrompt, getSystemPromptOverride, setSystemPromptOverride } = require('../lib/settings');
 const { PROMPTS } = require('../lib/prompts');
 const { familyFromModelId, shapePromptForFamily, listStyleProfiles } = require('../lib/model-style-profiles');
@@ -166,18 +167,15 @@ router.post('/admin/projects', requireHubAdmin, async (req, res) => {
 
 router.post('/admin/projects/:id', requireHubAdmin, (req, res) => {
   const { name, slug, context_depth, is_cv_context } = req.body;
-  db.hub().prepare(`
-    UPDATE projects
-       SET name = ?, slug = ?, context_depth = ?, is_cv_context = ?
-     WHERE id = ? AND user = ?
-  `).run(
-    name.trim(),
-    slug.trim().toLowerCase(),
-    parseInt(context_depth, 10) || 20,
-    is_cv_context ? 1 : 0,
-    req.params.id,
-    req.hubUser
-  );
+  const hub = db.hub();
+  try {
+    renameProject(hub, { user: req.hubUser, projectId: req.params.id, name, slug });
+    hub.prepare('UPDATE projects SET context_depth = ?, is_cv_context = ? WHERE id = ? AND user = ?').run(
+      parseInt(context_depth, 10) || 20, is_cv_context ? 1 : 0, req.params.id, req.hubUser
+    );
+  } catch (err) {
+    console.error('[hub-admin] rename project:', err.message);
+  }
   res.redirect('/admin');
 });
 
