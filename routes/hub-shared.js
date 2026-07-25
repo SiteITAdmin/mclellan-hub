@@ -6,6 +6,12 @@ const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize
 const chatLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 80, keyPrefix: 'hub-chat' });
 const uploadLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'hub-upload' });
 const writeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 40, keyPrefix: 'hub-write' });
+
+function uploadedFiles(files) {
+  if (Array.isArray(files)) return files;
+  if (!files || typeof files !== 'object') return [];
+  return [...(files.file || []), ...(files.files || [])];
+}
 // WhatsApp capture is bearer-authenticated and may legitimately arrive in
 // bursts. Keep a separate safety ceiling so the generic UI write limit does
 // not silently discard message 41 from a busy group conversation.
@@ -97,6 +103,7 @@ module.exports = {
   chatLimiter,
   uploadLimiter,
   writeLimiter,
+  uploadedFiles,
   messagingCaptureLimiter,
   mobileBearerBridge,
   requireAuth,

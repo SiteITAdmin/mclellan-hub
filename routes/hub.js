@@ -24,7 +24,7 @@ const { buildPromptInjectionGuard, wrapUntrustedBlock } = require('../lib/securi
 const { getSystemPrompt } = require('../lib/settings');
 const { PROMPTS } = require('../lib/prompts');
 const {
-  upload, audioUpload, chatLimiter, uploadLimiter, writeLimiter,
+  upload, audioUpload, chatLimiter, uploadLimiter, writeLimiter, uploadedFiles,
   requireAuth, requireSameOrigin,
 } = require('./hub-shared');
 const { getWeekKey, weekKeyRange } = require('../lib/newsletter-pipeline');
@@ -912,12 +912,13 @@ router.post('/api/export', requireAuth, requireSameOrigin, writeLimiter, async (
 // - In a project: store as a document with YAML frontmatter. Documents are
 //   injected as system context on every subsequent /slug query.
 router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, res, next) => {
-  upload.array('files', 5)(req, res, err => {
+  upload.fields([{ name: 'file', maxCount: 1 }, { name: 'files', maxCount: 5 }])(req, res, err => {
     if (err) return res.status(413).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File too large (max 10 MB)' : err.message });
     next();
   });
 }, async (req, res) => {
-  if (!req.files?.length) return res.status(400).json({ error: 'No files' });
+  const files = uploadedFiles(req.files);
+  if (!files.length) return res.status(400).json({ error: 'No files' });
 
   const { projectSlug, convId: existingConvId, model, autoAnalyse, analysisPrompt, toWiki } = req.body;
   const hub = db.hub();
@@ -926,7 +927,7 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
 
   // Project upload: single file, existing behaviour.
   if (projectSlug) {
-    const file = req.files[0];
+    const file = files[0];
     const fileExt = require('path').extname(file.originalname || '').toLowerCase();
     const isImage = IMAGE_EXTS.includes(fileExt);
 
@@ -1019,7 +1020,7 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
 
   // Chat upload: extract all files, apply context budget, save as one combined message.
   const extractions = [];
-  for (const file of req.files) {
+  for (const file of files) {
     const ext = require('path').extname(file.originalname || '').toLowerCase();
     if (IMAGE_EXTS.includes(ext)) {
       extractions.push({ file, markdown: `(image: ${file.originalname})` });
@@ -1065,7 +1066,7 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
     convId = uuid();
     hub.prepare(
       'INSERT INTO conversations (id, user, title) VALUES (?, ?, ?)'
-    ).run(convId, req.hubUser, (req.files.length === 1 ? req.files[0].originalname : `${req.files.length} documents`).slice(0, 60));
+    ).run(convId, req.hubUser, (files.length === 1 ? files[0].originalname : `${files.length} documents`).slice(0, 60));
   }
 
   const userMsgId = uuid();
@@ -1086,9 +1087,9 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
         await buildIngestionPackage({
           id: userMsgId,
           user: req.hubUser,
-          filename: req.files[0].originalname,
-          mimetype: req.files[0].mimetype,
-          sizeBytes: req.files[0].size,
+          filename: files[0].originalname,
+          mimetype: files[0].mimetype,
+          sizeBytes: files[0].size,
           markdown: extractions[0].markdown,
         });
         scheduleJob('mycelium_doc', { user: req.hubUser }, null, 'large-doc-chat-upload');
@@ -1107,9 +1108,9 @@ router.post('/api/upload', requireAuth, requireSameOrigin, uploadLimiter, (req, 
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const defaultPrompt = req.files.length === 1
+  const defaultPrompt = files.length === 1
     ? 'Please read and analyse the document I just attached. Summarise what it contains and flag anything notable.'
-    : `Please read and analyse the ${req.files.length} documents I just attached. Summarise each and flag anything notable.`;
+    : `Please read and analyse the ${files.length} documents I just attached. Summarise each and flag anything notable.`;
   const prompt = analysisPrompt?.trim() || defaultPrompt;
 
   // Send the user-message content back first so the UI can render it
