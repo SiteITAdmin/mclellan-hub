@@ -14,6 +14,8 @@ const { startGoogleAuth, finishGoogleAuth } = require('../lib/google-auth');
 const { requireSameOrigin } = require('../lib/security');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
+const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
+const { PROMPTS } = require('../lib/prompts');
 const {
   indexAll,
   buildGraph,
@@ -521,25 +523,19 @@ router.get('/api/search', requireAuth, async (req, res) => {
       )).concat(emailMatches.map((e, index) => (
         `E${index + 1}: Email | ${e.subject} | ${e.from_name}`
       ))).join('\n');
+      const wikiSearchModel = getSystemModelId('wiki_search', 'system', 'deepseek/deepseek-v3.2');
+      const wikiSearchPrompt = getSystemPrompt('wiki_search', 'system', PROMPTS.wiki_search);
       const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: openRouterHeaders(TASK_CODES.WIKI, {
           baseUrl: 'https://wiki.mclellan.scot',
         }),
         body: JSON.stringify({
-          model: 'deepseek/deepseek-v3.2',
+          model: wikiSearchModel,
           messages: [
             {
               role: 'system',
-              content: [
-                'Answer from the supplied private knowledge-base sources only.',
-                'Return valid JSON with this exact shape:',
-                '{"headline":"short specific title","summary":"2-4 sentence direct answer","facts":[{"label":"short label","detail":"specific fact","source_ids":["S1"]}],"gaps":["specific missing information"],"assessment":"one sentence describing how complete the evidence is"}',
-                'Use 3-7 facts. Keep facts concrete and avoid repeating the summary.',
-                'A gap must be relevant to the question, not a generic wish list.',
-                'Never claim a source says something absent from its excerpt.',
-                'Do not output Markdown or text outside the JSON object.',
-              ].join('\n'),
+              content: wikiSearchPrompt,
             },
             {
               role: 'user',
@@ -553,9 +549,9 @@ router.get('/api/search', requireAuth, async (req, res) => {
       const data = await resp.json();
       logUsageFromResponse({
         user: req.hubUser || 'system',
-        feature: 'wiki-search',
-        modelKey: 'wiki-search',
-        fallbackModelId: 'deepseek/deepseek-v3.2',
+        feature: 'wiki_search',
+        modelKey: 'wiki_search',
+        fallbackModelId: wikiSearchModel,
         data,
         taskCode: TASK_CODES.WIKI,
       });

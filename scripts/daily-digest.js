@@ -18,6 +18,8 @@ const db = require('../lib/db');
 const { writeNote, vaultRoot } = require('../lib/obsidian-vault');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
+const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
+const { PROMPTS } = require('../lib/prompts');
 
 const args = Object.fromEntries(
   process.argv.slice(2)
@@ -115,21 +117,21 @@ function extractJournalSection(content) {
 }
 
 async function synthesise(topicName, context) {
-  const prompt = `You are summarising recent activity about "${topicName}" from journal entries and emails.
+  const fallbackModel = process.env.DIGEST_MODEL || 'deepseek/deepseek-v3.2';
+  const modelId = getSystemModelId('daily_digest', 'system', fallbackModel);
+  const system = getSystemPrompt('daily_digest', 'system', PROMPTS.daily_digest);
+  const prompt = `${system}
 
-${context}
+Project/topic: ${topicName}
 
-Write 2–4 sentences covering: what's happened recently, any open threads or decisions, and what to watch next.
-- Use [[wikilink]] syntax for people and project names.
-- Only include what is evidenced in the content above.
-- No bullet points. Flowing prose.`;
+${context}`;
 
   try {
     const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: openRouterHeaders(TASK_CODES.DAILY_DIGEST),
       body: JSON.stringify({
-        model: process.env.DIGEST_MODEL || 'deepseek/deepseek-v3.2',
+        model: modelId,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.2,
       }),
@@ -137,10 +139,10 @@ Write 2–4 sentences covering: what's happened recently, any open threads or de
     if (!resp.ok) throw new Error(`LLM ${resp.status}`);
     const data = await resp.json();
     logUsageFromResponse({
-      user,
-      feature: 'daily-digest',
-      modelKey: 'daily-digest',
-      fallbackModelId: process.env.DIGEST_MODEL || 'deepseek/deepseek-v3.2',
+      user: USER,
+      feature: 'daily_digest',
+      modelKey: 'daily_digest',
+      fallbackModelId: modelId,
       data,
       taskCode: TASK_CODES.DAILY_DIGEST,
     });
