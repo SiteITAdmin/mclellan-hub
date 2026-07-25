@@ -19,6 +19,7 @@ const {
 const { buildDebriefContext } = require('../lib/debrief-context');
 const { synthesizeSpeech } = require('../lib/tts');
 const { transcribeAudioBuffer } = require('../lib/workday-ingest');
+const { listProjects } = require('../lib/project-lifecycle');
 
 const meetingUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
@@ -434,7 +435,7 @@ router.get('/meeting', requireAuth, async (req, res, next) => {
   next();
 }, (req, res) => {
   const hub = db.hub();
-  const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
+  const projects = listProjects(hub, req.hubUser);
   const contacts = hub.prepare('SELECT name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   res.render('hub/meeting', { user: req.hubUser, projects, contacts, debriefContext: res.locals.debriefContext });
 });

@@ -28,6 +28,7 @@ const {
 const { getWeekKey, weekKeyRange } = require('../lib/newsletter-pipeline');
 const { buildIngestionPackage } = require('../lib/heavy-file-ingestion');
 const { humanizeText, MAX_INPUT_CHARS: HUMANIZER_MAX_CHARS } = require('../lib/ai-humanizer');
+const { listProjects } = require('../lib/project-lifecycle');
 const newsletterRouter = require('./hub-newsletter');
 router.use('/newsletter', requireAuth, newsletterRouter);
 
@@ -190,7 +191,7 @@ router.get('/', requireAuth, async (req, res) => {
   const hub = db.hub();
   const user = req.hubUser;
 
-  const projects = hub.prepare('SELECT * FROM projects WHERE user = ? ORDER BY name').all(user);
+  const projects = listProjects(hub, user);
   const recentConvs = hub.prepare('SELECT * FROM conversations WHERE user = ? ORDER BY created_at DESC LIMIT 10').all(user);
 
   // Today strip data
@@ -391,9 +392,7 @@ router.get('/_home', requireAuth, (req, res) => {
 router.get('/c/:convId?', requireAuth, (req, res) => {
   const hub = db.hub();
   const convId = req.params.convId || null;
-  const projects = hub.prepare(
-    'SELECT * FROM projects WHERE user = ? ORDER BY name'
-  ).all(req.hubUser);
+  const projects = listProjects(hub, req.hubUser);
 
   let messages = [];
   let conv = null;
@@ -450,9 +449,7 @@ router.get('/p/:slug', requireAuth, (req, res) => {
      ORDER BY m.ts DESC LIMIT ?`
   ).all(project.id, project.context_depth * 5).reverse() : [];
 
-  const projects = hub.prepare(
-    'SELECT * FROM projects WHERE user = ? ORDER BY name'
-  ).all(req.hubUser);
+  const projects = listProjects(hub, req.hubUser);
 
   const recentConvs = hub.prepare(
     'SELECT * FROM conversations WHERE user = ? ORDER BY created_at DESC LIMIT 20'

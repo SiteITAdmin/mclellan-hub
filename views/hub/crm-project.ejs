@@ -39,7 +39,7 @@ async function taskAction(id, action) {
     <label>Status
       <select name="status">
         <option value="">Derived from activity</option>
-        <% for (const s of ['planning','active','blocked','completed']) { %>
+        <% for (const s of ['planning','active','blocked','completed','closed']) { %>
           <option value="<%= s %>" <%= projectMeta.status === s ? 'selected' : '' %>><%= s %></option>
         <% } %>
       </select>
@@ -48,7 +48,17 @@ async function taskAction(id, action) {
     <label class="wide">Scope<input name="scope" value="<%= projectMeta.scope || '' %>" placeholder="One sentence on scope and outcome"></label>
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn" type="submit">Save</button>
+      <button class="btn btn-subtle" type="button" id="project-lifecycle-toggle"><%= projectHealth === 'closed' ? 'Reopen project' : 'Close project' %></button>
       <span class="crm-muted" id="project-meta-msg" style="font-size:12px;">Stored as declared knowledge (manual atoms), not columns.</span>
+    </div>
+  </form>
+  <hr style="border:0;border-top:1px solid var(--border);margin:16px 0;">
+  <form class="crm-form-grid" id="project-rename-form">
+    <label>Project name<input name="name" value="<%= project.name %>" required></label>
+    <label>Slug<input name="slug" value="<%= project.slug %>" required pattern="[a-z0-9-]+"></label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-subtle" type="submit">Rename everywhere</button>
+      <span class="crm-muted" id="project-rename-msg" style="font-size:12px;">Updates local task, email, meeting and report references atomically.</span>
     </div>
   </form>
 </section>
@@ -346,6 +356,29 @@ document.getElementById('project-meta-form').addEventListener('submit', async e 
     });
     const j = await r.json();
     if (j.ok) { msg.textContent = 'Saved.'; setTimeout(() => location.reload(), 600); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
+});
+document.getElementById('project-lifecycle-toggle').addEventListener('click', () => {
+  const form = document.getElementById('project-meta-form');
+  const status = form.querySelector('[name=status]');
+  const closing = status.value !== 'closed';
+  if (closing && !confirm('Close this project? Its data stays available, but it will leave active project views and daily work reports.')) return;
+  status.value = closing ? 'closed' : 'active';
+  form.requestSubmit();
+});
+document.getElementById('project-rename-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = document.getElementById('project-rename-msg');
+  if (!confirm('Rename this project everywhere in the Hub?')) return;
+  msg.textContent = 'Renaming…';
+  try {
+    const r = await fetch('/api/crm/project/<%= project.slug %>/rename', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+    });
+    const j = await r.json();
+    if (j.ok) location.assign('/crm/project/' + encodeURIComponent(j.project.slug));
     else msg.textContent = j.error || 'Error';
   } catch (err) { msg.textContent = err.message; }
 });

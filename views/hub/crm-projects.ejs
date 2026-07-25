@@ -29,6 +29,7 @@
 </section>
 <div style="margin:0 0 16px">
   <button class="btn btn-subtle" id="toggle-add-project">+ Add project</button>
+  <% if (closedCount) { %><a class="btn btn-subtle" style="margin-left:6px;" href="/crm/projects<%= showClosed ? '' : '?show_closed=1' %>"><%= showClosed ? 'Hide closed' : `Show closed (${closedCount})` %></a><% } %>
 </div>
 
 <section class="crm-card-grid">
@@ -42,7 +43,7 @@
       </div>
       <div class="crm-badges" style="margin-top:6px;">
         <% if (p.health) { %>
-          <% const healthColor = { blocked: 'var(--crm-danger,#c0392b)', stale: 'var(--crm-danger,#c0392b)', quiet: '#b8860b', completed: 'var(--crm-muted,#888)' }[p.health]; %>
+          <% const healthColor = { blocked: 'var(--crm-danger,#c0392b)', stale: 'var(--crm-danger,#c0392b)', quiet: '#b8860b', completed: 'var(--crm-muted,#888)', closed: 'var(--crm-muted,#888)' }[p.health]; %>
           <span class="crm-badge<%= healthColor ? '' : ' subtle' %>" <% if (healthColor) { %>style="color:<%= healthColor %>;border-color:currentColor;"<% } %>><%= p.health %><%= p.manualStatus ? '' : ' (derived)' %></span>
         <% } %>
         <% if (p.deadline) { %><span class="crm-badge subtle">target <%= p.deadline %></span><% } %>
