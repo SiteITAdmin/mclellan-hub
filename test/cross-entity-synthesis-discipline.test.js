@@ -25,7 +25,7 @@ test.beforeEach(cleanup);
 test.after(cleanup);
 
 test('cross-entity synthesis has a bounded completion budget', () => {
-  assert.equal(CROSS_ENTITY_MAX_TOKENS, 4000);
+  assert.equal(CROSS_ENTITY_MAX_TOKENS, 8000);
 });
 
 test('only source-backed cross-entity insights are accepted', () => {
