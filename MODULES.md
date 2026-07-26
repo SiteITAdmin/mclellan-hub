@@ -120,6 +120,7 @@ These are the tools the system runs on. They are not features — they are the f
 - Manual capture is one pass: Add Person takes phone/company/role/how-we-met; touchpoints, milestones, and project status are recorded where they're seen (facts and manual atoms, not columns)
 - Meeting intake drafts are previewed (attendees/outcomes/actions/risk flags) before anything is committed; debriefs create CRM meeting rows with date/time/duration/channel
 - Every question the nightly quality boards raise is answerable at `/crm/questions`, and answering one writes knowledge instead of only clearing a flag: a meeting question becomes a `decision` atom on its project, an unowned action becomes an `open_commitment` atom on a real person (with the transcript's name kept as an alias), an alias clash becomes a `distinct_from`/`same_person_as` atom. A board that asks something Douglas cannot answer anywhere is an incomplete feature
+- Placeholder speakers block new intake before processing; the quality board must not reopen speaker mapping on already-processed legacy transcripts that no longer have an editable mapping step
 
 **Does not own:** Tasks (those go to Google Tasks), calendar events (that's Calendar), document storage (that's Projects/Documents)
 
@@ -165,7 +166,7 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Does not own:** Running projects (that's CRM), task management (that's Google Tasks)
 
-**Health check:** Documents uploaded in the last 7 days with no associated tasks should be flagged unless they're images or have no actionable content.
+**Health check:** Recent non-image, non-meeting documents with no `task_extracted_at` review marker should be flagged. A reviewed document that produced zero tasks is healthy, and generated `_Project Memory.md` documents are outside task extraction.
 
 ---
 

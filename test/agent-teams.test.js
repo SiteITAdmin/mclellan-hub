@@ -9,6 +9,7 @@ const {
 
 const {
   capoChecks,
+  documentsAwaitingTaskReview,
   writeUnderbossReceipt,
 } = require('../lib/hub-family-agents');
 
@@ -265,6 +266,41 @@ test('CRM meeting quality board asks for clarification on Trina and Triona audio
   assert.equal(review.verdict, 'warn');
   const clarifications = review.checks.find(c => c.name === 'transcription_clarifications_needed').details.clarifications;
   assert(clarifications.some(item => item.type === 'near_name_audio_variant' && item.evidence.includes('Trina may be Triona')));
+});
+
+test('CRM meeting quality board does not reopen speaker mapping for processed legacy transcripts', () => {
+  const processed = buildMeetingIntakeQualityReview({
+    contacts: [],
+    intakes: [{
+      id: 'legacy-intake',
+      title: 'Already processed',
+      status: 'processed',
+      transcript: 'Speaker 2 | 00:01\nThe meeting is already in CRM.',
+      extraction: '{}',
+    }],
+  });
+  assert.equal(processed.clarification_requests.some(item => item.type === 'generic_speaker_labels'), false);
+
+  const awaitingReview = buildMeetingIntakeQualityReview({
+    contacts: [],
+    intakes: [{
+      id: 'new-intake',
+      title: 'Needs mapping',
+      status: 'needs_speaker_review',
+      transcript: 'Speaker 2 | 00:01\nI will circulate the document.',
+      extraction: '{}',
+    }],
+  });
+  assert.equal(awaitingReview.clarification_requests.some(item => item.type === 'generic_speaker_labels'), true);
+});
+
+test('document quality distinguishes completed review from a document that produced no tasks', () => {
+  const awaiting = documentsAwaitingTaskReview([
+    { id: 'reviewed-no-tasks', filename: 'HLD.docx', markdown: 'No actions.', task_extracted_at: 1785000000 },
+    { id: 'generated-memory', filename: '_Project Memory.md', markdown: '# Project Memory', task_extracted_at: null },
+    { id: 'not-reviewed', filename: 'Actions.docx', markdown: 'Douglas will send the pack.', task_extracted_at: null },
+  ]);
+  assert.deepEqual(awaiting.map(doc => doc.id), ['not-reviewed']);
 });
 
 test('CRM task quality board flags unknown owners from meeting action registers', () => {
