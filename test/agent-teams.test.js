@@ -708,6 +708,7 @@ test('no capo ships a tautological always-pass count check', () => {
 });
 
 const {
+  clearedRemediationOutcome,
   remediateCheck,
   FIXERS,
   ADVISOR_WHITELIST,
@@ -827,6 +828,23 @@ test('remediation escalates instead of dispatching forever after repeated unreso
     db.hub = originalHub;
     mem.close();
   }
+});
+
+test('remediation records recovery when a previously unresolved check now passes', () => {
+  const outcome = clearedRemediationOutcome(
+    'documents_projects',
+    { name: 'recent_documents_have_task_review', verdict: 'pass', evidence: '0 documents awaiting task review' },
+    { status: 'fail', summary: 'could not self-heal' },
+  );
+  assert.equal(outcome.status, 'resolved');
+  assert.equal(outcome.action, 'verified_current_check_passes');
+  assert.equal(outcome.before, 'fail');
+  assert.equal(outcome.after, 'pass');
+  assert.equal(clearedRemediationOutcome(
+    'documents_projects',
+    { name: 'recent_documents_have_task_review', verdict: 'pass', evidence: 'clear' },
+    { status: 'pass' },
+  ), null, 'a recorded recovery must not be written again on every cycle');
 });
 
 const {
