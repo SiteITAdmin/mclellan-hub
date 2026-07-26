@@ -51,6 +51,18 @@ test('only source-backed cross-entity insights are accepted', () => {
   assert.deepEqual(insights[0].evidenceAtomIds, ['atom-a', 'atom-b']);
 });
 
+test('source-backed insight candidates are not truncated to a fixed quota', () => {
+  const candidates = Array.from({ length: 16 }, (_, index) => ({
+    type: 'connection',
+    title: `Distinct connection ${index + 1}`,
+    detail: `This independently useful connection has sufficient evidence for item ${index + 1}. It changes how the related work should be understood.`,
+    evidence_atom_ids: ['atom-a', 'atom-b'],
+    confidence: 0.8,
+  }));
+
+  assert.equal(normaliseCrossEntityInsights(candidates, atoms).length, 16);
+});
+
 test('replacing insights preserves exact atom provenance', () => {
   const insights = normaliseCrossEntityInsights([{
     type: 'workflow',
