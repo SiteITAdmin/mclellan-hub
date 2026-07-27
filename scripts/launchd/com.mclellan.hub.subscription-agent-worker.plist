@@ -6,7 +6,7 @@
     <key>HOME</key><string>/Users/dm_mini</string>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
-  <key>ProgramArguments</key><array><string>/opt/homebrew/bin/node</string><string>/Users/dm_mini/Documents/mclellan hub/scripts/subscription-agent-worker.js</string></array>
+  <key>ProgramArguments</key><array><string>/opt/homebrew/opt/node@24/bin/node</string><string>/Users/dm_mini/Documents/mclellan hub/scripts/subscription-agent-worker.js</string></array>
   <key>WorkingDirectory</key><string>/Users/dm_mini/Documents/mclellan hub</string>
   <key>RunAtLoad</key><true/><key>StartInterval</key><integer>60</integer>
   <key>StandardOutPath</key><string>/Users/dm_mini/Library/Logs/mclellan-hub.subscription-agent-worker.out.log</string>
