@@ -852,6 +852,7 @@ const {
   fallbackBrief,
   summarizeForModel,
   isCircularGovernanceAsk,
+  askGroups,
 } = require('../lib/consigliere-brief');
 
 test('consigliere brief drops circular governance self-references', () => {
@@ -866,6 +867,46 @@ test('consigliere brief drops circular governance self-references', () => {
   }, {});
   assert.equal(input.asks.length, 1);
   assert.equal(input.asks[0].concern, 'real ask');
+});
+
+test('one failing check reaches Douglas once, carrying the cause and not the board it blocks', () => {
+  // The capo failure, the remediation pass that could not heal it and the board
+  // veto it produces are three receipts about one problem. Split up, the two
+  // derived ones arrive with no cause and the brief has nothing to recommend but
+  // overriding the veto — a control the Hub does not have.
+  const report = {
+    asks_douglas: [
+      {
+        reason: 'failure', severity: 'blocker', source_kind: 'hub_module', source_id: 'token_burn',
+        subsystem: 'token_burn', root_check: 'latest_import_fresh',
+        root_evidence: 'latest=2026-07-23; age=4 day(s) — run the token-burn refresh job on the Mac mini',
+        diagnosis: '', summary: 'Token Burn Capo: FAIL',
+      },
+      {
+        reason: 'failure', severity: 'blocker', source_kind: 'hub_remediation', source_id: 'latest_import_fresh',
+        subsystem: 'token_burn', root_check: 'latest_import_fresh', root_evidence: 'latest=2026-07-23; age=4 day(s)',
+        diagnosis: 'The latest import is stale at 4 days old', self_heal_attempted: true,
+        summary: 'Remediation: cannot self-heal token_burn:latest_import_fresh',
+      },
+      {
+        reason: 'veto', severity: 'decision', source_kind: 'hub_quality', source_id: 'capo:token_burn',
+        subsystem: 'token_burn', root_check: 'capo_checks_are_not_failing',
+        root_evidence: '1 failing check(s), 0 warning check(s)', diagnosis: '',
+        summary: 'Token Burn Capo Quality Board: FAIL - VETO',
+      },
+    ],
+  };
+
+  const groups = askGroups(report);
+  assert.equal(groups.length, 1, 'three receipts about one subsystem must collapse to one problem');
+
+  const [ask] = summarizeForModel(report, {}).asks;
+  assert.equal(ask.area, 'Token burn');
+  assert.equal(ask.failing_check, 'latest_import_fresh', 'the board rule must never stand in for the failing check');
+  assert(ask.concern.includes('age=4 day(s)'), 'the cause must survive the collapse');
+  assert(!ask.concern.includes('1 failing check(s)'), 'the board only counts failures beneath it; that is not a cause');
+  assert.equal(ask.blocking_quality_board, true, 'the veto survives as a property, not as its own ask');
+  assert.equal(ask.tried_to_self_heal, true);
 });
 
 test('consigliere brief flattens clarification JSON into human strings, no raw objects', () => {
