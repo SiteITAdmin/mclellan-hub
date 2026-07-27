@@ -17,6 +17,12 @@ test('cross-entity maps to local Codex Luna at medium effort', () => {
   assert.deepEqual(command.args.slice(0, 7), ['exec', '--model', 'gpt-5.6-luna', '--config', 'model_reasoning_effort=medium', '--sandbox', 'read-only']);
 });
 
+test('Nakai route-change quality review uses an independent Codex Luna judge', () => {
+  const command = commandFor(RUNNERS.nakai_briefing_quality_review, 'system');
+  assert.equal(command.command, 'codex');
+  assert.deepEqual(command.args.slice(0, 7), ['exec', '--model', 'gpt-5.6-luna', '--config', 'model_reasoning_effort=medium', '--sandbox', 'read-only']);
+});
+
 test('a runner can be disabled explicitly', () => {
   const old = process.env.NAKAI_DAILY_BRIEFING_RUNNER;
   process.env.NAKAI_DAILY_BRIEFING_RUNNER = 'off';
