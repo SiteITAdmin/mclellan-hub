@@ -9,9 +9,9 @@ VPS_USER="root"
 LABEL="com.mclellan.hub.subscription-agent-worker"
 
 if [ ! -f "$ENV_FILE" ]; then echo "missing $ENV_FILE" >&2; exit 1; fi
-HUB_URL="$(grep -E '^HUB_URL=' "$ENV_FILE" | head -1 | cut -d= -f2- | sed 's:/*$::')"
+HUB_URL="$( { grep -E '^HUB_URL=' "$ENV_FILE" || true; } | head -1 | cut -d= -f2- | sed 's:/*$::')"
 if [ -z "$HUB_URL" ]; then echo 'HUB_URL is required in the Mac .env' >&2; exit 1; fi
-SECRET="$(grep -E '^SUBSCRIPTION_AGENT_WORKER_SECRET=' "$ENV_FILE" | head -1 | cut -d= -f2-)"
+SECRET="$( { grep -E '^SUBSCRIPTION_AGENT_WORKER_SECRET=' "$ENV_FILE" || true; } | head -1 | cut -d= -f2-)"
 if [ -z "$SECRET" ]; then
   SECRET="$(openssl rand -hex 32)"
   printf '\nSUBSCRIPTION_AGENT_WORKER_SECRET=%s\n' "$SECRET" >> "$ENV_FILE"
