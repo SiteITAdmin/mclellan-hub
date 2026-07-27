@@ -9,6 +9,7 @@ const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 const { buildBriefingPdfHtml } = require('../lib/newsletter-pipeline');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
+const { runSubscriptionText } = require('../lib/subscription-agent');
 const { captureNakaiDailyBriefing } = require('../lib/knowledge-format');
 const { getRefAtoms } = require('../lib/nakai-ref-synthesis');
 
@@ -267,6 +268,17 @@ function briefingModelAttempts(primaryModelId) {
 
 async function requestBriefingMarkdown({ prompt, userContent, primaryModelId }) {
   const failures = [];
+  try {
+    const local = await runSubscriptionText({ feature: 'nakai_daily_briefing', systemPrompt: prompt, userPrompt: userContent, timeoutMs: MODEL_TIMEOUT_MS });
+    if (local) {
+      if (!/^# Daily Briefing/m.test(local.text)) throw new Error('local Opus response did not contain a Daily Briefing');
+      console.log(`[nakai-briefing] subscription generation succeeded (${local.runner}/${local.model}/${local.effort})`);
+      return local.text;
+    }
+  } catch (err) {
+    failures.push(`subscription: ${err.message}`);
+    console.warn(`[nakai-briefing] subscription runner failed; using OpenRouter fallback: ${err.message}`);
+  }
   for (const attempt of briefingModelAttempts(primaryModelId)) {
     try {
       const started = Date.now();
@@ -328,6 +340,17 @@ async function generateMarkdown(meta = briefingMeta()) {
   fs.writeFileSync(path.join(OUT_DIR, 'nakai-daily-briefing-prompt.md'), fullPrompt, 'utf8');
 
   if (process.env.NAKAI_DAILY_BRIEFING_FORCE_FALLBACK) return { text: fallbackBriefing(meta), liveIds: pack.liveIds };
+  if (require('../lib/subscription-agent-jobs').enabled()) {
+    const queued = require('../lib/subscription-agent-jobs').enqueue({
+      feature: 'nakai_daily_briefing',
+      dedupeKey: meta.edition || meta.iso,
+      payload: {
+        meta, liveIds: pack.liveIds, prompt,
+        userPrompt: `Current date: ${meta.label}\n${editionContext}${previousContext}\nSource pack:\n\n${pack.text}`,
+      },
+    });
+    return { queued: true, ...queued, liveIds: pack.liveIds };
+  }
   if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set');
 
   try {
@@ -607,7 +630,13 @@ function markCitationInclusion(markdown, liveIds, edition) {
 
 async function buildNakaiDailyBriefing({ date = new Date() } = {}) {
   const meta = briefingMeta(date);
-  const { text: markdown, liveIds } = await generateMarkdown(meta);
+  const generated = await generateMarkdown(meta);
+  if (generated.queued) return { queued: true, jobId: generated.jobId, meta };
+  const { text: markdown, liveIds } = generated;
+  return finalizeNakaiDailyBriefing({ meta, markdown, liveIds });
+}
+
+async function finalizeNakaiDailyBriefing({ meta, markdown, liveIds = [] }) {
   const result = await renderPdf(markdown, meta);
   result.includedItemIds = markCitationInclusion(markdown, liveIds, meta.edition);
   try {
@@ -626,6 +655,14 @@ async function buildNakaiDailyBriefing({ date = new Date() } = {}) {
   return result;
 }
 
+async function completeRemoteNakaiDailyBriefing(payload, markdown) {
+  const text = String(markdown || '').trim();
+  if (!/^# Daily Briefing/m.test(text)) throw new Error('remote Opus response did not contain a Daily Briefing');
+  const result = await finalizeNakaiDailyBriefing({ meta: payload.meta, markdown: text, liveIds: payload.liveIds || [] });
+  await sendStoredBriefing(payload.meta.edition, { force: false });
+  return { edition: payload.meta.edition, archive: result.archive, execution: 'subscription_remote', runner: 'claude', model: 'opus', effort: 'high' };
+}
+
 async function sendTodayNakaiDailyBriefing({ force = false, date = new Date() } = {}) {
   const meta = briefingMeta(date);
   if (!meta.edition) {
@@ -633,7 +670,9 @@ async function sendTodayNakaiDailyBriefing({ force = false, date = new Date() } 
     return { ok: true, skipped: true, reason: 'before-start-date', meta };
   }
   const existing = listStoredBriefings().find(item => item.edition === meta.edition);
-  const manifest = existing || (await buildNakaiDailyBriefing({ date })).archive;
+  const built = existing ? null : await buildNakaiDailyBriefing({ date });
+  if (built?.queued) return { ok: true, queued: true, jobId: built.jobId, meta };
+  const manifest = existing || built?.archive;
   if (!manifest) throw new Error(`Could not build Daily Briefing ${meta.edition}`);
   return sendStoredBriefing(meta.edition, { force });
 }
@@ -654,6 +693,7 @@ module.exports = {
   START_DATE,
   briefingMeta,
   buildNakaiDailyBriefing,
+  completeRemoteNakaiDailyBriefing,
   sendTodayNakaiDailyBriefing,
   sendStoredBriefing,
   listStoredBriefings,

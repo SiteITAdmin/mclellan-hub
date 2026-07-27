@@ -8,7 +8,7 @@ const {
 } = require('../lib/messaging-capture');
 const {
   writeLimiter, messagingCaptureLimiter, requireAuth, requireSameOrigin, requireHermesAuth,
-  requireContentResearchWorkerAuth,
+  requireContentResearchWorkerAuth, requireSubscriptionAgentWorkerAuth,
 } = require('./hub-shared');
 
 // ── YouTube / URL ingest ──────────────────────────────────────────────────────
@@ -208,6 +208,32 @@ router.post('/api/content-research/worker/fail', requireContentResearchWorkerAut
     console.error('[content-research worker fail]', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Subscription agent Mac pull-worker ───────────────────────────────────────
+// The VPS only prepares source-backed packages. The Mini executes the selected
+// prepaid CLI and returns a bounded result; this endpoint applies validation.
+router.post('/api/subscription-agent/worker/claim', requireSubscriptionAgentWorkerAuth, writeLimiter, (req, res) => {
+  try {
+    const result = require('../lib/subscription-agent-jobs').claim({ workerId: req.body?.worker_id || 'mac', limit: req.body?.limit || 1 });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/api/subscription-agent/worker/complete', requireSubscriptionAgentWorkerAuth, writeLimiter, async (req, res) => {
+  try {
+    const result = await require('../lib/subscription-agent-jobs').complete({ jobId: req.body?.job_id, claimToken: req.body?.claim_token, output: req.body?.output });
+    if (!result.ok) return res.status(result.status || 400).json(result);
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/api/subscription-agent/worker/fail', requireSubscriptionAgentWorkerAuth, writeLimiter, (req, res) => {
+  try {
+    const result = require('../lib/subscription-agent-jobs').fail({ jobId: req.body?.job_id, claimToken: req.body?.claim_token, error: req.body?.error });
+    if (!result.ok) return res.status(result.status || 400).json(result);
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;

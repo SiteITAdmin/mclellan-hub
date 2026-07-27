@@ -97,6 +97,14 @@ function requireContentResearchWorkerAuth(req, res, next) {
   next();
 }
 
+function requireSubscriptionAgentWorkerAuth(req, res, next) {
+  const secret = process.env.SUBSCRIPTION_AGENT_WORKER_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Subscription agent worker auth not configured' });
+  const auth = req.headers.authorization || '';
+  if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
 module.exports = {
   upload,
   audioUpload,
@@ -111,5 +119,6 @@ module.exports = {
   requireWorkdayWebhookAuth,
   requireHermesAuth,
   requireContentResearchWorkerAuth,
+  requireSubscriptionAgentWorkerAuth,
   validWorkdayWebhookAuth,
 };
