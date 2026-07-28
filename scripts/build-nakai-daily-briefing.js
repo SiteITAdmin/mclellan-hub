@@ -659,7 +659,12 @@ async function completeRemoteNakaiDailyBriefing(payload, markdown) {
   const text = String(markdown || '').trim();
   if (!/^# Daily Briefing/m.test(text)) throw new Error('remote Opus response did not contain a Daily Briefing');
   const result = await finalizeNakaiDailyBriefing({ meta: payload.meta, markdown: text, liveIds: payload.liveIds || [] });
-  await sendStoredBriefing(payload.meta.edition, { force: false });
+  const sent = await sendStoredBriefing(payload.meta.edition, { force: false });
+  try {
+    require('../lib/nakai-intelligence-pipeline').markLatestBriefingDelivered(sent.manifest);
+  } catch (err) {
+    console.warn(`[nakai-briefing] delivery receipt update failed: ${err.message}`);
+  }
   return { edition: payload.meta.edition, archive: result.archive, execution: 'subscription_remote', runner: 'claude', model: 'opus', effort: 'high' };
 }
 

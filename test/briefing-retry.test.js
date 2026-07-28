@@ -33,7 +33,7 @@ require.cache[monitorPath] = {
 };
 
 const db = require('../lib/db');
-const { retryDailyBriefing } = require('../lib/nakai-intelligence-pipeline');
+const { retryDailyBriefing, _test } = require('../lib/nakai-intelligence-pipeline');
 
 const RUN_ID = `briefing-retry-test-${Date.now()}`;
 // Far-future started_at so this row is the "latest run" the retry marks.
@@ -60,7 +60,7 @@ test('failed retry reports ok=false and sends no email', async () => {
 
 test('successful retry marks the latest run and emails a recovery confirmation', async () => {
   sentEmails.length = 0;
-  briefingBehaviour = async () => ({ ok: true, skipped: false, manifest: { edition: '999', to: 'nakai@example.com' } });
+  briefingBehaviour = async () => ({ ok: true, skipped: false, manifest: { edition: '999', to: 'nakai@example.com', sentAt: new Date().toISOString() } });
   const result = await retryDailyBriefing();
   assert.equal(result.ok, true);
   const run = db.hub().prepare(
@@ -76,8 +76,13 @@ test('successful retry marks the latest run and emails a recovery confirmation',
 
 test('already-sent retry is ok but sends no duplicate recovery email', async () => {
   sentEmails.length = 0;
-  briefingBehaviour = async () => ({ ok: true, skipped: true, manifest: { edition: '999', to: 'nakai@example.com' } });
+  briefingBehaviour = async () => ({ ok: true, skipped: true, manifest: { edition: '999', to: 'nakai@example.com', sentAt: new Date().toISOString() } });
   const result = await retryDailyBriefing();
   assert.equal(result.ok, true);
   assert.equal(sentEmails.length, 0);
+});
+
+test('a queued subscription job is not a delivery receipt', () => {
+  assert.equal(_test.briefingDelivered({ ok: true, queued: true, jobId: 'job-1' }), false);
+  assert.equal(_test.briefingDelivered({ ok: true, manifest: { edition: '999', sentAt: '2099-01-01T00:00:00Z' } }), true);
 });
