@@ -6,7 +6,7 @@ const { RUNNERS, configuredRunner, commandFor, textFromOutput } = require('../li
 
 test('Nakai maps to local Claude Opus at high effort', () => {
   const command = commandFor(RUNNERS.nakai_daily_briefing, 'system');
-  assert.equal(command.command, 'claude');
+  assert.match(command.command, /(?:^|\/)claude$/);
   assert.deepEqual(command.args.slice(0, 6), ['--print', '--model', 'opus', '--effort', 'high', '--tools']);
   assert.equal(textFromOutput(RUNNERS.nakai_daily_briefing, JSON.stringify({ result: '# Daily Briefing\nBody' })), '# Daily Briefing\nBody');
 });

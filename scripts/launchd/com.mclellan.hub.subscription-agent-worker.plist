@@ -4,7 +4,9 @@
   <key>Label</key><string>com.mclellan.hub.subscription-agent-worker</string>
   <key>EnvironmentVariables</key><dict>
     <key>HOME</key><string>/Users/dm_mini</string>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>USER</key><string>dm_mini</string>
+    <key>LOGNAME</key><string>dm_mini</string>
+    <key>PATH</key><string>/Users/dm_mini/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>ProgramArguments</key><array><string>/opt/homebrew/opt/node@24/bin/node</string><string>/Users/dm_mini/Documents/mclellan hub/scripts/subscription-agent-worker.js</string></array>
   <key>WorkingDirectory</key><string>/Users/dm_mini/Documents/mclellan hub</string>
