@@ -40,3 +40,8 @@ test('server-rendered scraper keeps long regulator headline anchors', () => {
     title: 'Regulator publication metadata'.repeat(5) + 'Strengthening resilience across an increasingly interconnected financial system28/07/2026',
   }]);
 });
+
+test('regulator search-result navigation cannot consume the new-item cap', () => {
+  assert.equal(regTest.isJunkUrl('https://www.fca.org.uk/news/search-results?n_search_term=&category=blogs'), true);
+  assert.equal(regTest.isJunkUrl('https://www.fca.org.uk/news/blogs/outcomes-monitoring'), false);
+});
