@@ -31,6 +31,21 @@ test('FCA uses its server-rendered HTML instead of the broken browser route', ()
   });
 });
 
+test('Central Bank Markets Update is a first-class daily EU source', () => {
+  const source = db.hub().prepare(`
+    SELECT name, url, browser, cadence, active
+    FROM nakai_reg_monitor_sites
+    WHERE id = 'nrs_cbi_markets'
+  `).get();
+  assert.deepEqual(source, {
+    name: 'Central Bank of Ireland Markets Update',
+    url: 'https://www.centralbank.ie/regulation/markets-update',
+    browser: 0,
+    cadence: 'daily',
+    active: 1,
+  });
+});
+
 test('server-rendered scraper keeps long regulator headline anchors', () => {
   const padding = '<span class="meta">Regulator publication metadata</span>'.repeat(5);
   const html = `<a href="/news/blogs/strengthening-resilience">${padding}<span>Strengthening resilience across an increasingly interconnected financial system</span><time>28/07/2026</time></a>`;
