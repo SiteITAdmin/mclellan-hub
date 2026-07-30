@@ -12,6 +12,7 @@ const { logUsageFromResponse } = require('../lib/openrouter-usage');
 const { runSubscriptionText } = require('../lib/subscription-agent');
 const { captureNakaiDailyBriefing } = require('../lib/knowledge-format');
 const { getRefAtoms } = require('../lib/nakai-ref-synthesis');
+const { regulatorForUrl } = require('../lib/us-regulatory-sources');
 
 const ROOT = path.join(__dirname, '..');
 const STORE_DIR = path.join(ROOT, 'data', 'nakai-briefings');
@@ -20,6 +21,12 @@ const START_DATE = process.env.NAKAI_DAILY_BRIEFING_START_DATE || '2026-06-19';
 const MODEL_TIMEOUT_MS = parseInt(process.env.NAKAI_DAILY_BRIEFING_TIMEOUT_MS || '180000', 10);
 const FALLBACK_MODEL_ID = process.env.NAKAI_DAILY_BRIEFING_FALLBACK_MODEL || 'google/gemini-2.5-flash';
 const FALLBACK_TIMEOUT_MS = parseInt(process.env.NAKAI_DAILY_BRIEFING_FALLBACK_TIMEOUT_MS || '120000', 10);
+const CURRENT_SCOPE_DIRECTIVE = `Current briefing scope override:
+- This briefing is EU/Irish/UK-first, with relevant international authorities such as FATF.
+- Exclude every US federal, state, attorney-general, legislative, enforcement, and regulatory item, even if it appears in the source pack or previous-edition context.
+- Do not include a US Regulatory Watch section, US regulatory source citation, or US regulatory follow-up.
+- A separate US updates briefing will own that material later.
+- Required section order: Executive Readout; EU, UK and International Regulatory Watch; Block Product Watch; Audit Horizon: Consumer Duty and Operational Resilience; Watchlist for Nakai; optional Standing Context; Sources.`;
 
 function briefingMeta(date = new Date()) {
   const now = date instanceof Date ? date : new Date(date);
@@ -140,6 +147,21 @@ function alertIntelMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
   ].filter(Boolean).join('\n')).join('\n\n---\n\n');
 }
 
+function isUsRegulatoryItem(item) {
+  const site = String(item?.site || '').trim().toLowerCase();
+  const details = String(item?.detail_json || '').toLowerCase();
+  if (details.includes('official-us-regulator')) return true;
+  if (
+    site.startsWith('us ')
+    || site.startsWith('us attorney general')
+    || site.startsWith('us financial regulator')
+    || site === 'oregon department of justice'
+    || site === 'texas attorney general'
+    || site === 'national association of attorneys general'
+  ) return true;
+  return Boolean(regulatorForUrl(item?.url));
+}
+
 // Live source pack — reads from reg_monitor_items (last 48 hours as of
 // asOfEpoch) so the briefing reflects what the regulatory monitor actually
 // found overnight. asOfEpoch defaults to now (the live daily run); a rebuild
@@ -162,8 +184,10 @@ function liveSourcePackMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
       AND title NOT LIKE '%View in Irish%'
       AND url NOT LIKE '%/ga/%'
     ORDER BY found_at DESC
-    LIMIT 80
-  `).all(since48h, asOfEpoch);
+    LIMIT 320
+  `).all(since48h, asOfEpoch)
+    .filter(item => !isUsRegulatoryItem(item))
+    .slice(0, 80);
 
   let staleFallback = false;
   if (!items.length) {
@@ -177,8 +201,10 @@ function liveSourcePackMarkdown(asOfEpoch = Math.floor(Date.now() / 1000)) {
         AND title NOT LIKE '%View in Irish%'
         AND url NOT LIKE '%/ga/%'
       ORDER BY found_at DESC
-      LIMIT 80
-    `).all(asOfEpoch);
+      LIMIT 320
+    `).all(asOfEpoch)
+      .filter(item => !isUsRegulatoryItem(item))
+      .slice(0, 80);
     staleFallback = true;
   }
 
@@ -327,7 +353,8 @@ async function generateMarkdown(meta = briefingMeta()) {
   if (process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD && fs.existsSync(process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD)) {
     return { text: fs.readFileSync(process.env.NAKAI_DAILY_BRIEFING_SOURCE_MD, 'utf8'), liveIds: [] };
   }
-  const prompt = getSystemPrompt('nakai_daily_briefing', 'system', PROMPTS.nakai_daily_briefing);
+  const configuredPrompt = getSystemPrompt('nakai_daily_briefing', 'system', PROMPTS.nakai_daily_briefing);
+  const prompt = `${configuredPrompt}\n\n${CURRENT_SCOPE_DIRECTIVE}`;
   const modelId = getSystemModelId('nakai_daily_briefing', 'system', 'anthropic/claude-sonnet-4-6');
   const editionContext = meta.edition
     ? `Briefing edition: ${meta.edition}\nPrevious edition: ${meta.previousEdition || 'none'}\nResend admin action: ${resendUrl(meta.edition)}\n`
@@ -710,5 +737,7 @@ module.exports = {
     alertIntelMarkdown,
     sourcePackMarkdown,
     briefingModelAttempts,
+    isUsRegulatoryItem,
+    CURRENT_SCOPE_DIRECTIVE,
   },
 };

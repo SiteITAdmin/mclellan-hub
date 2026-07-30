@@ -226,16 +226,17 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## Regulatory Monitor
-**Purpose:** Scan specified websites daily for regulatory updates, read new publication pages with Firecrawl, and send Nakai a private regulatory email digest.
+**Purpose:** Scan EU, Irish, UK, and relevant international authority websites daily for regulatory updates, compile source-backed intelligence, and send Nakai a private briefing. US federal and state regulation is explicitly out of scope and will be handled by a separate future briefing.
 
 **Healthy looks like:**
 - Nakai receives the scheduled regulatory email.
-- The email lists sources checked, new links found, relevant items, priority, affected firms, evidence, confidence, and source URLs.
+- The briefing leads with current EU/Irish/UK developments and contains no US regulatory section or US regulator follow-ups.
+- The audit email lists sources checked, new links found, relevant items, priority, affected firms, evidence, confidence, and source URLs.
 - If the daily briefing step fails (e.g. OpenRouter out of credits), Douglas gets a PANIC audit email and the Hub retries the briefing hourly (`NAKAI_BRIEFING_RETRY_MINUTES`, default 60) until it sends or Dublin midnight passes; a successful retry emails Douglas a RECOVERED confirmation.
 
-**Does not own:** Hub CRM notes, Google Chat alerts, weekly digest content, or Douglas-facing regulatory surfaces.
+**Does not own:** US regulatory monitoring, Hub CRM notes, Google Chat alerts, weekly digest content, or Douglas-facing regulatory surfaces.
 
-**Health check:** Check process logs for `[reg-monitor] email sent`, `[intelligence-pipeline] briefing retry` lines, and Firecrawl fetch warnings.
+**Health check:** Check process logs for `[reg-monitor]`, `[intelligence-pipeline] briefing retry` lines, zero-link warnings, and Firecrawl fetch warnings.
 
 ---
 
