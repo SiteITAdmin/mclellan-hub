@@ -3,75 +3,40 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../lib/db');
-const {
-  US_STATE_FINANCIAL_REGULATORS,
-  US_STATE_AG_NEWSROOMS,
-  NAAG_NEWSROOM,
-} = require('../lib/us-regulatory-sources');
+const { _test: regTest } = require('../lib/regulatory-monitor');
 
-test('Oregon DOJ news is a normal daily regulatory monitor source', () => {
-  const source = db.hub().prepare(`
-    SELECT name, url, browser, cadence, active
-    FROM nakai_reg_monitor_sites
-    WHERE id = 'nrs_or_doj'
-  `).get();
-
-  assert.deepEqual(source, {
-    name: 'Oregon Department of Justice',
-    url: 'https://www.doj.state.or.us/media/news-media-releases/oregon-doj-news/',
-    browser: 0,
-    cadence: 'daily',
-    active: 1,
-  });
-});
-
-test('all supplied US financial regulator sources are normal daily monitor sites', () => {
+test('Nakai regulatory monitor contains no US federal or state sources', () => {
   const rows = db.hub().prepare(`
-    SELECT name, browser, cadence, active
+    SELECT id, name
     FROM nakai_reg_monitor_sites
-    WHERE name LIKE 'US financial regulator — %'
+    WHERE id IN ('nrs_or_doj', 'nrs_tx_ag', 'nrs_naag')
+       OR id LIKE 'nrs_us_%'
+       OR name LIKE 'US financial regulator — %'
+       OR name LIKE 'US Attorney General — %'
   `).all();
-
-  assert.equal(rows.length, US_STATE_FINANCIAL_REGULATORS.length);
-  assert.ok(rows.every(row => row.browser === 0 && row.cadence === 'daily' && row.active === 1));
-  assert.ok(rows.some(row => /California Department/.test(row.name)));
-  assert.ok(rows.some(row => /Puerto Rico/.test(row.name)));
+  assert.deepEqual(rows, []);
 });
 
-test('Texas Attorney General news is a normal daily monitor source', () => {
+test('FCA uses its server-rendered HTML instead of the broken browser route', () => {
   const source = db.hub().prepare(`
-    SELECT url, browser, cadence, active FROM nakai_reg_monitor_sites WHERE id = 'nrs_tx_ag'
+    SELECT url, browser, cadence, active
+    FROM nakai_reg_monitor_sites
+    WHERE id = 'nrs_fca'
   `).get();
   assert.deepEqual(source, {
-    url: 'https://www.texasattorneygeneral.gov/news', browser: 0, cadence: 'daily', active: 1,
-  });
-});
-
-test('all supplied state AG newsrooms are normal daily monitor sites', () => {
-  const seeded = db.hub().prepare(`
-    SELECT name, browser, cadence, active
-    FROM nakai_reg_monitor_sites
-    WHERE name LIKE 'US Attorney General — %'
-  `).all();
-  const separatelySeeded = db.hub().prepare(`
-    SELECT COUNT(*) AS n FROM nakai_reg_monitor_sites WHERE id IN ('nrs_or_doj', 'nrs_tx_ag')
-  `).get().n;
-
-  assert.equal(seeded.length + separatelySeeded, US_STATE_AG_NEWSROOMS.length);
-  assert.ok(seeded.every(row => row.browser === 0 && row.cadence === 'daily' && row.active === 1));
-  assert.ok(seeded.some(row => /California Department/.test(row.name)));
-  assert.ok(seeded.some(row => /New York Attorney/.test(row.name)));
-});
-
-test('NAAG newsroom is a normal daily multistate-action source', () => {
-  const source = db.hub().prepare(`
-    SELECT name, url, browser, cadence, active FROM nakai_reg_monitor_sites WHERE id = 'nrs_naag'
-  `).get();
-  assert.deepEqual(source, {
-    name: NAAG_NEWSROOM.name,
-    url: NAAG_NEWSROOM.url,
+    url: 'https://www.fca.org.uk/news',
     browser: 0,
     cadence: 'daily',
     active: 1,
   });
+});
+
+test('server-rendered scraper keeps long regulator headline anchors', () => {
+  const padding = '<span class="meta">Regulator publication metadata</span>'.repeat(5);
+  const html = `<a href="/news/blogs/strengthening-resilience">${padding}<span>Strengthening resilience across an increasingly interconnected financial system</span><time>28/07/2026</time></a>`;
+  const rows = regTest.extractSameDomainLinks(html, 'https://www.fca.org.uk/news');
+  assert.deepEqual(rows, [{
+    url: 'https://www.fca.org.uk/news/blogs/strengthening-resilience',
+    title: 'Regulator publication metadata'.repeat(5) + 'Strengthening resilience across an increasingly interconnected financial system28/07/2026',
+  }]);
 });
