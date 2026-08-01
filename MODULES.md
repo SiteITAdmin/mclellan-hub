@@ -336,6 +336,17 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Does not own:** Regulatory analysis, Microsoft Defender monitoring, raw vendor-console records, or endpoint remediation.
 
+## US Block Special Edition
+**Purpose:** Scan the configured US financial-regulator and attorney-general sources on Monday, Wednesday, and Friday, then publish/email Nakai only when source-backed synthesis finds a high-confidence direct Block/product story.
+
+**Healthy looks like:**
+- Every run stores its raw search evidence and gate decision under `data/us-block-briefings/checks/`.
+- Generic crypto, unrelated-company, homepage, keyword-only, and speculative items are suppressed.
+- A qualifying run stores Markdown, HTML, PDF, source pack, decision, manifest, and private knowledge capture, then sends the edition to the configured Nakai recipient.
+- A no-story run records `no-candidates` or `suppressed` and sends nothing.
+
+**Does not own:** Nakai's EU/UK/Irish daily regulatory briefing or Microsoft 365 operations/security monitoring.
+
 ---
 
 ## Newsletter / Briefing (Afternoon)
