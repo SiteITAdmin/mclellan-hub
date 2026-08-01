@@ -2044,10 +2044,15 @@ router.post('/api/tasks/:id/complete', requireAuth, requireSameOrigin, writeLimi
   }
 });
 
-router.post('/api/tasks/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
-  const ok = deleteTask(req.hubUser, req.params.id);
-  if (!ok) return res.status(404).json({ error: 'Not found' });
-  res.json({ ok: true });
+router.post('/api/tasks/:id/delete', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const ok = await deleteTask(req.hubUser, req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[tasks] delete error', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/api/tasks/:id/wrong', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
@@ -2073,10 +2078,15 @@ router.post('/api/tasks/:id/wrong', requireAuth, requireSameOrigin, writeLimiter
   }
 });
 
-router.post('/api/tasks/:id/restore', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
-  const ok = restoreTask(req.hubUser, req.params.id);
-  if (!ok) return res.status(404).json({ error: 'Not found' });
-  res.json({ ok: true });
+router.post('/api/tasks/:id/restore', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const ok = await restoreTask(req.hubUser, req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[tasks] restore error', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/crm/tasks/:id', requireAuth, async (req, res) => {
