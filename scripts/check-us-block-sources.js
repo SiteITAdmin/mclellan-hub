@@ -153,7 +153,8 @@ async function searchProbe(provider, source) {
       });
       const data = response.ok ? await response.json() : null;
       const results = data?.web?.results || [];
-      return { attempted: true, status: response.status, resultCount: results.length, sameDomainCount: results.filter(item => hostname(item.url) === host).length, error: response.ok ? null : `HTTP ${response.status}` };
+      const sameDomain = results.filter(item => hostname(item.url) === host);
+      return { attempted: true, status: response.status, resultCount: results.length, sameDomainCount: sameDomain.length, sameDomainResults: sameDomain.slice(0, 3).map(item => ({ title: item.title || '', url: item.url || '' })), error: response.ok ? null : `HTTP ${response.status}` };
     }
     if (!process.env.EXA_API_KEY) return { attempted: false, status: 'not-configured', resultCount: 0, sameDomainCount: 0, error: null };
     const response = await fetch('https://api.exa.ai/search', {
@@ -163,9 +164,10 @@ async function searchProbe(provider, source) {
     });
     const data = response.ok ? await response.json() : null;
     const results = data?.results || [];
-    return { attempted: true, status: response.status, resultCount: results.length, sameDomainCount: results.filter(item => hostname(item.url) === host).length, error: response.ok ? null : `HTTP ${response.status}` };
+    const sameDomain = results.filter(item => hostname(item.url) === host);
+    return { attempted: true, status: response.status, resultCount: results.length, sameDomainCount: sameDomain.length, sameDomainResults: sameDomain.slice(0, 3).map(item => ({ title: item.title || '', url: item.url || '' })), error: response.ok ? null : `HTTP ${response.status}` };
   } catch (err) {
-    return { attempted: true, status: null, resultCount: 0, sameDomainCount: 0, error: err.message };
+    return { attempted: true, status: null, resultCount: 0, sameDomainCount: 0, sameDomainResults: [], error: err.message };
   }
 }
 
@@ -208,7 +210,8 @@ async function checkSource(source, browser) {
   const firecrawl = needsFirecrawl ? await firecrawlProbe(source) : { attempted: false, status: 'not-needed', markdownLength: 0, error: null };
   const brave = await searchProbe('brave', source);
   const exa = await searchProbe('exa', source);
-  const result = { name: source.name, kind: source.kind, url: source.url, host: hostname(source.url), direct, browser: browserResult, firecrawl, brave, exa };
+  const urlConfidence = direct.status === 404 ? 'not-found-review' : (direct.ok ? 'directly-reachable' : 'fallback-required');
+  const result = { name: source.name, kind: source.kind, url: source.url, host: hostname(source.url), urlConfidence, direct, browser: browserResult, firecrawl, brave, exa };
   return { ...result, verdict: verdict(result) };
 }
 
