@@ -177,6 +177,20 @@ async function finalizeBriefing({ meta, markdown }) {
   return manifest;
 }
 
+async function rerenderStoredBriefing(edition) {
+  loadDotEnv();
+  const manifest = getStoredBriefing(edition);
+  const markdown = fs.readFileSync(manifest.mdPath, 'utf8');
+  const meta = { edition: manifest.edition, iso: manifest.date, label: manifest.label, title: manifest.title };
+  const artifacts = await renderArtifacts(markdown, meta);
+  fs.copyFileSync(artifacts.mdPath, manifest.mdPath);
+  fs.copyFileSync(artifacts.htmlPath, manifest.htmlPath);
+  fs.copyFileSync(artifacts.pdfPath, manifest.pdfPath);
+  const updated = { ...manifest, rerenderedAt: new Date().toISOString() };
+  writeJson(path.join(storedDir(edition), 'manifest.json'), updated);
+  return updated;
+}
+
 function recipient() {
   const raw = process.env.DOUGLAS_GOOGLE_EMAILS || process.env.DOUGLAS_GOOGLE_EMAIL || process.env.GOOGLE_EMAIL || 'douglas@mclellan.scot';
   return raw.split(',').map(value => value.trim()).filter(Boolean)[0];
@@ -241,4 +255,4 @@ async function main() {
 
 if (require.main === module) main().catch(err => { console.error(err); process.exit(1); });
 
-module.exports = { START_DATE, SYSTEM_PROMPT, dateMeta, listStoredBriefings, getStoredBriefing, validateMarkdown, emailPayload, buildM365DailyBriefing, sendTodayM365DailyBriefing, sendStoredBriefing, completeRemoteM365DailyBriefing };
+module.exports = { START_DATE, SYSTEM_PROMPT, dateMeta, listStoredBriefings, getStoredBriefing, validateMarkdown, emailPayload, buildM365DailyBriefing, sendTodayM365DailyBriefing, sendStoredBriefing, rerenderStoredBriefing, completeRemoteM365DailyBriefing };
