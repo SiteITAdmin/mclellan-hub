@@ -149,10 +149,12 @@ These are the tools the system runs on. They are not features — they are the f
 - Tasks exist from all active sources: `email`, `agentmail`, `document`, `mycelium`, `crm`
 - No duplicate tasks for the same source event (enforced by `source_id` uniqueness)
 - Flight prep and check-in tasks exist for upcoming flights
+- CRM edits that Google can store (title, notes, due, complete) land on the remote task immediately — not only in the local cache
+- Changing a task's project moves it to that project's Google Tasks list; deleting in the CRM removes the open item from Google (restore re-creates it)
 
-**Does not own:** Deciding what is a task (that's each source module's job), completing tasks (that's Douglas)
+**Does not own:** Deciding what is a task (that's each source module's job), completing tasks (that's Douglas). Contact/company links and Hub reminder times (`deadline`) are Hub-local metadata — Google has no fields for them.
 
-**Health check:** Open tasks with no `project_slug` and no `contact_id` should be reviewed — they're orphaned from the network.
+**Health check:** Open tasks with no `project_slug` and no `contact_id` should be reviewed — they're orphaned from the network. Open Hub tasks whose `task_list_id` does not match their project's `google_task_list_id` are out of sync — save the task or run `repairTaskGoogleSync`.
 
 ---
 
