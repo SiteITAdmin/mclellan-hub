@@ -325,6 +325,17 @@ These are the tools the system runs on. They are not features — they are the f
 - Includes any flights today or tomorrow
 - Includes open tasks due today or overdue
 
+## M365 Operations & Security Briefing
+**Purpose:** Email Douglas at 07:15 on weekdays with source-backed Microsoft 365, hybrid identity, Intune, Endpoint Central, SentinelOne, PAM360, CloudWave, and Artemis operational intelligence. It uses the Nakai-style VPS evidence/package/archive/delivery flow and the Mac subscription worker for final writing.
+
+**Healthy looks like:**
+- A private Markdown, HTML, PDF, source-pack, prompt, and manifest edition is stored under `data/m365-briefings/<edition>/`.
+- Every material claim cites a marker present in that edition's stored source pack.
+- Missing tenant/vendor adapters appear as `not connected`, never as evidence of safety.
+- The Mac worker receives only a bounded source package and returns Markdown; the VPS validates, renders, archives, and sends it.
+
+**Does not own:** Regulatory analysis, Microsoft Defender monitoring, raw vendor-console records, or endpoint remediation.
+
 ---
 
 ## Newsletter / Briefing (Afternoon)

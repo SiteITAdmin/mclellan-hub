@@ -23,6 +23,7 @@ const { ingestAllFeeds } = require('./lib/rss-ingest');
 const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
 const { sendWorkDailyBrief } = require('./lib/work-daily-brief');
+const { sendTodayM365DailyBriefing } = require('./scripts/build-m365-daily-briefing');
 const {
   readGovernanceReport,
   isWeeklyReviewDue,
@@ -180,6 +181,18 @@ setInterval(() => {
   for (const user of BRIEFING_USERS) {
     syncCalendarMeetings(user).catch(err => console.error(`[crm] calendar sync error for ${user}:`, err));
   }
+}, 60 * 1000);
+
+// ── M365 Operations & Security Brief (07:15 Europe/Dublin, Mon–Fri) ─────────
+const M365_BRIEF_HOUR = parseInt(process.env.M365_BRIEF_HOUR || '7');
+const M365_BRIEF_MINUTE = parseInt(process.env.M365_BRIEF_MINUTE || '15');
+
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  const day = now.getDay();
+  if (day === 0 || day === 6) return;
+  if (now.getHours() !== M365_BRIEF_HOUR || now.getMinutes() !== M365_BRIEF_MINUTE) return;
+  sendTodayM365DailyBriefing().catch(err => console.error('[m365-briefing] error:', err));
 }, 60 * 1000);
 
 // ── Work Daily Brief (07:00 Europe/Dublin, Mon–Fri) ──────────────────────────

@@ -655,6 +655,7 @@ const SYSTEM_MODEL_GROUPS = [
   ]},
   { id: 'daily-reports', label: 'Daily & weekly reports', slots: [
     { feature: 'work_daily_brief',  scope: 'system', label: 'Work daily brief model', note: 'Model for all Work Daily Brief LLM calls: yesterday recap, today line, project signals.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'm365_daily_briefing', scope: 'system', label: 'M365 operations & security brief', note: 'Writes Douglas\'s source-backed daily M365, hybrid identity, Intune, Endpoint Central, SentinelOne and privileged-access briefing.', fallback: 'anthropic/claude-sonnet-4-6' },
     { feature: 'work_brief_recap',  scope: 'system', label: 'Work brief — yesterday recap', note: 'Recaps yesterday\'s emails and meetings in 2-3 sentences. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
     { feature: 'work_brief_today',  scope: 'system', label: 'Work brief — today line', note: 'One-sentence summary of today\'s calendar. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
     { feature: 'work_brief_project_salience', scope: 'system', label: 'Work brief — project signals', note: 'Joins radar/briefing content to recent project evidence. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
