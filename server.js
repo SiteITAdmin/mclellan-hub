@@ -24,6 +24,7 @@ const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
 const { sendWorkDailyBrief } = require('./lib/work-daily-brief');
 const { sendTodayM365DailyBriefing } = require('./scripts/build-m365-daily-briefing');
+const { sendTodayUSBlockBriefing } = require('./scripts/build-us-block-special-briefing');
 const {
   readGovernanceReport,
   isWeeklyReviewDue,
@@ -181,6 +182,25 @@ setInterval(() => {
   for (const user of BRIEFING_USERS) {
     syncCalendarMeetings(user).catch(err => console.error(`[crm] calendar sync error for ${user}:`, err));
   }
+}, 60 * 1000);
+
+// ── US Block Special Edition (07:30 Europe/Dublin, Mon/Wed/Fri) ─────────────
+// The source scan runs on the three configured days.  The publication gate in
+// build-us-block-special-briefing.js suppresses the archive/email entirely
+// unless a high-confidence direct Block/product story is evidenced.
+const US_BLOCK_BRIEFING_ENABLED = process.env.US_BLOCK_BRIEFING_ENABLED !== '0';
+const US_BLOCK_BRIEF_HOUR = parseInt(process.env.US_BLOCK_BRIEF_HOUR || '7');
+const US_BLOCK_BRIEF_MINUTE = parseInt(process.env.US_BLOCK_BRIEF_MINUTE || '30');
+const US_BLOCK_BRIEF_DAYS = new Set((process.env.US_BLOCK_BRIEF_DAYS || 'mon,wed,fri').split(',').map(day => day.trim().toLowerCase()).filter(Boolean));
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+setInterval(() => {
+  if (!US_BLOCK_BRIEFING_ENABLED) return;
+  const now = nowIn('Europe/Dublin');
+  if (!US_BLOCK_BRIEF_DAYS.has(DAY_NAMES[now.getDay()])) return;
+  if (now.getHours() !== US_BLOCK_BRIEF_HOUR || now.getMinutes() !== US_BLOCK_BRIEF_MINUTE) return;
+  sendTodayUSBlockBriefing().then(result => console.log('[us-block-briefing] scheduled run:', result.reason || (result.queued ? `queued ${result.jobId}` : result.sent ? 'sent' : result.published ? 'published' : 'suppressed')))
+    .catch(err => console.error('[us-block-briefing] error:', err));
 }, 60 * 1000);
 
 // ── M365 Operations & Security Brief (07:15 Europe/Dublin, Mon–Fri) ─────────
