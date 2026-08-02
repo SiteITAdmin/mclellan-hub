@@ -47,6 +47,12 @@ processAgentMail()
 ```
 Scheduled via job queue every 15 min. Stores AgentMail records and summaries as source evidence for the same CRM knowledge engine. Do not add a separate AgentMail-to-CRM write path.
 
+### Project routing is content-first
+An inbound email's project is decided by what the email is **about**, never by who sent it. `resolveProjectSlug()` (agentmail-processor.js) takes the model's content-derived `project_slug`, then the classifier's, and only then — as a last-resort tie-breaker — the sender-domain→company map. The sender domain establishes *whose world* the mail is (e.g. any `@beaconhospital.ie` address is Beacon work), it must not pick the specific project. Routing targets are filtered to **live** project slugs (`liveSlugs`), so mail can never be filed into an ended project; when content or the domain map points at a dead project the mail falls back to the live `beacon` default. Do not reintroduce a `companyProjectSlug`-first chain: that once buried nine live M365 emails in the closed Cybersecurity project (commit `bbd39761`).
+
+### Project lifecycle vocabulary is unified
+"This project is dead" is one concept with one source of truth: `TERMINAL_PROJECT_STATUSES` in `lib/project-lifecycle.js` (`closed`, `completed`, `ended`, `done`, `archived`, `cancelled`, …). Every surface that hides or excludes projects — CRM lists, work briefs, the task-add guard, AgentMail routing — routes through `closedProjectIds`/`closedProjectSlugs`/`isProjectClosed`, so a project marked with **any** terminal word behaves identically. Do not add a new filter that keys off a single literal like `'closed'`; that split once left a `completed` project live enough to keep receiving mail.
+
 ### Silent-filter list
 Subjects matching `SILENT_SUBJECT_RE` (email-processor.js:21) are dropped before processing. Add patterns there, not in calling code.
 

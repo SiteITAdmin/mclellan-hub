@@ -52,6 +52,8 @@ Do not reintroduce old direct CRM write paths. Gmail, AgentMail, and meeting int
 
 Company identity is a hard database invariant: a normalized name already present in `companies` cannot be created or renamed as a `contacts` row. Resolve that evidence to the company identity. For explicitly routed group messages, keep the message sender (`contact_name`) distinct from the person the group is about (`subject_contact_name`).
 
+Project routing is content-first: an email's project is decided by what it is about, not by who sent it. The sender domain only establishes whose world the mail belongs to; it must never pick the specific project, and mail is only ever filed into a live project (see `resolveProjectSlug` and `TERMINAL_PROJECT_STATUSES` in ARCHITECTURE.md). "Project is dead" is one concept — any terminal status word (closed, completed, ended, …) must behave identically everywhere; never add a filter that keys off a single literal like `'closed'`.
+
 Quality checks must test completion markers, not output counts: document task review is proven by `documents.task_extracted_at`, even when the review correctly creates zero tasks. Generated project-memory documents are not task inputs. Placeholder speakers block new meeting intake before processing; do not reopen speaker mapping on processed legacy transcripts that no longer have an editable mapping step.
 
 When changing CRM behavior, update `ARCHITECTURE.md`, this file, and any affected docs so future agents see the prompt operating system before they see the tables.
