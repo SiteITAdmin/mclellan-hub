@@ -20,6 +20,7 @@ const {
   CRM_KNOWLEDGE_PIPELINE_VERSION,
   listActionOutcomeQueue,
   approveReviewedAction,
+  runCrmKnowledgeSource,
   retryCrmKnowledgeErrors,
   writeReceipt,
   _test,
@@ -47,6 +48,19 @@ function makeEvidenceForUser(testUser, id, body) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, testUser, `${id}-message`, 'Action request', 'Alex', 'alex@example.test', 1771200000 + messageNumber, 'lossy', body);
   return resolveSourceEvidence(testUser, 'email_summary', id);
+}
+
+function makeTaskEvidenceForUser(testUser, id, title, status) {
+  const hub = db.hub();
+  hub.prepare(`
+    INSERT INTO google_tasks
+      (id, user, google_task_id, task_list_id, title, notes, status, source, source_id, created_at, completed_at)
+    VALUES (?, ?, ?, '@default', ?, ?, ?, 'manual', ?, unixepoch(), ?)
+  `).run(
+    id, testUser, `${id}-google`, title, `Canonical task evidence: ${title}`,
+    status, `${id}-source`, status === 'completed' ? Math.floor(Date.now() / 1000) : null,
+  );
+  return resolveSourceEvidence(testUser, status === 'completed' ? 'completed_task' : 'open_task', id);
 }
 
 function actionFor(evidence, quote, extra = {}) {
@@ -88,23 +102,26 @@ async function project(evidence, action, dependencies = {}) {
   });
 }
 
-function runReplayAudit(auditUser) {
-  const result = spawnSync(process.execPath, [
+function replayCommand(auditUser, { sourceKind = null, sourceId = null, apply = false } = {}) {
+  const command = [
     path.join(__dirname, '..', 'scripts', 'replay-crm-knowledge.js'),
     '--db', tmpDb,
     '--user', auditUser,
-  ], { encoding: 'utf8' });
+  ];
+  if (sourceKind) command.push('--source-kind', sourceKind);
+  if (sourceId) command.push('--source-id', sourceId);
+  if (apply) command.push('--apply');
+  return spawnSync(process.execPath, command, { encoding: 'utf8' });
+}
+
+function runReplayAudit(auditUser, target = {}) {
+  const result = replayCommand(auditUser, target);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout;
 }
 
-function runReplayApply(auditUser) {
-  const result = spawnSync(process.execPath, [
-    path.join(__dirname, '..', 'scripts', 'replay-crm-knowledge.js'),
-    '--db', tmpDb,
-    '--user', auditUser,
-    '--apply',
-  ], { encoding: 'utf8' });
+function runReplayApply(auditUser, target = {}) {
+  const result = replayCommand(auditUser, { ...target, apply: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout;
 }
@@ -266,6 +283,372 @@ test('a stale pending calendar call becomes a permanently non-creatable reconcil
   }), /side_effect_ambiguity_requires_reconciliation/);
   assert.equal(taskCalls, 0);
   assert.equal(eventCalls, 0, 'approval cannot reclaim an unreconciled stale calendar call');
+});
+
+test('an open stable task preserves non-reclaimable reviews and reconciles only a safe automatic projection CAS', async () => {
+  const blockedUser = 'crm-stable-review-blocked';
+  const quote = 'Please send the stable-task review packet.';
+  const evidence = makeEvidenceForUser(blockedUser, 'stable-review-blocked', quote);
+  const candidate = _test.decorateCandidate(evidence, evidence.chunks[0], {
+    action: 'Send the stable-task review packet',
+    evidence: quote,
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+  }, 0);
+  const action = {
+    candidate_key: candidate.candidate_key,
+    title: candidate.action,
+    actionability: candidate.actionability,
+    confidence: candidate.confidence,
+    evidence: quote,
+  };
+  const identity = _test.actionIdentity(evidence, action, [candidate], evidence.chunks[0]);
+  db.hub().prepare(`
+    INSERT INTO google_tasks
+      (id, user, google_task_id, task_list_id, title, status, source, source_id, created_at)
+    VALUES (?, ?, ?, '@default', ?, 'needsAction', 'crm-engine', ?, unixepoch())
+  `).run('stable-review-blocked-task', blockedUser, 'stable-review-blocked-google', action.title, `crm-action:${identity.action_key}`);
+  const blocked = _test.upsertActionOutcome(blockedUser, evidence, identity.action_key, {
+    action,
+    identity: {
+      ...identity,
+      non_creatable: true,
+      side_effect_ambiguity: { type: 'unreconciled_provider_side_effect', phase: 'task', requires_reconciliation: true },
+    },
+    disposition: 'review',
+    reason: 'task_side_effect_ambiguous_requires_human_review',
+    payload: {
+      pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+      source_revision: evidence.revision_hash,
+      non_creatable: true,
+      candidate,
+      action,
+      evidence_span: candidate.source_span,
+      side_effect_ambiguity: { type: 'unreconciled_provider_side_effect', phase: 'task', requires_reconciliation: true },
+    },
+  });
+  let blockedProviderCalls = 0;
+  const blockedResult = await _test.projectCandidates(blockedUser, evidence, [candidate], [], {
+    projectActionsFn: async () => ({ parsed: { actions: [action] }, modelId: 'stable-review-test' }),
+    createTaskFn: async () => { blockedProviderCalls += 1; return { localId: 'must-not-run' }; },
+  });
+  const blockedAfter = _test.getActionOutcome(blockedUser, evidence, identity.action_key);
+  assert.equal(blockedResult.review, 1);
+  assert.equal(blockedProviderCalls, 0);
+  assert.equal(blockedAfter.id, blocked.id);
+  assert.equal(blockedAfter.disposition, 'review');
+  assert.equal(blockedAfter.reason, 'task_side_effect_ambiguous_requires_human_review');
+  assert.equal(blockedAfter.payload, blocked.payload);
+
+  const safeUser = 'crm-stable-review-safe-cas';
+  const safeQuote = 'Please send the safely reconciled packet.';
+  const safeEvidence = makeEvidenceForUser(safeUser, 'stable-review-safe-cas', safeQuote);
+  const safeCandidate = _test.decorateCandidate(safeEvidence, safeEvidence.chunks[0], {
+    action: 'Send the safely reconciled packet',
+    evidence: safeQuote,
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+  }, 0);
+  const safeAction = {
+    candidate_key: safeCandidate.candidate_key,
+    title: safeCandidate.action,
+    actionability: safeCandidate.actionability,
+    confidence: safeCandidate.confidence,
+    evidence: safeQuote,
+  };
+  const safeIdentity = _test.actionIdentity(safeEvidence, safeAction, [safeCandidate], safeEvidence.chunks[0]);
+  db.hub().prepare(`
+    INSERT INTO google_tasks
+      (id, user, google_task_id, task_list_id, title, status, source, source_id, created_at)
+    VALUES (?, ?, ?, '@default', ?, 'needsAction', 'crm-engine', ?, unixepoch())
+  `).run('stable-review-safe-task', safeUser, 'stable-review-safe-google', safeAction.title, `crm-action:${safeIdentity.action_key}`);
+  const safe = _test.upsertActionOutcome(safeUser, safeEvidence, safeIdentity.action_key, {
+    action: safeAction,
+    identity: { ...safeIdentity, non_creatable: true },
+    disposition: 'review',
+    reason: 'projection_omitted_triage_candidate',
+    payload: {
+      pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+      source_revision: safeEvidence.revision_hash,
+      non_creatable: true,
+      projection_gate: 'omitted_triage_candidate',
+      candidate: safeCandidate,
+      action: safeAction,
+      evidence_span: safeCandidate.source_span,
+    },
+  });
+  let safeProviderCalls = 0;
+  const safeResult = await _test.projectCandidates(safeUser, safeEvidence, [safeCandidate], [], {
+    projectActionsFn: async () => ({ parsed: { actions: [safeAction] }, modelId: 'stable-review-test' }),
+    createTaskFn: async () => { safeProviderCalls += 1; return { localId: 'must-not-run' }; },
+  });
+  const safeAfter = _test.getActionOutcome(safeUser, safeEvidence, safeIdentity.action_key);
+  assert.equal(safeResult.created, 1);
+  assert.equal(safeProviderCalls, 0, 'the existing stable task is reconciled without another provider call');
+  assert.equal(safeAfter.id, safe.id);
+  assert.equal(safeAfter.disposition, 'task_created');
+  assert.equal(JSON.parse(safeAfter.payload).recovered_from_projection_linkage_review.prior_outcome_id, safe.id);
+});
+
+test('fresh non-create projection branches preserve protected action outcomes byte-for-byte', async () => {
+  const cases = [
+    { label: 'fyi', fresh: { actionability: 'fyi' } },
+    { label: 'implied-review', fresh: { actionability: 'implied', confidence: 0.1 } },
+    { label: 'duplicate', fresh: { duplicate_of: 'unverified-existing-task' } },
+    { label: 'creation-block', fresh: { title: ' ' } },
+    { label: 'source-block', taskStatus: 'completed' },
+    { label: 'source-open-task', taskStatus: 'needsAction' },
+  ];
+  let taskCalls = 0;
+
+  for (const testCase of cases) {
+    const protectedUser = `crm-early-preserve-${testCase.label}`;
+    const quote = `Please preserve the ${testCase.label} review outcome.`;
+    const evidence = testCase.taskStatus
+      ? makeTaskEvidenceForUser(protectedUser, `early-preserve-${testCase.label}`, quote, testCase.taskStatus)
+      : makeEvidenceForUser(protectedUser, `early-preserve-${testCase.label}`, quote);
+    const candidate = _test.decorateCandidate(evidence, evidence.chunks[0], {
+      action: `Preserve ${testCase.label} review outcome`,
+      evidence: quote,
+      actionability: 'explicit_ask',
+      confidence: 0.9,
+    }, 0);
+    const seededAction = {
+      candidate_key: candidate.candidate_key,
+      title: candidate.action,
+      actionability: 'explicit_ask',
+      confidence: 0.9,
+      evidence: quote,
+    };
+    const identity = _test.actionIdentity(evidence, seededAction, [candidate], evidence.chunks[0]);
+    const sideEffectAmbiguity = {
+      type: 'unreconciled_provider_side_effect',
+      phase: 'task',
+      requires_reconciliation: true,
+    };
+    _test.upsertActionOutcome(protectedUser, evidence, identity.action_key, {
+      action: seededAction,
+      identity: { ...identity, non_creatable: true, side_effect_ambiguity: sideEffectAmbiguity },
+      disposition: 'review',
+      reason: 'task_side_effect_ambiguous_requires_human_review',
+      payload: {
+        pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+        source_revision: evidence.revision_hash,
+        candidate,
+        action: seededAction,
+        evidence_span: candidate.source_span,
+        non_creatable: true,
+        side_effect_ambiguity: sideEffectAmbiguity,
+        human_review: { reviewer: 'test', reason: 'do not replace this review' },
+        recovered_from_projection_linkage_review: {
+          prior_outcome_id: `prior-${testCase.label}`,
+          prior_reason: 'projection_omitted_triage_candidate',
+        },
+      },
+    });
+    const before = _test.getActionOutcome(protectedUser, evidence, identity.action_key);
+    const freshAction = { ...seededAction, ...(testCase.fresh || {}) };
+
+    const result = await _test.projectCandidates(protectedUser, evidence, [candidate], [], {
+      projectActionsFn: async () => ({ parsed: { actions: [freshAction] }, modelId: 'early-state-preservation-test' }),
+      createTaskFn: async () => { taskCalls += 1; return { localId: 'must-not-run' }; },
+    });
+
+    const after = _test.getActionOutcome(protectedUser, evidence, identity.action_key);
+    assert.equal(result.created, 0, testCase.label);
+    assert.deepEqual(after, before, `${testCase.label} must leave the protected outcome unchanged`);
+  }
+  assert.equal(taskCalls, 0);
+});
+
+test('projection batch failure preserves existing outcomes and records only missing candidates', async () => {
+  const failureUser = 'crm-projection-failure-preserves-state';
+  const labels = ['terminal', 'human-review', 'pending', 'provider-ambiguity', 'prior-error', 'missing'];
+  const quotes = labels.map(label => `Please preserve the ${label} projection state.`);
+  const evidence = makeEvidenceForUser(failureUser, 'projection-failure-preserves-state', quotes.join('\n'));
+  const candidates = labels.map((label, index) => _test.decorateCandidate(evidence, evidence.chunks[0], {
+    action: `Preserve ${label} projection state`,
+    evidence: quotes[index],
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+  }, index));
+  const existingStates = [
+    {
+      label: 'terminal', disposition: 'task_created', reason: 'task_created', taskId: 'preserved-terminal-task',
+      extra: { recovered_from_projection_linkage_review: { prior_outcome_id: 'terminal-prior', prior_reason: 'projection_omitted_triage_candidate' } },
+    },
+    {
+      label: 'human-review', disposition: 'review', reason: 'low_confidence_action',
+      extra: { human_review: { reviewer: 'test', reason: 'human review survives a model outage' } },
+    },
+    {
+      label: 'pending', disposition: 'pending_task', reason: 'task_side_effect_pending', taskId: 'preserved-pending-task',
+      extra: { outbox_marker: 'pending side effect remains owned' },
+    },
+    {
+      label: 'provider-ambiguity', disposition: 'review', reason: 'task_side_effect_ambiguous_requires_human_review',
+      extra: {
+        non_creatable: true,
+        side_effect_ambiguity: { type: 'unreconciled_provider_side_effect', phase: 'task', requires_reconciliation: true },
+      },
+    },
+    {
+      label: 'prior-error', disposition: 'error', reason: 'action_projection_failed: earlier projection outage',
+      extra: { recovered_from_non_exact_evidence_review: { prior_outcome_id: 'error-prior', prior_reason: 'non_exact_evidence_requires_review' } },
+    },
+  ];
+  const snapshots = new Map();
+
+  for (const [index, state] of existingStates.entries()) {
+    const candidate = candidates[index];
+    const action = {
+      candidate_key: candidate.candidate_key,
+      title: candidate.action,
+      actionability: 'explicit_ask',
+      confidence: 0.9,
+      evidence: quotes[index],
+    };
+    const identity = _test.actionIdentity(evidence, action, [candidate], evidence.chunks[0]);
+    _test.upsertActionOutcome(failureUser, evidence, identity.action_key, {
+      action,
+      identity: state.extra.side_effect_ambiguity
+        ? { ...identity, non_creatable: true, side_effect_ambiguity: state.extra.side_effect_ambiguity }
+        : identity,
+      disposition: state.disposition,
+      reason: state.reason,
+      taskId: state.taskId || null,
+      payload: {
+        pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+        source_revision: evidence.revision_hash,
+        candidate,
+        action,
+        evidence_span: candidate.source_span,
+        retained_marker: state.label,
+        ...state.extra,
+      },
+    });
+    snapshots.set(candidate.candidate_key, _test.getActionOutcome(failureUser, evidence, candidate.candidate_key));
+  }
+
+  let taskCalls = 0;
+  const failed = await _test.projectCandidates(failureUser, evidence, candidates, [], {
+    projectActionsFn: async () => { throw new Error('projection batch unavailable'); },
+    createTaskFn: async () => { taskCalls += 1; return { localId: 'must-not-run' }; },
+  });
+
+  assert.equal(failed.errors, 1, 'only the candidate without a prior outcome records this outage');
+  assert.equal(taskCalls, 0);
+  for (const candidate of candidates.slice(0, existingStates.length)) {
+    assert.deepEqual(
+      _test.getActionOutcome(failureUser, evidence, candidate.candidate_key),
+      snapshots.get(candidate.candidate_key),
+      `${candidate.action} must retain every durable field`,
+    );
+  }
+  const missing = _test.getActionOutcome(failureUser, evidence, candidates[existingStates.length].candidate_key);
+  assert.equal(missing.disposition, 'error');
+  assert.match(missing.reason, /^action_projection_failed: projection batch unavailable$/);
+});
+
+test('projection-recovery audit survives task and calendar provider-error ambiguity conversion', async () => {
+  const cases = [
+    {
+      label: 'linkage-task-error',
+      oldReason: 'projection_omitted_triage_candidate',
+      candidateEvidence: 'Please send the linkage recovery packet.',
+      extraPayload: { projection_gate: 'omitted_triage_candidate' },
+      recoveryKey: 'recovered_from_projection_linkage_review',
+      event: null,
+    },
+    {
+      label: 'nonexact-calendar-error',
+      oldReason: 'non_exact_evidence_requires_review',
+      candidateEvidence: 'A triage paraphrase that is not a raw quotation.',
+      extraPayload: { creation_block: 'non_exact_evidence_requires_review' },
+      recoveryKey: 'recovered_from_non_exact_evidence_review',
+      event: { start: '2026-08-03T10:00', end: '2026-08-03T10:30', location: 'Teams' },
+    },
+  ];
+
+  for (const testCase of cases) {
+    const recoveryUser = `crm-recovery-audit-${testCase.label}`;
+    const quote = `Please send the ${testCase.label} packet.`;
+    const evidence = makeEvidenceForUser(recoveryUser, `recovery-audit-${testCase.label}`, quote);
+    const candidate = _test.decorateCandidate(evidence, evidence.chunks[0], {
+      action: `Send the ${testCase.label} packet`,
+      evidence: testCase.candidateEvidence,
+      actionability: 'explicit_ask',
+      confidence: 0.9,
+    }, 0);
+    const action = {
+      candidate_key: candidate.candidate_key,
+      title: candidate.action,
+      actionability: candidate.actionability,
+      confidence: candidate.confidence,
+      evidence: quote,
+      ...(testCase.event ? { event: testCase.event } : {}),
+    };
+    const oldIdentity = {
+      candidate,
+      span: candidate.source_span,
+      action_key: candidate.candidate_key,
+      non_creatable: true,
+    };
+    _test.upsertActionOutcome(recoveryUser, evidence, candidate.candidate_key, {
+      action,
+      identity: oldIdentity,
+      disposition: 'review',
+      reason: testCase.oldReason,
+      payload: {
+        pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+        source_revision: evidence.revision_hash,
+        non_creatable: true,
+        candidate,
+        action,
+        evidence_span: candidate.source_span,
+        ...testCase.extraPayload,
+      },
+    });
+
+    let providerCalls = 0;
+    const first = await _test.projectCandidates(recoveryUser, evidence, [candidate], [], {
+      projectActionsFn: async () => ({ parsed: { actions: [action] }, modelId: 'recovery-audit-test' }),
+      createTaskFn: async (_user, input) => {
+        providerCalls += 1;
+        if (!testCase.event) throw new Error('task provider failure after recovery');
+        const taskId = `recovery-audit-task-${testCase.label}`;
+        db.hub().prepare(`
+          INSERT INTO google_tasks
+            (id, user, google_task_id, task_list_id, title, status, source, source_id, created_at)
+          VALUES (?, ?, ?, '@default', ?, 'needsAction', 'crm-engine', ?, unixepoch())
+        `).run(taskId, recoveryUser, `${taskId}-google`, action.title, input.sourceId);
+        return { localId: taskId };
+      },
+      createCalendarEventFn: testCase.event
+        ? async () => { providerCalls += 1; throw new Error('calendar provider failure after recovery'); }
+        : undefined,
+    });
+    assert.equal(first.errors, 1, testCase.label);
+    const failed = _test.getActionOutcome(recoveryUser, evidence, candidate.candidate_key);
+    const failedPayload = JSON.parse(failed.payload);
+    assert.equal(failed.disposition, 'error', testCase.label);
+    assert.ok(failedPayload[testCase.recoveryKey], testCase.label);
+
+    const second = await _test.projectCandidates(recoveryUser, evidence, [candidate], [], {
+      projectActionsFn: async () => ({ parsed: { actions: [action] }, modelId: 'recovery-audit-test' }),
+      createTaskFn: async () => { providerCalls += 1; return { localId: 'must-not-run' }; },
+      createCalendarEventFn: async () => { providerCalls += 1; return { localId: 'must-not-run' }; },
+    });
+    const ambiguous = _test.getActionOutcome(recoveryUser, evidence, candidate.candidate_key);
+    const ambiguousPayload = JSON.parse(ambiguous.payload);
+    assert.equal(second.review, 1, testCase.label);
+    assert.equal(providerCalls, testCase.event ? 2 : 1, testCase.label);
+    assert.equal(ambiguous.disposition, 'review', testCase.label);
+    assert.match(ambiguous.reason, testCase.event
+      ? /^event_side_effect_ambiguous_requires_human_review$/
+      : /^task_side_effect_ambiguous_requires_human_review$/);
+    assert.deepEqual(ambiguousPayload[testCase.recoveryKey], failedPayload[testCase.recoveryKey], testCase.label);
+  }
 });
 
 test('concurrent fresh action projection atomically claims one task side effect', async () => {
@@ -464,6 +847,374 @@ test('two same-span candidate asks project once each and replay without duplicat
   `).all(user, evidence.source_kind, evidence.source_id);
   assert.equal(outcomes.length, 2);
   assert.equal(new Set(outcomes.map(row => row.action_key)).size, 2);
+});
+
+test('a linkage replay canonicalises a mixed missing/stale/wrong candidate-key batch into one task per candidate', async () => {
+  const linkageUser = 'crm-linkage-replay-batch';
+  const asks = [
+    ['Send the signed scope', 'Please send the signed scope.'],
+    ['Share the implementation timeline', 'Please share the implementation timeline.'],
+    ['Confirm the steering group attendees', 'Please confirm the steering group attendees.'],
+    ['Provide the current risk register', 'Please provide the current risk register.'],
+    ['Book the technical review', 'Please book the technical review.'],
+    ['Send the data-processing agreement', 'Please send the data-processing agreement.'],
+    ['Confirm the budget owner', 'Please confirm the budget owner.'],
+    ['Arrange the supplier call', 'Please arrange the supplier call.'],
+    ['Reply with the go-live date', 'Please reply with the go-live date.'],
+  ];
+  const evidence = makeEvidenceForUser(
+    linkageUser,
+    'linkage-replay-nine-asks',
+    asks.map(([, quote]) => quote).join('\n'),
+  );
+  const candidates = asks.map(([action], index) => _test.decorateCandidate(evidence, evidence.chunks[0], {
+    action,
+    // Production reproduced: triage got every distinct ask but each evidence
+    // field was a paraphrase rather than a verbatim quote from the raw body.
+    evidence: `Neil's outstanding request number ${index + 1}`,
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+  }, index));
+  assert.ok(candidates.every(candidate => candidate.source_span.exact === false));
+
+  const seededIds = new Map();
+  for (const [index, candidate] of candidates.entries()) {
+    const identity = {
+      candidate,
+      span: candidate.source_span,
+      action_key: candidate.candidate_key,
+      non_creatable: true,
+    };
+    const reason = index % 3 === 0
+      ? 'projection_omitted_triage_candidate'
+      : index % 3 === 1
+        ? 'projection_action_not_tied_to_triage_candidate'
+        : 'non_exact_evidence_requires_review';
+    const outcome = _test.upsertActionOutcome(linkageUser, evidence, candidate.candidate_key, {
+      action: {
+        candidate_key: `legacy-unlinked-${index}`,
+        title: candidate.action,
+        actionability: candidate.actionability,
+        confidence: candidate.confidence,
+        evidence: candidate.evidence,
+      },
+      identity,
+      disposition: 'review',
+      reason,
+      payload: {
+        pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+        source_revision: evidence.revision_hash,
+        non_creatable: true,
+        ...(reason === 'non_exact_evidence_requires_review'
+          ? { creation_block: 'non_exact_evidence_requires_review' }
+          : { projection_gate: reason === 'projection_action_not_tied_to_triage_candidate' ? 'unmatched_projection_action' : 'omitted_triage_candidate' }),
+        action: { title: candidate.action, evidence: candidate.evidence },
+        candidate,
+        evidence_span: candidate.source_span,
+      },
+    });
+    seededIds.set(candidate.candidate_key, outcome.id);
+  }
+
+  let providerCalls = 0;
+  const providerSourceIds = [];
+  const pendingRecovery = new Map();
+  const projectedFor = candidate => {
+    const index = candidates.indexOf(candidate);
+    const [title, quote] = asks[index];
+    // Reproduces the missing key, a stale unknown key, and a known-but-wrong
+    // key. The title is an unambiguous semantic match, so the linker can
+    // safely recover the authoritative candidate identity without guessing.
+    const candidateKey = index % 3 === 0
+      ? null
+      : index % 3 === 1
+        ? `stale-candidate-${index}`
+        : candidates[(index + 1) % candidates.length].candidate_key;
+    return {
+      ...(candidateKey ? { candidate_key: candidateKey } : {}),
+      title,
+      actionability: 'explicit_ask',
+      confidence: 0.9,
+      evidence: quote,
+    };
+  };
+  const dependencies = {
+    projectActionsFn: async (_user, _chunk, batch) => ({
+      parsed: { actions: batch.map(projectedFor) },
+      modelId: 'linkage-replay-test',
+    }),
+    createTaskFn: async (_user, input) => {
+      providerCalls += 1;
+      providerSourceIds.push(input.sourceId);
+      const actionKey = input.sourceId.replace(/^crm-action:/, '');
+      pendingRecovery.set(actionKey, JSON.parse(_test.getActionOutcome(linkageUser, evidence, actionKey).payload));
+      return { localId: `linkage-replay-task-${providerCalls}` };
+    },
+  };
+
+  const first = await _test.projectCandidates(linkageUser, evidence, candidates, [], dependencies);
+  assert.equal(first.created, asks.length);
+  assert.equal(first.review, 0);
+  assert.equal(providerCalls, asks.length, 'each authoritative candidate reaches the provider once');
+  assert.equal(new Set(providerSourceIds).size, asks.length);
+
+  for (const [index, candidate] of candidates.entries()) {
+    const outcome = _test.getActionOutcome(linkageUser, evidence, candidate.candidate_key);
+    const payload = JSON.parse(outcome.payload);
+    const [, quote] = asks[index];
+    assert.equal(outcome.id, seededIds.get(candidate.candidate_key), 'the linkage-only review was reclaimed in place');
+    assert.equal(outcome.disposition, 'task_created');
+    assert.equal(outcome.evidence_text, quote);
+    assert.equal(payload.evidence_span.exact, true);
+    assert.equal(payload.action.candidate_key, candidate.candidate_key);
+    assert.equal(payload.candidate.candidate_key, candidate.candidate_key);
+    const pendingPayload = pendingRecovery.get(candidate.candidate_key);
+    if (index % 3 === 2) {
+      assert.equal(payload.recovered_from_non_exact_evidence_review.prior_reason, 'non_exact_evidence_requires_review');
+      assert.equal(payload.recovered_from_non_exact_evidence_review.prior_outcome_id, seededIds.get(candidate.candidate_key));
+      assert.equal(payload.recovered_from_non_exact_evidence_review.prior_gate_or_block, 'non_exact_evidence_requires_review');
+      assert.equal(pendingPayload.recovered_from_non_exact_evidence_review.prior_outcome_id, seededIds.get(candidate.candidate_key));
+    } else {
+      assert.equal(payload.recovered_from_projection_linkage_review.prior_outcome_id, seededIds.get(candidate.candidate_key));
+      assert.equal(payload.recovered_from_projection_linkage_review.prior_reason,
+        index % 3 === 0 ? 'projection_omitted_triage_candidate' : 'projection_action_not_tied_to_triage_candidate');
+      assert.equal(payload.recovered_from_projection_linkage_review.prior_gate_or_block,
+        index % 3 === 0 ? 'omitted_triage_candidate' : 'unmatched_projection_action');
+      assert.equal(pendingPayload.recovered_from_projection_linkage_review.prior_outcome_id, seededIds.get(candidate.candidate_key));
+    }
+    if (index % 3 === 1) assert.equal(payload.action.projected_candidate_key, `stale-candidate-${index}`);
+    if (index % 3 === 2) {
+      assert.equal(payload.action.projected_candidate_key, candidates[(index + 1) % candidates.length].candidate_key);
+    }
+  }
+
+  const second = await _test.projectCandidates(linkageUser, evidence, candidates, [], dependencies);
+  assert.equal(second.created, asks.length, 'terminal candidate outcomes replay as their original task state');
+  assert.equal(providerCalls, asks.length, 'the targeted replay cannot duplicate a provider side effect');
+});
+
+test('a wrong known candidate key cannot resolve an ambiguous shared-span projection', async () => {
+  const ambiguousUser = 'crm-linkage-replay-ambiguous';
+  const text = 'Please send the pack and book the review.';
+  const evidence = makeEvidenceForUser(ambiguousUser, 'linkage-replay-ambiguous', text);
+  const decision = _test.mergeTriageResults(evidence, [{
+    chunk: evidence.chunks[0],
+    parsed: {
+      candidate_actions: [
+        { action: 'Send the pack', evidence: text, actionability: 'explicit_ask', confidence: 0.9 },
+        { action: 'Book the review', evidence: text, actionability: 'explicit_ask', confidence: 0.9 },
+      ],
+    },
+  }]);
+  const ambiguousAction = {
+    // A reused current key is not sufficient proof: the generic action and
+    // shared quotation leave both triage candidates plausible.
+    candidate_key: decision.candidate_actions[0].candidate_key,
+    title: 'Follow up on the requests',
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+    evidence: text,
+  };
+  assert.equal(_test.candidateForProjectedAction(ambiguousAction, decision.candidate_actions), null);
+
+  let providerCalls = 0;
+  const result = await _test.projectCandidates(ambiguousUser, evidence, decision.candidate_actions, [], {
+    projectActionsFn: async () => ({ parsed: { actions: [ambiguousAction] }, modelId: 'ambiguous-linkage-test' }),
+    createTaskFn: async () => { providerCalls += 1; return { localId: 'must-not-create' }; },
+  });
+
+  assert.equal(result.review, 3, 'the unmatched action and both omitted candidates stay visible');
+  assert.equal(providerCalls, 0);
+  const rows = listActionOutcomeQueue(ambiguousUser).filter(row => row.source_id === evidence.source_id);
+  assert.equal(rows.length, 3);
+  assert.ok(rows.every(row => row.payload.non_creatable === true));
+  assert.ok(rows.some(row => row.reason === 'projection_action_not_tied_to_triage_candidate'));
+  assert.equal(rows.filter(row => row.reason === 'projection_omitted_triage_candidate').length, 2);
+});
+
+test('an explicit source-scoped replay admits a current review source and reuses its saved triage', async () => {
+  const scopedUser = 'crm-source-scoped-review-replay';
+  const quote = 'Please send Neil the signed implementation pack.';
+  const evidence = makeEvidenceForUser(scopedUser, 'source-scoped-review', quote);
+  const candidate = _test.decorateCandidate(evidence, evidence.chunks[0], {
+    action: 'Send Neil the signed implementation pack',
+    evidence: quote,
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+  }, 0);
+  const decision = {
+    should_synthesise: false,
+    source_summary: 'One outstanding Neil request.',
+    candidate_actions: [candidate],
+  };
+  const reviewIdentity = {
+    candidate,
+    span: candidate.source_span,
+    action_key: candidate.candidate_key,
+    non_creatable: true,
+  };
+  writeReceipt(scopedUser, evidence.source_kind, evidence.source_id, 'crm_source_triage', {
+    status: 'done', payload: decision, sourceRevision: evidence.revision_hash,
+  });
+  writeReceipt(scopedUser, evidence.source_kind, evidence.source_id, 'crm_action_projected', {
+    status: 'review', payload: { candidates: [candidate] }, sourceRevision: evidence.revision_hash,
+  });
+  _test.upsertActionOutcome(scopedUser, evidence, candidate.candidate_key, {
+    action: {
+      candidate_key: candidate.candidate_key,
+      title: candidate.action,
+      actionability: candidate.actionability,
+      confidence: candidate.confidence,
+      evidence: candidate.evidence,
+    },
+    identity: reviewIdentity,
+    disposition: 'review',
+    reason: 'projection_omitted_triage_candidate',
+    payload: {
+      pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+      source_revision: evidence.revision_hash,
+      non_creatable: true,
+      projection_gate: 'omitted_triage_candidate',
+      action: { candidate_key: candidate.candidate_key, title: candidate.action, evidence: candidate.evidence },
+      candidate,
+      evidence_span: candidate.source_span,
+    },
+  });
+
+  assert.equal(
+    _test.candidateSources(scopedUser, 8).some(item => item.source_id === evidence.source_id),
+    false,
+    'the recurring scanner must not auto-admit review-state sources',
+  );
+
+  let triageCalls = 0;
+  let providerCalls = 0;
+  const result = await runCrmKnowledgeSource(scopedUser, {
+    sourceKind: evidence.source_kind,
+    sourceId: evidence.source_id,
+    dependencies: {
+      // This unlocks the public entrypoint's model-provider configuration
+      // check; the saved triage means the generic model call must not occur.
+      requestModelObject: async () => { throw new Error('saved triage should be reused'); },
+      triageSourceFn: async () => { triageCalls += 1; throw new Error('unexpected triage'); },
+      reviewDuplicateFn: async () => ({ parsed: { decision: 'new', confidence: 0.9 }, modelId: 'scoped-test' }),
+      projectActionsFn: async () => ({
+        parsed: {
+          actions: [{
+            candidate_key: candidate.candidate_key,
+            title: candidate.action,
+            actionability: candidate.actionability,
+            confidence: candidate.confidence,
+            evidence: quote,
+          }],
+        },
+        modelId: 'scoped-test',
+      }),
+      createTaskFn: async () => {
+        providerCalls += 1;
+        return { localId: 'scoped-neil-task' };
+      },
+    },
+  });
+
+  assert.equal(result.considered, 1);
+  assert.equal(result.triaged, 0, 'current saved triage is authoritative');
+  assert.equal(providerCalls, 1);
+  assert.equal(triageCalls, 0);
+  const outcome = _test.getActionOutcome(scopedUser, evidence, candidate.candidate_key);
+  assert.equal(outcome.disposition, 'task_created');
+  const payload = JSON.parse(outcome.payload);
+  assert.equal(payload.recovered_from_projection_linkage_review.prior_reason, 'projection_omitted_triage_candidate');
+  assert.equal(payload.recovered_from_projection_linkage_review.prior_gate_or_block, 'omitted_triage_candidate');
+});
+
+test('candidate-keyed linkage reviews with task, event, resolution, payload, human, or ambiguity state never reclaim', async () => {
+  const cases = [
+    ['task', { taskId: 'prior-task' }],
+    ['event', { eventId: 'prior-event' }],
+    ['resolved', { resolved: true }],
+    ['payload-candidate-mismatch', { payloadCandidateKey: 'other-candidate' }],
+    ['human-resolution', { humanResolution: true }],
+    ['provider-ambiguity', { providerAmbiguity: true }],
+  ];
+
+  for (const [label, state] of cases) {
+    const safetyUser = `crm-linkage-cas-${label}`;
+    const quote = `Please send the ${label} repair packet.`;
+    const evidence = makeEvidenceForUser(safetyUser, `linkage-cas-${label}`, quote);
+    const candidate = _test.decorateCandidate(evidence, evidence.chunks[0], {
+      action: `Send the ${label} repair packet`,
+      evidence: quote,
+      actionability: 'explicit_ask',
+      confidence: 0.9,
+    }, 0);
+    const identity = {
+      candidate,
+      span: candidate.source_span,
+      action_key: candidate.candidate_key,
+      non_creatable: true,
+    };
+    const payload = {
+      pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+      source_revision: evidence.revision_hash,
+      non_creatable: true,
+      projection_gate: 'omitted_triage_candidate',
+      action: { candidate_key: candidate.candidate_key, title: candidate.action, evidence: quote },
+      candidate: {
+        ...candidate,
+        ...(state.payloadCandidateKey ? { candidate_key: state.payloadCandidateKey } : {}),
+      },
+      evidence_span: candidate.source_span,
+      ...(state.humanResolution ? { human_resolution: { by: 'reviewer' } } : {}),
+      ...(state.providerAmbiguity ? {
+        side_effect_ambiguity: { type: 'unreconciled_provider_side_effect', requires_reconciliation: true },
+      } : {}),
+    };
+    const seeded = _test.upsertActionOutcome(safetyUser, evidence, candidate.candidate_key, {
+      action: payload.action,
+      identity,
+      disposition: 'review',
+      reason: 'projection_omitted_triage_candidate',
+      taskId: state.taskId || null,
+      eventId: state.eventId || null,
+      payload,
+    });
+    if (state.resolved) {
+      db.hub().prepare('UPDATE crm_action_outcomes SET resolved_at = unixepoch() WHERE id = ?').run(seeded.id);
+    }
+    if (state.taskId) {
+      db.hub().prepare(`
+        INSERT INTO google_tasks
+          (id, user, google_task_id, task_list_id, title, status, source, source_id, created_at)
+        VALUES (?, ?, ?, '@default', ?, 'needsAction', 'crm-engine', ?, unixepoch())
+      `).run(state.taskId, safetyUser, `${state.taskId}-google`, candidate.action, `crm-action:${candidate.candidate_key}`);
+    }
+    const before = _test.getActionOutcome(safetyUser, evidence, candidate.candidate_key);
+    let providerCalls = 0;
+    const result = await _test.projectCandidates(safetyUser, evidence, [candidate], [], {
+      projectActionsFn: async () => ({
+        parsed: { actions: [{
+          candidate_key: candidate.candidate_key,
+          title: candidate.action,
+          actionability: candidate.actionability,
+          confidence: candidate.confidence,
+          evidence: quote,
+        }] },
+        modelId: 'cas-negative-test',
+      }),
+      createTaskFn: async () => {
+        providerCalls += 1;
+        return { localId: `must-not-create-${label}` };
+      },
+    });
+    const after = _test.getActionOutcome(safetyUser, evidence, candidate.candidate_key);
+    assert.equal(result.created, 0, label);
+    assert.equal(providerCalls, 0, label);
+    assert.equal(after.id, before.id, label);
+    assert.equal(after.disposition, 'review', label);
+    assert.equal(after.reason, 'projection_omitted_triage_candidate', label);
+    assert.equal(after.payload, before.payload, label);
+  }
 });
 
 test('recovery selects only incomplete/error sources and resumes a saved triage without rerunning it', async () => {
@@ -776,6 +1527,58 @@ test('replay apply queues one canonical engine job and is idempotent', () => {
   assert.equal(hub.prepare("SELECT COUNT(*) AS n FROM crm_action_outcomes WHERE user = ?").get(auditUser).n, 0);
   assert.ok(beforeJobs >= 0);
   hub.prepare("DELETE FROM system_jobs WHERE type = 'crm_knowledge_engine' AND json_extract(payload, '$.user') = ?").run(auditUser);
+});
+
+test('replay CLI reports and queues one exact source target without swallowing it behind a global job', () => {
+  const cliUser = 'crm-replay-cli-source-target';
+  const evidence = makeEvidenceForUser(cliUser, 'cli-source-target', 'Please send the targeted replay pack.');
+  const target = { sourceKind: evidence.source_kind, sourceId: evidence.source_id };
+  const hub = db.hub();
+  hub.prepare("DELETE FROM system_jobs WHERE type = 'crm_knowledge_engine' AND status IN ('pending','running')").run();
+
+  const dry = runReplayAudit(cliUser, target);
+  assert.match(dry, new RegExp(`target: user=${cliUser} source_kind=${evidence.source_kind} source_id=${evidence.source_id}`));
+  assert.match(dry, /dry-run: no writes performed/);
+  assert.equal(hub.prepare(`
+    SELECT COUNT(*) AS n FROM system_jobs
+    WHERE type = 'crm_knowledge_engine' AND status IN ('pending','running')
+  `).get().n, 0, 'the targeted audit opens the database read-only');
+
+  const partial = replayCommand(cliUser, { sourceKind: evidence.source_kind });
+  assert.equal(partial.status, 2);
+  assert.match(partial.stderr, /--source-kind KIND and --source-id ID together/);
+
+  const global = runReplayApply('crm-replay-cli-global');
+  assert.match(global, /\(global\)/);
+  const first = runReplayApply(cliUser, target);
+  assert.match(first, /\(source-scoped\)/);
+  const targetRows = hub.prepare(`
+    SELECT id, payload FROM system_jobs
+    WHERE type = 'crm_knowledge_engine' AND status IN ('pending','running')
+      AND json_extract(payload, '$.user') = ?
+      AND json_extract(payload, '$.source_kind') = ?
+      AND json_extract(payload, '$.source_id') = ?
+  `).all(cliUser, evidence.source_kind, evidence.source_id);
+  assert.equal(targetRows.length, 1, 'a pending global job cannot swallow the target repair');
+  assert.deepEqual(JSON.parse(targetRows[0].payload), {
+    user: cliUser,
+    source_kind: evidence.source_kind,
+    source_id: evidence.source_id,
+    pipeline_version: CRM_KNOWLEDGE_PIPELINE_VERSION,
+    requested_by: 'replay-crm-knowledge',
+  });
+  assert.equal(hub.prepare(`
+    SELECT COUNT(*) AS n FROM system_jobs
+    WHERE type = 'crm_knowledge_engine' AND status IN ('pending','running')
+  `).get().n, 2);
+
+  const repeat = runReplayApply(cliUser, target);
+  assert.match(repeat, /existing versioned replay path already queued/);
+  assert.equal(hub.prepare(`
+    SELECT COUNT(*) AS n FROM system_jobs
+    WHERE type = 'crm_knowledge_engine' AND status IN ('pending','running')
+  `).get().n, 2, 'only the exact same target deduplicates');
+  hub.prepare("DELETE FROM system_jobs WHERE type = 'crm_knowledge_engine' AND status IN ('pending','running')").run();
 });
 
 test('a non-provider projection failure is atomically retried once and then creates one task', async () => {
