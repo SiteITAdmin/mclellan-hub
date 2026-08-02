@@ -10,6 +10,22 @@ test('generated project memory documents are excluded from task extraction', () 
     filename: 'notes.md',
     markdown: '---\nauto_generated: true\n---\n# Notes',
   }), true);
+  assert.equal(isGeneratedDocument({
+    filename: 'Saved answer [chat].md',
+    markdown: '---\nauto_generated: true\ngenerated_kind: "chat-answer"\n---\n# Saved answer',
+  }), true);
+  assert.equal(isGeneratedDocument({
+    filename: 'Legacy answer [chat].md',
+    markdown: '# Legacy answer\n\n**Q:** What now?\n\n**A:** A prior assistant answer.',
+  }), true);
+  assert.equal(isGeneratedDocument({
+    filename: '2026-08-02 [meeting].md',
+    markdown: '# Meeting\n\n## Action Register\n- Send the pack\n\n## Transcript\nPlease send the pack.',
+  }), true);
+  assert.equal(isGeneratedDocument({
+    filename: 'raw-notes.md',
+    markdown: '# Raw notes\n\n## Action Register\nThis is a human-authored checklist, not a rendered meeting register.',
+  }), false);
   assert.equal(isGeneratedDocument({ filename: 'tracker.xlsx', markdown: 'Open tasks' }), false);
 });
 

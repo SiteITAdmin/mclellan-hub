@@ -173,7 +173,7 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## Knowledge Layer
-**Purpose:** The derived substrate the CRM/wiki/project pages are *views* over — not another table of hand-entered records. Compiled continuously from raw sources so connections are made from the whole corpus after ingestion, not from the thin context available at capture time. Files: `lib/retrieval.js` (embeddings), `lib/atoms.js` (atoms), `lib/synthesis.js` (extract + link), `lib/task-router.js`, `lib/knowledge-lint.js`. Jobs: `embed_backfill`, `atoms_backfill`, `synthesis_run` (nightly), `task_route_run` (daily), `knowledge_lint_run` (weekly). All model calls go through OpenRouter; `embeddings`, `atom_extractor`, `entity_linker` are admin model slots.
+**Purpose:** The derived substrate the CRM/wiki/project pages are *views* over — not another table of hand-entered records. Compiled continuously from raw sources so connections are made from the whole corpus after ingestion, not from the thin context available at capture time. Files: `lib/retrieval.js` (embeddings), `lib/atoms.js` (atoms), `lib/synthesis.js` (the compiler called only after canonical CRM gates), `lib/task-router.js`, `lib/knowledge-lint.js`. Jobs: `embed_backfill`, `atoms_backfill` (historical name; normally queues canonical review for CRM facts), `synthesis_run` (nightly compatibility scheduler delegating to `crm_knowledge_engine`), `task_route_run` (daily), `knowledge_lint_run` (weekly). All model calls go through OpenRouter; `embeddings`, `atom_extractor`, `entity_linker` are admin model slots.
 
 **Healthy looks like:**
 - `embeddings` count tracks the corpus; changing the embeddings model in admin causes a gradual re-index (isIndexed is model-aware)

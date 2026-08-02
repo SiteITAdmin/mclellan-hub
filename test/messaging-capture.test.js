@@ -93,6 +93,26 @@ test('captureMessagingMessage stores once and dedups', () => {
   assert.match(evidence, /Dad his things/);
 });
 
+test('messaging capture preserves the complete body, provider envelope, and explicit identity', () => {
+  const body = `  opening evidence\n${'x'.repeat(25000)}\nTAIL ACTION: send the complete pack.  `;
+  const explicitId = `provider-${'i'.repeat(300)}`;
+  const transportTrace = `trace-${'z'.repeat(60000)}`;
+  const captured = captureMessagingMessage('test-douglas', {
+    platform: 'whatsapp',
+    external_message_id: explicitId,
+    sender_name: 'Long Evidence Sender',
+    body,
+    raw: { transport_trace: transportTrace },
+  });
+
+  const stored = db.hub().prepare('SELECT * FROM messaging_messages WHERE id = ?').get(captured.id);
+  assert.equal(stored.external_message_id, explicitId);
+  assert.equal(stored.body, body);
+  const envelope = JSON.parse(stored.raw_json);
+  assert.equal(envelope.raw.transport_trace, transportTrace);
+  assert.match(buildEvidenceText(stored), /TAIL ACTION: send the complete pack\./);
+});
+
 test('messaging evidence preserves explicit contact and project routing metadata', () => {
   const hub = db.hub();
   hub.exec(`

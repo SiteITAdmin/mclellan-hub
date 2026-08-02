@@ -2,7 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { canResolveByName, linkableCandidates, resolveByName, shouldExcludeEmailSummaryFromKnowledge } = require('../lib/synthesis');
+const {
+  canResolveByName,
+  linkableCandidates,
+  resolveByName,
+  runSynthesis,
+  shouldExcludeEmailSummaryFromKnowledge,
+} = require('../lib/synthesis');
 
 const entities = [
   { kind: 'contact', id: 'contact-m365', label: 'M365 Rollout', aliases: [] },
@@ -104,4 +110,36 @@ test('knowledge synthesis keeps routed care-related emails', () => {
     project_slug: 'dad',
     contact_id: null,
   }), false);
+});
+
+test('the historical synthesis job delegates to the canonical CRM knowledge engine', async () => {
+  const calls = [];
+  const result = await runSynthesis('__test_canonical_synthesis_job', {
+    limit: 7,
+    linkBudget: 9,
+    dependencies: { requestModelObject: async () => ({}) },
+    runCrmKnowledgeEngineFn: async (user, options) => {
+      calls.push({ user, options });
+      return { considered: 3, triaged: 2, synthesised: 1, atomsStored: 4, proposed: 1 };
+    },
+    knowledgeHealthFn: () => ({
+      coverage: {
+        sources: [
+          { state: 'complete' },
+          { state: 'incomplete' },
+          { state: 'error' },
+          { state: 'review' },
+        ],
+      },
+    }),
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].user, '__test_canonical_synthesis_job');
+  assert.equal(calls[0].options.limit, 7);
+  assert.equal(calls[0].options.linkBudget, 9);
+  assert.equal(result.canonicalPipeline, true);
+  assert.equal(result.processed, 3);
+  assert.equal(result.remaining, 2);
+  assert.equal(result.atomsStored, 4);
 });

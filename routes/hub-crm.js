@@ -28,9 +28,11 @@ const { PROMPTS } = require('../lib/prompts');
 const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 const { sendEmail: amSendEmail } = require('../lib/agentmail');
 const { getCrmKnowledgeHealth } = require('../lib/crm-knowledge-health');
+const { isCanonicalMeetingEvidenceRow } = require('../lib/source-evidence');
 const { closedProjectIds, isProjectClosed, renameProject } = require('../lib/project-lifecycle');
 
 const knowledgeRetryUsers = new Set();
+const duplicateReviewRetryOutcomes = new Set();
 
 
 function todayIso() {
@@ -383,51 +385,27 @@ router.post('/crm/contacts', requireAuth, requireSameOrigin, writeLimiter, (req,
 // Provenance resolver — turns an atom's source_ref {kind,id} into a viewable
 // source so every claim on a contact/project page is traceable in one click.
 router.get('/crm/source/:kind/:id', requireAuth, (req, res) => {
-  const hub = db.hub();
   const { kind, id } = req.params;
-  let title = 'Source', meta = '', body = '';
+  const hub = db.hub();
   if (kind === 'crm_fact') {
     const f = hub.prepare('SELECT contact_id FROM crm_facts WHERE id = ? AND user = ?').get(id, req.hubUser);
     if (!f) return res.status(404).send('Source not found');
     return res.redirect('/crm/contact/' + f.contact_id);
-  } else if (kind === 'document') {
-    const d = hub.prepare('SELECT filename, markdown FROM documents WHERE id = ? AND user = ?').get(id, req.hubUser);
-    if (!d) return res.status(404).send('Source not found');
-    title = d.filename || 'Document'; body = d.markdown || '';
-  } else if (kind === 'email_summary') {
-    const e = hub.prepare('SELECT subject, from_name, from_email, summary, received_at FROM email_summaries WHERE id = ? AND user = ?').get(id, req.hubUser);
-    if (!e) return res.status(404).send('Source not found');
-    title = e.subject || '(no subject)';
-    meta = `From ${e.from_name || ''} ${e.from_email ? '<' + e.from_email + '>' : ''}`.trim();
-    body = e.summary || '';
-  } else if (kind === 'meeting_intake') {
-    const m = hub.prepare('SELECT title, summary, transcript FROM meeting_intakes WHERE id = ? AND user = ?').get(id, req.hubUser);
-    if (!m) return res.status(404).send('Source not found');
-    title = m.title || 'Meeting';
-    body = (m.summary ? m.summary + '\n\n' : '') + (m.transcript || '');
-  } else if (kind === 'completed_task') {
-    const t = hub.prepare(`
-      SELECT t.*, c.name AS contact_name, co.name AS company_name, p.name AS project_name
-        FROM google_tasks t
-        LEFT JOIN contacts c ON c.id = t.contact_id
-        LEFT JOIN companies co ON co.id = t.company_id
-        LEFT JOIN projects p ON p.user = t.user AND p.slug = t.project_slug
-       WHERE t.id = ? AND t.user = ?
-    `).get(id, req.hubUser);
-    if (!t) return res.status(404).send('Source not found');
-    title = t.title || 'Completed task';
-    meta = [
-      t.completed_at ? `Completed ${new Date(t.completed_at * 1000).toLocaleString('en-GB', { timeZone: 'Europe/Dublin' })}` : null,
-      t.source ? `source: ${t.source}` : null,
-      t.contact_name ? `person: ${t.contact_name}` : null,
-      t.company_name ? `company: ${t.company_name}` : null,
-      t.project_name ? `project: ${t.project_name}` : null,
-    ].filter(Boolean).join(' · ');
-    body = t.notes || '';
-  } else {
-    return res.status(404).send('Unknown source kind');
   }
-  res.render('hub/crm-source', { ...crmPageData(req.hubUser), kind, title, meta, body });
+  const { resolveSourceEvidence, sourceDisplay } = require('../lib/source-evidence');
+  const evidence = resolveSourceEvidence(req.hubUser, kind, id);
+  if (!evidence) return res.status(404).send('Source not found');
+  const display = sourceDisplay(evidence);
+  const provenance = evidence.complete
+    ? `faithful raw evidence · revision ${evidence.revision_hash.slice(0, 12)}`
+    : `${evidence.completeness} · revision ${evidence.revision_hash.slice(0, 12)}`;
+  res.render('hub/crm-source', {
+    ...crmPageData(req.hubUser),
+    kind,
+    title: display.title,
+    meta: [display.meta, provenance].filter(Boolean).join(' · '),
+    body: evidence.text,
+  });
 });
 
 router.get('/crm/contact/:id', requireAuth, (req, res) => {
@@ -769,7 +747,8 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
     ORDER BY mi.created_at DESC
     LIMIT 12
   `).all(req.hubUser);
-  const defaultActiveIntake = recent.find(item => ['draft', 'needs_speaker_review', 'error'].includes(item.status)) || null;
+  const defaultActiveIntake = recent.find(item => ['draft', 'needs_speaker_review', 'error'].includes(item.status)
+    || (item.status === 'processing' && isCanonicalMeetingEvidenceRow(item))) || null;
   const activeIntakeId = String(
     req.query.draft
     || req.query.review
@@ -786,8 +765,15 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
         WHERE mi.id = ? AND mi.user = ?
       `).get(activeIntakeId, req.hubUser)
     : null;
+  const staleProcessingIntakeIds = recent
+    .filter(item => item.status === 'processing' && isCanonicalMeetingEvidenceRow(item))
+    .map(item => item.id);
+  const activeIntakeStaleProcessing = Boolean(
+    activeIntake && activeIntake.status === 'processing' && isCanonicalMeetingEvidenceRow(activeIntake),
+  );
   res.render('hub/crm-meeting-intake', {
-    ...crmPageData(req.hubUser), meetings, projects, companies, projectContacts, allContacts, recent, activeIntake, query: req.query,
+    ...crmPageData(req.hubUser), meetings, projects, companies, projectContacts, allContacts, recent, activeIntake,
+    staleProcessingIntakeIds, activeIntakeStaleProcessing, query: req.query,
   });
 });
 
@@ -832,11 +818,22 @@ function parseMeetingIntakeExtraction(value) {
 function queueStoredMeetingIntake(user, intake) {
   const extraction = parseMeetingIntakeExtraction(intake.extraction);
   const options = extraction.intake_options || {};
-  db.hub().prepare(`
+  // Claim the UI-level processing window before scheduling the async worker.
+  // The compare-and-set makes two stale-page submits harmless, and recording
+  // the start now (rather than inside setImmediate) keeps a newly claimed
+  // intake visibly live for the whole hand-off to the extractor.
+  const claimedAt = Math.floor(Date.now() / 1000);
+  const processingExtraction = JSON.stringify({
+    ...extraction,
+    intake_processing_started_at: claimedAt,
+  });
+  const claimed = db.hub().prepare(`
     UPDATE meeting_intakes
-    SET status = 'processing', error = NULL
-    WHERE id = ? AND user = ?
-  `).run(intake.id, user);
+    SET status = 'processing', error = NULL, extraction = ?
+    WHERE id = ? AND user = ? AND status = ?
+      AND COALESCE(extraction, '') = COALESCE(?, '')
+  `).run(processingExtraction, intake.id, user, intake.status, intake.extraction).changes === 1;
+  if (!claimed) return false;
   queueMeetingIntakeProcessing({
     user,
     intakeId: intake.id,
@@ -851,6 +848,7 @@ function queueStoredMeetingIntake(user, intake) {
     },
     sourceFilename: intake.source_filename || '',
   });
+  return true;
 }
 
 function validKrispWebhook(req) {
@@ -1068,7 +1066,8 @@ router.post('/crm/meeting-intake/:id/update', requireAuth, requireSameOrigin, wr
   const hub = db.hub();
   const intake = hub.prepare('SELECT * FROM meeting_intakes WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
   if (!intake) return res.status(404).send('Intake not found');
-  if (intake.status === 'processing' || intake.status === 'processed') {
+  if (intake.status === 'processed'
+    || (intake.status === 'processing' && !isCanonicalMeetingEvidenceRow(intake))) {
     return res.status(400).send('This intake has already been sent to CRM');
   }
 
@@ -1198,7 +1197,9 @@ router.post('/crm/meeting-intake/:id/save', requireAuth, requireSameOrigin, writ
   if (intake.status === 'needs_speaker_review') {
     return res.status(400).send('Identify the detected speakers before saving this intake to CRM');
   }
-  if (intake.status === 'processing') return res.redirect(`/crm/meeting-intake?submitted=${encodeURIComponent(intake.id)}`);
+  if (intake.status === 'processing' && !isCanonicalMeetingEvidenceRow(intake)) {
+    return res.redirect(`/crm/meeting-intake?submitted=${encodeURIComponent(intake.id)}`);
+  }
   if (intake.status === 'processed') return res.redirect(`/crm/meeting-intake?intake=${encodeURIComponent(intake.id)}&meeting=${encodeURIComponent(intake.meeting_id || '')}`);
   queueStoredMeetingIntake(req.hubUser, intake);
   res.redirect(`/crm/meeting-intake?submitted=${encodeURIComponent(intake.id)}`);
@@ -1229,10 +1230,9 @@ router.post('/crm/meeting-intake/:id/speakers', requireAuth, requireSameOrigin, 
       const id = uuid();
       hub.prepare('INSERT INTO contacts (id, user, name) VALUES (?, ?, ?)').run(id, req.hubUser, newName);
       contact = { id, name: newName };
-      if (intake.project_slug) {
-        const project = hub.prepare('SELECT id FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, intake.project_slug);
-        if (project) hub.prepare('INSERT OR IGNORE INTO contact_projects (contact_id, project_id, role) VALUES (?, ?, ?)').run(id, project.id, 'meeting attendee');
-      }
+      // Keep this as meeting attendee metadata only.  A project association is
+      // durable semantic knowledge and must be compiled from evidence rather
+      // than inferred from the intake's routing slug.
     }
     if (contact) {
       speakerMap[speaker.label] = contact.name;
@@ -1289,6 +1289,11 @@ router.post('/api/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLim
 
 router.post('/crm/meeting-intake/:id/delete', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   try {
+    const intake = db.hub().prepare('SELECT * FROM meeting_intakes WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+    if (!intake) return res.status(404).send('Intake not found');
+    if (intake.status === 'processing' && !isCanonicalMeetingEvidenceRow(intake)) {
+      return res.status(409).send('This intake is actively processing; wait for it to finish or retry only after the processing lease expires');
+    }
     const { deleteMeetingIntake } = require('../lib/meeting-intake');
     const result = await deleteMeetingIntake(req.hubUser, req.params.id);
     if (!result.ok) return res.status(404).send(result.error || 'Intake not found');
@@ -2849,6 +2854,8 @@ router.get('/crm/knowledge', requireAuth, async (req, res) => {
   }
 
   const engineHealth = getCrmKnowledgeHealth(req.hubUser);
+  const { listActionOutcomeQueue } = require('../lib/crm-knowledge-engine');
+  const actionOutcomeQueue = listActionOutcomeQueue(req.hubUser, { limit: 80 });
   const health = {
     duplicateEmails: hub.prepare(`
       SELECT COUNT(*) AS n FROM (
@@ -2870,6 +2877,8 @@ router.get('/crm/knowledge', requireAuth, async (req, res) => {
     engineStages: engineHealth.stages,
     engineErrors: engineHealth.currentErrors.slice(0, 12),
     engineErrorSourceCount: engineHealth.erroredSourceCount,
+    engineCoverage: engineHealth.coverage,
+    actionOutcomeQueue,
     health,
   });
 });
@@ -2905,6 +2914,76 @@ router.post('/api/crm/knowledge/retry-errors', requireAuth, requireSameOrigin, w
     }
   });
   return res.json({ ok: true, message: 'Retrying up to 8 errored sources through the full knowledge pipeline.' });
+});
+
+// Review outcomes are compiled source-backed decisions.  Accepting one uses
+// its existing stable action key, so a human approval cannot create a second
+// task merely because the model phrased the title differently on replay.
+router.post('/api/crm/knowledge/actions/:id/accept', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { approveReviewedAction } = require('../lib/crm-knowledge-engine');
+    const result = await approveReviewedAction(req.hubUser, req.params.id);
+    res.json({ ok: true, disposition: result.disposition, taskId: result.outcome?.task_id || null, eventId: result.outcome?.event_id || null });
+  } catch (err) {
+    res.status(err.code === 'SOURCE_PROCESSING_LEASE_HELD' ? 409 : 400).json({ error: err.message });
+  }
+});
+
+router.post('/api/crm/knowledge/actions/:id/dismiss', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const { dismissActionOutcome } = require('../lib/crm-knowledge-engine');
+    const outcome = dismissActionOutcome(req.hubUser, req.params.id, String(req.body.reason || '').slice(0, 1000));
+    res.json({ ok: true, disposition: outcome.disposition });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Source-level duplicate/supersession gates are knowledge decisions, not task
+// reviews. They deliberately have their own resolution path so a generic
+// action dismissal cannot hide a source whose atom synthesis remains blocked.
+router.post('/api/crm/knowledge/duplicate-review/:id/skip', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const { skipDuplicateReviewSynthesis } = require('../lib/crm-knowledge-engine');
+    const result = skipDuplicateReviewSynthesis(req.hubUser, req.params.id, {
+      reason: String(req.body.reason || '').slice(0, 1000),
+    });
+    res.json({ ok: true, disposition: 'dismissed', resolved: result.resolved, resolution: result.resolution });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/api/crm/knowledge/duplicate-review/:id/retry', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const retryKey = `${req.hubUser}\u0000${req.params.id}`;
+  if (duplicateReviewRetryOutcomes.has(retryKey)) {
+    return res.status(409).json({ error: 'This duplicate/supersession review is already being retried.' });
+  }
+  try {
+    const { queueDuplicateReviewRetry, retryDuplicateReview } = require('../lib/crm-knowledge-engine');
+    const queued = queueDuplicateReviewRetry(req.hubUser, req.params.id, {
+      reason: String(req.body.reason || '').slice(0, 1000),
+    });
+    duplicateReviewRetryOutcomes.add(retryKey);
+    setImmediate(async () => {
+      try {
+        const result = await retryDuplicateReview(req.hubUser, req.params.id);
+        console.log(`[crm] duplicate review retry ${req.hubUser}/${req.params.id}:`, result);
+      } catch (err) {
+        console.error(`[crm] duplicate review retry ${req.hubUser}/${req.params.id} failed:`, err.message);
+      } finally {
+        duplicateReviewRetryOutcomes.delete(retryKey);
+      }
+    });
+    return res.status(202).json({
+      ok: true,
+      queued: true,
+      existing: Boolean(queued.existing),
+      message: 'Re-running duplicate/supersession review for this source only.',
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 });
 
 // User feedback on atoms: dispute / mark stale / restore. The status change is

@@ -11,7 +11,6 @@ const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
 const { PROMPTS } = require('../lib/prompts');
-const { createTask } = require('../lib/google-tasks');
 const {
   chatLimiter, uploadLimiter, writeLimiter,
   requireAuth, requireSameOrigin, audioUpload,
@@ -114,6 +113,36 @@ function renderDebriefTranscript(history) {
     })
     .filter(Boolean)
     .join('\n\n');
+}
+
+/**
+ * Keep extracted debrief actions in the canonical debrief-session evidence
+ * queue.  CRM knowledge synthesis owns any later task/fact/project projection;
+ * this edge must not create operational rows from an unreviewed extraction.
+ */
+function deferDebriefActions(actions, dateIso, sessionId) {
+  const list = Array.isArray(actions) ? actions : [];
+  const outcomes = list.map(rawAction => {
+    const title = typeof rawAction === 'string'
+      ? rawAction.trim()
+      : String(rawAction?.title || rawAction?.task || '').trim();
+    const sourceId = `${sessionId || dateIso}:${title.slice(0, 60)}`;
+    return {
+      status: 'deferred_to_crm_knowledge',
+      sourceId,
+      title: title || null,
+    };
+  });
+
+  return {
+    requested: list.length,
+    created: 0,
+    existing: 0,
+    errors: 0,
+    deferred: list.length,
+    status: 'deferred_to_crm_knowledge',
+    outcomes,
+  };
 }
 
 function parseHistory(value) {
@@ -256,7 +285,7 @@ router.post('/api/debrief/turn', requireDebriefAuth, chatLimiter, audioUpload.si
   }
 });
 
-// Save full transcript to Obsidian + async extraction → CRM / projects
+// Save full transcript to Obsidian + async extraction for CRM knowledge review
 router.post('/api/debrief/save', requireDebriefAuth, writeLimiter, async (req, res) => {
   const { transcript, sessionId } = req.body;
   if (!transcript?.trim()) return res.status(400).json({ error: 'No transcript provided' });
@@ -304,7 +333,17 @@ router.post('/api/debrief/save', requireDebriefAuth, writeLimiter, async (req, r
     // Async extraction — fire and forget after response sent
     setImmediate(() => {
       runDebriefExtraction(user, transcript, todayIso, notePath, sessionId)
-        .catch(err => console.error('[debrief extraction]', err.message));
+        .catch(err => {
+          console.error('[debrief extraction]', err.message);
+          if (sessionId) {
+            try {
+              db.hub().prepare(`UPDATE debrief_sessions SET error = ? WHERE id = ?`)
+                .run(`Extraction failed: ${err.message}`, sessionId);
+            } catch (persistErr) {
+              console.error('[debrief extraction] could not persist failure:', persistErr.message);
+            }
+          }
+        });
     });
   } catch (err) {
     console.error('[debrief save]', err);
@@ -315,7 +354,9 @@ router.post('/api/debrief/save', requireDebriefAuth, writeLimiter, async (req, r
   }
 });
 
-async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, sessionId) {
+async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, sessionId, {
+  fetchFn = fetch,
+} = {}) {
   const hub = db.hub();
   const contacts = hub.prepare('SELECT id, name, aliases FROM contacts WHERE user = ?').all(user);
   const projects = hub.prepare('SELECT id, name, slug FROM projects WHERE user = ?').all(user);
@@ -332,7 +373,7 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
 
   const prompt = `${extractorBase}\n\nTranscript:\n${transcript.trim()}`;
 
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const r = await fetchFn('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(TASK_CODES.DEBRIEF),
     body: JSON.stringify({
@@ -355,62 +396,43 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
   });
   const extracted = JSON.parse(data.choices[0].message.content);
 
+  // The raw note and this extraction are the only outputs of the debrief edge.
+  // People, projects, and actions remain source-backed candidates for the CRM
+  // knowledge engine; no facts, project notes, action notes, or Google Tasks
+  // are projected here.
+  const taskOutcome = deferDebriefActions(extracted.actions, dateIso, sessionId);
+  const deferredOutcome = {
+    status: 'deferred_to_crm_knowledge',
+    people: Array.isArray(extracted.people) ? extracted.people.length : 0,
+    projects: Array.isArray(extracted.projects) ? extracted.projects.length : 0,
+    actions: taskOutcome.requested,
+  };
+
+  const extraction = {
+    ...extracted,
+    outcome: 'deferred_to_crm_knowledge',
+    deferred_outcome: deferredOutcome,
+    task_outcomes: taskOutcome,
+  };
   if (sessionId) {
     try {
       db.hub().prepare(`UPDATE debrief_sessions SET extraction = ? WHERE id = ?`)
-        .run(JSON.stringify(extracted), sessionId);
-    } catch (_) {}
-  }
-
-  // Log people mentions in CRM
-  for (const personName of (extracted.people || [])) {
-    const match = knownPeople.find(p => p.term.toLowerCase() === personName.toLowerCase());
-    if (match) {
-      hub.prepare(`
-        INSERT INTO crm_facts (id, user, contact_id, fact, status, source)
-        VALUES (?, ?, ?, ?, 'active', 'debrief')
-      `).run(uuid(), user, match.contactId, `Mentioned in debrief on ${dateIso}`);
+        .run(JSON.stringify(extraction), sessionId);
+    } catch (err) {
+      // The deferred outcome is still returned to direct callers; surface a
+      // persistence failure rather than pretending the session was updated.
+      extraction.persistence_error = err.message;
     }
   }
 
-  // Append debrief reference to matching project notes
-  for (const projName of (extracted.projects || [])) {
-    const match = knownProjects.find(p => p.name.toLowerCase() === projName.toLowerCase());
-    if (match) {
-      const projSlug = match.slug || match.name.replace(/\s+/g, '-').toLowerCase();
-      await writeNote({
-        notePath: `Projects/${projSlug}.md`,
-        content: `\n- Mentioned in debrief on ${dateIso}: [[${sourceNotePath.replace(/\.md$/, '')}]]`,
-        mode: 'append',
-      });
-    }
-  }
-
-  // Save action items to a debrief actions note and Google Tasks
-  if (extracted.actions?.length) {
-    const actionLines = extracted.actions.map(a => `- [ ] ${a}`).join('\n');
-    await writeNote({
-      notePath: `Debrief/Actions-${dateIso}.md`,
-      content: [
-        `## From [[${sourceNotePath.replace(/\.md$/, '')}]]`,
-        '',
-        actionLines,
-        '',
-      ].join('\n'),
-      mode: 'append',
-    });
-
-    for (const action of extracted.actions) {
-      createTask(user, {
-        title: action,
-        notes: `From debrief on ${dateIso}`,
-        source: 'debrief',
-        sourceId: `${sessionId || dateIso}:${action.slice(0, 60)}`,
-      }).catch(err => console.warn('[tasks] debrief task create failed:', err.message));
-    }
-  }
-
-  console.log(`[debrief extraction] ${user}: people=${extracted.people?.length || 0} projects=${extracted.projects?.length || 0} actions=${extracted.actions?.length || 0}`);
+  console.log(`[debrief extraction] ${user}: people=${deferredOutcome.people} projects=${deferredOutcome.projects} actions=${deferredOutcome.actions} outcome=deferred_to_crm_knowledge`);
+  return {
+    ...extraction,
+    taskCreated: 0,
+    taskExisting: 0,
+    taskErrors: 0,
+    taskDeferred: taskOutcome.deferred,
+  };
 }
 
 // ── Meeting debrief page ──────────────────────────────────────────────────────
@@ -495,3 +517,7 @@ router.post('/api/meeting/submit', requireAuth, requireSameOrigin, uploadLimiter
 });
 
 module.exports = router;
+// Kept as properties for focused tests and the existing route's extraction
+// worker; the router itself remains the default CommonJS export.
+module.exports.deferDebriefActions = deferDebriefActions;
+module.exports.runDebriefExtraction = runDebriefExtraction;
