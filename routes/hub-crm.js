@@ -3093,7 +3093,7 @@ router.get('/crm/projects', requireAuth, (req, res) => {
     const meta = metaByProject.get(p.id) || {};
     return {
       ...p, openTasks, lastActivity: lastMsg,
-      health: closed.has(p.id) ? 'closed' : deriveProjectHealth(meta.status, lastMsg),
+      health: closed.has(p.id) ? (meta.status || 'closed') : deriveProjectHealth(meta.status, lastMsg),
       manualStatus: meta.status || null,
       deadline: meta.deadline || null,
     };
@@ -3219,7 +3219,7 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
   `).all(req.hubUser, project.id);
 
   const lastMsg = hub.prepare('SELECT MAX(ts) AS ts FROM messages WHERE project_id = ?').get(project.id)?.ts;
-  const projectHealth = isProjectClosed(hub, req.hubUser, project.id) ? 'closed' : deriveProjectHealth(projectMeta.status, lastMsg);
+  const projectHealth = isProjectClosed(hub, req.hubUser, project.id) ? (projectMeta.status || 'closed') : deriveProjectHealth(projectMeta.status, lastMsg);
 
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),
