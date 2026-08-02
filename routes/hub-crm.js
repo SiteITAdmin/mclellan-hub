@@ -486,7 +486,10 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
   `).all(contact.id);
   const allProjects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
   const linkedProjectIds = new Set(linkedProjects.map(p => p.id));
-  const availableProjects = allProjects.filter(p => !linkedProjectIds.has(p.id));
+  // Don't offer ended projects (closed/completed/…) as new link targets; a project
+  // already linked to this contact still shows above via linkedProjects.
+  const closedProjectIdSet = closedProjectIds(hub, req.hubUser);
+  const availableProjects = allProjects.filter(p => !linkedProjectIds.has(p.id) && !closedProjectIdSet.has(p.id));
 
   const linkedCompanyIds = new Set(companies.map(c => c.id));
   const allCompanies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
