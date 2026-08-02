@@ -147,6 +147,40 @@ test('distinct asks sharing one exact span retain stable semantic candidate iden
   );
 });
 
+test('a safe projection match canonicalises its candidate key and upgrades only its evidence span', () => {
+  const text = 'Please send the signed contract to Neil.';
+  const chunk = { index: 0, start: 0, end: text.length, text, chunk_id: 'chunk-canonical-link' };
+  const evidence = {
+    source_kind: 'email_summary', source_id: 'email-canonical-link', revision_hash: 'revision-canonical-link', text, chunks: [chunk],
+  };
+  const candidate = _test.decorateCandidate(evidence, chunk, {
+    action: 'Send the signed contract to Neil',
+    // This reproduces triage correctly identifying the ask but quoting a
+    // paraphrase that cannot itself be used as provider-side-effect evidence.
+    evidence: 'Neil still needs the signed contract',
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+  }, 0);
+  const projected = {
+    candidate_key: 'stale-model-candidate-key',
+    title: 'Send the signed contract to Neil',
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+    evidence: text,
+  };
+
+  assert.equal(candidate.source_span.exact, false);
+  assert.equal(_test.candidateForProjectedAction(projected, [candidate]), candidate);
+  const canonical = _test.canonicaliseProjectedAction(projected, candidate);
+  const identity = _test.actionIdentity(evidence, canonical, [candidate], chunk);
+
+  assert.equal(canonical.candidate_key, candidate.candidate_key);
+  assert.equal(canonical.projected_candidate_key, 'stale-model-candidate-key');
+  assert.equal(identity.action_key, candidate.candidate_key);
+  assert.equal(identity.span.exact, true);
+  assert.equal(identity.span.text, text);
+});
+
 test('task history exposes authoritative human state to action synthesis', () => {
   assert.equal(_test.taskState({ status: 'needsAction', deleted_at: 1 }), 'deleted');
   assert.equal(_test.taskState({ status: 'wrong', deleted_at: 1 }), 'wrong');
@@ -155,7 +189,10 @@ test('task history exposes authoritative human state to action synthesis', () =>
   assert.match(_test.ACTION_STATE_GUARD, /authoritative human decisions/);
 });
 
-test('crm_action_projection schema and event guard both describe the event field', () => {
+test('crm_action_projection schema and runtime guards require event and candidate identity fields', () => {
+  assert.match(PROMPTS.crm_action_projection, /"candidate_key": "copy the exact candidate_key from Candidates"/);
+  assert.match(PROMPTS.crm_action_projection, /candidate_key is REQUIRED for every action/);
+  assert.match(_test.ACTION_EVIDENCE_GUARD, /every object in "actions" MUST include "candidate_key"/);
   assert.match(PROMPTS.crm_action_projection, /"event":/);
   assert.match(PROMPTS.crm_action_projection, /specific date and a specific time/);
   assert.match(_test.ACTION_EVENT_GUARD, /must include an "event" field/);
