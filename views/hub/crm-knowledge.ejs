@@ -56,6 +56,14 @@
   <% } else { %>
     <p class="crm-muted" style="font-size:12px;margin:10px 0 0;">No receipts yet — the engine has not processed any sources for this account.</p>
   <% } %>
+  <% if (engineCoverage) { %>
+    <p class="crm-muted" style="font-size:12px;margin:10px 0 0;">
+      Current-version coverage: <strong style="color:var(--crm-text,inherit);"><%= engineCoverage.completed %>/<%= engineCoverage.eligible %></strong> complete (<%= engineCoverage.coveragePercent %>%)
+      <% if (engineCoverage.incomplete) { %> · <span style="color:#b8860b;"><%= engineCoverage.incomplete %> incomplete</span><% } %>
+      <% if (engineCoverage.review) { %> · <span style="color:#b8860b;"><%= engineCoverage.review %> review</span><% } %>
+      <% if (engineCoverage.errors) { %> · <span style="color:var(--crm-danger,#c0392b);"><%= engineCoverage.errors %> error</span><% } %>
+    </p>
+  <% } %>
   <% if (engineErrorSourceCount > 0) { %>
     <details style="margin-top:12px;">
       <summary style="cursor:pointer;font-size:12px;color:var(--crm-danger,#c0392b);"><%= engineErrorSourceCount %> source<%= engineErrorSourceCount === 1 ? '' : 's' %> currently have an errored stage</summary>
@@ -73,6 +81,63 @@
     </details>
   <% } %>
 </section>
+
+<% if (actionOutcomeQueue && actionOutcomeQueue.length) { %>
+<section class="section-card" style="margin-bottom:18px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:15px;">Knowledge and action review queue</h2>
+    <span class="crm-muted" style="font-size:12px;"><%= actionOutcomeQueue.length %> visible outcome<%= actionOutcomeQueue.length === 1 ? '' : 's' %></span>
+  </div>
+  <p class="crm-muted" style="font-size:12px;margin:8px 0 10px;">Each item is tied to an exact source span and current source revision. Review items can create one stable, replay-safe task; an unreconciled provider call is deliberately non-creatable until its task or calendar state is reconciled.</p>
+  <div style="display:grid;gap:8px;">
+    <% for (const outcome of actionOutcomeQueue) { %>
+      <% const nonCreatable = Boolean(outcome.payload && outcome.payload.non_creatable); %>
+      <% const requiresReconciliation = Boolean(outcome.payload && outcome.payload.side_effect_ambiguity?.requires_reconciliation); %>
+      <% const sourceStage = String(outcome.payload?.source_stage || ''); %>
+      <% const duplicateReviewGate = Boolean(outcome.payload?.source_level && (
+        sourceStage.startsWith('duplicate_')
+        || Boolean(outcome.payload?.synthesis_gate)
+        || Boolean(outcome.payload?.duplicate_review_error)
+        || /^duplicate_review_|^supersession_/.test(String(outcome.reason || ''))
+      )); %>
+      <article style="padding:10px;border-left:3px solid <%= outcome.disposition === 'error' ? 'var(--crm-danger,#c0392b)' : '#b8860b' %>;background:var(--crm-subtle-bg,rgba(0,0,0,.025));">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+          <div>
+            <strong style="font-size:13px;"><%= outcome.candidate_title || 'Malformed action candidate' %></strong>
+            <span class="crm-badge subtle" style="margin-left:5px;"><%= outcome.disposition.replace(/_/g, ' ') %></span>
+            <div class="crm-muted" style="font-size:11px;margin-top:3px;">
+              <a href="/crm/source/<%= outcome.source_kind %>/<%= outcome.source_id %>"><%= outcome.source_kind.replace(/_/g, ' ') %> evidence</a>
+              · revision <%= String(outcome.source_revision || '').slice(0, 12) %>
+              · <%= outcome.reason || 'No reason recorded' %>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <% if (duplicateReviewGate && (outcome.disposition === 'review' || outcome.disposition === 'error')) { %>
+              <button class="btn btn-sm duplicate-review-action" data-outcome="<%= outcome.id %>" data-action="skip">Skip atom synthesis</button>
+              <button class="btn btn-sm btn-ghost duplicate-review-action" data-outcome="<%= outcome.id %>" data-action="retry">Re-run duplicate review</button>
+            <% } else if (outcome.disposition === 'review' && !nonCreatable) { %>
+              <button class="btn btn-sm outcome-action" data-outcome="<%= outcome.id %>" data-action="accept">Create task</button>
+            <% } %>
+            <% if (!duplicateReviewGate && (outcome.disposition === 'review' || outcome.disposition === 'error')) { %>
+              <button class="btn btn-sm btn-ghost outcome-action" data-outcome="<%= outcome.id %>" data-action="dismiss">Dismiss</button>
+            <% } %>
+          </div>
+        </div>
+        <% if (requiresReconciliation) { %>
+          <div class="crm-muted" style="font-size:12px;margin-top:7px;">Provider reconciliation required: the prior task or calendar call may have succeeded, so creating another one is blocked.</div>
+        <% } else if (duplicateReviewGate) { %>
+          <div class="crm-muted" style="font-size:12px;margin-top:7px;">This is a source-level duplicate/supersession decision. Skip records an audited terminal synthesis skip; re-run asks the duplicate reviewer about this source only.</div>
+        <% } else if (nonCreatable) { %>
+          <div class="crm-muted" style="font-size:12px;margin-top:7px;">This review is evidence-only and cannot create a task.</div>
+        <% } %>
+        <% if (outcome.evidence_text) { %>
+          <blockquote style="margin:8px 0 0;padding-left:9px;border-left:2px solid var(--crm-border,#ddd);font-size:12px;line-height:1.45;white-space:pre-wrap;"><%= outcome.evidence_text %></blockquote>
+        <% } %>
+      </article>
+    <% } %>
+  </div>
+</section>
+<% } %>
 
 <% if (browse) { %>
 <section class="section-card" style="margin-bottom:18px;">
@@ -219,6 +284,42 @@ document.getElementById('engine-retry-btn')?.addEventListener('click', async e =
     msg.textContent = j.ok ? `${j.message} Refresh in a minute to see the new outcomes.` : (j.error || 'Error');
     if (!j.ok) e.target.disabled = false;
   } catch (err) { msg.textContent = err.message; e.target.disabled = false; }
+});
+
+document.querySelectorAll('.outcome-action').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const action = btn.dataset.action;
+    if (action === 'dismiss' && !confirm('Dismiss this source-backed outcome?')) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(`/api/crm/knowledge/actions/${btn.dataset.outcome}/${action}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: action === 'dismiss' ? JSON.stringify({ reason: 'dismissed from knowledge queue' }) : '{}',
+      });
+      const j = await r.json();
+      if (j.ok) location.reload();
+      else { btn.disabled = false; alert(j.error || 'Error'); }
+    } catch (err) { btn.disabled = false; alert(err.message); }
+  });
+});
+
+document.querySelectorAll('.duplicate-review-action').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const action = btn.dataset.action;
+    const prompt = action === 'skip'
+      ? 'Skip atom synthesis for this source? The source evidence remains intact and this decision is recorded.'
+      : 'Re-run duplicate/supersession review for this source only?';
+    if (!confirm(prompt)) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(`/api/crm/knowledge/duplicate-review/${btn.dataset.outcome}/${action}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const j = await r.json();
+      if (j.ok) location.reload();
+      else { btn.disabled = false; alert(j.error || 'Error'); }
+    } catch (err) { btn.disabled = false; alert(err.message); }
+  });
 });
 
 document.querySelectorAll('.atom-action').forEach(btn => {

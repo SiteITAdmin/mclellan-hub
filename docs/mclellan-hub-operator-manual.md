@@ -75,7 +75,7 @@ The CRM, wiki, and project pages are no longer the knowledge — they are **view
 - **Embeddings (`embeddings`):** documents, email summaries, CRM facts, meeting transcripts and atoms are embedded (OpenRouter; model set in admin) for semantic retrieval.
 - **Atoms (`knowledge_atoms`):** derived `subject–predicate–value` claims, each with provenance (the source rows that justify it), confidence and status. Not authored by hand.
 - **CRM prompt engine (`crm_knowledge_engine`):** reviews raw CRM-bound sources through `crm_source_triage`, `crm_duplicate_review`, synthesis/provenance merge, and `crm_action_projection` before knowledge or tasks are compiled.
-- **Synthesis (nightly `synthesis_run`):** re-reads new sources *after* ingestion, extracts atoms and links them to the right contact/company/project from the whole corpus — so a care-plan address attaches to the person even though the email that first arrived knew nothing about them.
+- **Synthesis (nightly `synthesis_run`):** retains the historical job name but delegates to `crm_knowledge_engine`; it cannot write an atom until the same source-evidence, triage, duplicate/supersession, receipt, and source-lease gates have passed.
 - **Live threads (`live_thread_synthesis`):** reads across Gmail summaries, meeting intakes, newsletter/RSS intelligence, opportunity signals, and atoms to compile cross-source themes as `subject_kind = 'thread'`. This is how a Masterclass email about managing change can connect with M365 material and hospital department meeting notes without being forced into one CRM bucket.
 - **Routing & lint:** `task_route_run` attaches free-text tasks to the entity their knowledge points to; `knowledge_lint_run` decays stale claims and surfaces contradictions/duplicates at `/admin/knowledge`.
 
@@ -731,7 +731,7 @@ The queue is checked every minute. Jobs survive a Node restart, are visible at `
 | `email_process` | Every 15 minutes | Fetches and classifies Gmail for configured users |
 | `agentmail_process` | Every 15 minutes | Processes the AI-facing AgentMail inbox |
 | `crm_knowledge_engine` | Recurring/background | Runs source triage, duplicate/supersession review, synthesis merge, and action projection for CRM-bound evidence |
-| `synthesis_run` | Nightly about 03:00 Dublin, drains backlog every 5 minutes | Re-reads raw sources into compiled atoms and projects knowledge to the wiki |
+| `synthesis_run` | Nightly about 03:00 Dublin, drains recoverable backlog every 5 minutes | Compatibility scheduler that delegates to `crm_knowledge_engine`, then projects compiled knowledge to the wiki; it is not a second atom pipeline |
 | `cross_entity_synthesis` | Nightly about 04:15 Dublin | Creates insight atoms spanning entities |
 | `live_thread_synthesis` | Nightly about 04:35 Dublin | Creates thread atoms spanning Gmail, meetings, newsletter/RSS intelligence, opportunities, and atoms |
 | `interest_synthesis_run` | Daily about 05:45 Dublin | Maintains the morning brief interest radar |

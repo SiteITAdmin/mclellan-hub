@@ -73,7 +73,7 @@ router.post('/api/documents/:id/to-wiki', requireAuth, requireSameOrigin, writeL
   }
 });
 
-// ── Extract tasks from a document and push to Google Tasks ───────────────────
+// ── Request canonical document-task review (legacy direct path is gated) ────
 router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   const hub = db.hub();
   const doc = hub.prepare(`
@@ -86,11 +86,44 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
   const markdown = (doc.markdown || '').replace(/^---[\s\S]*?---\n+/, '').replace(/^# .+\n+/, '');
   if (!markdown.trim()) return res.status(400).json({ error: 'Document has no content' });
 
-  const { extractionPrompt, isGeneratedDocument } = require('../lib/document-tasks');
-  const { formatLearnedTaskRules } = require('../lib/task-learning');
+  const { isGeneratedDocument } = require('../lib/document-tasks');
   if (isGeneratedDocument(doc)) {
     return res.status(400).json({ error: 'Generated project-memory documents are not task sources' });
   }
+
+  // The canonical CRM knowledge engine owns source triage, exact-evidence
+  // action outcomes, review, and any eventual Google Task projection.  This
+  // endpoint only requests that versioned path in normal operation; it must
+  // never call a shadow extractor or provider task API directly.
+  const { legacyDirectCrmWritesEnabled } = require('../lib/crm-pipeline-mode');
+  if (!legacyDirectCrmWritesEnabled()) {
+    try {
+      const { queueCrmKnowledgeEngine } = require('../lib/crm-knowledge-queue');
+      const queued = queueCrmKnowledgeEngine({
+        user: req.hubUser,
+        sourceKind: 'document',
+        sourceId: doc.id,
+        requestedBy: 'document-extract-tasks',
+      }, hub);
+      const queueVerb = queued.existing ? 'reused' : 'queued';
+      return res.status(202).json({
+        ok: true,
+        queued: true,
+        existing: Boolean(queued.existing),
+        jobId: queued.jobId,
+        review: true,
+        message: `Document task review ${queueVerb} for canonical CRM knowledge; no task was created directly.`,
+      });
+    } catch (err) {
+      console.error('[extract-tasks] canonical CRM queue failed:', err.message);
+      return res.status(500).json({ error: 'Unable to queue canonical CRM knowledge processing' });
+    }
+  }
+
+  // Rollback-only compatibility path.  This retains the historical direct
+  // extractor/provider writes solely when explicitly enabled by operations.
+  const { extractionPrompt } = require('../lib/document-tasks');
+  const { formatLearnedTaskRules } = require('../lib/task-learning');
   const fetch = require('../lib/fetch');
   const { logUsageFromResponse } = require('../lib/openrouter-usage');
   const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
@@ -189,7 +222,25 @@ router.post('/api/messages/:msgId/save-to-project', requireAuth, requireSameOrig
   const question = userMsg?.content || '(no question)';
   const answer   = asstMsg.content || '(no answer)';
   const title    = question.slice(0, 60).replace(/\n/g, ' ').replace(/[^\w\s-]/g, '') || 'Chat note';
-  const markdown = `# ${title}\n\n**Q:** ${question}\n\n**A:** ${answer}`;
+  // This is a convenience copy of an assistant answer, not a new raw source.
+  // Keep the structural marker with the document so canonical evidence, task
+  // extraction, health, and replay can exclude it without hiding it from the
+  // ordinary project-document UI.
+  const markdown = [
+    '---',
+    'auto_generated: true',
+    'generated_kind: "chat-answer"',
+    `assistant_message_id: ${JSON.stringify(asstMsg.id)}`,
+    `user_message_id: ${JSON.stringify(userMsg?.id || null)}`,
+    `conversation_id: ${JSON.stringify(asstMsg.conversation_id || null)}`,
+    '---',
+    '',
+    `# ${title}`,
+    '',
+    `**Q:** ${question}`,
+    '',
+    `**A:** ${answer}`,
+  ].join('\n');
   const filename = `${title.slice(0, 50)} [chat].md`;
 
   const docId = require('crypto').randomUUID();

@@ -76,7 +76,9 @@ function main() {
             || !currentRoute.historical_backfill
           ) {
             db.hub().prepare('UPDATE messaging_messages SET raw_json = ? WHERE id = ?')
-              .run(JSON.stringify(record).slice(0, 50000), result.id);
+              // Preserve a complete, parseable historical provider envelope.
+              // Route refresh must not reintroduce the retired 50k raw cap.
+              .run(JSON.stringify(record), result.id);
             routingRefreshed += 1;
           }
         }

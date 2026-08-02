@@ -56,6 +56,8 @@
   </p>
 <% } %>
 
+<% const staleIntakeIds = new Set(typeof staleProcessingIntakeIds !== 'undefined' && Array.isArray(staleProcessingIntakeIds) ? staleProcessingIntakeIds : []); %>
+
 <% if (activeIntake) {
   let activeExtraction = {};
   let activeCounts = {};
@@ -70,6 +72,8 @@
   const activeContactOptions = activeScopedContactOptions.length ? activeScopedContactOptions : allContacts;
   const activeTranscript = activeIntake.transcript || '';
   const activePreviewTitle = activeIntake.title || activeIntake.meeting_title || activeOptions.title || 'Meeting transcript';
+  const activeStaleProcessing = Boolean(typeof activeIntakeStaleProcessing !== 'undefined' && activeIntakeStaleProcessing);
+  const activeLiveProcessing = activeIntake.status === 'processing' && !activeStaleProcessing;
 %>
   <section class="section-card" style="margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
@@ -89,17 +93,24 @@
           <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/preview">
             <button class="btn btn-sm btn-ghost" type="submit"><%= activeExtraction.preview ? 'Re-run preview' : 'Preview extraction' %></button>
           </form>
+        <% } %>
+        <% if (activeIntake.status === 'draft' || activeIntake.status === 'error' || activeStaleProcessing) { %>
           <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/save">
-            <button class="btn btn-sm" type="submit">Submit to CRM</button>
+            <button class="btn btn-sm" type="submit"><%= activeStaleProcessing ? 'Retry CRM processing' : 'Submit to CRM' %></button>
           </form>
         <% } else if (activeIntake.status === 'needs_speaker_review') { %>
           <button class="btn btn-sm" type="button" disabled style="opacity:.55;cursor:not-allowed;">Submit after speaker names</button>
         <% } %>
-        <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/delete" class="intake-delete-form" data-intake-id="<%= activeIntake.id %>">
-          <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
-        </form>
+        <% if (!activeLiveProcessing) { %>
+          <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/delete" class="intake-delete-form" data-intake-id="<%= activeIntake.id %>">
+            <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
+          </form>
+        <% } %>
       </div>
     </div>
+    <% if (activeStaleProcessing) { %>
+      <p class="crm-muted" style="margin:10px 0 0;color:#9a6700;">The earlier processing lease expired. The preserved transcript can be reviewed or retried; a live processing lease remains blocked.</p>
+    <% } %>
     <% const preview = activeExtraction.preview; %>
     <% if (preview && (activeIntake.status === 'draft' || activeIntake.status === 'error')) {
       const pMeeting = preview.meeting || {};
@@ -204,7 +215,7 @@
         <button class="btn" type="submit">Apply speaker names</button>
       </form>
     <% } %>
-    <% if (activeIntake.status !== 'processed' && activeIntake.status !== 'processing') { %>
+    <% if (activeIntake.status !== 'processed' && (activeIntake.status !== 'processing' || activeStaleProcessing)) { %>
       <form class="crm-form-grid" method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/update" style="margin-top:14px;">
         <label class="wide">Meeting title
           <input name="title" value="<%= activePreviewTitle %>" required>
@@ -274,8 +285,8 @@
         </label>
         <div class="wide" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <button class="btn btn-ghost" type="submit" name="action" value="save">Save review changes</button>
-          <% if (activeIntake.status === 'draft' || activeIntake.status === 'error') { %>
-            <button class="btn" type="submit" name="action" value="submit">Submit to CRM</button>
+          <% if (activeIntake.status === 'draft' || activeIntake.status === 'error' || activeStaleProcessing) { %>
+            <button class="btn" type="submit" name="action" value="submit"><%= activeStaleProcessing ? 'Retry CRM processing' : 'Submit to CRM' %></button>
           <% } else if (activeIntake.status === 'needs_speaker_review') { %>
             <button class="btn" type="button" disabled style="opacity:.55;cursor:not-allowed;">Submit after speaker names</button>
             <span class="crm-muted" style="font-size:13px;">Map every detected speaker first.</span>
@@ -358,6 +369,8 @@
           ? projectContacts.filter(c => c.project_slug === item.project_slug)
           : allContacts;
         const contactOptions = scopedContactOptions.length ? scopedContactOptions : allContacts;
+        const staleProcessing = staleIntakeIds.has(item.id);
+        const liveProcessing = item.status === 'processing' && !staleProcessing;
       %>
         <div class="crm-action">
           <span>
@@ -377,15 +390,17 @@
             <% if (item.status === 'needs_speaker_review') { %>
               <a class="btn btn-sm btn-ghost" href="/crm/meeting-intake?review=<%= item.id %>">Review</a>
             <% } %>
-            <% if (item.status === 'draft' || item.status === 'error') { %>
+            <% if (item.status === 'draft' || item.status === 'error' || staleProcessing) { %>
               <a class="btn btn-sm btn-ghost" href="/crm/meeting-intake?draft=<%= item.id %>">Review</a>
               <form method="post" action="/crm/meeting-intake/<%= item.id %>/save">
-                <button class="btn btn-sm" type="submit">Submit</button>
+                <button class="btn btn-sm" type="submit"><%= staleProcessing ? 'Retry' : 'Submit' %></button>
               </form>
             <% } %>
-            <form method="post" action="/crm/meeting-intake/<%= item.id %>/delete" class="intake-delete-form" data-intake-id="<%= item.id %>">
-              <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
-            </form>
+            <% if (!liveProcessing) { %>
+              <form method="post" action="/crm/meeting-intake/<%= item.id %>/delete" class="intake-delete-form" data-intake-id="<%= item.id %>">
+                <button class="btn btn-sm btn-ghost" type="submit">Delete</button>
+              </form>
+            <% } %>
           </div>
         </div>
         <% if (item.status === 'needs_speaker_review' && speakerReview && speakerReview.speakers && speakerReview.speakers.length) { %>
