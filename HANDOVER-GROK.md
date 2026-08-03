@@ -17,37 +17,22 @@ email. **Deploys stay human.**
 
 ---
 
-## 1. Action-projection prompt is burning the OpenRouter balance — DO THIS FIRST
+## 1. Action-projection / full-corpus reprocess — FIXED (Grok, 3 Aug 2026)
 
-**The problem.** `taskHistoryForActionProjection()` in `lib/crm-knowledge-engine.js`
-pastes ~17,000 tokens (240 tasks, 68,000 chars) into **every**
-`crm_action_projection` call. Average request is 27,000 tokens, so this block is
-~63% of every call.
+**Was:** pipeline version `crm-evidence-actions-v2` re-queued the whole corpus;
+action projection pasted full task history into every call.
 
-**Cost.** 3 Aug: 182 calls, $5.55. 2 Aug: 108 calls, $2.84. Baseline before the
-replay was 1–17 calls/day at $0.01–0.17. That is ~$8.20 above normal in two days,
-essentially all one line item, on `anthropic/claude-haiku-4.5`.
+**Now:**
+- `CRM_KNOWLEDGE_AUTO_PROCESS_AFTER` freezes automatic OpenRouter CRM work for
+  evidence older than 2026-08-03T00:00:00Z (new evidence only).
+- Same-revision completion under a prior pipeline version is grandfathered —
+  a version bump must not re-bill the historical corpus.
+- Task history for projection keeps completed/deleted/wrong (anti-recreation)
+  but closed tasks are title-only; open tasks keep fuller detail.
+- Oversized embeddings are marked `unembeddable` instead of retrying forever.
 
-**Still running.** 2,987 eligible sources, 1,819 still incomplete — roughly 40%
-through. At current rate and prompt size that is ~980 more projection calls and
-~$30 more.
-
-**Root cause of the replay.** Commit `cfd0d61` shipped pipeline version
-`crm-evidence-actions-v2`. Processing identity is (source, revision, pipeline
-version), so bumping the version made the entire corpus re-eligible. This has
-happened before. **A pipeline-version bump must not silently re-queue the whole
-corpus** — that is the real fix and it is the most important item in this file.
-
-**Do not** simply drop completed/deleted tasks from the block. The prompt
-deliberately relies on them (`lib/prompts.js`, `crm_action_projection`):
-*"Treat completed, deleted, and wrong task states as authoritative human
-decisions. Do not recreate or paraphrase those tasks."* Composition of the 240:
-125 completed, 51 deleted, 64 open. Stripping them will start recreating
-finished tasks.
-
-**Suggested direction:** prompt-cache the stable task-history prefix (it is
-near-identical across calls), and stop re-paying it per batch — `candidateBatches`
-splits a dense source into several calls that each re-send the whole block.
+When OpenRouter is topped up, only ordinary daily incomplete/error sources
+inside the auto-process window should run.
 
 ---
 

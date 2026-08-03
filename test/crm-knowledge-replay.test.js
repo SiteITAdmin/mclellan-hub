@@ -28,6 +28,10 @@ const {
 
 const user = 'crm-replay-test';
 let messageNumber = 0;
+// Evidence timestamps must sit inside the auto-process window so coverage and
+// candidate selection tests exercise live behaviour rather than the legacy freeze.
+const { CRM_KNOWLEDGE_AUTO_PROCESS_AFTER } = require('../lib/source-evidence');
+const TEST_EVIDENCE_TS_BASE = CRM_KNOWLEDGE_AUTO_PROCESS_AFTER + 86_400;
 
 function makeEvidence(body) {
   const id = `crm-replay-email-${++messageNumber}`;
@@ -36,7 +40,7 @@ function makeEvidence(body) {
     INSERT INTO email_summaries
       (id, user, gmail_message_id, subject, from_name, from_email, received_at, summary, body_text)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, user, `crm-replay-msg-${messageNumber}`, 'Action request', 'Alex', 'alex@example.test', 1771000000 + messageNumber, 'lossy', body);
+  `).run(id, user, `crm-replay-msg-${messageNumber}`, 'Action request', 'Alex', 'alex@example.test', TEST_EVIDENCE_TS_BASE + messageNumber, 'lossy', body);
   return resolveSourceEvidence(user, 'email_summary', id);
 }
 
@@ -46,7 +50,7 @@ function makeEvidenceForUser(testUser, id, body) {
     INSERT INTO email_summaries
       (id, user, gmail_message_id, subject, from_name, from_email, received_at, summary, body_text)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, testUser, `${id}-message`, 'Action request', 'Alex', 'alex@example.test', 1771200000 + messageNumber, 'lossy', body);
+  `).run(id, testUser, `${id}-message`, 'Action request', 'Alex', 'alex@example.test', TEST_EVIDENCE_TS_BASE + 10_000 + messageNumber, 'lossy', body);
   return resolveSourceEvidence(testUser, 'email_summary', id);
 }
 
@@ -1425,9 +1429,9 @@ test('replay audit counts only exact-current revisions and saved debrief transcr
       (id, user, gmail_message_id, subject, from_name, from_email, received_at, summary, body_text)
     VALUES (?, ?, ?, 'Audit source', 'Alex', 'alex@example.test', ?, 'lossy', ?)
   `);
-  insertEmail.run('replay-audit-stale-email', auditUser, 'replay-audit-stale-msg', 1771010000, 'Original evidence body.');
-  insertEmail.run('replay-audit-current-email', auditUser, 'replay-audit-current-msg', 1771010001, 'Current evidence body.');
-  insertEmail.run('replay-audit-report-email', auditUser, 'replay-audit-report-msg', 1771010002, 'Report body must be excluded.');
+  insertEmail.run('replay-audit-stale-email', auditUser, 'replay-audit-stale-msg', TEST_EVIDENCE_TS_BASE + 100, 'Original evidence body.');
+  insertEmail.run('replay-audit-current-email', auditUser, 'replay-audit-current-msg', TEST_EVIDENCE_TS_BASE + 101, 'Current evidence body.');
+  insertEmail.run('replay-audit-report-email', auditUser, 'replay-audit-report-msg', TEST_EVIDENCE_TS_BASE + 102, 'Report body must be excluded.');
   hub.prepare("UPDATE email_summaries SET subject = 'Hub Daily Report: audit' WHERE id = ?")
     .run('replay-audit-report-email');
   hub.prepare(`

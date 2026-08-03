@@ -105,7 +105,14 @@ for processing again.
 
 Every stage writes a receipt keyed by source kind/id, current revision, and
 pipeline version. `error`, `review`, and incomplete outcomes remain replayable;
-retrying must not erase the earlier receipt. For each triage action candidate,
+retrying must not erase the earlier receipt.
+
+Automatic OpenRouter CRM processing is **new evidence only**. A pipeline-version
+bump must not re-queue the historical corpus: same-revision completion under any
+prior pipeline version is grandfathered, and evidence older than
+`CRM_KNOWLEDGE_AUTO_PROCESS_AFTER` is frozen for automatic selection (manual
+source-scoped replay remains available). OpenRouter spend after a top-up should
+be ordinary daily arrivals, not a full re-atomisation. For each triage action candidate,
 `crm_action_outcomes` records the exact source span and a stable source-derived
 `action_key`. The task/calendar outbox writes `pending_task` or
 `pending_event` before an external call and uses stable `source`/`source_id`

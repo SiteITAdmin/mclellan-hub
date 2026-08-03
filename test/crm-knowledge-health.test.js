@@ -184,3 +184,46 @@ test('coverage is current only when action outcomes and requested synthesis are 
   }]);
   assert.deepEqual(state, { state: 'complete', reason: 'done' });
 });
+
+test('same-revision completion under a prior pipeline version is grandfathered', () => {
+  const evidence = {
+    source_kind: 'email_summary', source_id: 'prior-complete', revision_hash: 'rev-prior',
+    ts: Math.floor(Date.parse('2026-08-10T12:00:00Z') / 1000),
+  };
+  const payload = value => JSON.stringify({
+    pipeline_version: 'crm-evidence-actions-v1', source_revision: 'rev-prior', ...value,
+  });
+  const state = _test.sourceCoverageState(evidence, [
+    {
+      receipt_order: 1, stage: 'crm_source_triage', source_kind: 'email_summary', source_id: 'prior-complete',
+      status: 'done', created_at: 1,
+      payload: payload({ should_synthesise: false, candidate_actions: [] }),
+    },
+    {
+      receipt_order: 2, stage: 'crm_action_projected', source_kind: 'email_summary', source_id: 'prior-complete',
+      status: 'done', created_at: 2, payload: payload({}),
+    },
+  ], []);
+  assert.deepEqual(state, { state: 'complete', reason: 'grandfathered_prior_pipeline' });
+});
+
+test('evidence older than the auto-process window is frozen without OpenRouter redo', () => {
+  const evidence = {
+    source_kind: 'email_summary', source_id: 'legacy-mail', revision_hash: 'rev-legacy',
+    ts: Math.floor(Date.parse('2026-07-01T12:00:00Z') / 1000),
+  };
+  const state = _test.sourceCoverageState(evidence, [], []);
+  assert.equal(state.state, 'complete');
+  assert.equal(state.reason, 'legacy_frozen_outside_auto_process_window');
+  assert.equal(state.frozen_from, 'incomplete');
+  assert.equal(state.frozen_reason, 'not_triaged_for_current_revision');
+});
+
+test('evidence inside the auto-process window stays incomplete until triaged', () => {
+  const evidence = {
+    source_kind: 'email_summary', source_id: 'fresh-mail', revision_hash: 'rev-fresh',
+    ts: Math.floor(Date.parse('2026-08-10T12:00:00Z') / 1000),
+  };
+  const state = _test.sourceCoverageState(evidence, [], []);
+  assert.deepEqual(state, { state: 'incomplete', reason: 'not_triaged_for_current_revision' });
+});
