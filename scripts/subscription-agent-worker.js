@@ -29,7 +29,13 @@ async function api(pathname, body) {
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const retryAfter = response.headers.get('retry-after');
+    const err = new Error(data.error || `HTTP ${response.status}`);
+    err.status = response.status;
+    if (retryAfter) err.retryAfterSec = Math.max(1, Number(retryAfter) || 0);
+    throw err;
+  }
   return data;
 }
 
@@ -110,12 +116,15 @@ async function main() {
     } catch (err) {
       console.error(`[subscription-agent-worker] tick error: ${err.message}`);
       // Back off hard on rate limits / upstream blips so we do not stampede the VPS.
-      if (/too many requests|429|502|503|fetch failed/i.test(err.message)) {
+      if (err.retryAfterSec > 0) {
+        backoffMs = Math.min(Math.max(err.retryAfterSec * 1000, IDLE_MS), 5 * 60 * 1000);
+      } else if (/too many requests|429|502|503|fetch failed/i.test(err.message) || err.status === 429) {
         backoffMs = Math.min(backoffMs * 2, 5 * 60 * 1000);
       }
     }
     if (ONCE) break;
-    await new Promise(r => setTimeout(r, worked ? 1000 : backoffMs));
+    // After real work, brief pause then claim again — not sub-second hammering.
+    await new Promise(r => setTimeout(r, worked ? 3000 : backoffMs));
   }
 }
 
