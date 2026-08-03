@@ -715,22 +715,18 @@ test('malformed and low-confidence actions stay in the visible review queue', as
   assert.ok(queue.some(item => item.source_id === evidence.source_id && item.disposition === 'review'));
 });
 
-test('non-exact evidence never creates a task and non-creatable reviews cannot be approved', async () => {
+test('a candidate-backed paraphrase creates a task, but non-creatable reviews still cannot be approved', async () => {
   const evidence = makeEvidence('Please send the requested file before Friday.');
+  // Triage can correctly identify an ask while quoting a paraphrase. Once a
+  // projection is tied to that authoritative triage candidate, the preserved
+  // raw source (not a byte-exact quote) is what makes it trustworthy.
   const nonExact = actionFor(evidence, 'this quotation is not in the source');
   let calls = 0;
   const projected = await project(evidence, nonExact, {
-    createTaskFn: async () => { calls += 1; return { localId: 'must-not-create' }; },
+    createTaskFn: async () => { calls += 1; return { localId: 'paraphrase-task' }; },
   });
-  assert.equal(projected.review, 1);
-  assert.equal(calls, 0);
-
-  const nonExactRow = db.hub().prepare(`
-    SELECT id FROM crm_action_outcomes
-    WHERE user = ? AND source_id = ? AND reason = 'non_exact_evidence_requires_review'
-  `).get(user, evidence.source_id);
-  assert.ok(nonExactRow);
-  assert.throws(() => approveReviewedAction(user, nonExactRow.id), /cannot create a side effect/);
+  assert.equal(projected.created, 1);
+  assert.equal(calls, 1);
 
   const malformed = await project(evidence, {
     title: '   ', actionability: 'explicit_ask', confidence: 0.9,
