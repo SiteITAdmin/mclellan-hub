@@ -98,48 +98,59 @@ Do not write a separate notification loop. Add reminder rows and let the ladder 
 
 ## LLM / AI calls
 
-**All model calls go through OpenRouter. No exceptions.** Direct Anthropic/OpenAI/Google API calls are not permitted.
+**As of 3 August 2026: production makes zero network calls to OpenRouter.**
+All text reasoning runs on the **subscription CLI plane** (Codex Luna/Terra,
+Claude Sonnet/Opus, Grok) via `hub-model://`. VPS enqueues; Mac mini
+`subscription-agent-worker` runs the CLIs. Process guard:
+`lib/openrouter-guard.js` rejects `*.openrouter.ai`. Spec:
+`docs/zero-openrouter-migration.md`. Agent entry: `AGENTS.md`, `CLAUDE.md`.
+
+Do not re-add OpenRouter keys or use OpenRouter as a fallback when a CLI fails
+— degrade closed. Do not call Anthropic/OpenAI/Google model APIs directly for
+Hub text features.
 
 ### Making a model call
 ```js
-// lib/fetch.js  (hub's fetch wrapper — validates attribution headers)
-// lib/router.js  (getModels, chat completions, streaming)
-// lib/settings.js  getSystemModelId(feature, userScope, fallbackModelId)
+// lib/feature-runners.js   feature → runner (luna/terra/grok/sonnet/opus/local)
+// lib/model-request.js     requestModelObject / requestModelText
+// lib/model-transport.js   CLI or remote Mac worker
+// lib/fetch.js             hub-model:// + residual HTTP (never openrouter.ai)
+// lib/settings.js          getSystemModelId(feature, userScope, fallbackModelId)
 ```
 
-**Every call must pass through the attribution gate.** `fetch.js:79–100` validates that every OpenRouter request carries the correct headers and logs a violation if they are missing. A call that skips `openRouterHeaders()` will be flagged — it is not a soft convention.
+Attribution / task codes still live in `lib/openrouter-attribution.js` for
+receipts and historical `request_logs` (`endpoint` may still say `openrouter`
+for old rows). New work goes through the feature registry and model transport,
+not a raw OpenRouter URL.
 
 ```js
-// lib/openrouter-attribution.js
-openRouterHeaders(taskCode, options)
-// taskCode: one of the 60+ codes defined in that file (AT-EmailClassification, etc.)
+// lib/openrouter-attribution.js — task codes for logging / governance
+openRouterHeaders(taskCode, options)  // legacy name; subscription path still tags work
 ```
-Adding a new feature → add a task code to `openrouter-attribution.js` first, then pass the result into every call.
+Adding a new feature → register in `feature-runners.js`, add a prompt/slot, and
+pass a stable task code for receipts.
 
 ### Model selection
-- User default: `crm_context` key `hub_default_model`
-- System slots: every LLM call in the system resolves through a named slot in `SYSTEM_MODEL_GROUPS` (`routes/hub-admin.js`) — ~90 slots as of 25 Jul 2026, including prompt-only slots (spiciness modifiers, suggestion-engine prompts, work-brief prompts, task rule learner, hub chat, etc.) whose model comes from a parent slot or the chat picker. Configured in the admin models UI (`/admin/models/system`, prompts at `/admin/models/prompts`). Completeness is gated by `test/system-model-slots-complete.test.js` — every `PROMPTS` key and every `getSystemModelId` / `getSystemPrompt` call site must appear in `SYSTEM_MODEL_GROUPS`.
-- Every slot's default prompt lives in `lib/prompts.js` (`PROMPTS`), overridable per-slot via `crm_context` key `hub_sys_prompt_<feature>`. Do not write an inline prompt in feature code — add a `PROMPTS` entry, read it with `getSystemPrompt(feature, scope, PROMPTS.<feature>)`, and give it a slot so it is visible in admin.
-- Never hardcode a model ID in feature code. Call `getSystemModelId()`.
-- Boot-time migration in `lib/db.js` deletes `hub_sys_model_*` overrides whose model key no longer exists in `model_config` (they would otherwise silently fall back while the admin page shows the stale override).
+- User default: `crm_context` key `hub_default_model` (chat); background work is registry-led.
+- System slots: every LLM call resolves through a named feature/slot (`SYSTEM_MODEL_GROUPS` in `routes/hub-admin.js`, prompts at `/admin/models/prompts`). Completeness is gated by `test/system-model-slots-complete.test.js`.
+- Every slot's default prompt lives in `lib/prompts.js` (`PROMPTS`), overridable per-slot via `crm_context` key `hub_sys_prompt_<feature>`.
+- Never hardcode a provider path around the subscription plane. Prefer `requestModelObject` + feature name.
+- Runner map summary: Luna (classify/extract) · Terra (CRM stages) · Grok (research) · Sonnet (cross-entity, wiki) · Opus (rare briefs) · local (embeddings).
 
-### Current system model defaults
-| Slot | Default model |
+### Current runner orientation (not OpenRouter model ids)
+| Family | Typical features |
 |---|---|
-| embeddings | openai/text-embedding-3-small |
-| atom_extractor | anthropic/claude-haiku-4-5 |
-| entity_linker | anthropic/claude-haiku-4-5 |
-| cross_entity_synthesis | anthropic/claude-haiku-4-5 |
-| knowledge_query | google/gemini-2.5-pro-preview |
-| project_report | google/gemini-2.5-pro-preview |
-| crm_source_triage | anthropic/claude-haiku-4-5 |
-| crm_duplicate_review | anthropic/claude-haiku-4-5 |
-| crm_action_projection | anthropic/claude-haiku-4-5 |
-| prompt_shaper | anthropic/claude-sonnet-4-6 |
-| style_distiller | anthropic/claude-sonnet-4-6 |
+| Luna | email_classifier, atom_extractor, crm_parser, agentmail, task extract |
+| Terra | crm_source_triage, crm_duplicate_review, crm_action_projection, digests |
+| Grok | content research, multi-search planning |
+| Sonnet | cross_entity_synthesis, wiki, newsletter briefing, m365/us-block |
+| Opus | nakai_daily_briefing, exceptional adjudication |
+| Local | embeddings (Ollama qwen3-embedding), STT/TTS when configured |
+
+Full map: `lib/feature-runners.js`. Admin UI is registry-aligned post-migration.
 
 ### Model style profiles
-`lib/model-style-profiles.js` holds per-family prompt style profiles (claude/gpt/gemini/grok/open), distilled monthly by the `style_profile_run` job from production system prompts in github.com/asgeirtj/system_prompts_leaks. Stored as compiled knowledge in `crm_context` (`hub_style_profile_<family>`, user `system`) with receipts in `knowledge_receipts`. Consumers: the prompt tool's target-model selector (adapt + Prompt Gym), and the admin "Shape for model" action (`POST /admin/system-models/_shape`), which proposes a restyled system prompt for the family of the slot's assigned model — proposal only, never auto-saved. `familyFromModelId()` maps any OpenRouter model id to a family. Module contract: MODULES.md → Model Style Profiles.
+`lib/model-style-profiles.js` holds per-family prompt style profiles (claude/gpt/gemini/grok/open), distilled monthly by the `style_profile_run` job from production system prompts in github.com/asgeirtj/system_prompts_leaks. Stored as compiled knowledge in `crm_context` with receipts in `knowledge_receipts`. Consumers: the prompt tool's target-model selector and admin "Shape for model". Module contract: MODULES.md → Model Style Profiles.
 
 ---
 
@@ -147,9 +158,11 @@ Adding a new feature → add a task code to `openrouter-attribution.js` first, t
 
 ```js
 // lib/retrieval.js
-embed(text, user)           // generate embedding via OpenRouter
+embed(text, user)           // generate embedding via Mac Ollama (qwen3-embedding)
 searchSimilar(query, user, filters)  // cosine similarity against embeddings table
 ```
+If the local embedder is unavailable, calls fail closed (`EMBEDDINGS_UNAVAILABLE`);
+do not fall back to OpenRouter. Historical vectors are preserved; backfill skips.
 Chunks: max 1200 chars, 150-char overlap, sentence-boundary aware.  
 Storage: `embeddings` table (`source_kind`, `source_id`, `user`, `vector`, `chunk_text`).  
 Backfill: `embed_backfill` job — runs automatically. Do not call `embed()` in bulk inline; add source rows and let the job pick them up.
@@ -382,7 +395,9 @@ Read via: `GET /api/obsidian/notes` or `/api/obsidian/search`.
 
 | Service | Purpose | Auth env var | Entry point |
 |---|---|---|---|
-| OpenRouter | All LLM + embeddings | `OPENROUTER_API_KEY` | lib/fetch.js + lib/router.js |
+| Subscription CLIs (Mac worker) | All text LLM (Luna/Terra/Grok/Sonnet/Opus) | Mac CLI logins + worker secret | lib/feature-runners.js + lib/subscription-agent-jobs.js |
+| Ollama (Mac) | Embeddings | local Ollama | lib/retrieval.js |
+| OpenRouter | **Retired in production (3 Aug 2026)** — do not re-enable | — | lib/openrouter-guard.js blocks |
 | Gmail API | Inbound/outbound email | OAuth2 refresh token | lib/gmail.js |
 | AgentMail | External email address | `AGENTMAIL_API_KEY` | lib/agentmail.js |
 | Google Drive | Document fetch | OAuth2 refresh token | lib/google-drive.js |

@@ -34,10 +34,13 @@ These are the tools the system runs on. They are not features — they are the f
 - Tokens auto-refresh while in use. If the Hub is down for an extended period, the refresh token may expire and require re-authorisation via `/auth/google`.
 - Health check: check the system report email — any Google API auth failure will surface as a module error there.
 
-### OpenRouter
-- All LLM and embedding calls go through OpenRouter. No direct Anthropic/Google/DeepSeek calls.
-- API key is `OPENROUTER_API_KEY` in `/app/.env`.
-- Health check: a successful email processing run (visible in `/admin/jobs`) confirms OpenRouter is reachable.
+### Subscription model plane (zero OpenRouter as of 3 August 2026)
+- **Production makes zero network calls to OpenRouter.** Do not re-add `OPENROUTER_API_KEY` or OpenRouter fallbacks.
+- Text reasoning: subscription CLIs via `hub-model://` — Luna / Terra (Codex), Sonnet / Opus (Claude), Grok. Registry: `lib/feature-runners.js`. Guard: `lib/openrouter-guard.js`.
+- VPS enqueues jobs; **Mac mini** runs `scripts/subscription-agent-worker.js` (KeepAlive, one job at a time) with authenticated CLIs.
+- Embeddings: Mac Ollama `qwen3-embedding` (not OpenRouter). Unavailable → fail closed (`EMBEDDINGS_UNAVAILABLE`).
+- Spec: `docs/zero-openrouter-migration.md`. Agent entry: `AGENTS.md`, `CLAUDE.md`.
+- Health check: Mac subscription worker healthy + a successful `email_process` / classifier run in `/admin/jobs` (not “OpenRouter reachable”).
 
 ### Synthadoc Python venv
 - Lives at `/app/.tools/synthadoc-venv/`. Used for vault ingest and wiki indexing.
@@ -173,7 +176,7 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## Knowledge Layer
-**Purpose:** The derived substrate the CRM/wiki/project pages are *views* over — not another table of hand-entered records. Compiled continuously from raw sources so connections are made from the whole corpus after ingestion, not from the thin context available at capture time. Files: `lib/retrieval.js` (embeddings), `lib/atoms.js` (atoms), `lib/synthesis.js` (the compiler called only after canonical CRM gates), `lib/task-router.js`, `lib/knowledge-lint.js`. Jobs: `embed_backfill`, `atoms_backfill` (historical name; normally queues canonical review for CRM facts), `synthesis_run` (nightly compatibility scheduler delegating to `crm_knowledge_engine`), `task_route_run` (daily), `knowledge_lint_run` (weekly). All model calls go through OpenRouter; `embeddings`, `atom_extractor`, `entity_linker` are admin model slots.
+**Purpose:** The derived substrate the CRM/wiki/project pages are *views* over — not another table of hand-entered records. Compiled continuously from raw sources so connections are made from the whole corpus after ingestion, not from the thin context available at capture time. Files: `lib/retrieval.js` (embeddings via Mac Ollama), `lib/atoms.js` (atoms), `lib/synthesis.js` (the compiler called only after canonical CRM gates), `lib/task-router.js`, `lib/knowledge-lint.js`. Jobs: `embed_backfill`, `atoms_backfill` (historical name; normally queues canonical review for CRM facts), `synthesis_run` (nightly compatibility scheduler delegating to `crm_knowledge_engine`), `task_route_run` (daily), `knowledge_lint_run` (weekly). Model calls use the **subscription plane** (`lib/feature-runners.js`); `embeddings`, `atom_extractor`, `entity_linker` are admin/registry slots — not OpenRouter.
 
 **Healthy looks like:**
 - `embeddings` count tracks the corpus; changing the embeddings model in admin causes a gradual re-index (isIndexed is model-aware)
@@ -267,7 +270,7 @@ These are the tools the system runs on. They are not features — they are the f
 - The briefing leads with current EU/Irish/UK developments and contains no US regulatory section or US regulator follow-ups.
 - The audit email lists sources checked, new links found, relevant items, priority, affected firms, evidence, confidence, and source URLs. This is sent as soon as the pipeline runs, before the briefing itself may have finished building (it can legitimately say PENDING if the Mac-mini subscription worker hasn't completed yet).
 - Once the briefing is actually written and the email to Nakai has actually gone out — whether that happens synchronously or asynchronously via the Mac-mini completion callback — `sendStoredBriefing` (in `scripts/build-nakai-daily-briefing.js`) emails Douglas a separate content confirmation quoting the edition's actual Executive Readout and Watchlist for Nakai sections, not just a status line. This is the only place that confirmation is sent, so both delivery paths funnel through it — never bypass it with a bespoke "sent" email elsewhere.
-- If the daily briefing step fails (e.g. OpenRouter out of credits), Douglas gets a PANIC audit email and the Hub retries the briefing hourly (`NAKAI_BRIEFING_RETRY_MINUTES`, default 60) until it sends or Dublin midnight passes; a successful retry is covered by the same `sendStoredBriefing` confirmation above, not a separate RECOVERED email.
+- If the daily briefing step fails (e.g. Mac subscription worker down or Opus/Sonnet CLI error), Douglas gets a PANIC audit email and the Hub retries the briefing hourly (`NAKAI_BRIEFING_RETRY_MINUTES`, default 60) until it sends or Dublin midnight passes; a successful retry is covered by the same `sendStoredBriefing` confirmation above, not a separate RECOVERED email.
 
 **Does not own:** US regulatory monitoring, Hub CRM notes, Google Chat alerts, weekly digest content, or Douglas-facing regulatory surfaces.
 
@@ -472,7 +475,7 @@ These are the tools the system runs on. They are not features — they are the f
 **Health check:** `node scripts/run-repair.js --dry-run` mines and triages against the latest snapshot without repairing, emailing, or spending.
 
 ## LinkedIn Content Research (Mac pull-worker for production)
-**Purpose:** Generates daily LinkedIn content-topic suggestions (`content_research_suggestions` table, read by the content cadence UI). Default path (`lib/content-research.js` → web search) is one flat Exa/Brave query per topic — thin, no engagement signal. Richer path: Grok (OpenRouter `content_research_driver`, fallback `x-ai/grok-4.5`) plans research, shells out to the last30days multi-source engine (Reddit/HN/GitHub/Digg/TikTok/Instagram/YouTube), and writes 3 evidence-grounded angle suggestions.
+**Purpose:** Generates daily LinkedIn content-topic suggestions (`content_research_suggestions` table, read by the content cadence UI). Default path (`lib/content-research.js` → web search) is one flat Exa/Brave query per topic — thin, no engagement signal. Richer path: Grok CLI (subscription plane / Mac worker; feature `content_research_driver`) plans research, shells out to the last30days multi-source engine (Reddit/HN/GitHub/Digg/TikTok/Instagram/YouTube), and writes 3 evidence-grounded angle suggestions.
 
 **Core capability (must be present):** a successful research run produces suggestions that cite specific, real, checkable evidence (URL, stat, quote) — not generic "AI is changing X" filler. At least one suggestion per run should typically cite a source last30days reaches that plain web search cannot.
 

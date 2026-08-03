@@ -1,5 +1,10 @@
 # Handover to Grok 4.5 (Mac mini, headless)
 
+**Update 3 August 2026:** Production Hub is now **zero-OpenRouter** (subscription
+CLI plane + Mac worker + Ollama embeddings). See `docs/zero-openrouter-migration.md`,
+`AGENTS.md`, and `CLAUDE.md`. Items below that mention OpenRouter 402s are
+historical context for the day of the cutover, not current architecture.
+
 All outstanding work below is handed to the local Grok 4.5 self-repair venue.
 It runs on the Mac mini through the locally authenticated Grok subscription —
 **no OpenRouter key, no API billing path**. Nightly 04:30 via launchd
