@@ -112,7 +112,11 @@ test('scheduled CRM fact backfill defers to the canonical knowledge engine', () 
       WHERE user = ? AND derived_by = 'backfill:crm_fact'
     `).get(user).n, 0);
     assert.equal(result.queued.queued, true);
-    assert.equal(result.queued.payload.source_kind, 'crm_fact');
+    // A source kind without a source id has never identified a canonical source,
+    // so queueCrmKnowledgeEngine deliberately degrades this compatibility caller
+    // to the ordinary global pass rather than inventing a scoped target.
+    assert.equal(result.queued.payload.source_kind, null);
+    assert.equal(result.queued.payload.source_id, null);
     assert.equal(result.queued.payload.requested_by, 'atoms-backfill-compatibility');
     assert.ok(hub.prepare(`
       SELECT 1 FROM system_jobs
