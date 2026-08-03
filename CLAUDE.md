@@ -34,6 +34,31 @@ The Hub ingests raw life. A synthesis layer, with LLM jobs running on schedule, 
 
 Before adding or changing any input path, read `docs/hub-input-contract.md`. Every input must name its raw store, synthesis path, compiled layer, and visible surface. A raw capture path without synthesis is only an archive; a direct table write without receipts or provenance is not the long-term architecture.
 
+### Two boundaries that must stay boundaries
+
+As of 3 August 2026 the Hub has one door in and one attributed path out. Both
+exist because of failures where a module reported success and the loss only
+became visible when Douglas noticed it himself.
+
+**The ingest door** (`lib/source-admission.js`). Every capture path calls
+`admitSource` immediately after writing its raw row, and the completeness
+verdict is recorded against the ingester that captured it. A source that cannot
+be read is a visible failure belonging to a named module, reported in the daily
+INGEST section — not something to be inferred three stages later from a task
+that never appeared. Adding an ingest path means calling this. Admission never
+gates capture and never decides meaning.
+
+**The effect gate** (`lib/effect-gate.js`, inside `google-tasks.js`
+`createTask`). Reading fans out; writing does not. Every task carries a declared
+`origin`, so "why did this task appear?" has one answer in one place. Pass
+`origin` when you add a call site. Do not add a second task-creation path that
+bypasses `createTask`, and do not turn the gate into a blocker — a wrong
+refusal costs Douglas a task he needed.
+
+When a module misbehaves, the goal is that it can be named and fixed on its
+own. If fixing one reader requires editing the engine, the ingesters and the
+task layer together, that is the bug, not the fix.
+
 ### CRM prompt operating system
 
 As of 27 June 2026, the CRM-bound ingest path is explicitly prompt-led:
