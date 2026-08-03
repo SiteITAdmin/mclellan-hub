@@ -239,6 +239,7 @@ async function createM365BriefingReadTask(manifest, markdown) {
       title: `Read ${manifest.title}`,
       notes: `${notes}\n\nFull report: data/m365-briefings/${manifest.edition}/briefing.pdf`,
       source: 'm365-briefing',
+      origin: 'm365-briefing:read-task',
       sourceId: manifest.edition,
     });
     if (!created) return; // already exists for this edition — resend, not a fresh task
