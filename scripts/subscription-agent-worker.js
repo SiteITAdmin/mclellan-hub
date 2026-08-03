@@ -9,7 +9,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const root = path.join(__dirname, '..');
-if (fs.existsSync(path.join(root, '.env'))) require('dotenv').config({ path: path.join(root, '.env'), override: false });
+// Resolve dotenv from the project tree so launchd Node does not miss node_modules.
+try {
+  const envPath = path.join(root, '.env');
+  if (fs.existsSync(envPath)) {
+    const dotenv = require(path.join(root, 'node_modules', 'dotenv'));
+    dotenv.config({ path: envPath, override: false });
+  }
+} catch (err) {
+  console.warn(`[subscription-agent-worker] dotenv load skipped: ${err.message}`);
+}
 
 const HUB_URL = String(process.env.HUB_URL || '').replace(/\/$/, '');
 const SECRET = String(process.env.SUBSCRIPTION_AGENT_WORKER_SECRET || '').trim();
