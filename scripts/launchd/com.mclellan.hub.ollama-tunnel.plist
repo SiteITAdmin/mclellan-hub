@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Reverse-tunnels Mac Mini Ollama (localhost:11434) to the VPS as
+  127.0.0.1:11434 so Hub production can embed via LOCAL_EMBED_URL without
+  exposing Ollama to the public internet.
+
+  Install:
+    cp scripts/launchd/com.mclellan.hub.ollama-tunnel.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mclellan.hub.ollama-tunnel.plist
+-->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.mclellan.hub.ollama-tunnel</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>HOME</key><string>/Users/dm_mini</string>
+    <key>USER</key><string>dm_mini</string>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/ssh</string>
+    <string>-N</string>
+    <string>-o</string><string>ExitOnForwardFailure=yes</string>
+    <string>-o</string><string>ServerAliveInterval=30</string>
+    <string>-o</string><string>ServerAliveCountMax=3</string>
+    <string>-o</string><string>StrictHostKeyChecking=accept-new</string>
+    <!-- Remote bind localhost only — never 0.0.0.0 -->
+    <string>-R</string><string>127.0.0.1:11434:127.0.0.1:11434</string>
+    <string>root@178.104.235.142</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/dm_mini/Library/Logs/mclellan-hub.ollama-tunnel.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/dm_mini/Library/Logs/mclellan-hub.ollama-tunnel.err.log</string>
+</dict></plist>
