@@ -46,6 +46,11 @@
 <%- include('partials/models-subnav', { modelsTab: 'prompts' }) %>
 
 <section class="admin-section">
+  <div style="padding:12px 14px;border-radius:10px;border:1px solid rgba(124,106,245,0.25);background:rgba(124,106,245,0.06);margin-bottom:14px;font-size:13px;line-height:1.5">
+    Prompts still drive every slot. <strong>Model execution is no longer OpenRouter</strong> —
+    the Mac subscription worker runs Codex / Claude / Grok according to the feature registry.
+    “Shape for model” still proposes restyles; it does not re-enable paid API routing.
+  </div>
   <p style="font-size:13px;color:var(--text-dim);margin-bottom:10px">
     Every system prompt the Hub runs, in one place. <strong>Edited</strong> slots override the built-in default; Restore default removes the override.
     Dynamic placeholders like [DATE], [NAME], [CALENDAR] are filled at runtime.

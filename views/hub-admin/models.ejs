@@ -57,12 +57,19 @@
 
 <section class="admin-section">
   <h2>How this works</h2>
-  <p>The chat model picker is built from this list. Shared defaults (faded) are available to both users. Models you add here are visible only in <strong><%= user %></strong>'s chat. Category and cost data show on the cards in the chat interface. System features (background jobs, pipelines) pick from this catalogue on the <a href="/admin/models/system">System models</a> page; their prompts are edited on the <a href="/admin/models/prompts">Prompts</a> page.</p>
+  <div style="padding:12px 14px;border-radius:10px;border:1px solid rgba(124,106,245,0.25);background:rgba(124,106,245,0.06);margin-bottom:14px;font-size:13px;line-height:1.5">
+    <strong>OpenRouter is retired.</strong> Interactive chat and background jobs use the
+    <strong>subscription CLI plane</strong> on the Mac mini (Codex Luna/Terra, Claude Sonnet/Opus, Grok).
+    Prefer catalogue keys <code>hub-luna</code>, <code>hub-terra</code>, <code>hub-sonnet</code>,
+    <code>hub-opus</code>, <code>hub-grok</code>, and <code>multi-search</code>.
+    Embeddings use Mac Ollama (<code>LOCAL_EMBED_*</code>), not catalogue OpenRouter embedding rows.
+  </div>
+  <p>The chat model picker is built from this list. Shared defaults (faded) are available to both users. Models you add here are visible only in <strong><%= user %></strong>'s chat. System features pick runners from the <a href="/admin/models/system">System models</a> page (registry + optional catalogue override); prompts live on <a href="/admin/models/prompts">Prompts</a>.</p>
   <p style="margin-top:8px;font-size:13px;color:var(--text-dim)">
     <strong>Search modes:</strong>
-    <strong>Native</strong> — Perplexity Sonar etc., model always searches, no plugin needed. When selected, hub auto-switches to Exa for semantic augmentation. &nbsp;|&nbsp;
-    <strong>Web plugin (Firecrawl)</strong> — OpenRouter injects search as a tool call; only works on models with tool support (auto-detected from catalogue). &nbsp;|&nbsp;
-    <strong>None</strong> — no built-in search; Exa/Brave context injection still works for any model.
+    <strong>Native</strong> — Grok CLI research / multi-search workflow. &nbsp;|&nbsp;
+    <strong>None</strong> — no built-in search; Exa/Brave context injection still works when research mode is on in chat. &nbsp;|&nbsp;
+    <strong>Web plugin</strong> — retired with OpenRouter (do not enable for new models).
   </p>
 </section>
 
@@ -179,8 +186,8 @@
             <div class="field">
               <label>Search</label>
               <select name="search">
-                <option value="web-plugin" <%= m.search === 'web-plugin' ? 'selected' : '' %>>Web plugin (add-on via OR)</option>
-                <option value="native" <%= m.search === 'native' ? 'selected' : '' %>>Native (built-in search)</option>
+                <option value="web-plugin" <%= m.search === 'web-plugin' ? 'selected' : '' %>>Web plugin (retired)</option>
+                <option value="native" <%= m.search === 'native' ? 'selected' : '' %>>Native (Grok / multi-search)</option>
                 <option value="orchestrated" <%= m.search === 'orchestrated' ? 'selected' : '' %>>Orchestrated multi-search</option>
                 <option value="none" <%= m.search === 'none' ? 'selected' : '' %>>None</option>
               </select>
@@ -189,11 +196,11 @@
           <div class="form-row">
             <div class="field">
               <label>Cost in ($/M tokens)</label>
-              <input name="cost_input" type="number" step="any" value="<%= m.cost_input != null ? m.cost_input : '' %>" placeholder="0.10">
+              <input name="cost_input" type="number" step="any" value="<%= m.cost_input != null ? m.cost_input : '' %>" placeholder="0 (subscription)">
             </div>
             <div class="field">
               <label>Cost out ($/M tokens)</label>
-              <input name="cost_output" type="number" step="any" value="<%= m.cost_output != null ? m.cost_output : '' %>" placeholder="0.40">
+              <input name="cost_output" type="number" step="any" value="<%= m.cost_output != null ? m.cost_output : '' %>" placeholder="0 (subscription)">
             </div>
             <div class="field">
               <label>Context (tokens)</label>
@@ -201,7 +208,7 @@
             </div>
           </div>
           <hr class="section-divider">
-          <p class="form-section-label">Custom provider (leave blank for OpenRouter)</p>
+          <p class="form-section-label">Custom provider (leave blank for subscription CLI plane)</p>
           <div class="field">
             <label>Base URL</label>
             <input name="base_url" value="<%= m.base_url || '' %>" placeholder="https://api.perplexity.ai">
@@ -236,28 +243,21 @@
 
     <div class="or-picker">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px">
-        Search OpenRouter catalogue — click to auto-fill form
+        Subscription catalogue — click to auto-fill form (OpenRouter live list retired)
       </div>
-      <input id="or-search" type="search" placeholder="Type model name or provider…">
+      <input id="or-search" type="search" placeholder="Type luna, sonnet, grok…">
       <div id="or-results"></div>
-      <div id="or-status"></div>
+      <div id="or-status">Shows hub-luna / hub-terra / hub-sonnet / hub-opus / hub-grok runners only.</div>
     </div>
 
     <div class="or-picker" id="embed-probe-panel">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px">
-        Test an embedding model ID — checks OpenRouter live
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="embed-probe-input" type="text" placeholder="e.g. openai/text-embedding-3-small"
-          style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text)">
-        <button type="button" id="embed-probe-btn"
-          style="padding:7px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap">
-          Test &amp; fill form
-        </button>
+        Embeddings — local Ollama only
       </div>
       <div id="embed-probe-status" style="font-size:12px;color:var(--text-dim);margin-top:5px">
-        OpenRouter embedding models aren't in their public catalogue.
-        Paste any model ID above to test if it's supported.
+        OpenRouter embedding probes are retired. Production uses
+        <code>LOCAL_EMBED_URL</code> + <code>LOCAL_EMBED_MODEL=qwen3-embedding</code>
+        on the Mac mini (reverse tunnel). Do not re-enable OpenRouter embedding catalogue rows.
       </div>
     </div>
 
@@ -281,16 +281,18 @@
         <div class="field">
           <label>Endpoint</label>
           <select id="f-endpoint" name="endpoint" required>
-            <option value="openrouter">openrouter</option>
-            <option value="openrouter-embeddings">openrouter-embeddings (embedding models)</option>
+            <option value="subscription" selected>subscription (Mac CLI plane)</option>
+            <option value="local">local (Ollama specialists)</option>
             <option value="multi-search">multi-search (orchestrated workflow)</option>
             <option value="custom-openai">custom-openai (OpenAI-compatible)</option>
             <option value="google-ai">google-ai (image)</option>
+            <option value="openrouter">openrouter (retired — do not use)</option>
+            <option value="openrouter-embeddings">openrouter-embeddings (retired)</option>
           </select>
         </div>
         <div class="field" style="flex:2">
           <label>Model ID</label>
-          <input id="f-model-id" name="model_id" placeholder="google/gemini-flash-1.5" required>
+          <input id="f-model-id" name="model_id" placeholder="claude/sonnet or codex/gpt-5.6-luna" required>
         </div>
       </div>
       <div class="form-row">
@@ -305,22 +307,22 @@
         <div class="field">
           <label>Search</label>
           <select id="f-search" name="search">
-            <option value="web-plugin">Web plugin (add-on via OR)</option>
-            <option value="native">Native (built-in search)</option>
+            <option value="none" selected>None</option>
+            <option value="native">Native (Grok / multi-search)</option>
             <option value="orchestrated">Orchestrated multi-search</option>
-            <option value="none">None</option>
+            <option value="web-plugin">Web plugin (retired)</option>
           </select>
-          <div class="hint">Auto-detected from model ID when browsing catalogue.</div>
+          <div class="hint">Prefer none or native. Web plugin is retired with OpenRouter.</div>
         </div>
       </div>
       <div class="form-row">
         <div class="field">
           <label>Cost in ($/M tokens)</label>
-          <input id="f-cost-in" name="cost_input" type="number" step="any" placeholder="0.10">
+          <input id="f-cost-in" name="cost_input" type="number" step="any" placeholder="0">
         </div>
         <div class="field">
           <label>Cost out ($/M tokens)</label>
-          <input id="f-cost-out" name="cost_output" type="number" step="any" placeholder="0.40">
+          <input id="f-cost-out" name="cost_output" type="number" step="any" placeholder="0">
         </div>
         <div class="field">
           <label>Context (tokens)</label>
@@ -328,7 +330,7 @@
         </div>
       </div>
       <hr class="section-divider">
-      <p class="form-section-label">Custom provider — only needed for non-OpenRouter models</p>
+      <p class="form-section-label">Custom provider — only for non-subscription endpoints</p>
       <div class="field">
         <label>Base URL</label>
         <input name="base_url" placeholder="https://api.perplexity.ai">
