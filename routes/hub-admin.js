@@ -666,8 +666,8 @@ const SYSTEM_MODEL_GROUPS = [
   { id: 'debrief', label: 'Debrief', slots: [
     { feature: 'debrief_interviewer', scope: 'user', label: 'Debrief interviewer', note: 'Conducts the end-of-day voice debrief. Must be fast with short outputs.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'debrief_extractor',  scope: 'user', label: 'Debrief extractor',   note: 'Extracts CRM facts and actions from the transcript.', fallback: 'deepseek/deepseek-v3.2' },
-    { feature: 'debrief_transcriber', scope: 'system', label: 'Debrief transcriber (STT)', note: 'Transcribes each spoken answer via the OpenRouter audio/transcriptions endpoint. Must be a speech-to-text model.', fallback: 'openai/whisper-large-v3' },
-    { feature: 'debrief_tts',        scope: 'system', label: 'Debrief voice (TTS)', note: 'Speaks the interviewer replies via the OpenRouter audio/speech endpoint. Must be a text-to-speech model.', fallback: 'hexgrad/kokoro-82m' },
+    { feature: 'debrief_transcriber', scope: 'system', label: 'Debrief transcriber (STT)', note: 'Speech-to-text for debrief answers. OpenRouter STT is retired — needs local Whisper (WHISPER_BIN) or a non-OpenRouter transcription key. Currently degraded when unset.', fallback: 'local-whisper (when configured)' },
+    { feature: 'debrief_tts',        scope: 'system', label: 'Debrief voice (TTS)', note: 'Text-to-speech for interviewer replies. OpenRouter TTS is retired — needs a local TTS engine. Currently degraded when unset.', fallback: 'local-tts (when configured)' },
     { feature: 'debrief_tts_voice',  scope: 'system', label: 'Debrief voice name', note: 'Voice preset passed to the TTS model (Kokoro British voices: bf_emma, bf_isabella, bm_george, bm_lewis). Prompt only — the text IS the voice name.', fallback: 'prompt only (voice: bf_emma)' },
   ]},
   { id: 'linkedin', label: 'LinkedIn pipeline', slots: [
@@ -692,18 +692,18 @@ const SYSTEM_MODEL_GROUPS = [
   ]},
   { id: 'workday', label: 'Workday', slots: [
     { feature: 'workday_narrative', scope: 'user', label: 'Narrative writer', note: 'Converts a workday voice transcript into a structured Markdown note.', fallback: 'free (or WORKDAY_NARRATIVE_MODEL env)' },
-    { feature: 'workday_transcription', scope: 'system', label: 'Workday transcriber (STT)', note: 'Speech-to-text for workday interview audio via OpenRouter audio/transcriptions. Must be an STT model.', fallback: 'openai/whisper-large-v3' },
+    { feature: 'workday_transcription', scope: 'system', label: 'Workday transcriber (STT)', note: 'Speech-to-text for workday interview audio. OpenRouter STT is retired — needs local Whisper or a non-OpenRouter key. Currently degraded when unset.', fallback: 'local-whisper (when configured)' },
   ]},
   { id: 'portfolio', label: 'Public portfolio', slots: [
-    { feature: 'portfolio_chat', scope: 'user', label: '"Ask me" chat',  note: 'Public-facing portfolio chat — anyone can trigger. Prefer fast, cheap models.', fallback: 'free' },
-    { feature: 'jd_analyser',   scope: 'user', label: 'JD analyser',    note: 'Public-facing JD analyser — anyone can trigger. Prefer fast, cheap models.', fallback: 'free' },
+    { feature: 'portfolio_chat', scope: 'user', label: '"Ask me" chat',  note: 'Public-facing portfolio chat — anyone can trigger. Uses the subscription CLI plane (prefer hub-luna / hub-sonnet).', fallback: 'hub-luna' },
+    { feature: 'jd_analyser',   scope: 'user', label: 'JD analyser',    note: 'Public-facing JD analyser — anyone can trigger. Uses the subscription CLI plane (prefer hub-luna / hub-terra).', fallback: 'hub-luna' },
   ]},
   { id: 'knowledge', label: 'Knowledge layer', slots: [
-    { feature: 'embeddings', scope: 'system', label: 'Embeddings model', note: 'Embeds documents, emails, CRM facts and meetings for semantic retrieval. Must be an OpenRouter embeddings model; query and corpus share one model, so changing it re-indexes over time.', fallback: 'openai/text-embedding-3-small' },
-    { feature: 'atom_extractor', scope: 'system', label: 'Atom extractor', note: 'Nightly synthesis — extracts durable claims (atoms) from raw documents, emails and meetings.', fallback: 'anthropic/claude-haiku-4-5' },
-    { feature: 'completed_task_atom_extractor', scope: 'system', label: 'Completed task extractor', note: 'Nightly synthesis — promotes only durable completed tasks into project/contact knowledge atoms.', fallback: 'anthropic/claude-haiku-4-5' },
-    { feature: 'entity_linker',           scope: 'system', label: 'Entity linker',           note: 'Nightly synthesis — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'anthropic/claude-haiku-4-5' },
-    { feature: 'cross_entity_synthesis',  scope: 'system', label: 'Cross-entity synthesis',  note: 'Nightly synthesis — reads all active atoms and writes insight atoms: patterns, workflow opportunities, connections, and gaps spanning multiple entities.', fallback: 'anthropic/claude-haiku-4-5' },
+    { feature: 'embeddings', scope: 'system', label: 'Embeddings model', note: 'Semantic retrieval vectors. OpenRouter embeddings are retired. Production uses Mac Ollama via LOCAL_EMBED_URL (qwen3-embedding). Historical vectors stay; new chunks use the local model id. Do not full-rebuild without a manifest.', fallback: 'ollama/qwen3-embedding (LOCAL_EMBED_*)' },
+    { feature: 'atom_extractor', scope: 'system', label: 'Atom extractor', note: 'Bulk structured extraction — Codex Luna via Mac worker. Extracts durable claims (atoms) from documents, emails and meetings.', fallback: 'codex/gpt-5.6-luna (registry)' },
+    { feature: 'completed_task_atom_extractor', scope: 'system', label: 'Completed task extractor', note: 'Codex Luna — promotes only durable completed tasks into project/contact knowledge atoms.', fallback: 'codex/gpt-5.6-luna (registry)' },
+    { feature: 'entity_linker',           scope: 'system', label: 'Entity linker',           note: 'Codex Terra — resolves an extracted atom to the contact/company/project it is about when the name is ambiguous.', fallback: 'codex/gpt-5.6-terra (registry)' },
+    { feature: 'cross_entity_synthesis',  scope: 'system', label: 'Cross-entity synthesis',  note: 'Claude Sonnet via Mac worker — change-driven synthesis over at most 80 recent active atoms (not the full table). Writes insight atoms.', fallback: 'claude/sonnet (registry, max 80 atoms)' },
     { feature: 'live_thread_synthesis',   scope: 'system', label: 'Live thread synthesis',   note: 'Knowledge layer — notices recurring ideas across Gmail, meetings, newsletters, RSS, opportunity signals, and atoms without forcing them into CRM buckets.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'interest_synthesis',      scope: 'system', label: 'Interest radar',          note: 'Daily job — joins meeting intakes and calendar to name the work topics Douglas is actively engaged with.', fallback: 'anthropic/claude-haiku-4-5' },
   ]},
@@ -763,6 +763,10 @@ function getAdminModels(req) {
 
 // Resolve current setting for each system model slot
 function getResolvedSystemGroups(req) {
+  let resolveFeatureRunner = null;
+  try {
+    resolveFeatureRunner = require('../lib/feature-runners').resolveFeatureRunner;
+  } catch (_) { /* registry optional for render */ }
   return SYSTEM_MODEL_GROUPS.map(group => ({
     ...group,
     slots: group.slots.map(slot => {
@@ -770,7 +774,22 @@ function getResolvedSystemGroups(req) {
       const current = getSystemModelLabel(slot.feature, resolvedScope);
       const promptOverride = getSystemPromptOverride(slot.feature, resolvedScope);
       const promptDefault = PROMPTS[slot.feature] || '';
-      return { ...slot, resolvedScope, currentKey: current?.key || null, currentLabel: current?.label || null, promptOverride, promptDefault };
+      let registry = null;
+      if (resolveFeatureRunner) {
+        try {
+          const r = resolveFeatureRunner(slot.feature);
+          registry = { tier: r.tier, runner: r.runner, model: r.model, effort: r.effort };
+        } catch (_) { /* unknown feature */ }
+      }
+      return {
+        ...slot,
+        resolvedScope,
+        currentKey: current?.key || null,
+        currentLabel: current?.label || null,
+        promptOverride,
+        promptDefault,
+        registry,
+      };
     }),
   }));
 }

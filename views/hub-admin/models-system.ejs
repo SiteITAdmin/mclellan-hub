@@ -34,10 +34,16 @@
 <%- include('partials/models-subnav', { modelsTab: 'system' }) %>
 
 <section class="admin-section">
+  <div style="padding:12px 14px;border-radius:10px;border:1px solid rgba(124,106,245,0.25);background:rgba(124,106,245,0.06);margin-bottom:16px;font-size:13px;line-height:1.5">
+    <strong>Runtime routing is registry-first.</strong> Each feature maps to a subscription runner
+    (Luna / Terra / Grok / Sonnet / Opus / local) in <code>lib/feature-runners.js</code>.
+    Catalogue picks below are optional overrides for display and legacy slots — they no longer
+    call OpenRouter. Prefer leaving most slots on the registry default (shown as the runner badge).
+  </div>
   <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">
     Models used by background and automated features. Changes apply immediately — no restart needed.
     Per-user slots show settings for <strong><%= user %></strong> only; other accounts have separate settings.
-    <strong>Use fallback</strong> removes a saved model choice and returns that slot to its built-in fallback model. It does not disable or delete the feature.
+    <strong>Use fallback</strong> removes a saved catalogue override so the registry default applies.
     Prompts for these slots are edited on the <a href="/admin/models/prompts">Prompts</a> page.
   </p>
 
@@ -85,10 +91,13 @@
             </div>
 
             <div class="model-card-badges">
+              <% if (slot.registry) { %>
+                <span class="badge badge-tier" title="feature-runners registry"><%= slot.registry.runner %>/<%= slot.registry.model %> · <%= slot.registry.tier %></span>
+              <% } %>
               <% if (slot.currentKey) { %>
-                <span class="badge badge-default"><%= slot.currentLabel || slot.currentKey %></span>
+                <span class="badge badge-default">override: <%= slot.currentLabel || slot.currentKey %></span>
               <% } else { %>
-                <span class="badge badge-search-none">fallback: <%= slot.fallback %></span>
+                <span class="badge badge-search-none">registry default</span>
               <% } %>
               <% if (slot.promptOverride) { %>
                 <span class="badge badge-tier">prompt edited</span>
