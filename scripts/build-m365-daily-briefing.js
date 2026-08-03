@@ -202,6 +202,54 @@ function assertPdf(manifest) {
   return pdf;
 }
 
+// Pulls the "## Rolling Watchlist" markdown table into structured rows. That
+// table is already exactly the set of open items the report itself considers
+// worth tracking, so it doubles as the source for the one consolidated task's
+// subtasks instead of re-deriving "asks" from the narrative prose.
+function extractRollingWatchlistItems(markdown) {
+  const lines = String(markdown || '').split('\n');
+  const start = lines.findIndex(l => l.trim().toLowerCase() === '## rolling watchlist');
+  if (start === -1) return [];
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex(l => /^##\s/.test(l.trim()));
+  const body = rest.slice(0, end === -1 ? rest.length : end);
+  const rows = [];
+  for (const line of body) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('|') || /^\|?\s*-+\s*\|/.test(trimmed)) continue;
+    const cells = trimmed.replace(/^\||\|$/g, '').split('|').map(c => c.replace(/\*\*/g, '').trim());
+    if (cells.length < 2 || cells[0].toLowerCase() === 'item') continue;
+    rows.push({ item: cells[0], status: cells[1] || '', why: cells[2] || '' });
+  }
+  return rows;
+}
+
+// One task per edition — "Read M365 Operations & Security Brief NNN" — with
+// the Rolling Watchlist rows as subtasks and in the notes, instead of the
+// generic CRM sent-mail path turning every open item into its own top-level
+// task. sourceId is the edition, so a resend never creates a duplicate.
+async function createM365BriefingReadTask(manifest, markdown) {
+  try {
+    const { createTask, createSubtask } = require('../lib/google-tasks');
+    const items = extractRollingWatchlistItems(markdown);
+    const notes = items.length
+      ? items.map(row => `- ${row.item} (${row.status})${row.why ? `: ${row.why}` : ''}`).join('\n')
+      : 'No open Rolling Watchlist items this edition.';
+    const created = await createTask('douglas', {
+      title: `Read ${manifest.title}`,
+      notes: `${notes}\n\nFull report: data/m365-briefings/${manifest.edition}/briefing.pdf`,
+      source: 'm365-briefing',
+      sourceId: manifest.edition,
+    });
+    if (!created) return; // already exists for this edition — resend, not a fresh task
+    for (const row of items) {
+      await createSubtask('douglas', created.localId, `${row.item} (${row.status})`);
+    }
+  } catch (err) {
+    console.warn(`[m365-briefing] read-task creation failed: ${err.message}`);
+  }
+}
+
 function emailPayload(manifest) {
   const markdown = fs.readFileSync(manifest.mdPath, 'utf8');
   return {
@@ -220,6 +268,7 @@ async function sendStoredBriefing(edition, { force = false } = {}) {
   await require('../lib/gmail').sendEmail('douglas', to, `${manifest.title} - ${manifest.label}`, emailPayload(manifest));
   const updated = { ...manifest, sentAt: new Date().toISOString(), to };
   writeJson(path.join(storedDir(edition), 'manifest.json'), updated);
+  await createM365BriefingReadTask(updated, fs.readFileSync(updated.mdPath, 'utf8'));
   return { ok: true, skipped: false, manifest: updated };
 }
 
@@ -255,4 +304,4 @@ async function main() {
 
 if (require.main === module) main().catch(err => { console.error(err); process.exit(1); });
 
-module.exports = { START_DATE, SYSTEM_PROMPT, dateMeta, listStoredBriefings, getStoredBriefing, validateMarkdown, emailPayload, buildM365DailyBriefing, sendTodayM365DailyBriefing, sendStoredBriefing, rerenderStoredBriefing, completeRemoteM365DailyBriefing };
+module.exports = { START_DATE, SYSTEM_PROMPT, dateMeta, listStoredBriefings, getStoredBriefing, validateMarkdown, emailPayload, buildM365DailyBriefing, sendTodayM365DailyBriefing, sendStoredBriefing, rerenderStoredBriefing, completeRemoteM365DailyBriefing, _test: { extractRollingWatchlistItems } };

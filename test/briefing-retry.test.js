@@ -58,7 +58,7 @@ test('failed retry reports ok=false and sends no email', async () => {
   assert.equal(sentEmails.length, 0);
 });
 
-test('successful retry marks the latest run and emails a recovery confirmation', async () => {
+test('successful retry marks the latest run and sends no email of its own', async () => {
   sentEmails.length = 0;
   briefingBehaviour = async () => ({ ok: true, skipped: false, manifest: { edition: '999', to: 'nakai@example.com', sentAt: new Date().toISOString() } });
   const result = await retryDailyBriefing();
@@ -69,12 +69,13 @@ test('successful retry marks the latest run and emails a recovery confirmation',
   assert.equal(run.briefing_ok, 1);
   assert.equal(run.briefing_edition, '999');
   assert.equal(run.briefing_error, null);
-  assert.equal(sentEmails.length, 1);
-  assert.match(sentEmails[0].subject, /RECOVERED — Daily Briefing 999/);
-  assert.ok(sentEmails[0].to);
+  // The Douglas content confirmation is now sent from inside
+  // sendStoredBriefing (stubbed away here via sendTodayNakaiDailyBriefing),
+  // not from the retry loop itself — see nakai-briefing-email.test.js.
+  assert.equal(sentEmails.length, 0);
 });
 
-test('already-sent retry is ok but sends no duplicate recovery email', async () => {
+test('already-sent retry is ok and sends no email', async () => {
   sentEmails.length = 0;
   briefingBehaviour = async () => ({ ok: true, skipped: true, manifest: { edition: '999', to: 'nakai@example.com', sentAt: new Date().toISOString() } });
   const result = await retryDailyBriefing();

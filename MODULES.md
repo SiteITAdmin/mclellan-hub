@@ -233,8 +233,9 @@ These are the tools the system runs on. They are not features — they are the f
 **Healthy looks like:**
 - Nakai receives the scheduled regulatory email.
 - The briefing leads with current EU/Irish/UK developments and contains no US regulatory section or US regulator follow-ups.
-- The audit email lists sources checked, new links found, relevant items, priority, affected firms, evidence, confidence, and source URLs.
-- If the daily briefing step fails (e.g. OpenRouter out of credits), Douglas gets a PANIC audit email and the Hub retries the briefing hourly (`NAKAI_BRIEFING_RETRY_MINUTES`, default 60) until it sends or Dublin midnight passes; a successful retry emails Douglas a RECOVERED confirmation.
+- The audit email lists sources checked, new links found, relevant items, priority, affected firms, evidence, confidence, and source URLs. This is sent as soon as the pipeline runs, before the briefing itself may have finished building (it can legitimately say PENDING if the Mac-mini subscription worker hasn't completed yet).
+- Once the briefing is actually written and the email to Nakai has actually gone out — whether that happens synchronously or asynchronously via the Mac-mini completion callback — `sendStoredBriefing` (in `scripts/build-nakai-daily-briefing.js`) emails Douglas a separate content confirmation quoting the edition's actual Executive Readout and Watchlist for Nakai sections, not just a status line. This is the only place that confirmation is sent, so both delivery paths funnel through it — never bypass it with a bespoke "sent" email elsewhere.
+- If the daily briefing step fails (e.g. OpenRouter out of credits), Douglas gets a PANIC audit email and the Hub retries the briefing hourly (`NAKAI_BRIEFING_RETRY_MINUTES`, default 60) until it sends or Dublin midnight passes; a successful retry is covered by the same `sendStoredBriefing` confirmation above, not a separate RECOVERED email.
 
 **Does not own:** US regulatory monitoring, Hub CRM notes, Google Chat alerts, weekly digest content, or Douglas-facing regulatory surfaces.
 

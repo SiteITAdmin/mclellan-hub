@@ -460,6 +460,56 @@ function nakaiEmail() {
   return raw.split(',').map(s => s.trim()).filter(Boolean)[0] || '';
 }
 
+function douglasEmail() {
+  const raw = process.env.DOUGLAS_GOOGLE_EMAILS || 'douglas@mclellan.scot';
+  return raw.split(',').map(s => s.trim()).filter(Boolean)[0];
+}
+
+// Pulls a named "## Heading" section's body out of the briefing markdown so
+// Douglas's confirmation can quote what Nakai's edition actually says, not
+// just that a send happened.
+function extractMarkdownSection(markdown, heading) {
+  const lines = String(markdown || '').split('\n');
+  const start = lines.findIndex(l => l.trim().toLowerCase() === `## ${heading}`.toLowerCase());
+  if (start === -1) return '';
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex(l => /^##\s/.test(l.trim()));
+  return rest.slice(0, end === -1 ? rest.length : end).join('\n').trim();
+}
+
+function douglasSentConfirmationPayload(manifest, markdown) {
+  const readout = extractMarkdownSection(markdown, 'Executive Readout') || '(no Executive Readout section found)';
+  const watchlist = extractMarkdownSection(markdown, 'Watchlist for Nakai') || '(no Watchlist section found)';
+  return {
+    subject: `Confirmed — Daily Briefing ${manifest.edition} written and sent to ${manifest.to}`,
+    text: [
+      `Daily Briefing ${manifest.edition} — ${manifest.label} — was generated and emailed to ${manifest.to} at ${manifest.sentAt}.`,
+      '',
+      'Executive Readout:',
+      readout,
+      '',
+      'Watchlist for Nakai:',
+      watchlist,
+      '',
+      `Full PDF/HTML/Markdown: ${resendUrl(manifest.edition)}`,
+    ].join('\n'),
+  };
+}
+
+// Fires once the briefing has actually been written and the email to Nakai
+// has actually gone out — covers both the synchronous build path and the
+// async Mac-mini completion path, since both funnel through sendStoredBriefing.
+async function sendDouglasSentConfirmation(manifest) {
+  try {
+    const markdown = fs.readFileSync(manifest.mdPath, 'utf8');
+    const { subject, text } = douglasSentConfirmationPayload(manifest, markdown);
+    const { sendEmail } = require('../lib/gmail');
+    await sendEmail('douglas', douglasEmail(), subject, text);
+  } catch (err) {
+    console.warn(`[nakai-briefing] Douglas sent-confirmation email failed: ${err.message}`);
+  }
+}
+
 function storedDir(edition) {
   if (!edition || !/^\d{3}$/.test(String(edition))) throw new Error(`Invalid edition: ${edition}`);
   return path.join(STORE_DIR, String(edition));
@@ -635,7 +685,9 @@ async function sendStoredBriefing(edition, { force = false } = {}) {
   const fromUser = process.env.NAKAI_DAILY_BRIEFING_GMAIL_USER || 'douglas';
   const payload = buildStoredBriefingEmailPayload(manifest);
   await sendEmail(fromUser, to, payload.subject, payload);
-  return { ok: true, skipped: false, manifest: markSent(edition, to) };
+  const sentManifest = markSent(edition, to);
+  await sendDouglasSentConfirmation(sentManifest);
+  return { ok: true, skipped: false, manifest: sentManifest };
 }
 
 // Marks which checked items actually made it into the generated briefing by
@@ -739,5 +791,7 @@ module.exports = {
     briefingModelAttempts,
     isUsRegulatoryItem,
     CURRENT_SCOPE_DIRECTIVE,
+    douglasSentConfirmationPayload,
+    extractMarkdownSection,
   },
 };
