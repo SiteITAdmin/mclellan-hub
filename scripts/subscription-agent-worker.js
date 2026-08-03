@@ -18,7 +18,8 @@ if (!HUB_URL || !SECRET) throw new Error('HUB_URL and SUBSCRIPTION_AGENT_WORKER_
 const { runSubscriptionText } = require('../lib/subscription-agent');
 const { resolveFeatureRunner } = require('../lib/feature-runners');
 
-const IDLE_MS = Math.max(2000, Number(process.env.SUBSCRIPTION_AGENT_IDLE_MS) || 5000);
+// Default 30s idle poll — continuous 5s claims hit the Hub write rate limiter.
+const IDLE_MS = Math.max(5000, Number(process.env.SUBSCRIPTION_AGENT_IDLE_MS) || 30000);
 const ONCE = process.env.SUBSCRIPTION_AGENT_ONCE === '1';
 
 async function api(pathname, body) {
@@ -100,15 +101,21 @@ async function tick() {
 
 async function main() {
   console.log(`[subscription-agent-worker] starting continuous pull against ${HUB_URL}`);
+  let backoffMs = IDLE_MS;
   for (;;) {
     let worked = false;
     try {
       worked = await tick();
+      backoffMs = IDLE_MS;
     } catch (err) {
       console.error(`[subscription-agent-worker] tick error: ${err.message}`);
+      // Back off hard on rate limits / upstream blips so we do not stampede the VPS.
+      if (/too many requests|429|502|503|fetch failed/i.test(err.message)) {
+        backoffMs = Math.min(backoffMs * 2, 5 * 60 * 1000);
+      }
     }
     if (ONCE) break;
-    await new Promise(r => setTimeout(r, worked ? 250 : IDLE_MS));
+    await new Promise(r => setTimeout(r, worked ? 1000 : backoffMs));
   }
 }
 
