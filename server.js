@@ -1,4 +1,6 @@
 require('dotenv').config();
+// Fail closed: no OpenRouter hostname may be contacted by this process.
+require('./lib/openrouter-guard').installOpenRouterNetworkGuard();
 const express = require('express');
 const session = require('express-session');
 const path = require('path');

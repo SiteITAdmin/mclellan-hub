@@ -9,7 +9,6 @@ const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 const { openRouterHeaders, TASK_CODES } = require('../lib/openrouter-attribution');
 const { parseModelObject } = require('../lib/model-response');
 
-const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const DEFAULTS = {
   email_classifier: 'google/gemini-2.5-pro-preview',
@@ -52,7 +51,7 @@ async function callModel({ feature, messages, json = true, temperature = 0.1, ti
     temperature,
   };
   if (json) body.response_format = { type: 'json_object' };
-  const resp = await fetch(OR_URL, {
+  const resp = await fetch('hub-model://v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(TASK_CODES.TESTBENCH),
     body: JSON.stringify(body),

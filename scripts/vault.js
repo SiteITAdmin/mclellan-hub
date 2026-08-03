@@ -44,7 +44,7 @@ const MODELS = {
 };
 
 async function fetchOpenRouterFull(modelId, messages, taskCode = TASK_CODES.WIKI_INGEST) {
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const r = await fetch('hub-model://v1/chat/completions', {
     method: 'POST',
     headers: {
       ...openRouterHeaders(taskCode),

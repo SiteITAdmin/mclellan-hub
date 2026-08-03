@@ -40,8 +40,10 @@ test('builds distinct OpenRouter attribution headers for each task', () => {
   assert.equal(wikiVision['X-OpenRouter-Title'], 'McLellan Auto: Wiki Image Vision');
   assert.equal(wikiLinking['X-OpenRouter-Title'], 'McLellan Auto: Wiki Link Discovery');
   assert.equal(hermesCapture['X-OpenRouter-Title'], 'McLellan User: Hermes CRM Capture');
-  assert.match(chat['HTTP-Referer'], /^https:\/\/ut-chat\.openrouter\.mclellan\.scot$/);
-  assert.match(ingest['HTTP-Referer'], /^https:\/\/at-newsletteringest\.openrouter\.mclellan\.scot$/);
+  // OpenRouter is retired: headers are local hub-model routing metadata only.
+  assert.equal(chat.Authorization, undefined);
+  assert.match(chat['HTTP-Referer'], /^https:\/\/hub-model\.local\/ut-chat$/);
+  assert.match(ingest['HTTP-Referer'], /^https:\/\/hub-model\.local\/at-newsletteringest$/);
   assert.equal(refererForTaskCode(TASK_CODES.LINKEDIN_SCORER), 'https://ut-linkedinscorer.openrouter.mclellan.scot');
   assert.notEqual(chat['HTTP-Referer'], ingest['HTTP-Referer']);
   assert.equal(taskCodeForFeature('newsletter-extractor'), 'AT-NewsletterIngest');

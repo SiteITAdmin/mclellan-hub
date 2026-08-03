@@ -67,7 +67,7 @@ async function interviewerReply({ user, history, contextText }) {
     .replace('[CONTEXT]', contextText)
     .replace('[CALENDAR]', contextText);
 
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const r = await fetch('hub-model://v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(TASK_CODES.DEBRIEF),
     body: JSON.stringify({
@@ -373,7 +373,7 @@ async function runDebriefExtraction(user, transcript, dateIso, sourceNotePath, s
 
   const prompt = `${extractorBase}\n\nTranscript:\n${transcript.trim()}`;
 
-  const r = await fetchFn('https://openrouter.ai/api/v1/chat/completions', {
+  const r = await fetchFn('hub-model://v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(TASK_CODES.DEBRIEF),
     body: JSON.stringify({

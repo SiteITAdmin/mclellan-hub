@@ -1109,21 +1109,19 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
   const prompt = `You are a BBC radio newsreader. Search bbc.com/news right now for the current top stories and write a 20-second headline bulletin — the kind read at the top of the hour on BBC Radio 4. Cover 3 stories. Be specific: include real names, places, and details from what you find. Start with "Here are today's headlines."`;
 
   try {
-    const apiKey = (m.endpoint !== 'openrouter' && m.api_key) ? m.api_key : process.env.OPENROUTER_API_KEY;
-    log(`calling OpenRouter stream=false`);
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    log(`calling subscription plane stream=false`);
+    const r = await fetch('hub-model://v1/chat/completions', {
       method: 'POST',
-      headers: openRouterHeaders(TASK_CODES.TESTBENCH, { apiKey }),
+      headers: openRouterHeaders(TASK_CODES.TESTBENCH, { feature: 'testbench' }),
       body: JSON.stringify({
         model: m.model_id,
         messages: [{ role: 'user', content: prompt }],
-        plugins: [WEB_SEARCH_PLUGIN],
         stream: false,
       }),
     });
 
     const rawText = await r.text();
-    log(`OpenRouter HTTP ${r.status}, raw response length=${rawText.length}`);
+    log(`subscription HTTP ${r.status}, raw response length=${rawText.length}`);
 
     let data;
     try {
@@ -1225,7 +1223,7 @@ router.post('/admin/models/_test-brave', requireHubAdmin, async (req, res) => {
             nextBody.tools = [WEB_SEARCH_TOOL];
             nextBody.tool_choice = 'auto';
           }
-          const rN = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          const rN = await fetch('hub-model://v1/chat/completions', {
             method: 'POST',
             headers: openRouterHeaders(TASK_CODES.TESTBENCH, { apiKey }),
             body: JSON.stringify(nextBody),
@@ -1497,7 +1495,7 @@ router.post('/admin/test/improve-prompt', requireHubAdmin, async (req, res) => {
   if (!question?.trim()) return res.json({ ok: false, error: 'No prompt provided' });
   const orHeaders = openRouterHeaders(TASK_CODES.PROMPT_QUICK_IMPROVER);
   try {
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const r = await fetch('hub-model://v1/chat/completions', {
       method: 'POST',
       headers: orHeaders,
       body: JSON.stringify({
@@ -1554,7 +1552,7 @@ async function runComboInternal(question, model, search) {
       exaR.content   ? `## Semantic search results\n${exaR.content}`   : '',
       braveR.content ? `## Web search results\n${braveR.content}` : '',
     ].filter(Boolean).join('\n\n');
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const r = await fetch('hub-model://v1/chat/completions', {
       method: 'POST', headers: orHeaders,
       body: JSON.stringify({
         model: getSystemModelId('admin_synthesiser', 'system', 'google/gemini-2.5-flash-lite'),
@@ -1606,7 +1604,7 @@ async function runComboInternal(question, model, search) {
   // web-plugin path only applies to OpenRouter models — custom-openai endpoints
   // don't support the plugin tool and should use the standard call path below.
   if (search === 'web-plugin' && model.endpoint !== 'custom-openai') {
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const r = await fetch('hub-model://v1/chat/completions', {
       method: 'POST', headers: orHeaders,
       body: JSON.stringify({ model: model.model_id, messages, stream: true, plugins: [WEB_SEARCH_PLUGIN] }),
     });
@@ -1634,7 +1632,7 @@ async function runComboInternal(question, model, search) {
       }
     }
   } else {
-    let apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
+    let apiUrl = 'hub-model://v1/chat/completions';
     let headers = orHeaders;
     if (model.endpoint === 'custom-openai' && model.base_url) {
       const apiKey = model.api_key || (model.api_key_env ? process.env[model.api_key_env] : null);
@@ -1822,26 +1820,26 @@ router.post('/admin/test/run-all', requireHubAdmin, async (req, res) => {
   }
 });
 
-// ── OpenRouter model catalogue proxy ─────────────────────────────────────────
-// Fetches the live OpenRouter model list server-side so the API key is never
-// exposed to the browser. Returns a simplified array for the search picker.
+// ── Subscription model catalogue ─────────────────────────────────────────────
+// OpenRouter live catalogue is retired. Returns subscription runners only.
 router.get('/admin/openrouter-models', requireHubAdmin, async (req, res) => {
   try {
-    const r = await fetch('https://openrouter.ai/api/v1/models', {
-      headers: openRouterHeaders(TASK_CODES.ADMIN),
+    const r = await fetch('hub-model://v1/models', {
+      headers: openRouterHeaders(TASK_CODES.ADMIN, { feature: 'testbench' }),
     });
-    if (!r.ok) return res.status(r.status).json({ error: `OpenRouter ${r.status}` });
+    if (!r.ok) return res.status(r.status).json({ error: `subscription catalogue ${r.status}` });
     const data = await r.json();
     const models = (data.data || [])
       .map(m => ({
         id: m.id,
         name: m.name || m.id,
         context: m.context_length || null,
-        inputPer1M:  m.pricing?.prompt      ? (parseFloat(m.pricing.prompt)      * 1_000_000).toFixed(4) : null,
-        outputPer1M: m.pricing?.completion  ? (parseFloat(m.pricing.completion)  * 1_000_000).toFixed(4) : null,
-        supportsTools: Array.isArray(m.supported_parameters) && m.supported_parameters.includes('tools'),
-        nativeSearch:  Array.isArray(m.supported_parameters) && m.supported_parameters.includes('web_search_options'),
-        modality: m.architecture?.modality || null,
+        inputPer1M: null,
+        outputPer1M: null,
+        supportsTools: false,
+        nativeSearch: String(m.id || '').includes('grok'),
+        modality: m.architecture?.modality || 'text',
+        retired_openrouter: false,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     res.json(models);
@@ -1850,39 +1848,15 @@ router.get('/admin/openrouter-models', requireHubAdmin, async (req, res) => {
   }
 });
 
-// ── OpenRouter embedding model probe ─────────────────────────────────────────
-// Embedding models are not listed in OpenRouter's /api/v1/models catalogue;
-// they use a separate /api/v1/embeddings endpoint.
-// This route live-tests any model ID the user provides and returns real metadata
-// if OpenRouter accepts it — no hardcoded list, works for any model they add.
+// Embedding probe — local only; OpenRouter is never contacted.
 router.post('/admin/openrouter-probe-embedding', requireHubAdmin, async (req, res) => {
   const modelId = String(req.body?.model_id || '').trim();
   if (!modelId) return res.status(400).json({ ok: false, error: 'model_id is required' });
-  try {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    const r = await fetch('https://openrouter.ai/api/v1/embeddings', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modelId, input: 'probe' }),
-      timeout: 12_000,
-    });
-    const data = await r.json();
-    if (!r.ok || data.error) {
-      return res.json({ ok: false, error: data.error?.message || `HTTP ${r.status}` });
-    }
-    const dimensions = data.data?.[0]?.embedding?.length || null;
-    const inputTokens = data.usage?.prompt_tokens || null;
-    // OpenRouter may return pricing in the response or we can estimate from usage
-    return res.json({
-      ok: true,
-      model_id: modelId,
-      dimensions,
-      input_tokens_used: inputTokens,
-      // Pricing not available from the response — user sets it manually or leaves blank
-    });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
-  }
+  return res.json({
+    ok: false,
+    error: 'OpenRouter embedding probe is retired. Configure LOCAL_EMBED_URL / LOCAL_EMBED_MODEL for local embeddings.',
+    model_id: modelId,
+  });
 });
 
 

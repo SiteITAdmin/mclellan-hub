@@ -303,15 +303,16 @@ async function requestBriefingMarkdown({ prompt, userContent, primaryModelId }) 
     }
   } catch (err) {
     failures.push(`subscription: ${err.message}`);
-    console.warn(`[nakai-briefing] subscription runner failed; using OpenRouter fallback: ${err.message}`);
+    console.warn(`[nakai-briefing] subscription runner failed (no OpenRouter fallback): ${err.message}`);
   }
+  // Fail closed: retry only through the subscription plane (hub-model → CLI).
   for (const attempt of briefingModelAttempts(primaryModelId)) {
     try {
       const started = Date.now();
-      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const r = await fetch('hub-model://v1/chat/completions', {
         method: 'POST',
         timeout: attempt.timeout,
-        headers: openRouterHeaders(TASK_CODES.NAKAI_DAILY_BRIEFING),
+        headers: openRouterHeaders(TASK_CODES.NAKAI_DAILY_BRIEFING, { feature: 'nakai_daily_briefing' }),
         body: JSON.stringify({
           model: attempt.modelId,
           temperature: 0.2,
@@ -321,12 +322,13 @@ async function requestBriefingMarkdown({ prompt, userContent, primaryModelId }) 
           ],
         }),
       });
-      if (!r.ok) throw new Error(`OpenRouter HTTP ${r.status}`);
+      if (!r.ok) throw new Error(`subscription HTTP ${r.status}`);
       const data = await r.json();
       logUsageFromResponse({
         user: 'nakai',
         feature: 'nakai-daily-briefing',
         modelKey: 'nakai_daily_briefing',
+        endpoint: 'subscription',
         fallbackModelId: attempt.modelId,
         data,
         durationMs: Date.now() - started,
@@ -378,7 +380,7 @@ async function generateMarkdown(meta = briefingMeta()) {
     });
     return { queued: true, ...queued, liveIds: pack.liveIds };
   }
-  if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set');
+  if (!require('../lib/subscription-agent-jobs').enabled() && process.platform !== 'darwin' && process.env.SUBSCRIPTION_AGENT_LOCAL !== '1') throw new Error('No subscription worker configured');
 
   try {
     const text = await requestBriefingMarkdown({

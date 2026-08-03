@@ -222,7 +222,12 @@ router.post('/api/subscription-agent/worker/claim', requireSubscriptionAgentWork
 
 router.post('/api/subscription-agent/worker/complete', requireSubscriptionAgentWorkerAuth, writeLimiter, async (req, res) => {
   try {
-    const result = await require('../lib/subscription-agent-jobs').complete({ jobId: req.body?.job_id, claimToken: req.body?.claim_token, output: req.body?.output });
+    const result = await require('../lib/subscription-agent-jobs').complete({
+      jobId: req.body?.job_id,
+      claimToken: req.body?.claim_token,
+      output: req.body?.output,
+      meta: req.body?.meta || null,
+    });
     if (!result.ok) return res.status(result.status || 400).json(result);
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
