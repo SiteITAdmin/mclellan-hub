@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-DEFAULT_CATALOG_URL = "https://openrouter.ai/api/v1/models?output_modalities=all"
+DEFAULT_CATALOG_URL = "hub-model://v1/models"
 MODEL_PREFIX = "hub_sys_model_"
 PROMPT_PREFIX = "hub_sys_prompt_"
 EXCLUDED_DIRS = {

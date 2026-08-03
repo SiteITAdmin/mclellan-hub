@@ -563,7 +563,7 @@ router.post('/interests/suggest', async (req, res) => {
     ).all(req.hubUser).map(r => r.name);
 
     const modelId = getSystemModelId('newsletter_extractor', 'system', 'google/gemini-2.5-flash-lite');
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const r = await fetch('hub-model://v1/chat/completions', {
       method: 'POST',
       headers: openRouterHeaders(TASK_CODES.NEWSLETTER_INGEST),
       body: JSON.stringify({

@@ -516,7 +516,7 @@ router.get('/api/search', requireAuth, async (req, res) => {
   const context = [sourceContext, emailContext].filter(Boolean).join('\n\n---\n\n');
 
   let synthesis = null;
-  if (process.env.OPENROUTER_API_KEY && context) {
+  if (context) {
     try {
       const sourceDirectory = matches.map((p, index) => (
         `S${index + 1}: ${p.typeLabel} | ${p.title} | ${p.type === 'wiki' ? p.slug : p.relativePath}`
@@ -525,7 +525,7 @@ router.get('/api/search', requireAuth, async (req, res) => {
       ))).join('\n');
       const wikiSearchModel = getSystemModelId('wiki_search', 'system', 'deepseek/deepseek-v3.2');
       const wikiSearchPrompt = getSystemPrompt('wiki_search', 'system', PROMPTS.wiki_search);
-      const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const resp = await fetch('hub-model://v1/chat/completions', {
         method: 'POST',
         headers: openRouterHeaders(TASK_CODES.WIKI, {
           baseUrl: 'https://wiki.mclellan.scot',

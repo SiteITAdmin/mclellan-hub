@@ -46,7 +46,7 @@ fi
 
 # synthadoc needs OPENAI_* env vars; bridge from OPENROUTER if needed
 export OPENAI_API_KEY="${OPENAI_API_KEY:-${OPENROUTER_API_KEY:-}}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-hub-model://v1}"
 
 {
   printf '[%s] vault sync start\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"

@@ -141,7 +141,7 @@ router.post('/api/documents/:id/extract-tasks', requireAuth, requireSameOrigin, 
 
   let extracted;
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const resp = await fetch('hub-model://v1/chat/completions', {
       method: 'POST',
       headers: openRouterHeaders(TASK_CODES.DOCUMENT_TASKS),
       body: JSON.stringify({

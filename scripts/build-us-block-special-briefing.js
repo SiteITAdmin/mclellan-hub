@@ -206,7 +206,7 @@ function renderMarkdown(meta, decision, pack) {
 async function requestOpenRouter(userPrompt) {
   const modelId = getSystemModelId('us_block_special_briefing', 'system', 'anthropic/claude-sonnet-4-6');
   const started = Date.now();
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetch('hub-model://v1/chat/completions', {
     method: 'POST', timeout: MODEL_TIMEOUT_MS, headers: openRouterHeaders(TASK_CODES.US_BLOCK_SPECIAL_BRIEFING),
     body: JSON.stringify({ model: modelId, temperature: 0.1, messages: [{ role: 'system', content: getSystemPrompt('us_block_special_briefing', 'system', SYSTEM_PROMPT) }, { role: 'user', content: userPrompt }] }),
   });
@@ -279,7 +279,7 @@ async function buildUSBlockSpecialBriefing({ date = new Date() } = {}) {
     writeJson(checkPath(meta), { status: 'queued', checkedAt: pack.checkedAt, sourceCount: pack.sourceCount, candidateCount: pack.items.length, jobId: queued.jobId });
     return { queued: true, jobId: queued.jobId, meta };
   }
-  if (!process.env.OPENROUTER_API_KEY) throw new Error('No subscription worker or OPENROUTER_API_KEY is configured');
+  if (!require('../lib/subscription-agent-jobs').enabled() && process.platform !== 'darwin' && process.env.SUBSCRIPTION_AGENT_LOCAL !== '1') throw new Error('No subscription worker configured (SUBSCRIPTION_AGENT_WORKER_ENABLED=1)');
   const rawDecision = await requestOpenRouter(userPrompt);
   const finalised = await finalizeBriefing({ meta, pack, rawDecision });
   if (finalised.published) await sendStoredBriefing(meta);

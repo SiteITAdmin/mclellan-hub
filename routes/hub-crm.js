@@ -2503,10 +2503,10 @@ function fallbackProjectReport(evidence, error = null) {
 
 async function generateProjectReport(user, evidence) {
   const defaults = fallbackProjectReport(evidence);
-  if (!process.env.OPENROUTER_API_KEY) return { report: defaults, model: null, fallback: true, error: 'OPENROUTER_API_KEY is not set' };
+  if (process.env.SUBSCRIPTION_AGENT_DISABLED === '1') return { report: defaults, model: null, fallback: true, error: 'subscription model plane disabled' };
   const modelId = getSystemModelId('project_report', 'system', 'anthropic/claude-haiku-4-5');
   const started = Date.now();
-  const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const resp = await fetch('hub-model://v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(TASK_CODES.CRM),
     body: JSON.stringify({

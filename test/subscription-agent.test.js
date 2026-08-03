@@ -11,15 +11,17 @@ test('Nakai maps to local Claude Opus at high effort', () => {
   assert.equal(textFromOutput(RUNNERS.nakai_daily_briefing, JSON.stringify({ result: '# Daily Briefing\nBody' })), '# Daily Briefing\nBody');
 });
 
-test('cross-entity maps to local Codex Luna at medium effort', () => {
+test('cross-entity maps to Claude Sonnet (senior synthesis, not Luna atomisation)', () => {
+  assert.equal(RUNNERS.cross_entity_synthesis.runner, 'claude');
+  assert.equal(RUNNERS.cross_entity_synthesis.model, 'sonnet');
   const command = commandFor(RUNNERS.cross_entity_synthesis, 'system');
-  assert.equal(command.command, 'codex');
-  assert.deepEqual(command.args.slice(0, 7), ['exec', '--model', 'gpt-5.6-luna', '--config', 'model_reasoning_effort=medium', '--sandbox', 'read-only']);
+  assert.match(command.command, /(?:^|\/)claude$/);
+  assert.deepEqual(command.args.slice(0, 6), ['--print', '--model', 'sonnet', '--effort', 'high', '--tools']);
 });
 
 test('Nakai route-change quality review uses an independent Codex Luna judge', () => {
   const command = commandFor(RUNNERS.nakai_briefing_quality_review, 'system');
-  assert.equal(command.command, 'codex');
+  assert.match(command.command, /(?:^|\/)codex$/);
   assert.deepEqual(command.args.slice(0, 7), ['exec', '--model', 'gpt-5.6-luna', '--config', 'model_reasoning_effort=medium', '--sandbox', 'read-only']);
 });
 

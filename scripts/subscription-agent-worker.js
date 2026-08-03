@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-// Mac-mini pull-worker for prepaid Claude/Codex synthesis. It receives only a
+// Mac-mini pull-worker for subscription-backed synthesis. Receives only a
 // prepared evidence package and returns model output; VPS applies the result.
+// Continuous loop, one job at a time — no uncontrolled parallel corpus work.
 
 const fs = require('fs');
 const path = require('path');
@@ -15,10 +16,16 @@ const SECRET = String(process.env.SUBSCRIPTION_AGENT_WORKER_SECRET || '').trim()
 if (!HUB_URL || !SECRET) throw new Error('HUB_URL and SUBSCRIPTION_AGENT_WORKER_SECRET are required');
 
 const { runSubscriptionText } = require('../lib/subscription-agent');
+const { resolveFeatureRunner } = require('../lib/feature-runners');
+
+const IDLE_MS = Math.max(2000, Number(process.env.SUBSCRIPTION_AGENT_IDLE_MS) || 5000);
+const ONCE = process.env.SUBSCRIPTION_AGENT_ONCE === '1';
 
 async function api(pathname, body) {
   const response = await fetch(`${HUB_URL}${pathname}`, {
-    method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    method: 'POST',
+    headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
@@ -27,21 +34,85 @@ async function api(pathname, body) {
 
 async function processJob(job) {
   const p = job.payload || {};
-  const local = await runSubscriptionText({ feature: job.feature, systemPrompt: p.systemPrompt || p.prompt, userPrompt: p.userPrompt, timeoutMs: 300000 });
+  const featureConfig = resolveFeatureRunner(job.feature);
+  const config = {
+    feature: job.feature,
+    runner: p.runner || featureConfig.runner,
+    model: p.model || featureConfig.model,
+    effort: p.effort || featureConfig.effort,
+    timeoutMs: featureConfig.timeoutMs,
+    maxInputChars: p.maxInputChars || featureConfig.maxInputChars,
+    maxOutputChars: featureConfig.maxOutputChars,
+    allowTools: featureConfig.allowTools,
+    jsonMode: featureConfig.jsonMode,
+    tier: featureConfig.tier,
+  };
+  if (config.runner === 'local') {
+    throw new Error(`Feature ${job.feature} is a local specialist and cannot run on the CLI worker`);
+  }
+
+  const local = await runSubscriptionText({
+    feature: job.feature,
+    systemPrompt: p.systemPrompt || p.prompt || '',
+    userPrompt: p.userPrompt || p.input || '',
+    timeoutMs: config.timeoutMs || 300000,
+    force: true,
+    config,
+  });
   if (!local) throw new Error(`no local runner configured for ${job.feature}`);
-  await api('/api/subscription-agent/worker/complete', { job_id: job.id, claim_token: job.claim_token, output: local.text });
+
+  await api('/api/subscription-agent/worker/complete', {
+    job_id: job.id,
+    claim_token: job.claim_token,
+    output: local.text,
+    meta: {
+      runner: local.runner,
+      model: local.model,
+      effort: local.effort,
+      tier: local.tier,
+      durationMs: local.durationMs,
+    },
+  });
   console.log(`[subscription-agent-worker] completed ${job.feature} ${job.id} (${local.runner}/${local.model}/${local.effort})`);
 }
 
-async function main() {
-  const claimed = await api('/api/subscription-agent/worker/claim', { worker_id: `mac:${os.hostname()}`, limit: 1 });
-  for (const job of claimed.jobs || []) {
-    try { await processJob(job); }
-    catch (err) {
+async function tick() {
+  const claimed = await api('/api/subscription-agent/worker/claim', {
+    worker_id: `mac:${os.hostname()}`,
+    limit: 1,
+  });
+  const jobs = claimed.jobs || [];
+  if (!jobs.length) return false;
+  for (const job of jobs) {
+    try {
+      await processJob(job);
+    } catch (err) {
       console.error(`[subscription-agent-worker] ${job.id}: ${err.message}`);
-      await api('/api/subscription-agent/worker/fail', { job_id: job.id, claim_token: job.claim_token, error: err.message }).catch(() => {});
+      await api('/api/subscription-agent/worker/fail', {
+        job_id: job.id,
+        claim_token: job.claim_token,
+        error: err.message,
+      }).catch(() => {});
     }
+  }
+  return true;
+}
+
+async function main() {
+  console.log(`[subscription-agent-worker] starting continuous pull against ${HUB_URL}`);
+  for (;;) {
+    let worked = false;
+    try {
+      worked = await tick();
+    } catch (err) {
+      console.error(`[subscription-agent-worker] tick error: ${err.message}`);
+    }
+    if (ONCE) break;
+    await new Promise(r => setTimeout(r, worked ? 250 : IDLE_MS));
   }
 }
 
-main().catch(err => { console.error(`[subscription-agent-worker] ${err.message}`); process.exitCode = 1; });
+main().catch(err => {
+  console.error(`[subscription-agent-worker] ${err.message}`);
+  process.exitCode = 1;
+});

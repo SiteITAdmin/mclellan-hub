@@ -127,7 +127,7 @@ Project/topic: ${topicName}
 ${context}`;
 
   try {
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const resp = await fetch('hub-model://v1/chat/completions', {
       method: 'POST',
       headers: openRouterHeaders(TASK_CODES.DAILY_DIGEST),
       body: JSON.stringify({

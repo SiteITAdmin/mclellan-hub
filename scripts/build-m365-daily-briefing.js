@@ -87,7 +87,7 @@ async function requestOpenRouter(userPrompt) {
   const modelId = getSystemModelId('m365_daily_briefing', 'system', 'anthropic/claude-sonnet-4-6');
   const systemPrompt = configuredPrompt();
   const started = Date.now();
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const r = await fetch('hub-model://v1/chat/completions', {
     method: 'POST', timeout: 180000,
     headers: openRouterHeaders(TASK_CODES.M365_DAILY_BRIEFING),
     body: JSON.stringify({ model: modelId, temperature: 0.2, messages: [
@@ -113,7 +113,7 @@ async function generateMarkdown(meta) {
     const queued = jobs.enqueue({ feature: 'm365_daily_briefing', dedupeKey: meta.edition || meta.iso, payload: { meta, systemPrompt, userPrompt } });
     return { queued: true, ...queued };
   }
-  if (!process.env.OPENROUTER_API_KEY) throw new Error('No subscription worker or OPENROUTER_API_KEY is configured');
+  if (!require('../lib/subscription-agent-jobs').enabled() && process.platform !== 'darwin' && process.env.SUBSCRIPTION_AGENT_LOCAL !== '1') throw new Error('No subscription worker configured (SUBSCRIPTION_AGENT_WORKER_ENABLED=1)');
   const markdown = await requestOpenRouter(userPrompt);
   return { markdown };
 }
