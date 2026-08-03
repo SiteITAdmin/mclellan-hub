@@ -20,6 +20,15 @@ const messagingCaptureLimiter = createRateLimiter({
   max: 2000,
   keyPrefix: 'hub-messaging-capture',
 });
+// Mac pull-workers (subscription-agent + content-research) are bearer-authenticated
+// and claim/complete on a tight loop while draining a backlog. The human UI
+// writeLimiter (40/15m) is far too low and caused 429 stampede on /worker/claim.
+// Safety ceiling only — auth is the real gate.
+const workerLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 2000,
+  keyPrefix: 'hub-mac-worker',
+});
 
 // ── Mobile bearer bridge ──────────────────────────────────────────────────────
 // The native iOS element apps (chat, tasks, CRM, flights, …) authenticate the
@@ -113,6 +122,7 @@ module.exports = {
   writeLimiter,
   uploadedFiles,
   messagingCaptureLimiter,
+  workerLimiter,
   mobileBearerBridge,
   requireAuth,
   requireSameOrigin,

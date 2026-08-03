@@ -7,7 +7,7 @@ const {
   buildEvidenceText,
 } = require('../lib/messaging-capture');
 const {
-  writeLimiter, messagingCaptureLimiter, requireAuth, requireSameOrigin, requireHermesAuth,
+  writeLimiter, messagingCaptureLimiter, workerLimiter, requireAuth, requireSameOrigin, requireHermesAuth,
   requireContentResearchWorkerAuth, requireSubscriptionAgentWorkerAuth,
 } = require('./hub-shared');
 
@@ -145,7 +145,7 @@ router.get('/api/messaging/recent', requireHermesAuth, (req, res) => {
 // polls these endpoints, runs Grok+last30days locally, and posts suggestions.
 // Auth: Authorization: Bearer <CONTENT_RESEARCH_WORKER_SECRET>
 
-router.post('/api/content-research/worker/heartbeat', requireContentResearchWorkerAuth, writeLimiter, (req, res) => {
+router.post('/api/content-research/worker/heartbeat', requireContentResearchWorkerAuth, workerLimiter, (req, res) => {
   try {
     const { recordWorkerHeartbeat, jobStats, useMacWorkerDriver } = require('../lib/content-research-jobs');
     recordWorkerHeartbeat({
@@ -163,7 +163,7 @@ router.post('/api/content-research/worker/heartbeat', requireContentResearchWork
   }
 });
 
-router.post('/api/content-research/worker/claim', requireContentResearchWorkerAuth, writeLimiter, (req, res) => {
+router.post('/api/content-research/worker/claim', requireContentResearchWorkerAuth, workerLimiter, (req, res) => {
   try {
     const { claimContentResearchJobs, recordWorkerHeartbeat } = require('../lib/content-research-jobs');
     recordWorkerHeartbeat({ workerId: req.body?.worker_id || 'mac' });
@@ -178,7 +178,7 @@ router.post('/api/content-research/worker/claim', requireContentResearchWorkerAu
   }
 });
 
-router.post('/api/content-research/worker/complete', requireContentResearchWorkerAuth, writeLimiter, (req, res) => {
+router.post('/api/content-research/worker/complete', requireContentResearchWorkerAuth, workerLimiter, (req, res) => {
   try {
     const { completeContentResearchJob } = require('../lib/content-research-jobs');
     const result = completeContentResearchJob({
@@ -194,7 +194,7 @@ router.post('/api/content-research/worker/complete', requireContentResearchWorke
   }
 });
 
-router.post('/api/content-research/worker/fail', requireContentResearchWorkerAuth, writeLimiter, (req, res) => {
+router.post('/api/content-research/worker/fail', requireContentResearchWorkerAuth, workerLimiter, (req, res) => {
   try {
     const { failContentResearchJob } = require('../lib/content-research-jobs');
     const result = failContentResearchJob({
@@ -213,14 +213,14 @@ router.post('/api/content-research/worker/fail', requireContentResearchWorkerAut
 // ── Subscription agent Mac pull-worker ───────────────────────────────────────
 // The VPS only prepares source-backed packages. The Mini executes the selected
 // prepaid CLI and returns a bounded result; this endpoint applies validation.
-router.post('/api/subscription-agent/worker/claim', requireSubscriptionAgentWorkerAuth, writeLimiter, (req, res) => {
+router.post('/api/subscription-agent/worker/claim', requireSubscriptionAgentWorkerAuth, workerLimiter, (req, res) => {
   try {
     const result = require('../lib/subscription-agent-jobs').claim({ workerId: req.body?.worker_id || 'mac', limit: req.body?.limit || 1 });
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/api/subscription-agent/worker/complete', requireSubscriptionAgentWorkerAuth, writeLimiter, async (req, res) => {
+router.post('/api/subscription-agent/worker/complete', requireSubscriptionAgentWorkerAuth, workerLimiter, async (req, res) => {
   try {
     const result = await require('../lib/subscription-agent-jobs').complete({
       jobId: req.body?.job_id,
@@ -233,7 +233,7 @@ router.post('/api/subscription-agent/worker/complete', requireSubscriptionAgentW
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/api/subscription-agent/worker/fail', requireSubscriptionAgentWorkerAuth, writeLimiter, (req, res) => {
+router.post('/api/subscription-agent/worker/fail', requireSubscriptionAgentWorkerAuth, workerLimiter, (req, res) => {
   try {
     const result = require('../lib/subscription-agent-jobs').fail({ jobId: req.body?.job_id, claimToken: req.body?.claim_token, error: req.body?.error });
     if (!result.ok) return res.status(result.status || 400).json(result);
