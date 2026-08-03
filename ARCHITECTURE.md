@@ -53,6 +53,13 @@ An inbound email's project is decided by what the email is **about**, never by w
 ### Project lifecycle vocabulary is unified
 "This project is dead" is one concept with one source of truth: `TERMINAL_PROJECT_STATUSES` in `lib/project-lifecycle.js` (`closed`, `completed`, `ended`, `done`, `archived`, `cancelled`, …). Every surface that hides or excludes projects — CRM lists, work briefs, the task-add guard, AgentMail routing — routes through `closedProjectIds`/`closedProjectSlugs`/`isProjectClosed`, so a project marked with **any** terminal word behaves identically. Do not add a new filter that keys off a single literal like `'closed'`; that split once left a `completed` project live enough to keep receiving mail.
 
+### Ingest door — every capture is judged where it lands
+```js
+// lib/source-admission.js
+admitSource(user, sourceKind, rowOrId, { ingester })
+```
+Called by `gmail.js` `captureFetchedRawGmailEmail`, `agentmail-processor.js` `captureRawAgentMail`, `meeting-intake.js`, and `messaging-capture.js` immediately after the raw row is written. Writes a `knowledge_receipts` row at stage `source_admitted` (`done` / `review` / `error` / `skipped`), idempotent per source revision. **A new ingest path must call this.** Completeness is judged where the capture happened, so "AgentMail isn't reading emails" is something the Hub reports in the daily INGEST section rather than something Douglas has to infer from a task that never appeared. Admission never gates capture, and it decides nothing about meaning. See MODULES.md → Ingest Door.
+
 ### Silent-filter list
 Subjects matching `SILENT_SUBJECT_RE` (email-processor.js:21) are dropped before processing. Add patterns there, not in calling code.
 
@@ -69,6 +76,15 @@ buildSuggestionCard(suggestion) // accept/dismiss/why buttons (web review also o
 Auth: service account at `config/google-service-account.json`. Posts to Douglas/Nakai's spaces via Hermes bot.
 
 Opportunity suggestions follow `source signal → salience synthesis → stable source-ID gate → semantic duplicate review against authoritative task/suggestion history → candidate/email`. Scored outcomes teach transferable relevance qualities; they are terminal history and never permission to repeat the accepted action.
+
+### Google Tasks — one attributed write path
+```js
+// lib/google-tasks.js
+createTask(user, { title, notes, due, source, sourceId, origin, ... })
+// lib/effect-gate.js  (called from inside createTask; not a wrapper to remember)
+recordEffect(user, { origin, source, sourceId, title, outcome })
+```
+Reading fans out across modules; writing must not. Every task creation is recorded at stage `external_effect` against a named `origin`, so "why did this task appear?" has one place to look. **Pass `origin` when adding a call site** — undeclared callers fall back to `source` and are reported as unattributed. The gate observes and escalates rather than blocking; a burst from one origin surfaces as a `NEEDS YOU` line in the daily EFFECTS section. See MODULES.md → External Effect Gate.
 
 ### Reminders (escalation ladder)
 ```js
@@ -153,6 +169,13 @@ Entry point:
 // lib/crm-knowledge-engine.js
 runCrmKnowledgeEngine({ user, limit })
 ```
+
+Shared infrastructure the stages all use now lives outside the engine file:
+`lib/crm-receipts.js` (stage receipts; `currentSourceReceipt` finds the newest
+receipt *for this exact revision*, which is not the same question as the newest
+row) and `lib/crm-source-lease.js` (the token-scoped source-processing lease —
+a stale worker's token can never finish or overwrite its replacement's lease).
+Use these rather than reimplementing either inside a stage.
 
 Scheduled via `crm_knowledge_engine` in `lib/job-queue.js`. The job reviews raw and intermediate source evidence, records prompt decisions in `knowledge_receipts`, merges provenance into existing atoms when the source confirms or supersedes known knowledge, and projects only high-confidence required actions into Google Tasks.
 

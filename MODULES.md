@@ -193,6 +193,38 @@ These are the tools the system runs on. They are not features — they are the f
 
 ---
 
+## Ingest Door (source admission)
+**Purpose:** Judge whether a freshly-captured raw row is actually readable, at the moment of capture, and attribute that verdict to the ingester that captured it. `lib/source-evidence.js` always knew how to make this judgement; until 3 Aug 2026 it was only ever asked on the way *out*, by the CRM engine, hours later. That is why the 2 August AgentMail failure was invisible: the ingester stored a forwarded email with no body, reported success, and the loss only surfaced when a task never appeared. Files: `lib/source-admission.js`. Called from `lib/gmail.js` (`captureFetchedRawGmailEmail`), `lib/agentmail-processor.js` (`captureRawAgentMail`), `lib/meeting-intake.js`, `lib/messaging-capture.js`.
+
+**Contract:** `admitSource(user, sourceKind, rowOrId, { ingester })` writes a `knowledge_receipts` row at stage `source_admitted` — `done` when complete, `review` when readable but partial, `error` when nothing readable was captured, `skipped` when the source is a deliberate exclusion (the Hub's own report mail). Idempotent per source revision; a later body/transcript backfill is a new revision and is admitted again, so a repaired source can become complete instead of being marked broken forever.
+
+**Healthy looks like:**
+- The daily system report's INGEST section shows each ingester's readable ratio, e.g. `gmail:received: 41/41 readable`
+- An ingester that captured sources and could read none of them produces a `NEEDS YOU` line naming it
+- `source_admitted` receipts exist for recent email/meeting/message captures
+
+**Does not own:** Any decision about meaning. Admission says only "this is what was captured, and whether it is whole." Triage, duplicate review, synthesis and projection remain the CRM knowledge engine's. It never gates capture — a lost receipt must not lose the email — and `crm-knowledge-health.js` filters stages through an explicit allowlist, so this stage cannot pollute the `/crm/knowledge` panel.
+
+**Health check:** `node --test test/source-admission.test.js`; confirm the daily report INGEST section names each ingester.
+
+---
+
+## External Effect Gate
+**Purpose:** Attribute every task the Hub creates to the module that asked for it. About a dozen call sites create Google Tasks and none could see the others, which is how on 3 Aug 2026 a briefing script turned Nakai's Rolling Watchlist into eight tasks in Douglas's list with no way to trace them but reading the code. Files: `lib/effect-gate.js`, called from inside `lib/google-tasks.js` `createTask`.
+
+**Contract:** The gate lives inside `createTask` — the one function every caller already goes through — not in a wrapper callers must remember to use, so a new call site is traced whether or not its author knew the gate existed. Each attempt writes a `knowledge_receipts` row at stage `external_effect` recording origin, source, title and outcome (`created` / `refused` / `failed`). Declared origins: `crm-knowledge-engine:action-projection`, `mycelium:flight-prep`, `mycelium:flight-checkin`, `mycelium:meeting-prep`, `mycelium:document-tasks`, `suggestion-engine:accepted`, `m365-briefing:read-task`. Undeclared callers fall back to the free-text `source` and are counted as unattributed.
+
+**Healthy looks like:**
+- The daily report's EFFECTS section attributes every created task to a named origin
+- Unattributed count trends toward zero as remaining call sites declare an origin
+- No origin exceeds five tasks in 24h without a `NEEDS YOU` line
+
+**Does not own:** Blocking. A wrong refusal costs Douglas a task he needed, which is worse than one he has to delete, so the gate observes, attributes and escalates; blocking stays with the boundary rules that own the specific decision (`isCanonicalEvidenceExcluded`, `actionProjectionBlockReason`). `recordEffect` never throws — an effect that happened must not be lost because its receipt could not be written.
+
+**Health check:** `node --test test/effect-gate.test.js`; confirm the daily report EFFECTS section lists origins.
+
+---
+
 ## Core Infrastructure Primitives
 **Purpose:** Shared capabilities other modules call instead of reimplementing ingestion, current-information research, or durable report rendering. These are primitives, not user-facing modules.
 
