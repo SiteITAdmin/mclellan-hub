@@ -59,6 +59,55 @@ When a module misbehaves, the goal is that it can be named and fixed on its
 own. If fixing one reader requires editing the engine, the ingesters and the
 task layer together, that is the bug, not the fix.
 
+### Model plane — zero OpenRouter (as of 3 August 2026)
+
+**Production Hub makes zero network calls to OpenRouter.** Do not reintroduce
+`OPENROUTER_API_KEY`, direct `openrouter.ai` fetches, or OpenRouter as a
+fallback when a subscription CLI fails. Full write-up:
+`docs/zero-openrouter-migration.md`.
+
+What shipped (commits through `4fbb397` / related follow-ups):
+
+| Layer | Role |
+|-------|------|
+| `lib/openrouter-guard.js` | Process-level block of `*.openrouter.ai` (installed at boot) |
+| `lib/fetch.js` + `hub-model://` | Routes model work to the subscription transport |
+| `lib/feature-runners.js` | Feature → runner registry (task family first, difficulty second) |
+| `lib/model-transport.js` / `model-request.js` / `chat-completions.js` | CLI or remote Mac worker |
+| `lib/subscription-agent-jobs.js` + `scripts/subscription-agent-worker.js` | VPS enqueues; Mac mini pulls one job at a time (KeepAlive worker) |
+| Ollama on Mac (`qwen3-embedding`) | Embeddings / semantic retrieval — not OpenRouter |
+
+**Runner map (summary):** Luna (email classifier, CRM parse/extract, atoms) ·
+Terra (CRM triage / duplicate / action projection, meetings, digests) ·
+Grok CLI (content research, multi-search) · Sonnet (cross-entity, wiki,
+LinkedIn synthesis, m365/us-block) · Opus (nakai briefing, rare adjudication) ·
+local (embeddings; STT/TTS when configured).
+
+**Operational rules for agents:**
+
+- Route new model work through the feature registry and `requestModelObject` /
+  subscription plane — never invent a second billing path.
+- VPS is the app; **Mac mini runs the CLIs**. If classification or CRM jobs
+  stall, check the Mac subscription worker health before assuming code is dead.
+- Grok headless invoke uses `--single` (not `--print`) in the subscription
+  agent path (`lib/subscription-agent.js`).
+- Mac pull-workers have their own rate-limit ceiling; do not tighten the generic
+  limiter in a way that starves them.
+- Cross-entity synthesis is **Sonnet**, bounded (~80 recent atoms), change-
+  driven, fail-closed — not Luna over the full corpus.
+- Admin models / chat routing is **registry-led** post-migration; keep UI and
+  `feature-runners` aligned.
+- When embeddings are unavailable, fail closed (`EMBEDDINGS_UNAVAILABLE`); do
+  not fall back to OpenRouter. Historical vectors stay; backfill skips.
+- Email: `email_process` every ~15 minutes re-fetches `processing_failures`
+  and rows with `ingestion_status` in (`captured`, `retry`). Unlabelled
+  “pending training” mail is different — it waits for a Gmail label, not a
+  re-classify.
+
+**Do not** bump CRM pipeline versions or re-queue the historical corpus without
+Douglas explicitly accepting the cost. Auto-process window:
+`CRM_KNOWLEDGE_AUTO_PROCESS_AFTER` (new evidence only after the 3 Aug freeze).
+
 ### CRM prompt operating system
 
 As of 27 June 2026, the CRM-bound ingest path is explicitly prompt-led:

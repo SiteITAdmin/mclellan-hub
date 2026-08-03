@@ -160,7 +160,9 @@ not answer them automatically.
 | Routed messages absent | Exact chat name in `~/.hermes/whatsapp-routes.json`; gateway process; bridge logs |
 | Capture 401 | Secret mismatch Hub vs Hermes |
 | Capture 503 | `HERMES_WEBHOOK_SECRET` unset on Hub |
-| Evidence but no atoms | CRM engine job / OpenRouter key / `/admin/knowledge` |
+| Evidence but no atoms | CRM engine job / Mac subscription worker / `/crm/knowledge` receipts for `messaging_message` |
+| DM routed as `all-incoming` not family contact | Bridge cached Douglas's own name as chat_name (fixed Aug 2026: peer name only for DMs); restart WhatsApp bridge |
+| Stuck `OpenRouter 402` / `action_outcome_error` after cutover | Superseded source-level stage errors + reclaim of `action_projection_failed` from triage candidates (CRM engine Aug 2026); run knowledge retry if still incomplete |
 
 ## Architecture notes
 

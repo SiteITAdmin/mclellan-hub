@@ -66,3 +66,25 @@ recent atoms, change-driven hash dedupe, fail-closed retention of prior insights
 
 Remove production OpenRouter keys only after deploy verification. Never print them.
 Historical `request_logs` with `endpoint='openrouter'` stay forever for audit.
+
+## Agent / skill docs (updated 3 August 2026)
+
+So future sessions do not reintroduce OpenRouter:
+
+| Audience | File |
+|----------|------|
+| Shared project rules | `AGENTS.md`, `CLAUDE.md` |
+| Module contract | `MODULES.md` (subscription plane section) |
+| Architecture | `ARCHITECTURE.md` (LLM / APIs sections) |
+| Codex skill | `~/.codex/skills/mclellan-hub-knowledge-first/SKILL.md` |
+| Grok skill | `~/.grok/skills/mclellan-hub-knowledge-first/SKILL.md` |
+| Claude skill | `~/.claude/skills/mclellan-hub-knowledge-first/SKILL.md` |
+| Claude memories | `feedback_openrouter_only.md` (superseded), hub `project_zero_openrouter.md` |
+
+## Follow-ups completed same day (post-cutover)
+
+- Mac Ollama `qwen3-embedding` wired for Hub retrieval
+- Subscription worker KeepAlive + poll backoff + dedicated rate-limit ceiling
+- Cross-entity: Sonnet + bounded packet + change-driven hash
+- Registry-led chat and admin UI for post-OpenRouter routing
+- Grok CLI headless invoke fixed (`--single`) for the subscription worker
