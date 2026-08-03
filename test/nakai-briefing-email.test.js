@@ -7,6 +7,7 @@ const path = require('node:path');
 const {
   assertStoredBriefingPdf,
   buildStoredBriefingEmailPayload,
+  _test: { douglasSentConfirmationPayload, extractMarkdownSection },
 } = require('../scripts/build-nakai-daily-briefing');
 
 function makeTempManifest() {
@@ -42,6 +43,45 @@ test('Nakai briefing email is a short cover note with a valid PDF attachment', (
   assert.equal(payload.attachments[0].filename, 'Daily Briefing 010.pdf');
   assert.equal(payload.attachments[0].content_type, 'application/pdf');
   assert.equal(Buffer.from(payload.attachments[0].content, 'base64').slice(0, 4).toString(), '%PDF');
+});
+
+test('extractMarkdownSection pulls only the named heading\'s body', () => {
+  const markdown = [
+    '# Daily Briefing 010',
+    '',
+    '## Executive Readout',
+    '- First highlight.',
+    '- Second highlight.',
+    '',
+    '## Watchlist for Nakai',
+    '1. Do the thing.',
+    '',
+    '## Sources',
+    '1. [L1] Something - https://example.com',
+  ].join('\n');
+
+  assert.equal(extractMarkdownSection(markdown, 'Executive Readout'), '- First highlight.\n- Second highlight.');
+  assert.equal(extractMarkdownSection(markdown, 'Watchlist for Nakai'), '1. Do the thing.');
+  assert.equal(extractMarkdownSection(markdown, 'Missing Heading'), '');
+});
+
+test('Douglas sent-confirmation quotes the actual Readout and Watchlist, not just a status line', () => {
+  const manifest = { edition: '010', label: '28 June 2026', to: 'nakai@mclellan.scot', sentAt: '2026-06-28T06:05:08.000Z' };
+  const markdown = [
+    '# Daily Briefing 010',
+    '',
+    '## Executive Readout',
+    '- Nothing new from ESMA today.',
+    '',
+    '## Watchlist for Nakai',
+    '1. Confirm the CMDI deadline.',
+  ].join('\n');
+
+  const { subject, text } = douglasSentConfirmationPayload(manifest, markdown);
+  assert.match(subject, /Confirmed — Daily Briefing 010 written and sent to nakai@mclellan\.scot/);
+  assert.match(text, /Nothing new from ESMA today\./);
+  assert.match(text, /Confirm the CMDI deadline\./);
+  assert.match(text, /generated and emailed to nakai@mclellan\.scot/);
 });
 
 test('Nakai briefing send refuses to proceed without a real stored PDF', () => {

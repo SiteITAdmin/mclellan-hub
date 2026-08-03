@@ -230,6 +230,40 @@ test('derived documents share one canonical evidence exclusion rule', () => {
   }), false);
 });
 
+test('Nakai daily briefing mail Douglas sends is excluded, not read as his own commitments', () => {
+  // Reproduces the bug where Nakai's regulatory Watchlist ("Confirm the
+  // deadline...", "Escalate MiCA...") got read by the sent-mail commitment
+  // detector as Douglas's own asks and turned into his Google Tasks — the
+  // owner is Nakai, not Douglas, even though Douglas's account sent it.
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'Daily Briefing 046 - 3 August 2026', direction: 'sent' },
+  }), true);
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'Confirmed — Daily Briefing 046 written and sent to nakai@mclellan.scot', direction: 'sent' },
+  }), true);
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'Daily Intelligence Pipeline - 3 August 2026: 0 new in briefing, 0 checked', direction: 'sent' },
+  }), true);
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'PANIC — Daily Intelligence Pipeline - 30 July 2026', direction: 'sent' },
+  }), true);
+  // Same bug, same fix, for M365's own sent-to-self operational brief — it
+  // owns its single consolidated "Read briefing" task instead.
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'M365 Operations & Security Brief 003 - 3 August 2026', direction: 'sent' },
+  }), true);
+  // A real commitment Douglas sends to a contact must still be evidence.
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'Re: project update', direction: 'sent' },
+  }), false);
+});
+
 test('generated chat documents stay visible while workday canonical evidence is transcript-only', () => {
   const hub = db.hub();
   const capturedAt = new Date('2026-08-02T09:30:00.000Z');
