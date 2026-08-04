@@ -56,7 +56,8 @@ async function main() {
   const gmail = await getGmailClient(USER);
   const updateEmail = hub.prepare('UPDATE email_summaries SET body_text = ? WHERE id = ?');
   const updateDoc = hub.prepare(
-    'UPDATE intel_documents SET content_text = ? WHERE external_id = ? AND LENGTH(COALESCE(content_text,'''')) < ?'
+    `UPDATE intel_documents SET content_text = ?
+      WHERE external_id = ? AND LENGTH(COALESCE(content_text, '')) < ?`
   );
 
   let repaired = 0, docsRefreshed = 0, failed = 0;
