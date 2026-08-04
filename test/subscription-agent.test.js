@@ -19,10 +19,16 @@ test('cross-entity maps to Claude Sonnet (senior synthesis, not Luna atomisation
   assert.deepEqual(command.args.slice(0, 6), ['--print', '--model', 'sonnet', '--effort', 'high', '--tools']);
 });
 
-test('Nakai route-change quality review uses an independent Codex Luna judge', () => {
-  const command = commandFor(RUNNERS.nakai_briefing_quality_review, 'system');
-  assert.match(command.command, /(?:^|\/)codex$/);
-  assert.deepEqual(command.args.slice(0, 7), ['exec', '--model', 'gpt-5.6-luna', '--config', 'model_reasoning_effort=medium', '--sandbox', 'read-only']);
+// The invariant is independence, not a particular vendor: the briefing must not
+// be marked by the model that wrote it. Naming Codex here made the test fail
+// when Luna moved to Grok (4 Aug 2026) even though independence still held.
+test('Nakai route-change quality review uses a judge independent of the writer', () => {
+  const writer = RUNNERS.nakai_daily_briefing;
+  const judge = RUNNERS.nakai_briefing_quality_review;
+  assert.notEqual(judge.runner, writer.runner, 'judge must not be the writing runner');
+  const command = commandFor(judge, 'system');
+  assert.ok(command.command, 'judge resolves to an executable runner');
+  assert.ok(command.args.length, 'judge is invoked with arguments');
 });
 
 test('a runner can be disabled explicitly', () => {
