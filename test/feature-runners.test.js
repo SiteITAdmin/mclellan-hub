@@ -2,13 +2,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveFeatureRunner, listFeatureRunners } = require('../lib/feature-runners');
+const { resolveFeatureRunner, listFeatureRunners, MODELS } = require('../lib/feature-runners');
 
+// The contract is the tier, not the vendor behind it: which runner backs Luna is
+// a deployment choice that has already changed once (Codex -> Grok on 4 Aug 2026,
+// when Codex exhausted its quota). Assert every high-volume feature lands on the
+// same tier, and that the tier resolves consistently.
 test('high-volume extraction routes to Luna', () => {
+  const expected = MODELS.luna.runner;
   for (const feature of ['email_classifier', 'atom_extractor', 'crm_parser', 'agentmail_extractor', 'newsletter_extractor']) {
     const r = resolveFeatureRunner(feature);
     assert.equal(r.tier, 'luna', feature);
-    assert.equal(r.runner, 'codex');
+    assert.equal(r.runner, expected, feature);
   }
 });
 
