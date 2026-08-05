@@ -13,6 +13,14 @@
 // snapshot (set it in prod; the nightly snapshot carries it here). Mining
 // and triage always run — they are read-only — but no Grok CLI session starts and
 // no branch/PR/email is produced while disabled, except escalation summaries.
+//
+// Separate auto-deploy switch: even with the venue on, a verified fix stops
+// at "PR opened, email sent" unless REPAIR_VENUE_AUTODEPLOY=1 (or crm_context
+// 'repair_venue_autodeploy_enabled' = '1') is ALSO set. With it on, a fix that
+// already passed triage (no judgment needed) and every verification gate
+// additionally merges its own PR, runs scripts/deploy.sh, and watches the VPS
+// come back healthy — auto-reverting if it doesn't. See lib/repair-venue.js
+// (autoDeployAndVerify) for the full flow and failure handling.
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
