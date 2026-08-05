@@ -36,7 +36,7 @@ const {
   SNAPSHOT_DIR,
 } = require('../lib/repair-reproducer');
 const { triageReproducer } = require('../lib/repair-triage');
-const { repairOne, cleanupStaleWorktrees } = require('../lib/repair-venue');
+const { repairOne, cleanupStaleWorktrees, pushRollupToVps } = require('../lib/repair-venue');
 const { sendRepairEmail } = require('../lib/repair-notify');
 
 const ROOT = path.join(__dirname, '..');
@@ -170,11 +170,23 @@ async function main() {
   }
 
   const summary = [];
+  const rollupEntries = [];
   for (const reproducer of reproducers) {
     try {
       const verdict = await triageReproducer(reproducer, { useModel: !dryRun });
-      const { outcome } = await dispatch(reproducer, verdict, { enabled, dryRun });
+      const { outcome, result } = await dispatch(reproducer, verdict, { enabled, dryRun });
       summary.push({ id: reproducer.id, verdict: verdict.verdict, outcome });
+      // Only outcomes that mean "the venue did something to code" are worth a
+      // line in tomorrow's daily report — skip/config_fix/escalate already
+      // get their own email and add no code-level activity to report.
+      if (result) {
+        rollupEntries.push({
+          error_class: reproducer.error_class,
+          outcome,
+          branch: result.branch || null,
+          pr_url: result.prUrl || null,
+        });
+      }
     } catch (err) {
       console.error(`[run-repair] ${reproducer.id} crashed:`, err.message);
       summary.push({ id: reproducer.id, verdict: 'error', outcome: err.message });
@@ -186,6 +198,13 @@ async function main() {
     summary: `Self-repair run: ${summary.length} reproducer(s) processed (venue ${enabled ? 'enabled' : 'disabled'}${dryRun ? ', dry run' : ''})`,
     payload: { agent: 'hub_repair', enabled, dry_run: dryRun, results: summary, run_at: new Date().toISOString() },
   });
+
+  // Best-effort sync to the VPS so the daily report can mention today's
+  // self-repair activity — independent of whether anything auto-deployed.
+  if (!dryRun && rollupEntries.length) {
+    const pushed = pushRollupToVps(rollupEntries);
+    if (!pushed.ok) console.warn(`[run-repair] rollup push to VPS failed (non-fatal): ${pushed.error}`);
+  }
 
   console.log(`[run-repair] done: ${JSON.stringify(summary)}`);
 }
