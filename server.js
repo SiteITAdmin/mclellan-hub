@@ -239,7 +239,11 @@ setInterval(() => {
 // ── Email + AgentMail: now handled by job queue (see lib/job-queue.js) ────────
 
 // ── Weekly digest (Sunday 14:00 Europe/Dublin) ───────────────────────────────
+// Disabled 6 Aug 2026 pending a full retool of the briefing function.
+// Set WEEKLY_DIGEST_ENABLED=1 to re-enable the existing implementation.
+const WEEKLY_DIGEST_ENABLED = process.env.WEEKLY_DIGEST_ENABLED === '1';
 setInterval(() => {
+  if (!WEEKLY_DIGEST_ENABLED) return;
   const now = nowIn('Europe/Dublin');
   if (now.getDay() !== 0 || now.getHours() !== 14 || now.getMinutes() !== 0) return;
   for (const user of BRIEFING_USERS) {
