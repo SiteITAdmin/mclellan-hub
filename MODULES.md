@@ -132,16 +132,18 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## Calendar
-**Purpose:** Be the source of truth for scheduled meetings, interviews, and appointments Douglas must personally attend, so he never has to add them to his calendar by hand after an email confirms a specific date and time.
+**Purpose:** Be the source of truth for scheduled meetings, interviews, appointments, and explicit task time blocks. Confirmed attendance events arrive through CRM action projection; Douglas places Google Tasks into free time through `/crm/planner`.
 
 **Healthy looks like:**
 - A calendar event exists for every source (email, meeting_intake, etc.) that states both a specific date and a specific time Douglas must attend — not for plain due-by deadlines with no attendance component
 - No duplicate events for the same source event (enforced by `meetings.source` + `source_id`, mirroring Google Tasks' dedup pattern)
 - Created events appear in the Work Brief's Today/Coming Up sections the same day they're created, not only after the next 06:45 calendar sync — the create path (`lib/google-calendar.js`) upserts `meetings` directly rather than waiting on `syncCalendarMeetings`
+- A task dragged or auto-planned at `/crm/planner` has exactly one Google Calendar block carrying its Hub task ID. Moving patches that block; unscheduling deletes only the block and leaves Google Tasks untouched
+- An interrupted provider response is reconciled through the event's private `hubTaskId` before another insert is attempted
 
-**Does not own:** The task list (that's Google Tasks — the same source event typically produces both a task and, when it has a specific time, an event), meeting debriefs/notes (that's CRM meeting intake)
+**Does not own:** The task list or task meaning (that's Google Tasks and the CRM knowledge engine), meeting debriefs/notes (that's CRM meeting intake). Planner placement is operational scheduling, not a new relationship or knowledge claim.
 
-**Health check:** `/crm/knowledge`'s `crm_action_projected` stage receipts include an `event_projection` count; the daily system report's "Calendar events" line should be non-zero on days when time-specific meetings were confirmed by email.
+**Health check:** `/crm/knowledge`'s `crm_action_projected` stage receipts include an `event_projection` count; task placement writes `calendar_planner_effect` receipts. A scheduled open task has one `meetings` row with `source='task_planner'`, its remote event ID, and its task ID in `source_id`.
 
 ---
 
@@ -154,8 +156,9 @@ These are the tools the system runs on. They are not features — they are the f
 - Flight prep and check-in tasks exist for upcoming flights
 - CRM edits that Google can store (title, notes, due, complete) land on the remote task immediately — not only in the local cache
 - Changing a task's project moves it to that project's Google Tasks list; deleting in the CRM removes the open item from Google (restore re-creates it)
+- `/crm/planner` reads this same open-task mirror, uses the existing priority/effort note tags and due date, and never creates a second task record to represent scheduling
 
-**Does not own:** Deciding what is a task (that's each source module's job), completing tasks (that's Douglas). Contact/company links and Hub reminder times (`deadline`) are Hub-local metadata — Google has no fields for them.
+**Does not own:** Deciding what is a task (that's each source module's job), completing tasks (that's Douglas), or calendar occupancy (that's Google Calendar). Contact/company links and Hub reminder times (`deadline`) are Hub-local metadata — Google has no fields for them.
 
 **Health check:** Open tasks with no `project_slug` and no `contact_id` should be reviewed — they're orphaned from the network. Open Hub tasks whose `task_list_id` does not match their project's `google_task_list_id` are out of sync — save the task or run `repairTaskGoogleSync`.
 

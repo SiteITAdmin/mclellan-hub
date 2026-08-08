@@ -86,6 +86,14 @@ recordEffect(user, { origin, source, sourceId, title, outcome })
 ```
 Reading fans out across modules; writing must not. Every task creation is recorded at stage `external_effect` against a named `origin`, so "why did this task appear?" has one place to look. **Pass `origin` when adding a call site** — undeclared callers fall back to `source` and are reported as unattributed. The gate observes and escalates rather than blocking; a burst from one origin surfaces as a `NEEDS YOU` line in the daily EFFECTS section. See MODULES.md → External Effect Gate.
 
+### Task calendar planner — Tasks remain tasks, placements become events
+
+`/crm/planner` is the Motion-style operational view over the existing Google Tasks mirror and live primary Google Calendar. `lib/task-calendar-planner.js` never copies tasks into a planner table. An unscheduled task is derived by subtracting `meetings.source='task_planner'` task IDs from current open tasks; its effort and priority come from the Google Tasks notes tags already parsed by `lib/google-tasks.js`.
+
+Dragging a task creates one ordinary Google Calendar event through `createCalendarEvent`, with private `hubSource=task_planner` / `hubTaskId=<local task id>` properties, and mirrors it into the existing `meetings` cache. Dragging it again patches that event. Unscheduling deletes only the event/cache row. The Auto-plan button is an explicit user effect: it orders unscheduled work by due date then priority, uses effort (30 minutes when unsized), skips opaque calendar events and past time, and writes only after confirmation. Transparent events remain visible without consuming focus time; an opaque all-day event blocks that work day.
+
+Provider exactly-once delivery is not assumed. Before inserting, the planner reconciles by the private task ID; after an ambiguous insert error it performs the same lookup and adopts the remote event if present. Each schedule/move/remove attempt writes a `calendar_planner_effect` receipt. These placements are operational state, not relationship evidence or a new task-creation path.
+
 ### Reminders (escalation ladder)
 ```js
 // lib/reminders.js
