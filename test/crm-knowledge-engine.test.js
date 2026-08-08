@@ -181,12 +181,25 @@ test('a safe projection match canonicalises its candidate key and upgrades only 
   assert.equal(identity.span.text, text);
 });
 
-test('task history exposes authoritative human state to action synthesis', () => {
+test('closed-task authority moved from the prompt to the deterministic post-check', () => {
   assert.equal(_test.taskState({ status: 'needsAction', deleted_at: 1 }), 'deleted');
   assert.equal(_test.taskState({ status: 'wrong', deleted_at: 1 }), 'wrong');
   assert.equal(_test.taskState({ status: 'completed', deleted_at: null }), 'completed');
-  assert.match(PROMPTS.crm_action_projection, /deleted, and wrong task states as authoritative human decisions/);
-  assert.match(_test.ACTION_STATE_GUARD, /authoritative human decisions/);
+  // The projection prompt no longer carries closed-task history; it only shows
+  // open tasks, and both prompt and runtime guard tell the model the closed
+  // check happens downstream so it must not withhold a genuine ask.
+  assert.match(PROMPTS.crm_action_projection, /Currently OPEN tasks/);
+  assert.doesNotMatch(PROMPTS.crm_action_projection, /completed, deleted, and wrong task states as authoritative/);
+  assert.match(PROMPTS.crm_action_projection, /deterministic check after you respond suppresses anything that matches a task Douglas already completed, deleted, or marked wrong/);
+  assert.match(_test.ACTION_STATE_GUARD, /only currently OPEN tasks/);
+  assert.match(_test.ACTION_STATE_GUARD, /deterministic check suppresses anything that matches a closed task/);
+});
+
+test('taskHistoryForActionProjection sends open tasks only', () => {
+  const block = _test.taskHistoryForActionProjection.toString();
+  // The query must filter to live tasks and must not re-introduce closed rows.
+  assert.match(block, /deleted_at IS NULL AND status NOT IN \('completed', 'wrong'\)/);
+  assert.doesNotMatch(block, /\[completed\]|\[deleted\]|\[wrong\]/);
 });
 
 test('crm_action_projection schema and runtime guards require event and candidate identity fields', () => {
