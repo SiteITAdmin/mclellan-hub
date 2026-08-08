@@ -29,6 +29,21 @@
     return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
   }
 
+  function preferencesFromForm() {
+    return {
+      workStart: document.getElementById('planner-work-start').value,
+      workEnd: document.getElementById('planner-work-end').value,
+      eveningStart: document.getElementById('planner-evening-start').value,
+      eveningEnd: document.getElementById('planner-evening-end').value,
+      weekendStart: document.getElementById('planner-weekend-start').value,
+      weekendEnd: document.getElementById('planner-weekend-end').value,
+    };
+  }
+
+  async function saveHours() {
+    return postJson('/api/planner/preferences', preferencesFromForm());
+  }
+
   function startDrag(element, event) {
     dragPayload = {
       taskId: element.dataset.taskId,
@@ -108,22 +123,34 @@
   });
 
   const autoButton = document.getElementById('planner-auto');
+  const saveHoursButton = document.getElementById('planner-save-hours');
+  saveHoursButton?.addEventListener('click', async () => {
+    saveHoursButton.disabled = true;
+    saveHoursButton.textContent = 'Saving…';
+    try {
+      await saveHours();
+      showMessage('Planning hours saved.');
+      window.setTimeout(() => window.location.reload(), 650);
+    } catch (error) {
+      saveHoursButton.disabled = false;
+      saveHoursButton.textContent = 'Save hours';
+      showMessage(error.message, true);
+    }
+  });
+
   autoButton?.addEventListener('click', async () => {
     const count = Number(data.unscheduledTasks?.length || 0);
     if (!count) return;
-    const workStart = document.getElementById('planner-work-start').value;
-    const workEnd = document.getElementById('planner-work-end').value;
-    const includeWeekends = document.getElementById('planner-weekends').checked;
-    if (!window.confirm(`Place up to ${count} open task${count === 1 ? '' : 's'} into free calendar time this week?`)) return;
+    if (!window.confirm(`Place up to ${count} selected task${count === 1 ? '' : 's'} into its allowed calendar time this week?`)) return;
     autoButton.disabled = true;
     autoButton.textContent = 'Planning…';
     try {
+      // Auto-plan always uses the values on screen and persists them as the
+      // user's defaults before creating any Calendar effects.
+      await saveHours();
       const result = await postJson('/api/planner/auto-plan', {
         startDate: data.startDate,
         endDate: data.endDate,
-        workStart,
-        workEnd,
-        includeWeekends,
       });
       const message = `${result.scheduled.length} scheduled`
         + (result.unplaced.length ? ` · ${result.unplaced.length} had no free slot` : '')
@@ -132,7 +159,7 @@
       window.setTimeout(() => window.location.reload(), 900);
     } catch (error) {
       autoButton.disabled = false;
-      autoButton.textContent = 'Auto-plan open tasks';
+      autoButton.textContent = 'Auto-plan selected tasks';
       showMessage(error.message, true);
     }
   });

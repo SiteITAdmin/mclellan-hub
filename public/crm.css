@@ -132,7 +132,17 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .crm-task-title { font-size: 13px; font-weight: 500; line-height: 1.4; }
 .crm-task-notes { font-size: 12px; color: var(--crm-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crm-task-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
-.crm-task-actions { display: flex; gap: 6px; flex-shrink: 0; margin-top: 2px; }
+.crm-task-actions { display: flex; gap: 6px; flex-shrink: 0; margin-top: 2px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.task-planner-control { display: inline-flex; align-items: center; gap: 5px; padding: 3px 5px; border: 1px solid var(--crm-line); border-radius: 7px; background: var(--crm-input-bg); }
+.task-planner-control label { display: inline-flex; align-items: center; gap: 4px; width: auto; margin: 0; color: var(--crm-text); font-size: 10px; font-weight: 650; cursor: pointer; }
+.task-planner-control input[type="checkbox"] { width: 14px; height: 14px; margin: 0; accent-color: var(--crm-accent); }
+.task-planner-control select { width: auto; min-width: 68px; margin: 0; padding: 2px 4px; border: 0; background: transparent; color: var(--crm-muted); font-size: 10px; }
+.task-planner-state { max-width: 90px; color: var(--crm-success); font-size: 9px; line-height: 1.2; }
+.task-planner-state.error { color: var(--crm-danger); }
+.task-planner-control-detail { padding: 6px 8px; background: var(--crm-card); }
+.task-add-planner { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.task-add-planner input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; }
+.task-add-planner select { flex: 1; margin: 0; }
 .btn-ghost { background: transparent; color: var(--crm-muted); border: 1px solid var(--crm-line); }
 .btn-ghost:hover { background: rgba(0,0,0,.04); }
 
@@ -172,10 +182,11 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-toolbar-copy { display: grid; gap: 3px; margin-right: auto; min-width: 150px; }
 .planner-toolbar-copy strong { font-size: 14px; }
 .planner-toolbar-copy span { color: var(--crm-muted); font-size: 11px; }
-.planner-toolbar label { width: 112px; }
+.planner-hours-group { display: flex; gap: 7px; min-width: 210px; margin: 0; padding: 0; border: 0; }
+.planner-hours-group legend { width: 100%; margin-bottom: 1px; color: var(--crm-muted); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.planner-hours-group label { width: 98px; font-size: 9px; }
 .planner-toolbar input[type="time"] { padding: 7px 9px; margin-top: 4px; }
-.planner-toolbar .planner-check { width: auto; display: flex; align-items: center; gap: 7px; padding-bottom: 9px; white-space: nowrap; }
-.planner-check input { width: auto; margin: 0; }
+.planner-toolbar-actions { display: flex; gap: 7px; align-items: center; }
 .planner-toolbar .btn:disabled { opacity: .45; cursor: not-allowed; }
 .planner-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
 .planner-inbox { position: sticky; top: 142px; padding: 16px; max-height: calc(100vh - 170px); overflow: hidden; display: flex; flex-direction: column; }
@@ -196,6 +207,8 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-task-card-top > span { flex-shrink: 0; color: var(--crm-accent); font-size: 10px; font-weight: 700; }
 .planner-task-card-meta { display: flex; flex-wrap: wrap; gap: 5px 7px; margin-top: 7px; color: var(--crm-muted); font-size: 9px; }
 .planner-pill { text-transform: uppercase; font-weight: 700; letter-spacing: .04em; }
+.planner-pill.lane-personal { color: #9a5b13; }
+.planner-pill.lane-work { color: var(--crm-accent-ink); }
 .planner-empty { padding: 28px 10px; color: var(--crm-muted); font-size: 12px; text-align: center; border: 1px dashed var(--crm-line); border-radius: 10px; }
 .planner-calendar-card { padding: 0; overflow: hidden; }
 .planner-calendar-title { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--crm-line); }
@@ -227,6 +240,7 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-half-line { opacity: .42; }
 .planner-event { position: absolute; z-index: 2; left: 4px; right: 4px; min-height: 24px; overflow: hidden; border-radius: 6px; padding: 5px 6px; border: 1px solid rgba(90,103,128,.16); background: color-mix(in srgb, var(--crm-muted) 13%, var(--crm-card)); color: var(--crm-text); box-shadow: 0 2px 6px rgba(20,24,36,.08); }
 .planner-task-event { padding-right: 19px; border-color: color-mix(in srgb, var(--crm-accent) 55%, transparent); background: color-mix(in srgb, var(--crm-accent) 16%, var(--crm-card)); cursor: grab; }
+.planner-task-personal { border-color: rgba(196,125,40,.55); background: color-mix(in srgb, #c47d28 16%, var(--crm-card)); }
 .planner-event-time { color: var(--crm-muted); font-size: 8px; font-weight: 600; }
 .planner-task-event .planner-event-time { color: var(--crm-accent-ink); }
 .planner-event-title { margin-top: 2px; font-size: 10px; font-weight: 650; line-height: 1.25; }
@@ -241,12 +255,19 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
   .planner-inbox { position: static; max-height: 310px; }
   .planner-toolbar { flex-wrap: wrap; align-items: end; }
   .planner-toolbar-copy { width: 100%; }
+  .planner-hours-group { flex: 1 1 210px; }
+  .planner-toolbar-actions { flex: 1 1 100%; justify-content: flex-end; }
 }
 @media (max-width: 600px) {
   .planner-week-nav { width: 100%; }
   .planner-week-nav .btn { flex: 1; }
-  .planner-toolbar label { flex: 1 1 100px; }
-  .planner-toolbar .planner-check { flex-basis: 100%; }
-  .planner-toolbar .btn { width: 100%; }
+  .planner-hours-group { flex-basis: 100%; }
+  .planner-hours-group label { flex: 1 1 100px; }
+  .planner-toolbar-actions { display: grid; grid-template-columns: 1fr; }
+  .planner-toolbar-actions .btn { width: 100%; }
   .planner-calendar-title { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 760px) {
+  .crm-task-row { flex-direction: column; gap: 9px; }
+  .crm-task-actions { width: 100%; justify-content: flex-start; }
 }

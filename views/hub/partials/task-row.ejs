@@ -5,6 +5,7 @@
      data-task-overdue="<%= t.due && t.status === 'needsAction' && !t.deleted_at && String(t.due).slice(0, 10) < _todayIso ? '1' : '0' %>"
      data-task-priority="<%= t.priority || '' %>"
      data-task-effort="<%= t.effort_minutes || '' %>"
+     data-task-planner="<%= t.planner_lane || '' %>"
      data-task-project="<%= t.project_slug || '' %>"
      data-task-project-name="<%= (t.project_name || t.project_slug || '').toLowerCase() %>">
   <div class="crm-task-main">
@@ -39,6 +40,17 @@
   </div>
   <div class="crm-task-actions">
     <% if (!t.deleted_at && t.status === 'needsAction') { %>
+      <div class="task-planner-control" data-task-planner-control data-task-id="<%= t.id %>" data-saved-lane="<%= t.planner_lane || 'work' %>">
+        <label title="Include this task in calendar planning">
+          <input type="checkbox" <%= t.planner_lane ? 'checked' : '' %> onchange="taskPlannerToggle(this)">
+          <span>Planner</span>
+        </label>
+        <select aria-label="Planner time for <%= t.title %>" onchange="taskPlannerLane(this)">
+          <option value="work" <%= t.planner_lane !== 'personal' ? 'selected' : '' %>>Work</option>
+          <option value="personal" <%= t.planner_lane === 'personal' ? 'selected' : '' %>>Personal</option>
+        </select>
+        <span class="task-planner-state" aria-live="polite"></span>
+      </div>
       <button class="btn btn-sm" onclick="taskAction('<%= t.id %>', 'complete')">Done</button>
       <% if (['document','email','agentmail'].includes(t.source)) { %>
         <button class="btn btn-sm btn-ghost" style="color:var(--crm-danger,#c0392b);" onclick="markTaskWrong('<%= t.id %>')">Wrong</button>

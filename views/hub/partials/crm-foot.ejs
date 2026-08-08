@@ -21,6 +21,55 @@ async function markTaskWrong(id) {
     alert('Could not learn from this task: ' + err.message);
   }
 }
+
+async function saveTaskPlannerControl(control, selected, lane) {
+  const checkbox = control.querySelector('input[type="checkbox"]');
+  const select = control.querySelector('select');
+  const state = control.querySelector('.task-planner-state');
+  const previousSelected = control.dataset.savedSelected === '1'
+    || (!('savedSelected' in control.dataset) && !selected);
+  const previousLane = control.dataset.savedLane || 'work';
+  checkbox.disabled = true;
+  select.disabled = true;
+  state.textContent = 'Saving…';
+  try {
+    const response = await fetch(`/api/tasks/${encodeURIComponent(control.dataset.taskId)}/planner`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selected, lane }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Planner update failed');
+    control.dataset.savedSelected = selected ? '1' : '0';
+    control.dataset.savedLane = lane;
+    control.closest('.crm-task-row')?.setAttribute('data-task-planner', selected ? lane : '');
+    state.textContent = selected ? 'Added' : (result.unscheduled ? 'Removed' : 'Off');
+    window.setTimeout(() => { state.textContent = ''; }, 1800);
+  } catch (error) {
+    checkbox.checked = previousSelected;
+    select.value = previousLane;
+    state.textContent = error.message;
+    state.classList.add('error');
+    window.setTimeout(() => { state.textContent = ''; state.classList.remove('error'); }, 4500);
+  } finally {
+    checkbox.disabled = false;
+    select.disabled = false;
+  }
+}
+
+function taskPlannerToggle(checkbox) {
+  const control = checkbox.closest('[data-task-planner-control]');
+  if (!('savedSelected' in control.dataset)) control.dataset.savedSelected = checkbox.checked ? '0' : '1';
+  saveTaskPlannerControl(control, checkbox.checked, control.querySelector('select').value);
+}
+
+function taskPlannerLane(select) {
+  const control = select.closest('[data-task-planner-control]');
+  const checkbox = control.querySelector('input[type="checkbox"]');
+  if (!checkbox.checked) return;
+  if (!('savedSelected' in control.dataset)) control.dataset.savedSelected = '1';
+  saveTaskPlannerControl(control, true, select.value);
+}
 </script>
 </body>
 </html>
