@@ -11,7 +11,9 @@ REMOTE_APP="${REMOTE_APP:-/app}"
 SINCE="${SINCE:-24 hours ago}"
 STAMP="${SNAPSHOT_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SNAPSHOT_ROOT="${SNAPSHOT_ROOT:-${ROOT}/data/prod-snapshots}"
+# Local-only path, NOT ~/Documents (iCloud-synced): keeps the ~327MB prod DB
+# copy off Apple's cloud and avoids launchd EDEADLK on cloud-evicted files.
+SNAPSHOT_ROOT="${SNAPSHOT_ROOT:-${HUB_SNAPSHOT_ROOT:-${HOME}/Library/Application Support/mclellan-hub/prod-snapshots}}"
 DEST="${SNAPSHOT_ROOT}/${STAMP}"
 REMOTE_TMP="/tmp/mclellan-prod-snapshot-${STAMP}"
 SSH_CONTROL="/tmp/mclellan-snapshot-$$"

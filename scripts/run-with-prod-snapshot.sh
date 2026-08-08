@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SNAPSHOT="${1:-${ROOT}/data/prod-snapshots/latest}"
+SNAPSHOT="${1:-${HUB_SNAPSHOT_ROOT:-${HOME}/Library/Application Support/mclellan-hub/prod-snapshots}/latest}"
 
 if [[ ! -f "${SNAPSHOT}/hub.db" ]]; then
   echo "No snapshot DB found at ${SNAPSHOT}/hub.db" >&2
