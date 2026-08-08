@@ -17,6 +17,8 @@ const {
   listPlannerCalendarEvents,
   scheduleTask,
   unscheduleTask,
+  getPlannerPreferences,
+  savePlannerPreferences,
 } = require('../lib/task-calendar-planner');
 
 const user = 'task-planner-integration';
@@ -68,7 +70,7 @@ test.before(() => {
     INSERT INTO google_tasks
       (id, user, google_task_id, task_list_id, title, notes, due, status, source)
     VALUES (?, ?, ?, '@default', ?, ?, '2026-08-12', 'needsAction', 'manual')
-  `).run(taskId, user, 'google-task-1', 'Write board paper', '[priority: high] [effort: 60m]');
+  `).run(taskId, user, 'google-task-1', 'Write board paper', '[priority: high] [effort: 60m] [planner: work]');
 });
 
 test.after(() => {
@@ -112,12 +114,32 @@ test('a CRM task schedules, moves, and unschedules through one Google Calendar b
   assert.equal(task.status, 'needsAction', 'unscheduling never deletes or completes the task');
 });
 
+test('planner hours persist in the existing CRM context store', () => {
+  assert.equal(getPlannerPreferences(user).workStart, '09:00');
+  const saved = savePlannerPreferences(user, {
+    workStart: '08:30', workEnd: '16:30',
+    eveningStart: '18:00', eveningEnd: '22:00',
+    weekendStart: '09:30', weekendEnd: '18:00',
+  });
+  assert.equal(saved.workStart, '08:30');
+  assert.deepEqual(getPlannerPreferences(user), saved);
+  assert.ok(db.hub().prepare(
+    "SELECT 1 FROM crm_context WHERE user = ? AND key = 'task_planner_preferences'"
+  ).get(user));
+  // Restore defaults expected by the scheduling scenarios below.
+  savePlannerPreferences(user, {
+    workStart: '09:00', workEnd: '17:30',
+    eveningStart: '18:30', eveningEnd: '21:30',
+    weekendStart: '10:00', weekendEnd: '17:00',
+  });
+});
+
 test('an interrupted insert reconciles the remote block instead of duplicating it', async () => {
   const secondTask = 'planner-task-ambiguous';
   db.hub().prepare(`
     INSERT INTO google_tasks
-      (id, user, google_task_id, task_list_id, title, status, source)
-    VALUES (?, ?, ?, '@default', 'Reconcile me', 'needsAction', 'manual')
+      (id, user, google_task_id, task_list_id, title, notes, status, source)
+    VALUES (?, ?, ?, '@default', 'Reconcile me', '[planner: work]', 'needsAction', 'manual')
   `).run(secondTask, user, 'google-task-ambiguous');
 
   let insertAttempted = false;
@@ -189,8 +211,8 @@ test('a remotely-created block already cached as a generic event is adopted, not
   const recoveredTask = 'planner-task-generic-cache';
   db.hub().prepare(`
     INSERT INTO google_tasks
-      (id, user, google_task_id, task_list_id, title, status, source)
-    VALUES (?, ?, ?, '@default', 'Adopt cached event', 'needsAction', 'manual')
+      (id, user, google_task_id, task_list_id, title, notes, status, source)
+    VALUES (?, ?, ?, '@default', 'Adopt cached event', '[planner: work]', 'needsAction', 'manual')
   `).run(recoveredTask, user, 'google-task-generic-cache');
   const remote = {
     id: 'calendar-generic-cache',

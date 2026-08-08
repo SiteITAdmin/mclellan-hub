@@ -1876,13 +1876,20 @@ router.post('/api/planner/auto-plan', requireAuth, requireSameOrigin, writeLimit
     const result = await autoPlanTasks(req.hubUser, {
       startDate: req.body.startDate,
       endDate: req.body.endDate,
-      workStart: req.body.workStart,
-      workEnd: req.body.workEnd,
-      includeWeekends: req.body.includeWeekends === true,
     });
     res.json({ ok: true, ...result });
   } catch (error) {
     console.error('[planner] auto-plan failed:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/api/planner/preferences', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const { savePlannerPreferences } = require('../lib/task-calendar-planner');
+    const preferences = savePlannerPreferences(req.hubUser, req.body || {});
+    res.json({ ok: true, preferences });
+  } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
@@ -2120,9 +2127,12 @@ router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (r
   try {
     const { withTaskTags } = require('../lib/google-tasks');
     const baseNotes = String(req.body.notes || '').trim();
+    const addToPlanner = req.body.planner_selected === true
+      || req.body.planner_selected === 'true' || req.body.planner_selected === '1' || req.body.planner_selected === 'on';
     const notes = withTaskTags(baseNotes, {
       priority: req.body.priority,
       effortMinutes: req.body.effort_minutes,
+      plannerLane: addToPlanner && ['work', 'personal'].includes(req.body.planner_lane) ? req.body.planner_lane : null,
     });
     const task = await createTask(req.hubUser, {
       title,
@@ -2137,6 +2147,35 @@ router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (r
   } catch (err) {
     console.error('[tasks] create error', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/tasks/:id/planner', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const hub = db.hub();
+  const task = hub.prepare(
+    "SELECT * FROM google_tasks WHERE id = ? AND user = ? AND status = 'needsAction' AND deleted_at IS NULL"
+  ).get(req.params.id, req.hubUser);
+  if (!task) return res.status(404).json({ error: 'Open task not found' });
+  const selected = req.body.selected === true || req.body.selected === 'true' || req.body.selected === '1';
+  const lane = selected ? String(req.body.lane || 'work').toLowerCase() : null;
+  if (selected && !['work', 'personal'].includes(lane)) {
+    return res.status(400).json({ error: 'Planner lane must be work or personal' });
+  }
+  try {
+    // Removing a task from the planner removes its compiled Calendar effect as
+    // well. If Google refuses that deletion, leave the task selected so the UI
+    // cannot claim the block is gone when it is not.
+    let unscheduled = { removed: false };
+    if (!selected) {
+      const { unscheduleTask } = require('../lib/task-calendar-planner');
+      unscheduled = await unscheduleTask(req.hubUser, task.id);
+    }
+    const { withPlannerTag } = require('../lib/google-tasks');
+    await updateTask(req.hubUser, task.id, { notes: withPlannerTag(task.notes, lane) });
+    res.json({ ok: true, selected, lane, unscheduled: unscheduled.removed });
+  } catch (error) {
+    console.error('[tasks] planner selection failed:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -2253,10 +2292,14 @@ router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimite
   } = req.body;
   let finalNotes = notes;
   if (notes !== undefined && (req.body.priority !== undefined || req.body.effort_minutes !== undefined)) {
-    const { withTaskTags } = require('../lib/google-tasks');
+    const { withTaskTags, parseTaskTags } = require('../lib/google-tasks');
+    const existing = db.hub().prepare('SELECT notes FROM google_tasks WHERE id = ? AND user = ?')
+      .get(req.params.id, req.hubUser);
+    if (!existing) return res.status(404).json({ error: 'Task not found' });
     finalNotes = withTaskTags(String(notes), {
       priority: req.body.priority,
       effortMinutes: req.body.effort_minutes,
+      plannerLane: parseTaskTags(existing.notes).planner_lane,
     });
   }
   try {

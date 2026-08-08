@@ -17,6 +17,17 @@
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <% if (!task.deleted_at && task.status === 'needsAction') { %>
+      <div class="task-planner-control task-planner-control-detail" data-task-planner-control data-task-id="<%= task.id %>" data-saved-lane="<%= taskTags.planner_lane || 'work' %>">
+        <label title="Include this task in calendar planning">
+          <input type="checkbox" <%= taskTags.planner_lane ? 'checked' : '' %> onchange="taskPlannerToggle(this)">
+          <span>Planner</span>
+        </label>
+        <select aria-label="Planner time" onchange="taskPlannerLane(this)">
+          <option value="work" <%= taskTags.planner_lane !== 'personal' ? 'selected' : '' %>>Work</option>
+          <option value="personal" <%= taskTags.planner_lane === 'personal' ? 'selected' : '' %>>Personal</option>
+        </select>
+        <span class="task-planner-state" aria-live="polite"></span>
+      </div>
       <button class="btn" onclick="taskAction('<%= task.id %>', 'complete')">Mark done</button>
       <button class="btn" style="opacity:.6;" onclick="remindMe()" title="Set an escalating reminder for this task">🔔 Remind me</button>
       <% if (['document','email','agentmail'].includes(task.source)) { %>
@@ -39,8 +50,8 @@
         <label class="wide">Title
           <input name="title" value="<%= task.title %>" required>
         </label>
-        <label class="wide">Notes <span style="font-size:11px;opacity:.6;">priority/effort tags are managed by the fields below</span>
-          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
+        <label class="wide">Notes <span style="font-size:11px;opacity:.6;">priority, effort, and planner tags are managed by the controls</span>
+          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort|planner)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
         </label>
         <label>Priority
           <select name="priority">

@@ -86,6 +86,45 @@ test('auto-plan does not let its own placements overlap and skips weekends by de
   ]);
 });
 
+test('personal tasks use weekday evenings and then weekend hours', () => {
+  const result = computeAutoPlan({
+    startDate: '2026-08-14',
+    endDate: '2026-08-17',
+    preferences: {
+      workStart: '09:00', workEnd: '17:30',
+      eveningStart: '18:30', eveningEnd: '19:00',
+      weekendStart: '10:00', weekendEnd: '10:30',
+    },
+    now: new Date('2026-08-14T06:00:00Z'),
+    tasks: [
+      { id: 'personal-one', title: 'Personal one', planner_lane: 'personal', effort_minutes: 30 },
+      { id: 'personal-two', title: 'Personal two', planner_lane: 'personal', effort_minutes: 30 },
+    ],
+    events: [],
+  });
+  assert.deepEqual(result.placements.map(item => item.startAt), [
+    '2026-08-14T18:30',
+    '2026-08-15T10:00',
+  ]);
+});
+
+test('manual planner windows distinguish work from personal time', () => {
+  const preferences = {
+    workStart: '09:00', workEnd: '17:30',
+    eveningStart: '18:30', eveningEnd: '21:30',
+    weekendStart: '10:00', weekendEnd: '17:00',
+  };
+  assert.doesNotThrow(() => _test.assertWithinPlannerWindow(
+    'work', { date: '2026-08-10', time: '09:00' }, { date: '2026-08-10', time: '09:30' }, preferences
+  ));
+  assert.throws(() => _test.assertWithinPlannerWindow(
+    'personal', { date: '2026-08-10', time: '09:00' }, { date: '2026-08-10', time: '09:30' }, preferences
+  ), /evening hours/);
+  assert.doesNotThrow(() => _test.assertWithinPlannerWindow(
+    'personal', { date: '2026-08-15', time: '10:00' }, { date: '2026-08-15', time: '10:30' }, preferences
+  ));
+});
+
 test('transparent events stay free while opaque all-day events block the work day', () => {
   const intervals = _test.eventBusyIntervals([
     { date: '2026-08-10', time: '09:00', endDate: '2026-08-10', endTime: '10:00', allDay: false, transparency: 'transparent' },

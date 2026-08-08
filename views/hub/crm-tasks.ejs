@@ -35,13 +35,21 @@
     </label>
     <label>Effort
       <select name="effort_minutes">
-        <option value="">— not sized —</option>
         <option value="5">5 min</option>
         <option value="15">15 min</option>
-        <option value="30">30 min</option>
+        <option value="30" selected>30 min (default)</option>
         <option value="60">1 hour</option>
         <option value="120">2 hours</option>
       </select>
+    </label>
+    <label>Add to planner
+      <span class="task-add-planner">
+        <input name="planner_selected" type="checkbox" value="1">
+        <select name="planner_lane" aria-label="Planner time">
+          <option value="work">Work hours</option>
+          <option value="personal">Evening / weekend</option>
+        </select>
+      </span>
     </label>
     <label>Person
       <select name="contact_id">
