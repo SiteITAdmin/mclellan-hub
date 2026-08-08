@@ -2,6 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const Database = require('better-sqlite3');
 const {
   REPAIR_MAX_TURNS,
   grokCliModel,
@@ -9,6 +13,22 @@ const {
   autoDeployEnabled,
   AUTODEPLOY_ENV,
 } = require('../lib/repair-venue');
+
+// A throwaway snapshot dir so the auto-deploy gate can be exercised against a
+// known crm_context state instead of whatever prod snapshot happens to be on
+// disk. `flag` null means "no flag row"; a string writes that value.
+function makeSnapshotDir(flag) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'repair-venue-autodeploy-'));
+  if (flag !== undefined) {
+    const db = new Database(path.join(dir, 'hub.db'));
+    db.exec("CREATE TABLE crm_context (user TEXT, key TEXT, value TEXT)");
+    if (flag !== null) {
+      db.prepare("INSERT INTO crm_context (user, key, value) VALUES ('system', 'repair_venue_autodeploy_enabled', ?)").run(flag);
+    }
+    db.close();
+  }
+  return dir;
+}
 
 test('self-repair uses the bounded local Grok CLI model', () => {
   assert.equal(REPAIR_MAX_TURNS, 12);
@@ -23,20 +43,32 @@ test('self-repair still rejects an executor that makes no change', () => {
   assert.match(scope.reason, /Grok made no changes/);
 });
 
-test('auto-deploy is off unless explicitly turned on, and the env override works without touching a DB', () => {
+test('auto-deploy is off unless explicitly turned on, and the env override wins', () => {
   const original = process.env[AUTODEPLOY_ENV];
+  const noDb = makeSnapshotDir(undefined);          // snapshot missing -> fail closed
+  const flagAbsent = makeSnapshotDir(null);         // snapshot present, no flag row
+  const flagOn = makeSnapshotDir('1');              // prod switch turned on
   try {
     delete process.env[AUTODEPLOY_ENV];
-    // No prod snapshot in this checkout, so the crm_context lookup must fail
-    // closed rather than throw.
-    assert.equal(autoDeployEnabled(), false);
+    // Default is OFF: a missing snapshot fails closed, and a present snapshot
+    // with no flag row stays off. Neither may read as enabled.
+    assert.equal(autoDeployEnabled({ snapshotDir: noDb }), false);
+    assert.equal(autoDeployEnabled({ snapshotDir: flagAbsent }), false);
+    // The prod crm_context switch is the only DB path that turns it on.
+    assert.equal(autoDeployEnabled({ snapshotDir: flagOn }), true);
+
+    // The env override forces on regardless of snapshot state...
     process.env[AUTODEPLOY_ENV] = '1';
-    assert.equal(autoDeployEnabled(), true);
+    assert.equal(autoDeployEnabled({ snapshotDir: noDb }), true);
+    assert.equal(autoDeployEnabled({ snapshotDir: flagAbsent }), true);
+    // ...and any other env value falls through to the snapshot verdict.
     process.env[AUTODEPLOY_ENV] = '0';
-    assert.equal(autoDeployEnabled(), false);
+    assert.equal(autoDeployEnabled({ snapshotDir: flagAbsent }), false);
+    assert.equal(autoDeployEnabled({ snapshotDir: flagOn }), true);
   } finally {
     if (original === undefined) delete process.env[AUTODEPLOY_ENV];
     else process.env[AUTODEPLOY_ENV] = original;
+    for (const dir of [noDb, flagAbsent, flagOn]) fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
