@@ -31,10 +31,29 @@ test('cross-entity synthesis is Sonnet not Luna', () => {
   assert.ok(r.maxEvidenceRecords <= 100);
 });
 
-test('research routes to Grok', () => {
+test('research stays on the grok tier, behind Claude Haiku (tool/web lane)', () => {
+  // Grok ran out of credits on 8 Aug 2026. The grok research tier keeps the
+  // Claude Haiku stopgap because content research needs web/tool capability the
+  // opencode free tier does not offer. The tier identity stays 'grok'.
   const r = resolveFeatureRunner('content_research_driver');
   assert.equal(r.tier, 'grok');
-  assert.equal(r.runner, 'grok');
+  assert.equal(r.runner, 'claude');
+  assert.equal(r.model, 'haiku');
+});
+
+test('bulk tiers (Luna/Terra) run on the opencode free lane until Grok credits return', () => {
+  // Both bulk lane Tiers moved to opencode/deepseek-v4-flash-free on 8 Aug 2026
+  // after Grok exhausted credits and Claude became the only paid lane. This is
+  // the $0 temporary path — flip MODELS back to 'grok' when the subscription
+  // resets. The opencode runner must never silently reach a paid API.
+  for (const tier of ['luna', 'terra']) {
+    const r = MODELS[tier];
+    assert.equal(r.runner, 'opencode', tier);
+    assert.ok(r.model.includes('deepseek-v4-flash'), tier);
+  }
+  const triage = resolveFeatureRunner('crm_source_triage');
+  assert.equal(triage.runner, 'opencode');
+  assert.notEqual(triage.runner, 'openrouter');
 });
 
 test('nakai daily briefing is Opus', () => {
