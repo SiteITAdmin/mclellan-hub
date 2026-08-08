@@ -1,0 +1,146 @@
+<%- include('partials/crm-head', { title: 'Planner', active: 'planner' }) %>
+<% const viewStartMinutes = 7 * 60; %>
+<% const viewEndMinutes = 20 * 60; %>
+<% const viewMinutes = viewEndMinutes - viewStartMinutes; %>
+<% const minuteOf = value => { const [h, m] = String(value || '00:00').split(':').map(Number); return h * 60 + m; }; %>
+
+<section class="crm-hero planner-hero">
+  <div>
+    <p class="crm-eyebrow">Tasks × Google Calendar</p>
+    <h1>Plan the week</h1>
+    <p>Drag an open task into free time. Task blocks are written to Google Calendar; appointments remain read-only here.</p>
+  </div>
+  <div class="planner-week-nav" aria-label="Change week">
+    <a class="btn btn-sm btn-ghost" href="/crm/planner?start=<%= previousStart %>" aria-label="Previous week">←</a>
+    <a class="btn btn-sm btn-ghost" href="/crm/planner?start=<%= todayStart %>">Today</a>
+    <a class="btn btn-sm btn-ghost" href="/crm/planner?start=<%= nextStart %>" aria-label="Next week">→</a>
+  </div>
+</section>
+
+<% if (taskSyncError || calendarError) { %>
+  <div class="crm-notice planner-warning" role="alert">
+    <% if (taskSyncError) { %><div>Google Tasks could not refresh: <%= taskSyncError %>. Cached tasks are shown.</div><% } %>
+    <% if (calendarError) { %><div>Google Calendar could not load: <%= calendarError %>. <a href="/auth/google">Reconnect Google</a> before scheduling.</div><% } %>
+  </div>
+<% } %>
+
+<section class="planner-toolbar section-card" aria-label="Automatic planning controls">
+  <div class="planner-toolbar-copy">
+    <strong><%= snapshot.unscheduledTasks.length %> to place</strong>
+    <span><%= snapshot.scheduledCount %> already scheduled</span>
+  </div>
+  <label>Start<input id="planner-work-start" type="time" value="09:00" step="900"></label>
+  <label>Finish<input id="planner-work-end" type="time" value="17:30" step="900"></label>
+  <label class="planner-check"><input id="planner-weekends" type="checkbox"> Include weekends</label>
+  <button class="btn" id="planner-auto" type="button" <%= calendarError || !snapshot.unscheduledTasks.length ? 'disabled' : '' %>>Auto-plan open tasks</button>
+</section>
+
+<div class="planner-shell">
+  <aside class="planner-inbox section-card" aria-label="Unscheduled tasks">
+    <div class="planner-inbox-head">
+      <div>
+        <p class="crm-eyebrow">Task inbox</p>
+        <h2>Unscheduled</h2>
+      </div>
+      <span class="planner-count"><%= snapshot.unscheduledTasks.length %></span>
+    </div>
+    <p class="planner-instruction">Drag a task onto the week. Effort sets the block length; unsized tasks use 30 minutes.</p>
+    <div class="planner-task-list">
+      <% if (!snapshot.unscheduledTasks.length) { %>
+        <div class="planner-empty">Everything has a place.</div>
+      <% } %>
+      <% for (const task of snapshot.unscheduledTasks) { %>
+        <article class="planner-task-card priority-<%= task.priority || 'none' %>"
+                 draggable="true" tabindex="0"
+                 data-task-id="<%= task.id %>"
+                 data-duration="<%= task.planningDurationMinutes %>">
+          <div class="planner-task-card-top">
+            <a href="/crm/tasks/<%= task.id %>"><%= task.title %></a>
+            <span><%= task.planningDurationMinutes >= 60 ? (task.planningDurationMinutes / 60) + 'h' : task.planningDurationMinutes + 'm' %></span>
+          </div>
+          <div class="planner-task-card-meta">
+            <% if (task.priority) { %><span class="planner-pill"><%= task.priority %></span><% } %>
+            <% if (task.due) { %><span>Due <%= new Date(String(task.due).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }) %></span><% } %>
+            <% if (task.project_name || task.project_slug) { %><span><%= task.project_name || task.project_slug %></span><% } %>
+          </div>
+        </article>
+      <% } %>
+    </div>
+  </aside>
+
+  <section class="planner-calendar-card section-card" aria-label="Weekly calendar">
+    <div class="planner-calendar-title">
+      <div>
+        <p class="crm-eyebrow">Week of</p>
+        <h2><%= new Date(snapshot.startDate + 'T12:00:00Z').toLocaleDateString('en-IE', { day:'numeric', month:'long', year:'numeric', timeZone:'UTC' }) %></h2>
+      </div>
+      <div class="planner-legend"><span><i class="task"></i> Task block</span><span><i></i> Calendar</span></div>
+    </div>
+    <div class="planner-calendar-scroll">
+      <div class="planner-calendar" style="--planner-view-minutes:<%= viewMinutes %>;">
+        <div class="planner-days-head">
+          <div class="planner-corner"></div>
+          <% for (const day of snapshot.days) { %>
+            <div class="planner-day-head" data-date="<%= day.date %>">
+              <span><%= day.label %></span>
+              <strong><%= day.dayNumber %></strong>
+              <small><%= day.monthLabel %></small>
+            </div>
+          <% } %>
+        </div>
+        <div class="planner-all-day-row">
+          <div class="planner-all-day-label">all day</div>
+          <% for (const day of snapshot.days) { %>
+            <div class="planner-all-day-cell">
+              <% for (const event of snapshot.events.filter(item => item.allDay && item.date <= day.date && item.endDate > day.date)) { %>
+                <a class="planner-all-day-event" href="<%= event.htmlLink || '#' %>" <%= event.htmlLink ? 'target="_blank" rel="noopener"' : '' %> title="<%= event.title %>"><%= event.title %></a>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
+        <div class="planner-time-grid">
+          <div class="planner-time-axis">
+            <% for (let minute = viewStartMinutes; minute <= viewEndMinutes; minute += 60) { %>
+              <span style="top:<%= minute - viewStartMinutes %>px"><%= String(Math.floor(minute / 60)).padStart(2,'0') %>:00</span>
+            <% } %>
+          </div>
+          <% for (const day of snapshot.days) { %>
+            <div class="planner-day-body" data-date="<%= day.date %>" data-view-start="<%= viewStartMinutes %>" data-view-end="<%= viewEndMinutes %>" style="height:<%= viewMinutes %>px">
+              <% for (let minute = viewStartMinutes; minute <= viewEndMinutes; minute += 60) { %>
+                <div class="planner-hour-line" style="top:<%= minute - viewStartMinutes %>px"></div>
+                <% if (minute < viewEndMinutes) { %><div class="planner-half-line" style="top:<%= minute - viewStartMinutes + 30 %>px"></div><% } %>
+              <% } %>
+              <% for (const event of snapshot.events.filter(item => !item.allDay && item.date === day.date && item.time)) { %>
+                <% const rawStart = minuteOf(event.time); %>
+                <% const rawEnd = event.endDate === day.date && event.endTime ? minuteOf(event.endTime) : viewEndMinutes; %>
+                <% const top = Math.max(0, rawStart - viewStartMinutes); %>
+                <% const height = Math.max(24, Math.min(viewEndMinutes, rawEnd) - Math.max(viewStartMinutes, rawStart)); %>
+                <% if (rawEnd > viewStartMinutes && rawStart < viewEndMinutes) { %>
+                  <article class="planner-event <%= event.isTask ? 'planner-task-event' : 'planner-calendar-event' %>"
+                           style="top:<%= top %>px;height:<%= height %>px"
+                           <%= event.isTask ? 'draggable="true"' : '' %>
+                           data-task-id="<%= event.taskId || '' %>"
+                           data-duration="<%= event.durationMinutes || 30 %>"
+                           title="<%= event.time %>–<%= event.endTime %> · <%= event.title %>">
+                    <div class="planner-event-time"><%= event.time %><% if (event.endTime) { %>–<%= event.endTime %><% } %></div>
+                    <div class="planner-event-title"><%= event.title %></div>
+                    <% if (event.isTask) { %>
+                      <button type="button" class="planner-unschedule" data-unschedule="<%= event.taskId %>" aria-label="Remove <%= event.title %> from calendar">×</button>
+                    <% } else if (event.location) { %>
+                      <div class="planner-event-location"><%= event.location %></div>
+                    <% } %>
+                  </article>
+                <% } %>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="planner-toast" id="planner-toast" role="status" aria-live="polite"></div>
+<script>window.__PLANNER__ = <%- plannerJson %>;</script>
+<script src="/task-planner.js?v=20260808"></script>
+<%- include('partials/crm-foot') %>

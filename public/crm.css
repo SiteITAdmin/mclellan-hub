@@ -111,7 +111,10 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .crm-danger-form button { border: 0; background: transparent; color: var(--crm-danger); padding: 0; font: 600 12px Geist, sans-serif; cursor: pointer; }
 @media (max-width: 760px) {
   .crm-page { padding: 28px 16px 60px; }
-  .crm-topbar { padding: 0 16px; }
+  .crm-topbar { padding: 0 16px; justify-content: flex-start; gap: 12px; overflow: hidden; }
+  .crm-brand { flex: 0 0 auto; }
+  .crm-topbar nav { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .crm-topbar nav::-webkit-scrollbar { display: none; }
   .crm-topbar nav a { padding: 7px; }
   .crm-two-col, .crm-form-grid { grid-template-columns: 1fr; }
   .crm-form-grid .wide { grid-column: auto; }
@@ -159,3 +162,91 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .crm-fact-edit-form { gap: 7px; margin: 2px 0 4px; }
 .crm-fact-edit-form textarea { font-size: 13px; line-height: 1.5; min-height: 76px; }
 .crm-fact-edit-actions { display: flex; gap: 7px; align-items: center; }
+
+/* ── Task calendar planner ──────────────────────────────────────────────── */
+.planner-hero { align-items: center; }
+.planner-week-nav { display: flex; gap: 7px; }
+.planner-warning { margin: -10px 0 20px; padding: 12px 14px; border: 1px solid var(--crm-danger); border-radius: 10px; color: var(--crm-danger); display: grid; gap: 5px; }
+.planner-warning a { color: inherit; font-weight: 700; }
+.planner-toolbar { display: flex; gap: 14px; align-items: end; padding: 14px 16px; }
+.planner-toolbar-copy { display: grid; gap: 3px; margin-right: auto; min-width: 150px; }
+.planner-toolbar-copy strong { font-size: 14px; }
+.planner-toolbar-copy span { color: var(--crm-muted); font-size: 11px; }
+.planner-toolbar label { width: 112px; }
+.planner-toolbar input[type="time"] { padding: 7px 9px; margin-top: 4px; }
+.planner-toolbar .planner-check { width: auto; display: flex; align-items: center; gap: 7px; padding-bottom: 9px; white-space: nowrap; }
+.planner-check input { width: auto; margin: 0; }
+.planner-toolbar .btn:disabled { opacity: .45; cursor: not-allowed; }
+.planner-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
+.planner-inbox { position: sticky; top: 142px; padding: 16px; max-height: calc(100vh - 170px); overflow: hidden; display: flex; flex-direction: column; }
+.planner-inbox-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.planner-inbox-head h2 { margin: 2px 0 0; }
+.planner-count { min-width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: rgba(86,83,232,.1); color: var(--crm-accent-ink); font-size: 12px; font-weight: 700; }
+.planner-instruction { margin: 4px 0 14px; color: var(--crm-muted); font-size: 11px; line-height: 1.5; }
+.planner-task-list { display: grid; gap: 8px; overflow: auto; padding: 2px 3px 14px 0; }
+.planner-task-card { border: 1px solid var(--crm-line); border-left: 3px solid var(--crm-accent); border-radius: 10px; padding: 10px; background: var(--crm-input-bg); cursor: grab; box-shadow: 0 3px 10px rgba(36,31,61,.04); transition: transform .15s, opacity .15s, border-color .15s; }
+.planner-task-card:hover { transform: translateY(-1px); border-color: var(--crm-accent); }
+.planner-task-card:active { cursor: grabbing; }
+.planner-task-card.dragging, .planner-event.dragging { opacity: .38; }
+.planner-task-card.priority-high { border-left-color: var(--crm-danger); }
+.planner-task-card.priority-medium { border-left-color: #c0841a; }
+.planner-task-card.priority-low { border-left-color: #4f8f78; }
+.planner-task-card-top { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.planner-task-card-top a { color: var(--crm-text); font-size: 12px; font-weight: 650; line-height: 1.35; text-decoration: none; }
+.planner-task-card-top > span { flex-shrink: 0; color: var(--crm-accent); font-size: 10px; font-weight: 700; }
+.planner-task-card-meta { display: flex; flex-wrap: wrap; gap: 5px 7px; margin-top: 7px; color: var(--crm-muted); font-size: 9px; }
+.planner-pill { text-transform: uppercase; font-weight: 700; letter-spacing: .04em; }
+.planner-empty { padding: 28px 10px; color: var(--crm-muted); font-size: 12px; text-align: center; border: 1px dashed var(--crm-line); border-radius: 10px; }
+.planner-calendar-card { padding: 0; overflow: hidden; }
+.planner-calendar-title { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--crm-line); }
+.planner-calendar-title h2 { margin: 2px 0 0; }
+.planner-legend { display: flex; gap: 14px; color: var(--crm-muted); font-size: 10px; }
+.planner-legend span { display: flex; align-items: center; gap: 5px; }
+.planner-legend i { width: 10px; height: 10px; border-radius: 3px; background: rgba(90,103,128,.28); }
+.planner-legend i.task { background: var(--crm-accent); }
+.planner-calendar-scroll { overflow: auto; }
+.planner-calendar { min-width: 900px; background: var(--crm-card); }
+.planner-days-head, .planner-all-day-row, .planner-time-grid { display: grid; grid-template-columns: 52px repeat(7, minmax(118px, 1fr)); }
+.planner-corner, .planner-all-day-label, .planner-time-axis { border-right: 1px solid var(--crm-line); }
+.planner-day-head { height: 62px; display: flex; align-items: baseline; justify-content: center; gap: 4px; padding-top: 14px; border-right: 1px solid var(--crm-line); color: var(--crm-muted); }
+.planner-day-head span { text-transform: uppercase; font-size: 9px; font-weight: 700; letter-spacing: .07em; }
+.planner-day-head strong { color: var(--crm-text); font-size: 21px; }
+.planner-day-head small { font-size: 9px; }
+.planner-day-head.is-today { background: rgba(86,83,232,.07); }
+.planner-day-head.is-today strong { color: var(--crm-accent); }
+.planner-all-day-row { min-height: 34px; border-top: 1px solid var(--crm-line); border-bottom: 1px solid var(--crm-line); }
+.planner-all-day-label { display: flex; justify-content: center; padding-top: 8px; color: var(--crm-muted); font-size: 8px; text-transform: uppercase; }
+.planner-all-day-cell { min-width: 0; padding: 4px; border-right: 1px solid var(--crm-line); display: grid; gap: 3px; align-content: start; }
+.planner-all-day-event { display: block; padding: 3px 5px; border-radius: 4px; background: rgba(90,103,128,.12); color: var(--crm-text); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+.planner-time-axis { position: relative; height: calc(var(--planner-view-minutes) * 1px); }
+.planner-time-axis span { position: absolute; right: 7px; transform: translateY(-50%); color: var(--crm-muted); font-size: 8px; }
+.planner-day-body { position: relative; min-width: 0; border-right: 1px solid var(--crm-line); transition: background .12s; }
+.planner-day-body.is-today { background-color: rgba(86,83,232,.025); }
+.planner-day-body.drag-over { background-color: rgba(86,83,232,.12); box-shadow: inset 0 0 0 2px var(--crm-accent); }
+.planner-hour-line, .planner-half-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--crm-line); pointer-events: none; }
+.planner-half-line { opacity: .42; }
+.planner-event { position: absolute; z-index: 2; left: 4px; right: 4px; min-height: 24px; overflow: hidden; border-radius: 6px; padding: 5px 6px; border: 1px solid rgba(90,103,128,.16); background: color-mix(in srgb, var(--crm-muted) 13%, var(--crm-card)); color: var(--crm-text); box-shadow: 0 2px 6px rgba(20,24,36,.08); }
+.planner-task-event { padding-right: 19px; border-color: color-mix(in srgb, var(--crm-accent) 55%, transparent); background: color-mix(in srgb, var(--crm-accent) 16%, var(--crm-card)); cursor: grab; }
+.planner-event-time { color: var(--crm-muted); font-size: 8px; font-weight: 600; }
+.planner-task-event .planner-event-time { color: var(--crm-accent-ink); }
+.planner-event-title { margin-top: 2px; font-size: 10px; font-weight: 650; line-height: 1.25; }
+.planner-event-location { margin-top: 2px; color: var(--crm-muted); font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.planner-unschedule { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border: 0; border-radius: 4px; padding: 0; background: transparent; color: var(--crm-accent-ink); cursor: pointer; font-size: 14px; line-height: 14px; opacity: .55; }
+.planner-unschedule:hover { opacity: 1; background: rgba(86,83,232,.14); }
+.planner-toast { position: fixed; left: 50%; bottom: 24px; z-index: 200; transform: translate(-50%, 20px); padding: 10px 15px; border-radius: 9px; background: #211e31; color: #fff; font-size: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.28); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
+.planner-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.planner-toast.error { background: var(--crm-danger); }
+@media (max-width: 900px) {
+  .planner-shell { grid-template-columns: 1fr; }
+  .planner-inbox { position: static; max-height: 310px; }
+  .planner-toolbar { flex-wrap: wrap; align-items: end; }
+  .planner-toolbar-copy { width: 100%; }
+}
+@media (max-width: 600px) {
+  .planner-week-nav { width: 100%; }
+  .planner-week-nav .btn { flex: 1; }
+  .planner-toolbar label { flex: 1 1 100px; }
+  .planner-toolbar .planner-check { flex-basis: 100%; }
+  .planner-toolbar .btn { width: 100%; }
+  .planner-calendar-title { align-items: flex-start; flex-direction: column; }
+}

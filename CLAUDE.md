@@ -196,6 +196,10 @@ When Douglas reports that something didn't happen — tasks not created, times n
 
 If the missing or bad data only exists in production, first pull a controlled production diagnostic snapshot, reproduce locally, fix locally, commit, push, deploy, then run any deliberate production repair if needed. A backup in Google Drive is not the same thing as a local diagnostic snapshot the app can run against.
 
+## Task calendar planner (8 August 2026)
+
+`/crm/planner` is a derived operational view over the existing Google Tasks mirror and live Google Calendar. Do not add a planner task table or turn a calendar placement into relationship knowledge. `lib/task-calendar-planner.js` creates one Google Calendar event per scheduled task with private `hubTaskId` provenance and mirrors it into `meetings` with `source='task_planner'`; moves patch it, and unscheduling removes only the event. Auto-plan is always an explicit user action. Preserve reconciliation by private task ID before insert and after ambiguous provider errors so retry cannot duplicate a time block.
+
 ## Before ending any session
 
 Ask yourself:

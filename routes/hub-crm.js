@@ -239,6 +239,7 @@ function crmPageData(user) {
       { href: '/crm/meeting-intake', label: 'Intake' },
       { href: '/crm/questions', label: 'Questions' },
       { href: '/crm/tasks', label: 'Tasks' },
+      { href: '/crm/planner', label: 'Planner' },
       { href: '/crm/suggestions', label: 'Suggestions' },
       { href: '/crm/reminders', label: 'Reminders' },
       { href: '/crm/projects', label: 'Projects' },
@@ -1778,6 +1779,112 @@ router.get('/crm/tasks', requireAuth, async (req, res) => {
   const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const projects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
   res.render('hub/crm-tasks', { ...crmPageData(req.hubUser), tasks, showHistory, contacts, companies, projects, syncError });
+});
+
+function plannerWeekStart(value = null) {
+  const fallback = todayIso();
+  const candidate = /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value) : fallback;
+  const date = new Date(`${candidate}T12:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return plannerWeekStart(fallback);
+  const weekday = date.getUTCDay();
+  date.setUTCDate(date.getUTCDate() - (weekday === 0 ? 6 : weekday - 1));
+  return date.toISOString().slice(0, 10);
+}
+
+router.get('/crm/planner', requireAuth, async (req, res) => {
+  const {
+    addIsoDays, getPlannerSnapshot,
+  } = require('../lib/task-calendar-planner');
+  const startDate = plannerWeekStart(req.query.start);
+  const endDate = addIsoDays(startDate, 7);
+  let taskSyncError = null;
+  let calendarError = null;
+  try {
+    await syncTasks(req.hubUser);
+  } catch (error) {
+    taskSyncError = error.message;
+    console.warn('[planner] task sync failed:', error.message);
+  }
+  let snapshot;
+  try {
+    snapshot = await getPlannerSnapshot(req.hubUser, { startDate, endDate });
+  } catch (error) {
+    calendarError = error.message;
+    console.warn('[planner] calendar read failed:', error.message);
+    snapshot = await getPlannerSnapshot(req.hubUser, { startDate, endDate }, {
+      calendarClient: { events: { list: async () => ({ data: { items: [] } }) } },
+      reconcileCache: false,
+    });
+  }
+  const plannerJson = JSON.stringify(snapshot)
+    .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+  res.render('hub/crm-planner', {
+    ...crmPageData(req.hubUser),
+    snapshot,
+    plannerJson,
+    taskSyncError,
+    calendarError,
+    previousStart: addIsoDays(startDate, -7),
+    nextStart: addIsoDays(startDate, 7),
+    todayStart: plannerWeekStart(),
+  });
+});
+
+router.get('/api/planner', requireAuth, async (req, res) => {
+  try {
+    const { getPlannerSnapshot } = require('../lib/task-calendar-planner');
+    const snapshot = await getPlannerSnapshot(req.hubUser, {
+      startDate: req.query.start,
+      endDate: req.query.end,
+    });
+    res.json({ ok: true, ...snapshot });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/api/planner/tasks/:id/schedule', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { scheduleTask } = require('../lib/task-calendar-planner');
+    const result = await scheduleTask(req.hubUser, req.params.id, {
+      startAt: req.body.startAt,
+      durationMinutes: req.body.durationMinutes,
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('[planner] schedule failed:', error);
+    const status = /not found/i.test(error.message) ? 404 : 400;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+router.post('/api/planner/tasks/:id/unschedule', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { unscheduleTask } = require('../lib/task-calendar-planner');
+    const result = await unscheduleTask(req.hubUser, req.params.id);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('[planner] unschedule failed:', error);
+    const status = /not found/i.test(error.message) ? 404 : 500;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+router.post('/api/planner/auto-plan', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { autoPlanTasks } = require('../lib/task-calendar-planner');
+    const result = await autoPlanTasks(req.hubUser, {
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      workStart: req.body.workStart,
+      workEnd: req.body.workEnd,
+      includeWeekends: req.body.includeWeekends === true,
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('[planner] auto-plan failed:', error);
+    res.status(400).json({ error: error.message });
+  }
 });
 
 // The answer side of the quality boards. Every question here was raised by a
