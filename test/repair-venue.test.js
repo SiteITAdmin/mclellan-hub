@@ -8,7 +8,7 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 const {
   REPAIR_MAX_TURNS,
-  grokCliModel,
+  resolveRepairModel,
   checkScope,
   autoDeployEnabled,
   AUTODEPLOY_ENV,
@@ -30,17 +30,18 @@ function makeSnapshotDir(flag) {
   return dir;
 }
 
-test('self-repair uses the bounded local Grok CLI model', () => {
+test('self-repair uses the local Claude Code CLI Opus model', () => {
   assert.equal(REPAIR_MAX_TURNS, 12);
-  assert.equal(grokCliModel('grok-4.5'), 'grok-4.5');
-  assert.equal(grokCliModel('x-ai/grok-4.5'), 'grok-4.5');
-  assert.throws(() => grokCliModel('google/gemini-2.5-pro-preview'), /must be Grok 4.5/);
+  assert.equal(resolveRepairModel('claude-opus-4-8'), 'claude-opus-4-8');
+  assert.equal(resolveRepairModel('opus'), 'claude-opus-4-8');
+  assert.throws(() => resolveRepairModel('grok-4.5'), /must be an Opus model/);
+  assert.throws(() => resolveRepairModel('google/gemini-2.5-pro-preview'), /must be an Opus model/);
 });
 
 test('self-repair still rejects an executor that makes no change', () => {
   const scope = checkScope({ constraints: { allowed_paths: ['lib/example.js'], forbidden: [] } }, []);
   assert.equal(scope.ok, false);
-  assert.match(scope.reason, /Grok made no changes/);
+  assert.match(scope.reason, /the repair agent made no changes/);
 });
 
 test('auto-deploy is off unless explicitly turned on, and the env override wins', () => {
