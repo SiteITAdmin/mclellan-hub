@@ -38,3 +38,38 @@ test('a runner can be disabled explicitly', () => {
   if (old === undefined) delete process.env.NAKAI_DAILY_BRIEFING_RUNNER;
   else process.env.NAKAI_DAILY_BRIEFING_RUNNER = old;
 });
+
+test('opencode runner targets the free tier via the opencode CLI', () => {
+  const config = {
+    runner: 'opencode',
+    model: 'deepseek-v4-flash-free',
+    effort: 'low',
+    allowTools: false,
+    jsonMode: true,
+    timeoutMs: 240000,
+    maxInputChars: 80000,
+    maxOutputChars: 32000,
+    tier: 'luna',
+  };
+  const command = commandFor(config, 'system');
+  assert.match(command.command, /opencode$/);
+  assert.equal(command.promptArg, true);
+  assert.ok(command.args.includes('run'), 'uses headless run mode');
+  assert.ok(command.args.includes('opencode/deepseek-v4-flash-free'), 'targets the free tier model');
+  assert.ok(command.args.includes('--format'), 'emits NDJSON events');
+  assert.ok(command.args.some(a => a === '__PROMPT__'), 'prompt is substituted');
+});
+
+test('opencode NDJSON output extracts only assistant text', () => {
+  const config = { runner: 'opencode', model: 'deepseek-v4-flash-free' };
+  const stream = [
+    JSON.stringify({ type: 'event', part: { type: 'text', text: 'first thought' } }),
+    JSON.stringify({ type: 'step-start' }),
+    JSON.stringify({ type: 'event', part: { type: 'text', text: '{"ok":true}' }, other: true }),
+    JSON.stringify({ type: 'step-finish', part: { type: 'step-finish' } }),
+  ].join('\n');
+  const out = textFromOutput(config, stream);
+  assert.equal(out, 'first thought\n{"ok":true}');
+  // A non-event payload falls back to the raw text.
+  assert.equal(textFromOutput(config, 'plain response'), 'plain response');
+});
