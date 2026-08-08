@@ -7,7 +7,10 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SNAPSHOT_ROOT="${SNAPSHOT_ROOT:-${ROOT}/data/prod-snapshots}"
+# Local-only path, NOT ~/Documents: that tree is iCloud-synced, and a launchd
+# job appending to a cloud-evicted log there dies with "Resource deadlock
+# avoided". Node side (lib/repair-reproducer.js) defaults to the same path.
+SNAPSHOT_ROOT="${SNAPSHOT_ROOT:-${HUB_SNAPSHOT_ROOT:-${HOME}/Library/Application Support/mclellan-hub/prod-snapshots}}"
 KEEP="${KEEP:-7}"
 LOG="${SNAPSHOT_ROOT}/refresh.log"
 

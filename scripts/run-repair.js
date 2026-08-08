@@ -33,6 +33,7 @@ const {
   loadReproducer,
   listReproducers,
   writeRepairReceipt,
+  SNAPSHOT_ROOT,
   SNAPSHOT_DIR,
 } = require('../lib/repair-reproducer');
 const { triageReproducer } = require('../lib/repair-triage');
@@ -64,7 +65,7 @@ function venueEnabled() {
 // The snapshot loop's own health rules apply here too: a failed or stale
 // snapshot means we would be mining yesterday's (or nobody's) errors.
 function snapshotHealthy() {
-  const failedMarker = path.join(ROOT, 'data', 'prod-snapshots', 'LAST_RUN_FAILED');
+  const failedMarker = path.join(SNAPSHOT_ROOT, 'LAST_RUN_FAILED');
   if (fs.existsSync(failedMarker)) {
     return { ok: false, reason: `snapshot refresh failed (${failedMarker} exists)` };
   }
