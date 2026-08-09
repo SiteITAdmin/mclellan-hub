@@ -115,7 +115,11 @@ test('a CRM task schedules, moves, and unschedules through one Google Calendar b
 });
 
 test('planner hours persist in the existing CRM context store', () => {
-  assert.equal(getPlannerPreferences(user).workStart, '09:00');
+  assert.deepEqual(getPlannerPreferences(user), {
+    workStart: '08:00', workEnd: '16:00',
+    eveningStart: '18:30', eveningEnd: '21:00',
+    weekendStart: '10:00', weekendEnd: '17:00',
+  });
   const saved = savePlannerPreferences(user, {
     workStart: '08:30', workEnd: '16:30',
     eveningStart: '18:00', eveningEnd: '22:00',
@@ -128,8 +132,8 @@ test('planner hours persist in the existing CRM context store', () => {
   ).get(user));
   // Restore defaults expected by the scheduling scenarios below.
   savePlannerPreferences(user, {
-    workStart: '09:00', workEnd: '17:30',
-    eveningStart: '18:30', eveningEnd: '21:30',
+    workStart: '08:00', workEnd: '16:00',
+    eveningStart: '18:30', eveningEnd: '21:00',
     weekendStart: '10:00', weekendEnd: '17:00',
   });
 });
