@@ -94,7 +94,7 @@ Dragging a task creates one ordinary Google Calendar event through `createCalend
 
 Provider exactly-once delivery is not assumed. Before inserting, the planner reconciles by the private task ID; after an ambiguous insert error it performs the same lookup and adopts the remote event if present. Each schedule/move/remove attempt writes a `calendar_planner_effect` receipt. These placements are operational state, not relationship evidence or a new task-creation path.
 
-`GET /api/planner/print-today` is a read-only, on-demand PDF projection of today’s live planner snapshot. It does not archive a document or create calendar/task state: it renders calendar events and a checklist of scheduled planner task blocks, marking late blocks in red.
+`GET /api/planner/print-today` is a read-only, on-demand PDF projection of today’s live planner snapshot. It does not archive a document or create calendar/task state: genuine appointments render in the calendar column, while task-backed Calendar mirrors render once in the scheduled-task checklist, with late blocks marked in red. The Work Brief applies the same provenance boundary and excludes `meetings.source='task_planner'` from its calendar sections because those actions already appear as tasks.
 
 ### CRM layout — fluid shared surface
 
