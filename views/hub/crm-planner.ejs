@@ -6,6 +6,7 @@
 <% const viewStartMinutes = Math.max(0, Math.floor((Math.min(...preferenceStarts) - 60) / 60) * 60); %>
 <% const viewEndMinutes = Math.min(24 * 60, Math.ceil((Math.max(...preferenceEnds) + 60) / 60) * 60); %>
 <% const viewMinutes = viewEndMinutes - viewStartMinutes; %>
+<% const minuteScale = 1.5; %>
 
 <section class="crm-hero planner-hero">
   <div>
@@ -97,7 +98,7 @@
       <div class="planner-legend"><span><i class="task"></i> Task block</span><span><i></i> Calendar</span></div>
     </div>
     <div class="planner-calendar-scroll">
-      <div class="planner-calendar" style="--planner-view-minutes:<%= viewMinutes %>;">
+      <div class="planner-calendar" style="--planner-view-height:<%= viewMinutes * minuteScale %>px;">
         <div class="planner-days-head">
           <div class="planner-corner"></div>
           <% for (const day of snapshot.days) { %>
@@ -121,20 +122,20 @@
         <div class="planner-time-grid">
           <div class="planner-time-axis">
             <% for (let minute = viewStartMinutes; minute <= viewEndMinutes; minute += 60) { %>
-              <span style="top:<%= minute - viewStartMinutes %>px"><%= minute === 1440 ? '24:00' : String(Math.floor(minute / 60)).padStart(2,'0') + ':00' %></span>
+              <span style="top:<%= (minute - viewStartMinutes) * minuteScale %>px"><%= minute === 1440 ? '24:00' : String(Math.floor(minute / 60)).padStart(2,'0') + ':00' %></span>
             <% } %>
           </div>
           <% for (const day of snapshot.days) { %>
-            <div class="planner-day-body" data-date="<%= day.date %>" data-view-start="<%= viewStartMinutes %>" data-view-end="<%= viewEndMinutes %>" style="height:<%= viewMinutes %>px">
+            <div class="planner-day-body" data-date="<%= day.date %>" data-view-start="<%= viewStartMinutes %>" data-view-end="<%= viewEndMinutes %>" style="height:<%= viewMinutes * minuteScale %>px">
               <% for (let minute = viewStartMinutes; minute <= viewEndMinutes; minute += 60) { %>
-                <div class="planner-hour-line" style="top:<%= minute - viewStartMinutes %>px"></div>
-                <% if (minute < viewEndMinutes) { %><div class="planner-half-line" style="top:<%= minute - viewStartMinutes + 30 %>px"></div><% } %>
+                <div class="planner-hour-line" style="top:<%= (minute - viewStartMinutes) * minuteScale %>px"></div>
+                <% if (minute < viewEndMinutes) { %><div class="planner-half-line" style="top:<%= (minute - viewStartMinutes + 30) * minuteScale %>px"></div><% } %>
               <% } %>
               <% for (const event of snapshot.events.filter(item => !item.allDay && item.date === day.date && item.time)) { %>
                 <% const rawStart = minuteOf(event.time); %>
                 <% const rawEnd = event.endDate === day.date && event.endTime ? minuteOf(event.endTime) : viewEndMinutes; %>
-                <% const top = Math.max(0, rawStart - viewStartMinutes); %>
-                <% const height = Math.max(24, Math.min(viewEndMinutes, rawEnd) - Math.max(viewStartMinutes, rawStart)); %>
+                <% const top = Math.max(0, rawStart - viewStartMinutes) * minuteScale; %>
+                <% const height = Math.max(32, (Math.min(viewEndMinutes, rawEnd) - Math.max(viewStartMinutes, rawStart)) * minuteScale); %>
                 <% if (rawEnd > viewStartMinutes && rawStart < viewEndMinutes) { %>
                   <article class="planner-event <%= event.isTask ? 'planner-task-event planner-task-' + (event.task?.planner_lane || 'work') + (event.isLate ? ' planner-task-late' : '') : 'planner-calendar-event' %>"
                            style="top:<%= top %>px;height:<%= height %>px"

@@ -228,8 +228,8 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-legend i { width: 10px; height: 10px; border-radius: 3px; background: rgba(90,103,128,.28); }
 .planner-legend i.task { background: var(--crm-accent); }
 .planner-calendar-scroll { overflow: auto; }
-.planner-calendar { min-width: 980px; background: var(--crm-card); }
-.planner-days-head, .planner-all-day-row, .planner-time-grid { display: grid; grid-template-columns: 58px repeat(7, minmax(130px, 1fr)); }
+.planner-calendar { min-width: 1250px; background: var(--crm-card); }
+.planner-days-head, .planner-all-day-row, .planner-time-grid { display: grid; grid-template-columns: 58px repeat(7, minmax(170px, 1fr)); }
 .planner-corner, .planner-all-day-label, .planner-time-axis { border-right: 1px solid var(--crm-line); }
 .planner-day-head { height: 70px; display: flex; align-items: baseline; justify-content: center; gap: 5px; padding-top: 16px; border-right: 1px solid var(--crm-line); color: var(--crm-muted); }
 .planner-day-head span { text-transform: uppercase; font-size: 10px; font-weight: 700; letter-spacing: .07em; }
@@ -241,7 +241,7 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-all-day-label { display: flex; justify-content: center; padding-top: 8px; color: var(--crm-muted); font-size: 8px; text-transform: uppercase; }
 .planner-all-day-cell { min-width: 0; padding: 4px; border-right: 1px solid var(--crm-line); display: grid; gap: 3px; align-content: start; }
 .planner-all-day-event { display: block; padding: 3px 5px; border-radius: 4px; background: rgba(90,103,128,.12); color: var(--crm-text); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
-.planner-time-axis { position: relative; height: calc(var(--planner-view-minutes) * 1px); }
+.planner-time-axis { position: relative; height: var(--planner-view-height); }
 .planner-time-axis span { position: absolute; right: 9px; transform: translateY(-50%); color: var(--crm-muted); font-size: 9px; }
 .planner-day-body { position: relative; min-width: 0; border-right: 1px solid var(--crm-line); transition: background .12s; }
 .planner-day-body.is-today { background-color: rgba(86,83,232,.025); }

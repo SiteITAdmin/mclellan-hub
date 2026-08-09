@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createPlannerDayPdf, dayEvents } = require('../lib/task-planner-pdf');
+const { createPlannerDayPdf, dayEvents, splitDayEvents } = require('../lib/task-planner-pdf');
 
 const snapshot = {
   events: [
@@ -19,4 +19,10 @@ test('daily planner PDF includes today calendar events and scheduled task checkl
   assert.ok(pdf.length > 1000);
   assert.match(pdf.toString('latin1'), /Today/);
   assert.equal((pdf.toString('latin1').match(/\/Type \/Page\b/g) || []).length, 1);
+});
+
+test('daily planner separates appointments from planner task mirrors', () => {
+  const result = splitDayEvents(snapshot, '2026-08-10');
+  assert.deepEqual(result.calendarEvents.map(event => event.id), ['meeting']);
+  assert.deepEqual(result.tasks.map(event => event.id), ['task']);
 });
