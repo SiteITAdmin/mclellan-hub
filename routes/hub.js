@@ -12,13 +12,6 @@ const { createTask, syncTasks, completeTask, getCachedTasks } = require('../lib/
 const { compactProject } = require('../lib/memory-compactor');
 const { vaultRoot } = require('../lib/obsidian-vault');
 const { getWikiPagesByTags } = require('../lib/wiki-tags');
-const {
-  buildTokenBurnPage,
-  buildTokenBurnSummary,
-  formatTokens,
-  formatUsd,
-  heatLevel,
-} = require('../lib/token-burn');
 const { TASK_CODES } = require('../lib/openrouter-attribution');
 const { buildPromptInjectionGuard, wrapUntrustedBlock } = require('../lib/security');
 const { getSystemPrompt } = require('../lib/settings');
@@ -218,8 +211,6 @@ router.get('/', requireAuth, async (req, res) => {
   let calendarEvents = [];
   try { calendarEvents = await fetchTodayCalendarEvents(user); } catch (_) {}
 
-  const tokenBurn = buildTokenBurnSummary(user);
-
   const nlWeekKey = getWeekKey();
   const nlRange = weekKeyRange(nlWeekKey);
   const nlFromTs = Date.parse(`${nlRange.dateFrom}T00:00:00Z`) / 1000;
@@ -230,18 +221,7 @@ router.get('/', requireAuth, async (req, res) => {
   `).get(user, nlFromTs, nlToTs);
   const nlThisWeek = { total: nlRow?.total || 0, selected: nlRow?.selected || 0, weekKey: nlWeekKey };
 
-  res.render('hub/home', { user, projects, recentConvs, today, calendarEvents, recentMeeting, tokenBurn, formatTokens, nlThisWeek });
-});
-
-router.get('/token-burn', requireAuth, (req, res) => {
-  const tokenBurn = buildTokenBurnPage(req.hubUser);
-  res.render('hub/token-burn', {
-    user: req.hubUser,
-    tokenBurn,
-    formatTokens,
-    formatUsd,
-    heatLevel,
-  });
+  res.render('hub/home', { user, projects, recentConvs, today, calendarEvents, recentMeeting, nlThisWeek });
 });
 
 // ── Command palette index — CRM entities for the ⌘K jump palette ────────────
@@ -288,20 +268,6 @@ router.get('/api/mobile/conversations/:convId', requireAuth, (req, res) => {
 
 router.get('/api/mobile/models', requireAuth, (req, res) => {
   res.json({ models: listModelsForUser(req.hubUser) });
-});
-
-router.get('/api/mobile/token-burn', requireAuth, (req, res) => {
-  const t = buildTokenBurnPage(req.hubUser);
-  res.json({
-    importedExact: t.importedExact,
-    lastDate: t.lastDate,
-    maxDay: t.maxDay,
-    recentDays: t.recentDays,
-    topDays: t.topDays,
-    liveDaily: t.liveDaily,
-    liveTasks: t.liveTasks,
-    accountTasks: t.accountTasks,
-  });
 });
 
 // ── AI text humanizer ────────────────────────────────────────────────────────
