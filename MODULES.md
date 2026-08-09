@@ -140,6 +140,7 @@ These are the tools the system runs on. They are not features — they are the f
 - Created events appear in the Work Brief's Today/Coming Up sections the same day they're created, not only after the next 06:45 calendar sync — the create path (`lib/google-calendar.js`) upserts `meetings` directly rather than waiting on `syncCalendarMeetings`
 - A task checked for Planner and then dragged or auto-planned at `/crm/planner` has exactly one Google Calendar block carrying its Hub task ID. Moving patches that block; unscheduling or unchecking deletes only the block and leaves Google Tasks untouched
 - Saved working/evening/weekend windows are enforced for manual moves and auto-plan: work tasks use Monday–Friday work hours, personal tasks use weekday evenings or weekends
+- Within five minutes of a new or changed genuine Calendar appointment, any colliding scheduled task is patched into the next permitted free slot; later task blocks cascade only when necessary, and no replacement Calendar event is created
 - An interrupted provider response is reconciled through the event's private `hubTaskId` before another insert is attempted
 - “Print today” produces a read-only PDF from the same live Calendar/Planner snapshot: genuine appointments appear in the calendar and task-backed Calendar blocks appear once in the task checklist
 

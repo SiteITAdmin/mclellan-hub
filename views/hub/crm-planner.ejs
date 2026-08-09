@@ -29,6 +29,18 @@
   </div>
 <% } %>
 
+<% if (snapshot.lastReflow && (snapshot.lastReflow.moved?.length || snapshot.lastReflow.unplaced?.length || snapshot.lastReflow.failed?.length)) { %>
+  <div class="crm-notice planner-reflow-notice" role="status">
+    <% if (snapshot.lastReflow.moved?.length) { %>
+      <strong>Calendar changed:</strong> moved <%= snapshot.lastReflow.moved.length %> task<%= snapshot.lastReflow.moved.length === 1 ? '' : 's' %> to the next free time.
+      <span><%= snapshot.lastReflow.moved.map(item => item.title).join(' · ') %></span>
+    <% } %>
+    <% if (snapshot.lastReflow.unplaced?.length || snapshot.lastReflow.failed?.length) { %>
+      <strong><%= (snapshot.lastReflow.unplaced?.length || 0) + (snapshot.lastReflow.failed?.length || 0) %> task<%= ((snapshot.lastReflow.unplaced?.length || 0) + (snapshot.lastReflow.failed?.length || 0)) === 1 ? '' : 's' %> still need attention.</strong>
+    <% } %>
+  </div>
+<% } %>
+
 <section class="planner-toolbar section-card" aria-label="Automatic planning controls">
   <div class="planner-toolbar-copy">
     <strong><%= snapshot.unscheduledTasks.length %> to place</strong>

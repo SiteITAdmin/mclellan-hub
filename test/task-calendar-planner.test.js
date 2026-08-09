@@ -7,6 +7,7 @@ const {
   zonedDateTimeToIso,
   normaliseDuration,
   computeAutoPlan,
+  computeConflictReflow,
   _test,
 } = require('../lib/task-calendar-planner');
 
@@ -107,6 +108,73 @@ test('auto-plan does not let its own placements overlap and skips weekends by de
     '2026-08-17T09:00',
     '2026-08-17T09:30',
   ]);
+});
+
+test('a new appointment moves the conflicting task and cascades later task blocks', () => {
+  const tasks = [
+    { id: 'first', title: 'First task', planner_lane: 'work', effort_minutes: 30, due: '2026-08-10' },
+    { id: 'second', title: 'Second task', planner_lane: 'work', effort_minutes: 30, due: '2026-08-10' },
+    { id: 'safe', title: 'Safe task', planner_lane: 'work', effort_minutes: 30, due: '2026-08-10' },
+  ];
+  const taskEvent = (taskId, time, endTime) => ({
+    id: `event-${taskId}`, taskId, isTask: true, date: '2026-08-10', endDate: '2026-08-10',
+    time, endTime, durationMinutes: 30, allDay: false, transparency: 'opaque',
+    task: tasks.find(task => task.id === taskId),
+  });
+  const result = computeConflictReflow({
+    tasks,
+    startDate: '2026-08-10',
+    endDate: '2026-08-12',
+    preferences: { workStart: '08:00', workEnd: '12:00' },
+    now: new Date('2026-08-10T06:00:00Z'),
+    events: [
+      { id: 'appointment', title: 'New appointment', date: '2026-08-10', endDate: '2026-08-10', time: '09:00', endTime: '10:00', allDay: false, transparency: 'opaque' },
+      taskEvent('first', '09:00', '09:30'),
+      taskEvent('second', '10:00', '10:30'),
+      taskEvent('safe', '11:30', '12:00'),
+    ],
+  });
+
+  assert.deepEqual(result.moved.map(item => [item.taskId, item.fromAt, item.startAt, item.late]), [
+    ['first', '2026-08-10T09:00', '2026-08-10T10:00', false],
+    ['second', '2026-08-10T10:00', '2026-08-10T10:30', false],
+  ]);
+  assert.deepEqual(result.unchanged.map(item => item.taskId), ['safe']);
+  assert.deepEqual(result.unplaced, []);
+});
+
+test('automatic conflict reflow rolls into the next work day and marks the task late', () => {
+  const task = { id: 'late', title: 'Late task', planner_lane: 'work', effort_minutes: 60, due: '2026-08-10' };
+  const result = computeConflictReflow({
+    tasks: [task],
+    startDate: '2026-08-10',
+    endDate: '2026-08-12',
+    preferences: { workStart: '15:00', workEnd: '16:00' },
+    now: new Date('2026-08-10T06:00:00Z'),
+    events: [
+      { id: 'appointment', date: '2026-08-10', endDate: '2026-08-10', time: '15:00', endTime: '16:00', allDay: false, transparency: 'opaque' },
+      { id: 'task', taskId: task.id, isTask: true, task, date: '2026-08-10', endDate: '2026-08-10', time: '15:00', endTime: '16:00', allDay: false, transparency: 'opaque' },
+    ],
+  });
+  assert.equal(result.moved[0].startAt, '2026-08-11T15:00');
+  assert.equal(result.moved[0].late, true);
+});
+
+test('automatic conflict reflow leaves an observable item when no later slot exists', () => {
+  const task = { id: 'boxed-in', title: 'Boxed in', planner_lane: 'work', effort_minutes: 60 };
+  const result = computeConflictReflow({
+    tasks: [task],
+    startDate: '2026-08-10',
+    endDate: '2026-08-11',
+    preferences: { workStart: '15:00', workEnd: '16:00' },
+    now: new Date('2026-08-10T06:00:00Z'),
+    events: [
+      { id: 'appointment', date: '2026-08-10', endDate: '2026-08-10', time: '15:00', endTime: '16:00', allDay: false, transparency: 'opaque' },
+      { id: 'task', taskId: task.id, isTask: true, task, date: '2026-08-10', endDate: '2026-08-10', time: '15:00', endTime: '16:00', allDay: false, transparency: 'opaque' },
+    ],
+  });
+  assert.equal(result.moved.length, 0);
+  assert.equal(result.unplaced[0].taskId, task.id);
 });
 
 test('personal tasks use weekday evenings and then weekend hours', () => {

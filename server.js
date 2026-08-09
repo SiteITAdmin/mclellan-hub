@@ -13,6 +13,7 @@ const adminRouter = require('./routes/admin');
 const wikiRouter = require('./routes/wiki');
 const promptRouter = require('./routes/prompt');
 const { syncCalendarMeetings } = require('./lib/crm');
+const { reflowPlannerConflicts } = require('./lib/task-calendar-planner');
 const {
   runDailyIntelligencePipeline,
   retryDailyBriefing,
@@ -184,6 +185,32 @@ setInterval(() => {
   for (const user of BRIEFING_USERS) {
     syncCalendarMeetings(user).catch(err => console.error(`[crm] calendar sync error for ${user}:`, err));
   }
+}, 60 * 1000);
+
+// ── Planner conflict reflow (every 5 minutes) ────────────────────────────────
+// Google Calendar appointments are fixed evidence; task-backed blocks yield
+// and cascade forward while retaining their existing event identity.
+const PLANNER_REFLOW_ENABLED = process.env.PLANNER_REFLOW_ENABLED !== '0';
+const plannerReflowMinutesValue = parseInt(process.env.PLANNER_REFLOW_MINUTES || '5');
+const PLANNER_REFLOW_MINUTES = Number.isFinite(plannerReflowMinutesValue) ? Math.max(1, plannerReflowMinutesValue) : 5;
+const PLANNER_REFLOW_USERS = (process.env.PLANNER_USERS || 'douglas').split(',').map(user => user.trim()).filter(Boolean);
+let plannerReflowRunning = false;
+
+setInterval(() => {
+  if (!PLANNER_REFLOW_ENABLED) return;
+  const now = nowIn('Europe/Dublin');
+  if (now.getMinutes() % PLANNER_REFLOW_MINUTES !== 0 || plannerReflowRunning) return;
+  plannerReflowRunning = true;
+  Promise.allSettled(PLANNER_REFLOW_USERS.map(user => reflowPlannerConflicts(user)))
+    .then(results => results.forEach((result, index) => {
+      const user = PLANNER_REFLOW_USERS[index];
+      if (result.status === 'rejected') {
+        console.error(`[task-planner] automatic reflow failed for ${user}:`, result.reason);
+      } else if (result.value.moved.length || result.value.unplaced.length || result.value.failed.length) {
+        console.log(`[task-planner] automatic reflow for ${user}: ${result.value.moved.length} moved, ${result.value.unplaced.length} unplaced, ${result.value.failed.length} failed`);
+      }
+    }))
+    .finally(() => { plannerReflowRunning = false; });
 }, 60 * 1000);
 
 // ── US Block Special Edition (07:30 Europe/Dublin, Mon/Wed/Fri) ─────────────
