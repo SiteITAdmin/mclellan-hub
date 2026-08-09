@@ -4,13 +4,14 @@
   const data = window.__PLANNER__ || {};
   const toast = document.getElementById('planner-toast');
   let dragPayload = null;
+  let dragSourceElement = null;
 
   function showMessage(message, error = false) {
     toast.textContent = message;
     toast.classList.toggle('error', error);
     toast.classList.add('show');
     window.clearTimeout(showMessage.timer);
-    showMessage.timer = window.setTimeout(() => toast.classList.remove('show'), 4500);
+    showMessage.timer = window.setTimeout(() => toast.classList.remove('show'), error ? 7000 : 4500);
   }
 
   async function postJson(url, body = {}) {
@@ -29,6 +30,11 @@
     return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
   }
 
+  function minuteOfDay(timeStr) {
+    const [h, m] = String(timeStr || '00:00').split(':').map(Number);
+    return h * 60 + m;
+  }
+
   function preferencesFromForm() {
     return {
       workStart: document.getElementById('planner-work-start').value,
@@ -40,15 +46,42 @@
     };
   }
 
+  function getPlannerPrefs() {
+    return {
+      workStart: minuteOfDay(document.getElementById('planner-work-start')?.value),
+      workEnd: minuteOfDay(document.getElementById('planner-work-end')?.value),
+      eveningStart: minuteOfDay(document.getElementById('planner-evening-start')?.value),
+      eveningEnd: minuteOfDay(document.getElementById('planner-evening-end')?.value),
+      weekendStart: minuteOfDay(document.getElementById('planner-weekend-start')?.value),
+      weekendEnd: minuteOfDay(document.getElementById('planner-weekend-end')?.value),
+    };
+  }
+
+  function isValidDropTime(lane, minute, dateStr, duration) {
+    const prefs = getPlannerPrefs();
+    const endMinute = minute + duration;
+    const weekday = new Date(`${dateStr}T12:00:00Z`).getUTCDay();
+    const isWeekend = weekday === 0 || weekday === 6;
+    if (lane === 'personal') {
+      const window = isWeekend ? [prefs.weekendStart, prefs.weekendEnd] : [prefs.eveningStart, prefs.eveningEnd];
+      return minute >= window[0] && endMinute <= window[1];
+    }
+    if (isWeekend) return false;
+    return minute >= prefs.workStart && endMinute <= prefs.workEnd;
+  }
+
   async function saveHours() {
     return postJson('/api/planner/preferences', preferencesFromForm());
   }
 
   function startDrag(element, event) {
+    const lane = element.classList.contains('planner-task-personal') ? 'personal' : 'work';
     dragPayload = {
       taskId: element.dataset.taskId,
       durationMinutes: Number(element.dataset.duration || 30),
+      lane,
     };
+    dragSourceElement = element;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('application/json', JSON.stringify(dragPayload));
     event.dataTransfer.setData('text/plain', dragPayload.taskId);
@@ -59,10 +92,12 @@
   document.querySelectorAll('[draggable="true"][data-task-id]').forEach(element => {
     element.addEventListener('dragstart', event => startDrag(element, event));
     element.addEventListener('dragend', () => {
-      element.classList.remove('dragging');
+      if (dragSourceElement) dragSourceElement.classList.remove('dragging');
       document.body.classList.remove('planner-is-dragging');
       document.querySelectorAll('.planner-day-body.drag-over').forEach(day => day.classList.remove('drag-over'));
+      document.querySelectorAll('.planner-day-body.drag-invalid').forEach(day => day.classList.remove('drag-invalid'));
       dragPayload = null;
+      dragSourceElement = null;
     });
   });
 
@@ -71,14 +106,27 @@
       if (!dragPayload) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
-      day.classList.add('drag-over');
+      const rect = day.getBoundingClientRect();
+      const viewStart = Number(day.dataset.viewStart);
+      const viewEnd = Number(day.dataset.viewEnd);
+      const duration = Math.max(15, dragPayload.durationMinutes || 30);
+      const rawMinute = viewStart + ((event.clientY - rect.top) / rect.height) * (viewEnd - viewStart);
+      const minute = Math.max(viewStart, Math.min(viewEnd - duration, Math.round(rawMinute / 15) * 15));
+      const valid = isValidDropTime(dragPayload.lane, minute, day.dataset.date, duration);
+      day.classList.toggle('drag-over', valid);
+      day.classList.toggle('drag-invalid', !valid);
+      event.dataTransfer.dropEffect = valid ? 'move' : 'none';
     });
     day.addEventListener('dragleave', event => {
-      if (!day.contains(event.relatedTarget)) day.classList.remove('drag-over');
+      if (!day.contains(event.relatedTarget)) {
+        day.classList.remove('drag-over');
+        day.classList.remove('drag-invalid');
+      }
     });
     day.addEventListener('drop', async event => {
       event.preventDefault();
       day.classList.remove('drag-over');
+      day.classList.remove('drag-invalid');
       let payload = dragPayload;
       if (!payload) {
         try { payload = JSON.parse(event.dataTransfer.getData('application/json')); } catch (_) {}
@@ -90,8 +138,17 @@
       const duration = Math.max(15, Number(payload.durationMinutes || 30));
       const rawMinute = viewStart + ((event.clientY - rect.top) / rect.height) * (viewEnd - viewStart);
       const minute = Math.max(viewStart, Math.min(viewEnd - duration, Math.round(rawMinute / 15) * 15));
+      if (!isValidDropTime(payload.lane, minute, day.dataset.date, duration)) {
+        const label = payload.lane === 'personal' ? 'Personal' : 'Work';
+        const isWeekend = new Date(`${day.dataset.date}T12:00:00Z`).getUTCDay() % 6 === 0;
+        const windowLabel = payload.lane === 'personal'
+          ? (isWeekend ? 'weekend hours' : 'evening hours')
+          : 'work hours';
+        showMessage(`${label} tasks can only be placed in ${windowLabel}`, true);
+        return;
+      }
       const startAt = `${day.dataset.date}T${timeFromMinutes(minute)}`;
-      showMessage(`Scheduling at ${timeFromMinutes(minute)}…`);
+      showMessage(`Moving to ${timeFromMinutes(minute)}…`);
       try {
         await postJson(`/api/planner/tasks/${encodeURIComponent(payload.taskId)}/schedule`, {
           startAt,
