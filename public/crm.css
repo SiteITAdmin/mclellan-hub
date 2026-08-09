@@ -252,7 +252,7 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-hour-line, .planner-half-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--crm-line); pointer-events: none; }
 .planner-half-line { opacity: .42; }
 .planner-event { position: absolute; z-index: 2; left: 5px; right: 5px; min-height: 24px; overflow: hidden; border-radius: 7px; padding: 5px 7px; border: 1px solid rgba(90,103,128,.16); background: color-mix(in srgb, var(--crm-muted) 13%, var(--crm-card)); color: var(--crm-text); box-shadow: 0 2px 6px rgba(20,24,36,.08); }
-.planner-task-event { padding-right: 19px; border-color: color-mix(in srgb, var(--crm-accent) 55%, transparent); background: color-mix(in srgb, var(--crm-accent) 16%, var(--crm-card)); cursor: grab; }
+.planner-task-event { padding-right: 19px; border-color: color-mix(in srgb, var(--crm-accent) 55%, transparent); background: color-mix(in srgb, var(--crm-accent) 16%, var(--crm-card)); cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }
 .planner-task-personal { border-color: rgba(196,125,40,.55); background: color-mix(in srgb, #c47d28 16%, var(--crm-card)); }
 .planner-task-late { border-color: color-mix(in srgb, var(--crm-danger) 70%, transparent); background: color-mix(in srgb, var(--crm-danger) 13%, var(--crm-card)); }
 .planner-event-time { color: var(--crm-muted); font-size: 9px; font-weight: 600; }
@@ -263,10 +263,12 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-event-location { margin-top: 2px; color: var(--crm-muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .planner-unschedule { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border: 0; border-radius: 4px; padding: 0; background: transparent; color: var(--crm-accent-ink); cursor: pointer; font-size: 14px; line-height: 14px; opacity: .55; }
 .planner-unschedule:hover { opacity: 1; background: rgba(86,83,232,.14); }
-.planner-resize-handle { position: absolute; bottom: 0; left: 0; right: 0; height: 7px; cursor: ns-resize; border-radius: 0 0 7px 7px; background: transparent; }
+.planner-resize-handle { position: absolute; bottom: 0; left: 0; right: 0; height: 7px; cursor: ns-resize; border-radius: 0 0 7px 7px; background: transparent; touch-action: none; }
 .planner-resize-handle:hover, .planner-task-event.resizing .planner-resize-handle { background: rgba(86,83,232,.25); }
 .planner-task-event.resizing { opacity: .85; cursor: ns-resize !important; }
 body.planner-is-resizing * { cursor: ns-resize !important; user-select: none; }
+.planner-touch-ghost { -webkit-user-select: none; user-select: none; }
+.planner-calendar-scroll { touch-action: pan-x pan-y; }
 .planner-toast { position: fixed; left: 50%; bottom: 24px; z-index: 200; transform: translate(-50%, 20px); padding: 10px 15px; border-radius: 9px; background: #211e31; color: #fff; font-size: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.28); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
 .planner-toast.show { opacity: 1; transform: translate(-50%, 0); }
 .planner-toast.error { background: var(--crm-danger); }

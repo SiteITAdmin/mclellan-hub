@@ -186,6 +186,7 @@
   document.querySelectorAll('[draggable="true"][data-task-id]').forEach(element => {
     element.addEventListener('touchstart', event => {
       if (event.target.closest('.planner-resize-handle, .planner-unschedule')) return;
+      event.preventDefault();
       const touch = event.touches[0];
       const lane = element.classList.contains('planner-task-personal') ? 'personal' : 'work';
       touchDrag = {
@@ -198,7 +199,7 @@
         startY: touch.clientY,
         moved: false,
       };
-    }, { passive: true });
+    }, { passive: false });
 
     element.addEventListener('touchmove', event => {
       if (!touchDrag || touchDrag.taskId !== element.dataset.taskId) return;
