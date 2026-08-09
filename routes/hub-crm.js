@@ -233,6 +233,7 @@ function crmPageData(user) {
   return {
     user,
     nav: [
+      { href: '/crm/activity', label: 'Activity' },
       { href: '/crm/contacts', label: 'People' },
       { href: '/crm/companies', label: 'Companies' },
       { href: '/crm/meetings', label: 'Meetings' },
@@ -2953,6 +2954,26 @@ router.get('/crm/project-report', requireAuth, async (req, res) => {
     projects, crmProjects, workspaceProjects,
     selectedSlug, days, project, evidence, report, model, error, fallback,
     reportSchedule,
+  });
+});
+
+// ── CRM activity dashboard ────────────────────────────────────────────────────
+
+router.get('/crm/activity', requireAuth, (req, res) => {
+  const { buildCrmActivity } = require('../lib/crm-activity');
+  let activity = null;
+  let activityError = null;
+  try {
+    activity = buildCrmActivity(req.hubUser);
+  } catch (err) {
+    console.error('[crm activity]', err);
+    activityError = err.message;
+  }
+  res.render('hub/crm-activity', {
+    ...crmPageData(req.hubUser),
+    active: 'activity',
+    activity,
+    activityError,
   });
 });
 
