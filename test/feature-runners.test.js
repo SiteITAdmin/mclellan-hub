@@ -41,18 +41,21 @@ test('research stays on the grok tier, behind Claude Haiku (tool/web lane)', () 
   assert.equal(r.model, 'haiku');
 });
 
-test('bulk tiers (Luna/Terra) run on the opencode free lane until Grok credits return', () => {
-  // Both bulk lane Tiers moved to opencode/deepseek-v4-flash-free on 8 Aug 2026
-  // after Grok exhausted credits and Claude became the only paid lane. This is
-  // the $0 temporary path — flip MODELS back to 'grok' when the subscription
-  // resets. The opencode runner must never silently reach a paid API.
+test('bulk tiers (Luna/Terra) run on a single Codex gpt-5.6-luna lane', () => {
+  // Both bulk tiers point at Codex gpt-5.6-luna as of 9 Aug 2026 — one Luna
+  // lane, no separate gpt-5.6-terra — after the 4 Aug Codex "usage limit" was
+  // traced to a one-off sol-5.6 job rather than the Hub's steady load. The
+  // effort split is kept: extraction at low, operational reasoning at medium.
   for (const tier of ['luna', 'terra']) {
     const r = MODELS[tier];
-    assert.equal(r.runner, 'opencode', tier);
-    assert.ok(r.model.includes('deepseek-v4-flash'), tier);
+    assert.equal(r.runner, 'codex', tier);
+    assert.equal(r.model, 'gpt-5.6-luna', tier);
   }
+  assert.equal(MODELS.luna.effort, 'low');
+  assert.equal(MODELS.terra.effort, 'medium');
   const triage = resolveFeatureRunner('crm_source_triage');
-  assert.equal(triage.runner, 'opencode');
+  assert.equal(triage.runner, 'codex');
+  assert.equal(triage.model, 'gpt-5.6-luna');
   assert.notEqual(triage.runner, 'openrouter');
 });
 
