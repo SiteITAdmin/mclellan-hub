@@ -14,10 +14,14 @@ process.env.HUB_DB_PATH = tmpDb;
 const db = require('../lib/db');
 const { admitSource } = require('../lib/source-admission');
 const { recordEffect } = require('../lib/effect-gate');
-const { ingestTrend, pipelineFunnel, contentInventory, buildCrmActivity } = require('../lib/crm-activity');
+const { ingestTrend, pipelineFunnel, contentInventory, peopleOverview, buildCrmActivity } = require('../lib/crm-activity');
 
 const user = 'crm-activity-test';
 let seq = 0;
+
+function dublinToday() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
+}
 
 test.after(() => {
   try { db.hub().close(); } catch (_) {}
@@ -82,6 +86,30 @@ test('content inventory aggregates content families from existing tables', () =>
   assert.ok(Array.isArray(content.inbound));
   assert.equal(typeof content.documents, 'number');
   assert.equal(typeof content.rssArticles, 'number');
+});
+
+test('people overview excludes the owner contact from people met', () => {
+  const hub = db.hub();
+  // Ensure a self-style contact (owns the account) exists and is linked to a meeting,
+  // alongside a distinct third-party. The owner must not count toward people met.
+  const meId = `me-${++seq}`;
+  const partnerId = `partner-${++seq}`;
+  hub.prepare(`
+    INSERT INTO contacts (id, user, name, email, notes, aliases)
+    VALUES (?, ?, ?, ?, '', '[]')
+  `).run(meId, user, 'crm-activity-test Me', 'me@hub.test');
+  hub.prepare(`
+    INSERT INTO contacts (id, user, name, email, notes, aliases)
+    VALUES (?, ?, ?, ?, '', '[]')
+  `).run(partnerId, user, 'Partner Person', 'partner@hub.test');
+  hub.prepare(`
+    INSERT INTO meetings (id, user, title, meeting_date, meeting_time, source, created_at)
+    VALUES (?, ?, ?, ?, ?, 'transcript', ?)
+  `).run(`m-${seq}`, user, 'Catchup', dublinToday(), '10:00', Math.floor(Date.now() / 1000));
+  const meetingId = `m-${seq}`;
+  hub.prepare('INSERT INTO meeting_attendees (meeting_id, contact_id) VALUES (?, ?)').run(meetingId, meId);
+  hub.prepare('INSERT INTO meeting_attendees (meeting_id, contact_id) VALUES (?, ?)').run(meetingId, partnerId);
+  assert.equal(peopleOverview(user).peopleMet, 1);
 });
 
 test('buildCrmActivity returns the full dashboard snapshot', () => {

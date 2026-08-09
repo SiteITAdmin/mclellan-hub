@@ -28,28 +28,28 @@
     <span class="crm-muted" style="font-size:12px;">Rolling 24h window · Dublin time</span>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:14px;">
-    <div class="mgmt-card" style="padding:14px 16px;">
+    <a class="mgmt-card crm-link-card" href="/crm/knowledge" style="padding:14px 16px;">
       <div style="font-size:26px;font-weight:700;"><%= ingest.totals.captured %></div>
       <div class="crm-muted" style="font-size:12px;margin-top:2px;">Sources captured</div>
       <% if (ingest.totals.incomplete + ingest.totals.unreadable > 0) { %>
         <div style="font-size:11px;margin-top:4px;color:#b8860b;"><%= ingest.totals.incomplete %> incomplete · <%= ingest.totals.unreadable %> unreadable</div>
       <% } %>
-    </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    </a>
+    <a class="mgmt-card crm-link-card" href="/crm/tasks" style="padding:14px 16px;">
       <div style="font-size:26px;font-weight:700;"><%= taskCreatedToday %></div>
       <div class="crm-muted" style="font-size:12px;margin-top:2px;">Tasks created</div>
       <% if (effects.totals.refused + effects.totals.failed > 0) { %>
         <div style="font-size:11px;margin-top:4px;color:#b8860b;"><%= effects.totals.refused %> refused · <%= effects.totals.failed %> failed</div>
       <% } %>
-    </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    </a>
+    <a class="mgmt-card crm-link-card" href="/crm/meetings" style="padding:14px 16px;">
       <div style="font-size:26px;font-weight:700;"><%= activity.todayMeetings %></div>
       <div class="crm-muted" style="font-size:12px;margin-top:2px;">Meetings today</div>
-    </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    </a>
+    <a class="mgmt-card crm-link-card" href="/crm/meetings" style="padding:14px 16px;">
       <div style="font-size:26px;font-weight:700;"><%= activity.people.upcoming.length %></div>
       <div class="crm-muted" style="font-size:12px;margin-top:2px;">Upcoming meetings</div>
-    </div>
+    </a>
   </div>
 </section>
 
@@ -149,20 +149,20 @@
         <% for (const r of activity.content.inbound) { %><span style="margin-right:8px;"><%= r.source %>: <%= r.n %></span><% } %>
       </div>
     </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    <a class="mgmt-card crm-link-card" href="/crm/meetings" style="padding:14px 16px;">
       <div style="font-size:24px;font-weight:700;"><%= activity.content.meetings.reduce((a, r) => a + r.n, 0) %></div>
       <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Meetings</div>
       <div class="crm-muted" style="font-size:11px;margin-top:4px;">
         <% for (const r of activity.content.meetings) { %><span style="margin-right:8px;"><%= r.source %>: <%= r.n %></span><% } %>
       </div>
-    </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    </a>
+    <a class="mgmt-card crm-link-card" href="/crm/meeting-intake" style="padding:14px 16px;">
       <div style="font-size:24px;font-weight:700;"><%= activity.content.intakes.reduce((a, r) => a + r.n, 0) %></div>
-      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Transcripts</div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Meeting transcripts</div>
       <div class="crm-muted" style="font-size:11px;margin-top:4px;">
         <% for (const r of activity.content.intakes) { %><span style="margin-right:8px;"><%= r.status %>: <%= r.n %></span><% } %>
       </div>
-    </div>
+    </a>
     <div class="mgmt-card" style="padding:14px 16px;">
       <div style="font-size:24px;font-weight:700;"><%= activity.content.documents %></div>
       <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Documents</div>
@@ -174,29 +174,29 @@
         <% for (const r of activity.content.messaging) { %><span style="margin-right:8px;"><%= r.platform %>: <%= r.n %></span><% } %>
       </div>
     </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    <a class="mgmt-card crm-link-card" href="/newsletter/sources" style="padding:14px 16px;">
       <div style="font-size:24px;font-weight:700;"><%= activity.content.rssArticles %></div>
       <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">RSS articles</div>
-    </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    </a>
+    <a class="mgmt-card crm-link-card" href="/newsletter" style="padding:14px 16px;">
       <div style="font-size:24px;font-weight:700;"><%= activity.content.intelItems %></div>
       <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Intel items</div>
-    </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    </a>
+    <a class="mgmt-card crm-link-card" href="/flights" style="padding:14px 16px;">
       <div style="font-size:24px;font-weight:700;"><%= activity.content.flights %></div>
       <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Flights</div>
-    </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    </a>
+    <a class="mgmt-card crm-link-card" href="/lin" style="padding:14px 16px;">
       <div style="font-size:24px;font-weight:700;"><%= activity.content.linkedin.reduce((a, r) => a + r.n, 0) %></div>
       <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">LinkedIn content</div>
       <div class="crm-muted" style="font-size:11px;margin-top:4px;">
         <% for (const r of activity.content.linkedin) { %><span style="margin-right:8px;"><%= r.status %>: <%= r.n %></span><% } %>
       </div>
-    </div>
-    <div class="mgmt-card" style="padding:14px 16px;">
+    </a>
+    <a class="mgmt-card crm-link-card" href="/debrief" style="padding:14px 16px;">
       <div style="font-size:24px;font-weight:700;"><%= activity.content.debriefSessions %></div>
       <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Debriefs</div>
-    </div>
+    </a>
   </div>
 </section>
 
@@ -205,22 +205,23 @@
     <section class="section-card" style="margin-bottom:18px;">
       <h2 style="margin-bottom:14px;">People &amp; companies</h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
-        <div class="mgmt-card" style="padding:14px 16px;">
+        <a class="mgmt-card crm-link-card" href="/crm/contacts" style="padding:14px 16px;">
           <div style="font-size:26px;font-weight:700;"><%= activity.people.contacts %></div>
           <div class="crm-muted" style="font-size:12px;margin-top:2px;">Contacts</div>
-        </div>
-        <div class="mgmt-card" style="padding:14px 16px;">
+        </a>
+        <a class="mgmt-card crm-link-card" href="/crm/companies" style="padding:14px 16px;">
           <div style="font-size:26px;font-weight:700;"><%= activity.people.companies %></div>
           <div class="crm-muted" style="font-size:12px;margin-top:2px;">Companies</div>
-        </div>
-        <div class="mgmt-card" style="padding:14px 16px;">
+        </a>
+        <a class="mgmt-card crm-link-card" href="/crm/meetings" style="padding:14px 16px;">
           <div style="font-size:26px;font-weight:700;"><%= activity.people.peopleMet %></div>
-          <div class="crm-muted" style="font-size:12px;margin-top:2px;">People met (calendar)</div>
-        </div>
-        <div class="mgmt-card" style="padding:14px 16px;">
+          <div class="crm-muted" style="font-size:12px;margin-top:2px;">People met</div>
+          <div class="crm-muted" style="font-size:10px;margin-top:2px;">Unique contacts in meetings (excl. you)</div>
+        </a>
+        <a class="mgmt-card crm-link-card" href="/crm/meetings" style="padding:14px 16px;">
           <div style="font-size:26px;font-weight:700;"><%= activity.people.attendeeLinks %></div>
           <div class="crm-muted" style="font-size:12px;margin-top:2px;">Meeting attendances</div>
-        </div>
+        </a>
       </div>
     </section>
 
@@ -229,17 +230,17 @@
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
         <% const taskStatusLabels = { needsAction: 'Open', completed: 'Completed', wrong: 'Wrong' }; %>
         <% for (const r of activity.tasks.byStatus) { %>
-          <div class="mgmt-card" style="padding:14px 16px;">
+          <a class="mgmt-card crm-link-card" href="/crm/tasks" style="padding:14px 16px;">
             <div style="font-size:24px;font-weight:700;"><%= r.n %></div>
             <div class="crm-muted" style="font-size:12px;margin-top:2px;"><%= taskStatusLabels[r.status] || r.status.replace(/([A-Z])/g, ' $1') %></div>
-          </div>
+          </a>
         <% } %>
       </div>
     </section>
   </div>
 
   <div>
-    <section class="section-card" style="margin-bottom:18px;">
+    <a class="section-card crm-link-card" href="/crm/knowledge" style="margin-bottom:18px;display:block;">
       <h2 style="margin-bottom:14px;">Knowledge layer</h2>
       <% const atomTotal = activity.knowledge.byStatus.reduce((a, r) => a + r.n, 0); %>
       <div style="font-size:26px;font-weight:700;"><%= atomTotal %></div>
@@ -254,7 +255,7 @@
           <span class="crm-badge subtle"><%= r.subject_kind %>: <%= r.n %></span>
         <% } %>
       </div>
-    </section>
+    </a>
 
     <section class="section-card">
       <h2 style="margin-bottom:14px;">Upcoming meetings</h2>
