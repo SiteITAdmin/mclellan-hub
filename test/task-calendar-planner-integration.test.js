@@ -19,6 +19,7 @@ const {
   unscheduleTask,
   getPlannerPreferences,
   savePlannerPreferences,
+  reflowPlannerConflicts,
 } = require('../lib/task-calendar-planner');
 
 const user = 'task-planner-integration';
@@ -241,4 +242,51 @@ test('a remotely-created block already cached as a generic event is adopted, not
   assert.equal(inserts, insertCountBefore, 'the generic cache row is adopted before any insert');
   const meeting = db.hub().prepare('SELECT source, source_id FROM meetings WHERE id = ?').get('generic-cached-meeting');
   assert.deepEqual(meeting, { source: PLANNER_SOURCE, source_id: recoveredTask });
+});
+
+test('automatic reflow patches the existing Calendar task event instead of recreating it', async () => {
+  const reflowTask = 'planner-task-reflow';
+  db.hub().prepare(`
+    INSERT INTO google_tasks
+      (id, user, google_task_id, task_list_id, title, notes, due, status, source)
+    VALUES (?, ?, ?, '@default', 'Move after appointment', '[effort: 30m] [planner: work]', '2026-08-24', 'needsAction', 'manual')
+  `).run(reflowTask, user, 'google-task-reflow');
+  const taskEvent = {
+    id: 'calendar-reflow-task', status: 'confirmed', summary: 'Move after appointment',
+    start: { dateTime: '2026-08-24T09:00:00+01:00', timeZone: 'Europe/Dublin' },
+    end: { dateTime: '2026-08-24T09:30:00+01:00', timeZone: 'Europe/Dublin' },
+    extendedProperties: { private: { hubSource: PLANNER_SOURCE, hubTaskId: reflowTask } },
+  };
+  remoteEvents.set(taskEvent.id, taskEvent);
+  db.hub().prepare(`
+    INSERT INTO meetings
+      (id, user, title, meeting_date, meeting_time, duration_mins, calendar_event_id, source, source_id)
+    VALUES ('meeting-reflow-task', ?, 'Move after appointment', '2026-08-24', '09:00', 30, ?, ?, ?)
+  `).run(user, taskEvent.id, PLANNER_SOURCE, reflowTask);
+  remoteEvents.set('calendar-fixed-appointment', {
+    id: 'calendar-fixed-appointment', status: 'confirmed', summary: 'Fixed appointment',
+    start: { dateTime: '2026-08-24T09:00:00+01:00', timeZone: 'Europe/Dublin' },
+    end: { dateTime: '2026-08-24T10:00:00+01:00', timeZone: 'Europe/Dublin' },
+  });
+
+  const insertsBefore = inserts;
+  const patchesBefore = patches;
+  const result = await reflowPlannerConflicts(user, {
+    startDate: '2026-08-24', endDate: '2026-08-26', now: new Date('2026-08-24T06:00:00Z'),
+  }, { calendarClient: calendar, syncTasksFn: async () => {} });
+
+  assert.equal(result.moved.length, 1);
+  assert.equal(result.moved[0].startAt, '2026-08-24T10:00');
+  assert.equal(inserts, insertsBefore, 'automatic movement must not create a replacement event');
+  assert.equal(patches, patchesBefore + 1);
+  assert.equal(remoteEvents.get(taskEvent.id).start.dateTime, '2026-08-24T10:00:00');
+  const meeting = db.hub().prepare('SELECT meeting_time FROM meetings WHERE id = ?').get('meeting-reflow-task');
+  assert.equal(meeting.meeting_time, '10:00');
+  const receipt = db.hub().prepare(`
+    SELECT payload FROM knowledge_receipts
+     WHERE user = ? AND source_kind = 'google_task' AND source_id = ?
+       AND stage = 'calendar_planner_effect'
+     ORDER BY created_at DESC, rowid DESC LIMIT 1
+  `).get(user, reflowTask);
+  assert.equal(JSON.parse(receipt.payload).reason, 'calendar_conflict');
 });
