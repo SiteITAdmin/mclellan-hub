@@ -141,6 +141,7 @@ These are the tools the system runs on. They are not features — they are the f
 - A task checked for Planner and then dragged or auto-planned at `/crm/planner` has exactly one Google Calendar block carrying its Hub task ID. Moving patches that block; unscheduling or unchecking deletes only the block and leaves Google Tasks untouched
 - Saved working/evening/weekend windows are enforced for manual moves and auto-plan: work tasks use Monday–Friday work hours, personal tasks use weekday evenings or weekends
 - An interrupted provider response is reconciled through the event's private `hubTaskId` before another insert is attempted
+- “Print today” produces a read-only PDF from the same live Calendar/Planner snapshot, including the day’s schedule and a checklist of task blocks placed on it
 
 **Does not own:** The task list or task meaning (that's Google Tasks and the CRM knowledge engine), meeting debriefs/notes (that's CRM meeting intake). Planner placement is operational scheduling, not a new relationship or knowledge claim.
 

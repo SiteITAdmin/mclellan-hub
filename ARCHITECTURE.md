@@ -94,6 +94,8 @@ Dragging a task creates one ordinary Google Calendar event through `createCalend
 
 Provider exactly-once delivery is not assumed. Before inserting, the planner reconciles by the private task ID; after an ambiguous insert error it performs the same lookup and adopts the remote event if present. Each schedule/move/remove attempt writes a `calendar_planner_effect` receipt. These placements are operational state, not relationship evidence or a new task-creation path.
 
+`GET /api/planner/print-today` is a read-only, on-demand PDF projection of today’s live planner snapshot. It does not archive a document or create calendar/task state: it renders calendar events and a checklist of scheduled planner task blocks, marking late blocks in red.
+
 ### CRM layout — fluid shared surface
 
 All CRM views inherit their layout from `views/hub/partials/crm-head.ejs` and `public/crm.css`. The CRM canvas is viewport-fluid with clamped gutters and spacing rather than a fixed centred width. Card collections add columns as room appears; detail views keep a weighted primary/sidebar split until the tablet breakpoint; forms gain a third column only on wide screens. The Planner uses the same fluid canvas, keeps a wider task inbox on large displays, and stacks the inbox above the calendar before the seven-day grid becomes cramped. Narrow screens may scroll the calendar itself, but must never make the document horizontally overflow. Keep readable caps on prose/source views locally; do not reintroduce a global fixed-width CRM wrapper or page-specific copies of these breakpoints.

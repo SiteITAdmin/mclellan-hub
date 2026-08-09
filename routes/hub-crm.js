@@ -1844,6 +1844,28 @@ router.get('/api/planner', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/api/planner/print-today', requireAuth, async (req, res) => {
+  try {
+    const { addIsoDays, getPlannerSnapshot } = require('../lib/task-calendar-planner');
+    const { createPlannerDayPdf } = require('../lib/task-planner-pdf');
+    const date = todayIso();
+    const snapshot = await getPlannerSnapshot(req.hubUser, {
+      startDate: date,
+      endDate: addIsoDays(date, 1),
+    }, { reconcileCache: false });
+    const pdf = await createPlannerDayPdf(snapshot, date);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="today-${date}.pdf"`,
+      'Cache-Control': 'no-store',
+    });
+    res.send(pdf);
+  } catch (error) {
+    console.error('[planner] print today failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/api/planner/tasks/:id/schedule', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   try {
     const { scheduleTask } = require('../lib/task-calendar-planner');
