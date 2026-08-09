@@ -263,6 +263,10 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-event-location { margin-top: 2px; color: var(--crm-muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .planner-unschedule { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border: 0; border-radius: 4px; padding: 0; background: transparent; color: var(--crm-accent-ink); cursor: pointer; font-size: 14px; line-height: 14px; opacity: .55; }
 .planner-unschedule:hover { opacity: 1; background: rgba(86,83,232,.14); }
+.planner-resize-handle { position: absolute; bottom: 0; left: 0; right: 0; height: 7px; cursor: ns-resize; border-radius: 0 0 7px 7px; background: transparent; }
+.planner-resize-handle:hover, .planner-task-event.resizing .planner-resize-handle { background: rgba(86,83,232,.25); }
+.planner-task-event.resizing { opacity: .85; cursor: ns-resize !important; }
+body.planner-is-resizing * { cursor: ns-resize !important; user-select: none; }
 .planner-toast { position: fixed; left: 50%; bottom: 24px; z-index: 200; transform: translate(-50%, 20px); padding: 10px 15px; border-radius: 9px; background: #211e31; color: #fff; font-size: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.28); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
 .planner-toast.show { opacity: 1; transform: translate(-50%, 0); }
 .planner-toast.error { background: var(--crm-danger); }
