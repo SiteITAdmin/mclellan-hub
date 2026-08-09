@@ -203,11 +203,14 @@
 
     element.addEventListener('touchmove', event => {
       if (!touchDrag || touchDrag.taskId !== element.dataset.taskId) return;
+      // iOS commits to scroll-vs-gesture on the first touchmove: cancel from the
+      // very first move (like the resize handle does) or later preventDefault is
+      // ignored and the calendar scroll container eats the drag.
+      event.preventDefault();
       const touch = event.touches[0];
       const dx = touch.clientX - touchDrag.startX;
       const dy = touch.clientY - touchDrag.startY;
       if (!touchDrag.moved && Math.abs(dx) + Math.abs(dy) < 12) return;
-      event.preventDefault();
       if (!touchDrag.moved) {
         touchDrag.moved = true;
         touchDrag.sourceEl.style.opacity = '.35';
