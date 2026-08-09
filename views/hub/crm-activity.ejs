@@ -1,0 +1,280 @@
+<%- include('partials/crm-head', { title: 'CRM Activity', active: 'activity' }) %>
+
+<section class="crm-hero">
+  <div>
+    <p class="crm-eyebrow">Activity</p>
+    <h1>CRM Activity</h1>
+    <p>Everything the Hub has captured and compiled, in one place: daily ingests, the knowledge pipeline, content by type, people and meetings.</p>
+  </div>
+</section>
+
+<% if (activityError) { %>
+  <section class="section-card" style="margin-bottom:18px;">
+    <p class="crm-muted" style="color:var(--crm-danger,#c0392b);font-size:13px;">Could not build the activity snapshot: <%= activityError %></p>
+  </section>
+<% } %>
+
+<% if (activity) { %>
+<%
+  const ingest = activity.ingest;
+  const effects = activity.effects;
+  const todayTotal = ingest.totals.captured;
+  const taskCreatedToday = effects.totals.created;
+%>
+
+<section class="section-card" style="margin-bottom:18px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+    <h2 style="margin:0;font-size:15px;">Today — <%= activity.today %></h2>
+    <span class="crm-muted" style="font-size:12px;">Rolling 24h window · Dublin time</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:14px;">
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:26px;font-weight:700;"><%= ingest.totals.captured %></div>
+      <div class="crm-muted" style="font-size:12px;margin-top:2px;">Sources captured</div>
+      <% if (ingest.totals.incomplete + ingest.totals.unreadable > 0) { %>
+        <div style="font-size:11px;margin-top:4px;color:#b8860b;"><%= ingest.totals.incomplete %> incomplete · <%= ingest.totals.unreadable %> unreadable</div>
+      <% } %>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:26px;font-weight:700;"><%= taskCreatedToday %></div>
+      <div class="crm-muted" style="font-size:12px;margin-top:2px;">Tasks created</div>
+      <% if (effects.totals.refused + effects.totals.failed > 0) { %>
+        <div style="font-size:11px;margin-top:4px;color:#b8860b;"><%= effects.totals.refused %> refused · <%= effects.totals.failed %> failed</div>
+      <% } %>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:26px;font-weight:700;"><%= activity.todayMeetings %></div>
+      <div class="crm-muted" style="font-size:12px;margin-top:2px;">Meetings today</div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:26px;font-weight:700;"><%= activity.people.upcoming.length %></div>
+      <div class="crm-muted" style="font-size:12px;margin-top:2px;">Upcoming meetings</div>
+    </div>
+  </div>
+</section>
+
+<section class="section-card" style="margin-bottom:18px;">
+  <h2 style="margin-bottom:14px;">Daily ingests — 14 days</h2>
+  <% if (ingest.silentlyFailing && ingest.silentlyFailing.length) { %>
+    <div style="padding:10px 12px;border-left:3px solid var(--crm-danger,#c0392b);background:rgba(180,35,24,.06);font-size:12px;margin-bottom:14px;color:var(--crm-danger,#c0392b);">
+      <strong>Silently failing ingester<%= ingest.silentlyFailing.length === 1 ? '' : 's' %>:</strong>
+      <% for (const f of ingest.silentlyFailing) { %><span style="margin-right:10px;"><%= f.ingester %> (<%= f.captured %> captured, 0 complete)</span><% } %>
+    </div>
+  <% } %>
+  <div style="display:grid;gap:6px;">
+    <% const maxDay = Math.max(...activity.trend.map(d => d.captured), 1); %>
+    <% for (const d of activity.trend) { %>
+      <% const pct = Math.round((d.captured / maxDay) * 100); %>
+      <div style="display:grid;grid-template-columns:74px 1fr 120px;gap:10px;align-items:center;font-size:12px;">
+        <span style="color:var(--crm-muted);"><%= d.day.slice(5) %></span>
+        <div style="height:18px;border-radius:4px;background:rgba(86,83,232,.1);overflow:hidden;position:relative;">
+          <div style="height:100%;width:<%= Math.max(pct, 2) %>% ;background:linear-gradient(90deg,rgba(86,83,232,.55),rgba(86,83,232,.85));"></div>
+        </div>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--crm-muted);">
+          <%= d.captured %> source<%= d.captured === 1 ? '' : 's' %>
+          <% if (d.unreadable > 0) { %><span style="color:var(--crm-danger,#c0392b);"> · <%= d.unreadable %> ✗</span><% } %>
+          <% if (d.incomplete > 0) { %><span style="color:#b8860b;"> · <%= d.incomplete %>~</span><% } %>
+        </span>
+      </div>
+    <% } %>
+  </div>
+  <% if (ingest.ingesters && ingest.ingesters.length) { %>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:12px;">
+      <% for (const ing of ingest.ingesters) { %>
+        <span class="crm-muted">
+          <strong style="color:var(--crm-text,inherit);"><%= ing.ingester %></strong> · <%= ing.captured %> captured
+          <% if (ing.complete) { %> · <span style="color:var(--crm-success,#287a4b);"><%= ing.complete %> complete</span><% } %>
+          <% if (ing.incomplete) { %> · <%= ing.incomplete %> incomplete<% } %>
+          <% if (ing.unreadable) { %> · <span style="color:var(--crm-danger,#c0392b);"><%= ing.unreadable %> unreadable</span><% } %>
+        </span>
+      <% } %>
+    </div>
+  <% } %>
+</section>
+
+<section class="section-card" style="margin-bottom:18px;">
+  <h2 style="margin-bottom:14px;">Knowledge pipeline</h2>
+  <% const k = activity.knowledge; %>
+  <div style="display:grid;gap:8px;">
+    <% for (const s of activity.funnel) { %>
+      <div style="display:grid;grid-template-columns:minmax(140px,180px) 1fr auto;gap:10px;align-items:center;font-size:12px;">
+        <span><%= s.label %></span>
+        <div style="height:12px;border-radius:4px;background:rgba(80,76,97,.08);overflow:hidden;display:flex;">
+          <% const total = Math.max(s.total, 1); %>
+          <div style="width:<%= Math.round((s.processed / total) * 100) %>%;background:rgba(86,83,232,.7);" title="<%= s.processed %> processed"></div>
+          <div style="width:<%= Math.round((s.skipped / total) * 100) %>%;background:rgba(80,76,97,.35);" title="<%= s.skipped %> skipped"></div>
+          <div style="width:<%= Math.round((s.warnings / total) * 100) %>%;background:#d4a017;" title="<%= s.warnings %> warnings"></div>
+          <div style="width:<%= Math.round((s.errors / total) * 100) %>%;background:var(--crm-danger,#c0392b);" title="<%= s.errors %> errors"></div>
+        </div>
+        <span style="color:var(--crm-muted);white-space:nowrap;">
+          <%= s.total %> source<%= s.total === 1 ? '' : 's' %>
+          <% if (s.errors) { %><span style="color:var(--crm-danger,#c0392b);"> · <%= s.errors %> err</span><% } %>
+        </span>
+      </div>
+    <% } %>
+  </div>
+  <% const effectStage = activity.funnel.find(s => s.key === 'external_effect'); %>
+  <% if (effectStage && effectStage.effectOrigins && effectStage.effectOrigins.length) { %>
+    <div style="margin-top:12px;font-size:12px;">
+      <div class="crm-muted" style="margin-bottom:6px;">External task effects by origin</div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;">
+        <% for (const o of effectStage.effectOrigins) { %>
+          <span class="crm-muted"><strong style="color:var(--crm-text,inherit);"><%= o.origin %></strong> · <%= o.created %> created<% if (o.refused) { %> · <%= o.refused %> refused<% } %><% if (o.failed) { %> · <span style="color:var(--crm-danger,#c0392b);"><%= o.failed %> failed</span><% } %></span>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
+  <% if (k.health && k.health.coverage) { const cov = k.health.coverage; %>
+    <div class="crm-muted" style="font-size:12px;margin-top:14px;">
+      Current-version coverage: <strong style="color:var(--crm-text,inherit);"><%= cov.completed %>/<%= cov.eligible %></strong> complete (<%= cov.coveragePercent %>%)
+      <% if (cov.incomplete) { %> · <span style="color:#b8860b;"><%= cov.incomplete %> incomplete</span><% } %>
+      <% if (cov.review) { %> · <%= cov.review %> review<% } %>
+      <% if (cov.errors) { %> · <span style="color:var(--crm-danger,#c0392b);"><%= cov.errors %> error</span><% } %>
+    </div>
+  <% } %>
+</section>
+
+<section class="section-card" style="margin-bottom:18px;">
+  <h2 style="margin-bottom:14px;">Content by type</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;">
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.emails.received + activity.content.emails.sent %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Email</div>
+      <div class="crm-muted" style="font-size:11px;margin-top:4px;"><%= activity.content.emails.received %> received · <%= activity.content.emails.sent %> sent</div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.inbound.reduce((a, r) => a + r.n, 0) %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">AgentMail inbound</div>
+      <div class="crm-muted" style="font-size:11px;margin-top:4px;">
+        <% for (const r of activity.content.inbound) { %><span style="margin-right:8px;"><%= r.source %>: <%= r.n %></span><% } %>
+      </div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.meetings.reduce((a, r) => a + r.n, 0) %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Meetings</div>
+      <div class="crm-muted" style="font-size:11px;margin-top:4px;">
+        <% for (const r of activity.content.meetings) { %><span style="margin-right:8px;"><%= r.source %>: <%= r.n %></span><% } %>
+      </div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.intakes.reduce((a, r) => a + r.n, 0) %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Transcripts</div>
+      <div class="crm-muted" style="font-size:11px;margin-top:4px;">
+        <% for (const r of activity.content.intakes) { %><span style="margin-right:8px;"><%= r.status %>: <%= r.n %></span><% } %>
+      </div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.documents %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Documents</div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.messaging.reduce((a, r) => a + r.n, 0) %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Messaging</div>
+      <div class="crm-muted" style="font-size:11px;margin-top:4px;">
+        <% for (const r of activity.content.messaging) { %><span style="margin-right:8px;"><%= r.platform %>: <%= r.n %></span><% } %>
+      </div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.rssArticles %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">RSS articles</div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.intelItems %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Intel items</div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.flights %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Flights</div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.linkedin.reduce((a, r) => a + r.n, 0) %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">LinkedIn content</div>
+      <div class="crm-muted" style="font-size:11px;margin-top:4px;">
+        <% for (const r of activity.content.linkedin) { %><span style="margin-right:8px;"><%= r.status %>: <%= r.n %></span><% } %>
+      </div>
+    </div>
+    <div class="mgmt-card" style="padding:14px 16px;">
+      <div style="font-size:24px;font-weight:700;"><%= activity.content.debriefSessions %></div>
+      <div class="crm-card-title" style="font-size:13px;justify-content:flex-start;gap:6px;margin-top:2px;">Debriefs</div>
+    </div>
+  </div>
+</section>
+
+<section class="crm-two-col" style="margin-bottom:18px;">
+  <div>
+    <section class="section-card" style="margin-bottom:18px;">
+      <h2 style="margin-bottom:14px;">People &amp; companies</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
+        <div class="mgmt-card" style="padding:14px 16px;">
+          <div style="font-size:26px;font-weight:700;"><%= activity.people.contacts %></div>
+          <div class="crm-muted" style="font-size:12px;margin-top:2px;">Contacts</div>
+        </div>
+        <div class="mgmt-card" style="padding:14px 16px;">
+          <div style="font-size:26px;font-weight:700;"><%= activity.people.companies %></div>
+          <div class="crm-muted" style="font-size:12px;margin-top:2px;">Companies</div>
+        </div>
+        <div class="mgmt-card" style="padding:14px 16px;">
+          <div style="font-size:26px;font-weight:700;"><%= activity.people.peopleMet %></div>
+          <div class="crm-muted" style="font-size:12px;margin-top:2px;">People met (calendar)</div>
+        </div>
+        <div class="mgmt-card" style="padding:14px 16px;">
+          <div style="font-size:26px;font-weight:700;"><%= activity.people.attendeeLinks %></div>
+          <div class="crm-muted" style="font-size:12px;margin-top:2px;">Meeting attendances</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2 style="margin-bottom:14px;">Tasks</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
+        <% const taskStatusLabels = { needsAction: 'Open', completed: 'Completed', wrong: 'Wrong' }; %>
+        <% for (const r of activity.tasks.byStatus) { %>
+          <div class="mgmt-card" style="padding:14px 16px;">
+            <div style="font-size:24px;font-weight:700;"><%= r.n %></div>
+            <div class="crm-muted" style="font-size:12px;margin-top:2px;"><%= taskStatusLabels[r.status] || r.status.replace(/([A-Z])/g, ' $1') %></div>
+          </div>
+        <% } %>
+      </div>
+    </section>
+  </div>
+
+  <div>
+    <section class="section-card" style="margin-bottom:18px;">
+      <h2 style="margin-bottom:14px;">Knowledge layer</h2>
+      <% const atomTotal = activity.knowledge.byStatus.reduce((a, r) => a + r.n, 0); %>
+      <div style="font-size:26px;font-weight:700;"><%= atomTotal %></div>
+      <div class="crm-muted" style="font-size:12px;margin-top:2px;">Knowledge atoms</div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;">
+        <% for (const r of activity.knowledge.byStatus) { %>
+          <span class="crm-badge <%= r.status === 'active' ? '' : 'subtle' %>"><%= r.status %>: <%= r.n %></span>
+        <% } %>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;">
+        <% for (const r of activity.knowledge.bySubject) { %>
+          <span class="crm-badge subtle"><%= r.subject_kind %>: <%= r.n %></span>
+        <% } %>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2 style="margin-bottom:14px;">Upcoming meetings</h2>
+      <% if (activity.people.upcoming.length) { %>
+        <div class="crm-timeline">
+          <% for (const m of activity.people.upcoming) { %>
+            <a class="crm-timeline-item" href="/crm/meeting/<%= m.id %>">
+              <time><%= m.meeting_date %><% if (m.meeting_time) { %> · <%= m.meeting_time %><% } %></time>
+              <strong><%= m.title %></strong>
+              <% if (m.location) { %><span><%= m.location %></span><% } %>
+            </a>
+          <% } %>
+        </div>
+      <% } else { %>
+        <p class="crm-muted">No upcoming meetings.</p>
+      <% } %>
+    </section>
+  </div>
+</section>
+
+<% } %>
+
+<%- include('partials/crm-foot') %>
