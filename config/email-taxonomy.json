@@ -143,6 +143,13 @@
       "target_label": "Resources/Newsletters",
       "notes": "Nate's Substack; keep direct sender classification consistent regardless of article topic.",
       "priority": 1000
+    },
+    {
+      "match_type": "sender_domain",
+      "match_value": "email.masterclass.com",
+      "target_label": "Resources/Learning",
+      "notes": "MasterClass course mail. Gmail files it as Promotions, so it needs a rule to reach the classifier; Douglas already files these under Resources/Learning.",
+      "priority": 1000
     }
   ],
   "signal_sources": [
