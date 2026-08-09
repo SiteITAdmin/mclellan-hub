@@ -200,6 +200,10 @@ If the missing or bad data only exists in production, first pull a controlled pr
 
 `/crm/planner` is a derived operational view over the existing Google Tasks mirror and live Google Calendar. Do not add a planner task table or turn a calendar placement into relationship knowledge. A task opts in through its Google-visible notes tag (`[planner: work]` or `[planner: personal]`); absence of the tag means it is not in the planner. New tasks created through `createTask` default to `[effort: 30m]`. User scheduling windows are JSON preferences in `crm_context.task_planner_preferences`: work is Monday–Friday inside work hours, while personal tasks use weekday evening or weekend hours. `lib/task-calendar-planner.js` creates one Google Calendar event per scheduled task with private `hubTaskId` provenance and mirrors it into `meetings` with `source='task_planner'`; moves patch it, deselecting/unscheduling removes only the event. Auto-plan is always an explicit user action. Preserve reconciliation by private task ID before insert and after ambiguous provider errors so retry cannot duplicate a time block.
 
+## CRM responsive layout (9 August 2026)
+
+Every native CRM page uses the shared fluid layout in `public/crm.css`: viewport-relative gutters, scalable card spacing, auto-filling card grids, a weighted detail/sidebar grid, and common tablet/mobile breakpoints. Do not put a fixed global max-width back on `.crm-page`, duplicate responsive breakpoints inside individual CRM templates, or force the Planner inbox and seven-day grid into cramped side-by-side columns. A prose-heavy source view may retain its own readable line-length cap. Verify representative list, detail, form, task, and Planner layouts at 1920, 1280, tablet, and phone widths; document-level horizontal overflow is a regression, while the calendar's own narrow-screen scroller is intentional.
+
 ## Before ending any session
 
 Ask yourself:
