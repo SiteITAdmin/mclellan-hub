@@ -6,6 +6,9 @@
   let dragPayload = null;
   let dragSourceElement = null;
 
+  // ── Resize state ────────────────────────────────────────────────────────
+  let resizeState = null; // { taskId, startY, startDuration, element, minuteScale, lane }
+
   function showMessage(message, error = false) {
     toast.textContent = message;
     toast.classList.toggle('error', error);
@@ -70,9 +73,19 @@
     return minute >= prefs.workStart && endMinute <= prefs.workEnd;
   }
 
+  function getMinuteScale() {
+    const grid = document.querySelector('.planner-calendar');
+    if (!grid) return 1.5;
+    return parseFloat(getComputedStyle(grid).getPropertyValue('--planner-view-height')) /
+      (Number(document.querySelector('.planner-day-body')?.dataset.viewEnd || 1080) -
+       Number(document.querySelector('.planner-day-body')?.dataset.viewStart || 360));
+  }
+
   async function saveHours() {
     return postJson('/api/planner/preferences', preferencesFromForm());
   }
+
+  // ── Drag to move ────────────────────────────────────────────────────────
 
   function startDrag(element, event) {
     const lane = element.classList.contains('planner-task-personal') ? 'personal' : 'work';
@@ -90,12 +103,16 @@
   }
 
   document.querySelectorAll('[draggable="true"][data-task-id]').forEach(element => {
-    element.addEventListener('dragstart', event => startDrag(element, event));
+    element.addEventListener('dragstart', event => {
+      if (event.target.closest('.planner-resize-handle, .planner-unschedule')) return;
+      startDrag(element, event);
+    });
     element.addEventListener('dragend', () => {
       if (dragSourceElement) dragSourceElement.classList.remove('dragging');
       document.body.classList.remove('planner-is-dragging');
-      document.querySelectorAll('.planner-day-body.drag-over').forEach(day => day.classList.remove('drag-over'));
-      document.querySelectorAll('.planner-day-body.drag-invalid').forEach(day => day.classList.remove('drag-invalid'));
+      document.querySelectorAll('.planner-day-body.drag-over, .planner-day-body.drag-invalid').forEach(day => {
+        day.classList.remove('drag-over', 'drag-invalid');
+      });
       dragPayload = null;
       dragSourceElement = null;
     });
@@ -118,15 +135,11 @@
       event.dataTransfer.dropEffect = valid ? 'move' : 'none';
     });
     day.addEventListener('dragleave', event => {
-      if (!day.contains(event.relatedTarget)) {
-        day.classList.remove('drag-over');
-        day.classList.remove('drag-invalid');
-      }
+      if (!day.contains(event.relatedTarget)) day.classList.remove('drag-over', 'drag-invalid');
     });
     day.addEventListener('drop', async event => {
       event.preventDefault();
-      day.classList.remove('drag-over');
-      day.classList.remove('drag-invalid');
+      day.classList.remove('drag-over', 'drag-invalid');
       let payload = dragPayload;
       if (!payload) {
         try { payload = JSON.parse(event.dataTransfer.getData('application/json')); } catch (_) {}
@@ -161,6 +174,8 @@
     });
   });
 
+  // ── Unschedule button ───────────────────────────────────────────────────
+
   document.querySelectorAll('[data-unschedule]').forEach(button => {
     button.addEventListener('click', async event => {
       event.preventDefault();
@@ -178,6 +193,85 @@
       }
     });
   });
+
+  // ── Resize handles ──────────────────────────────────────────────────────
+
+  document.querySelectorAll('[data-resize]').forEach(handle => {
+    handle.addEventListener('mousedown', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const article = handle.closest('.planner-task-event');
+      if (!article) return;
+      const taskId = handle.dataset.resize;
+      const lane = article.classList.contains('planner-task-personal') ? 'personal' : 'work';
+      const startDuration = Number(article.dataset.duration || 30);
+      const minuteScale = getMinuteScale();
+      resizeState = { taskId, startY: event.clientY, startDuration, element: article, minuteScale, lane };
+      article.classList.add('resizing');
+      document.body.classList.add('planner-is-resizing');
+      document.addEventListener('mousemove', onResizeMove);
+      document.addEventListener('mouseup', onResizeEnd);
+    });
+  });
+
+  function onResizeMove(event) {
+    if (!resizeState) return;
+    const deltaPixels = event.clientY - resizeState.startY;
+    const deltaMinutes = Math.round((deltaPixels / resizeState.minuteScale) / 15) * 15;
+    let newDuration = resizeState.startDuration + deltaMinutes;
+    newDuration = Math.max(15, Math.min(120, newDuration));
+    resizeState.element.style.height = `${newDuration * resizeState.minuteScale}px`;
+    resizeState.element.dataset.duration = newDuration;
+    const titleEl = resizeState.element.querySelector('.planner-event-title');
+    if (titleEl) {
+      const baseTitle = resizeState.element.getAttribute('title')?.split(' · ')[0] || '';
+      resizeState.element.title = `${baseTitle} · ${newDuration >= 60 ? (newDuration / 60) + 'h' : newDuration + 'm'}`;
+    }
+  }
+
+  async function onResizeEnd(event) {
+    document.removeEventListener('mousemove', onResizeMove);
+    document.removeEventListener('mouseup', onResizeEnd);
+    if (!resizeState) return;
+    const { taskId, startDuration, element, lane } = resizeState;
+    element.classList.remove('resizing');
+    document.body.classList.remove('planner-is-resizing');
+    const deltaPixels = event.clientY - resizeState.startY;
+    const deltaMinutes = Math.round((deltaPixels / resizeState.minuteScale) / 15) * 15;
+    let newDuration = startDuration + deltaMinutes;
+    newDuration = Math.max(15, Math.min(120, newDuration));
+    resizeState = null;
+    if (newDuration === startDuration) return;
+    const dateStr = element.dataset.eventDate;
+    const startTime = element.dataset.eventStart;
+    if (!dateStr || !startTime) {
+      showMessage('Cannot resize: missing time data', true);
+      return;
+    }
+    const startMinute = minuteOfDay(startTime);
+    if (!isValidDropTime(lane, startMinute, dateStr, newDuration)) {
+      const label = lane === 'personal' ? 'Personal' : 'Work';
+      showMessage(`${label} task would exceed allowed time window at this duration`, true);
+      element.style.height = `${startDuration * getMinuteScale()}px`;
+      element.dataset.duration = startDuration;
+      return;
+    }
+    const startAt = `${dateStr}T${startTime}`;
+    showMessage(`Resizing to ${newDuration >= 60 ? (newDuration / 60) + 'h' : newDuration + 'm'}…`);
+    try {
+      await postJson(`/api/planner/tasks/${encodeURIComponent(taskId)}/schedule`, {
+        startAt,
+        durationMinutes: newDuration,
+      });
+      window.location.reload();
+    } catch (error) {
+      showMessage(error.message, true);
+      element.style.height = `${startDuration * getMinuteScale()}px`;
+      element.dataset.duration = startDuration;
+    }
+  }
+
+  // ── Auto-plan & preferences ─────────────────────────────────────────────
 
   const autoButton = document.getElementById('planner-auto');
   const saveHoursButton = document.getElementById('planner-save-hours');
@@ -202,8 +296,6 @@
     autoButton.disabled = true;
     autoButton.textContent = 'Planning…';
     try {
-      // Auto-plan always uses the values on screen and persists them as the
-      // user's defaults before creating any Calendar effects.
       await saveHours();
       const result = await postJson('/api/planner/auto-plan', {
         startDate: data.startDate,

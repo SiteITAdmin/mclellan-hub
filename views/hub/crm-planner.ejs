@@ -154,11 +154,14 @@
                            <%= event.isTask ? 'draggable="true"' : '' %>
                            data-task-id="<%= event.taskId || '' %>"
                            data-duration="<%= event.durationMinutes || 30 %>"
+                           data-event-date="<%= day.date %>"
+                           data-event-start="<%= event.time || '' %>"
                            title="<%= event.time %>–<%= event.endTime %> · <%= event.title %><%= event.isLate ? ' · Late' : '' %>">
                     <% if (!event.isTask) { %><div class="planner-event-time"><%= event.time %><% if (event.endTime) { %>–<%= event.endTime %><% } %></div><% } %>
                     <div class="planner-event-title"><% if (event.isLate) { %><span class="planner-late-marker" aria-label="Late" title="Scheduled after its due date">!</span><% } %><%= event.title %></div>
                     <% if (event.isTask) { %>
-                      <button type="button" class="planner-unschedule" data-unschedule="<%= event.taskId %>" aria-label="Remove <%= event.title %> from calendar">×</button>
+                      <button type="button" class="planner-unschedule" draggable="false" data-unschedule="<%= event.taskId %>" aria-label="Remove <%= event.title %> from calendar">×</button>
+                      <div class="planner-resize-handle" draggable="false" data-resize="<%= event.taskId %>" title="Drag to resize"></div>
                     <% } else if (event.location) { %>
                       <div class="planner-event-location"><%= event.location %></div>
                     <% } %>
@@ -175,5 +178,5 @@
 
 <div class="planner-toast" id="planner-toast" role="status" aria-live="polite"></div>
 <script>window.__PLANNER__ = <%- plannerJson %>;</script>
-<script src="/task-planner.js?v=20260809c"></script>
+<script src="/task-planner.js?v=20260809d"></script>
 <%- include('partials/crm-foot') %>
