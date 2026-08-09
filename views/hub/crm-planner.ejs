@@ -14,6 +14,7 @@
     <p>Check “Planner” on a CRM task, then drag it into free time. Work stays in working hours; personal tasks stay in evenings or weekends.</p>
   </div>
   <div class="planner-week-nav" aria-label="Change week">
+    <a class="btn btn-sm btn-ghost" href="/api/planner/print-today" target="_blank" rel="noopener">Print today</a>
     <a class="btn btn-sm btn-ghost" href="/crm/planner?start=<%= previousStart %>" aria-label="Previous week">←</a>
     <a class="btn btn-sm btn-ghost" href="/crm/planner?start=<%= todayStart %>">Today</a>
     <a class="btn btn-sm btn-ghost" href="/crm/planner?start=<%= nextStart %>" aria-label="Next week">→</a>
@@ -141,7 +142,7 @@
                            data-task-id="<%= event.taskId || '' %>"
                            data-duration="<%= event.durationMinutes || 30 %>"
                            title="<%= event.time %>–<%= event.endTime %> · <%= event.title %><%= event.isLate ? ' · Late' : '' %>">
-                    <div class="planner-event-time"><%= event.time %><% if (event.endTime) { %>–<%= event.endTime %><% } %></div>
+                    <% if (!event.isTask) { %><div class="planner-event-time"><%= event.time %><% if (event.endTime) { %>–<%= event.endTime %><% } %></div><% } %>
                     <div class="planner-event-title"><% if (event.isLate) { %><span class="planner-late-marker" aria-label="Late" title="Scheduled after its due date">!</span><% } %><%= event.title %></div>
                     <% if (event.isTask) { %>
                       <button type="button" class="planner-unschedule" data-unschedule="<%= event.taskId %>" aria-label="Remove <%= event.title %> from calendar">×</button>
