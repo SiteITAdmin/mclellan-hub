@@ -67,6 +67,29 @@ test('auto-plan treats overdue work as urgent instead of making it impossible to
   assert.equal(result.placements[0].startAt, '2026-08-11T09:00');
 });
 
+test('auto-plan spills a due task into the next free day and marks it late', () => {
+  const result = computeAutoPlan({
+    startDate: '2026-08-10',
+    endDate: '2026-08-12',
+    workStart: '09:00',
+    workEnd: '10:00',
+    now: new Date('2026-08-09T07:00:00Z'),
+    tasks: [
+      { id: 'due-monday-one', title: 'Due Monday one', effort_minutes: 30, due: '2026-08-10' },
+      { id: 'due-monday-two', title: 'Due Monday two', effort_minutes: 30, due: '2026-08-10' },
+    ],
+    events: [
+      { date: '2026-08-10', endDate: '2026-08-10', time: '09:00', endTime: '10:00', allDay: false, transparency: 'opaque' },
+    ],
+  });
+
+  assert.deepEqual(result.unplaced, []);
+  assert.deepEqual(result.placements.map(item => [item.startAt, item.late]), [
+    ['2026-08-11T09:00', true],
+    ['2026-08-11T09:30', true],
+  ]);
+});
+
 test('auto-plan does not let its own placements overlap and skips weekends by default', () => {
   const result = computeAutoPlan({
     startDate: '2026-08-15',

@@ -135,14 +135,14 @@
                 <% const top = Math.max(0, rawStart - viewStartMinutes); %>
                 <% const height = Math.max(24, Math.min(viewEndMinutes, rawEnd) - Math.max(viewStartMinutes, rawStart)); %>
                 <% if (rawEnd > viewStartMinutes && rawStart < viewEndMinutes) { %>
-                  <article class="planner-event <%= event.isTask ? 'planner-task-event planner-task-' + (event.task?.planner_lane || 'work') : 'planner-calendar-event' %>"
+                  <article class="planner-event <%= event.isTask ? 'planner-task-event planner-task-' + (event.task?.planner_lane || 'work') + (event.isLate ? ' planner-task-late' : '') : 'planner-calendar-event' %>"
                            style="top:<%= top %>px;height:<%= height %>px"
                            <%= event.isTask ? 'draggable="true"' : '' %>
                            data-task-id="<%= event.taskId || '' %>"
                            data-duration="<%= event.durationMinutes || 30 %>"
-                           title="<%= event.time %>–<%= event.endTime %> · <%= event.title %>">
+                           title="<%= event.time %>–<%= event.endTime %> · <%= event.title %><%= event.isLate ? ' · Late' : '' %>">
                     <div class="planner-event-time"><%= event.time %><% if (event.endTime) { %>–<%= event.endTime %><% } %></div>
-                    <div class="planner-event-title"><%= event.title %></div>
+                    <div class="planner-event-title"><% if (event.isLate) { %><span class="planner-late-marker" aria-label="Late" title="Scheduled after its due date">!</span><% } %><%= event.title %></div>
                     <% if (event.isTask) { %>
                       <button type="button" class="planner-unschedule" data-unschedule="<%= event.taskId %>" aria-label="Remove <%= event.title %> from calendar">×</button>
                     <% } else if (event.location) { %>
@@ -161,5 +161,5 @@
 
 <div class="planner-toast" id="planner-toast" role="status" aria-live="polite"></div>
 <script>window.__PLANNER__ = <%- plannerJson %>;</script>
-<script src="/task-planner.js?v=20260809"></script>
+<script src="/task-planner.js?v=20260809b"></script>
 <%- include('partials/crm-foot') %>
