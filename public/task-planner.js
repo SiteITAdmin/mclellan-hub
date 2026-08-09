@@ -153,6 +153,7 @@
         endDate: data.endDate,
       });
       const message = `${result.scheduled.length} scheduled`
+        + (result.lateCount ? ` · ${result.lateCount} late` : '')
         + (result.unplaced.length ? ` · ${result.unplaced.length} had no free slot` : '')
         + (result.failed.length ? ` · ${result.failed.length} failed` : '');
       showMessage(message, Boolean(result.failed.length));
