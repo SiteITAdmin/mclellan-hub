@@ -7,7 +7,9 @@
   let dragSourceElement = null;
 
   // ── Resize state ────────────────────────────────────────────────────────
-  let resizeState = null; // { taskId, startY, startDuration, element, minuteScale, lane }
+  let resizeState = null;
+  // ── Touch drag state ────────────────────────────────────────────────────
+  let touchDrag = null; // { taskId, duration, lane, ghostEl, startX, startY, moved, sourceEl }
 
   function showMessage(message, error = false) {
     toast.textContent = message;
@@ -85,7 +87,7 @@
     return postJson('/api/planner/preferences', preferencesFromForm());
   }
 
-  // ── Drag to move ────────────────────────────────────────────────────────
+  // ── Drag to move (desktop) ──────────────────────────────────────────────
 
   function startDrag(element, event) {
     const lane = element.classList.contains('planner-task-personal') ? 'personal' : 'work';
@@ -174,6 +176,106 @@
     });
   });
 
+  // ── Touch drag to move (mobile) ─────────────────────────────────────────
+
+  function getDayColumnUnder(touch) {
+    const els = document.elementsFromPoint(touch.clientX, touch.clientY);
+    return els.find(el => el.classList?.contains('planner-day-body')) || null;
+  }
+
+  document.querySelectorAll('[draggable="true"][data-task-id]').forEach(element => {
+    element.addEventListener('touchstart', event => {
+      if (event.target.closest('.planner-resize-handle, .planner-unschedule')) return;
+      const touch = event.touches[0];
+      const lane = element.classList.contains('planner-task-personal') ? 'personal' : 'work';
+      touchDrag = {
+        taskId: element.dataset.taskId,
+        duration: Number(element.dataset.duration || 30),
+        lane,
+        sourceEl: element,
+        ghostEl: null,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        moved: false,
+      };
+    }, { passive: true });
+
+    element.addEventListener('touchmove', event => {
+      if (!touchDrag || touchDrag.taskId !== element.dataset.taskId) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - touchDrag.startX;
+      const dy = touch.clientY - touchDrag.startY;
+      if (!touchDrag.moved && Math.abs(dx) + Math.abs(dy) < 12) return;
+      event.preventDefault();
+      if (!touchDrag.moved) {
+        touchDrag.moved = true;
+        touchDrag.sourceEl.style.opacity = '.35';
+        const ghost = touchDrag.sourceEl.cloneNode(true);
+        ghost.classList.add('planner-touch-ghost');
+        ghost.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;width:' +
+          touchDrag.sourceEl.offsetWidth + 'px;opacity:.88;transform:scale(1.04);' +
+          'box-shadow:0 8px 24px rgba(0,0,0,.25);';
+        document.body.appendChild(ghost);
+        touchDrag.ghostEl = ghost;
+        document.body.classList.add('planner-is-dragging');
+      }
+      if (touchDrag.ghostEl) {
+        touchDrag.ghostEl.style.left = (touch.clientX - touchDrag.sourceEl.offsetWidth / 2) + 'px';
+        touchDrag.ghostEl.style.top = (touch.clientY - 16) + 'px';
+      }
+      document.querySelectorAll('.planner-day-body.drag-over, .planner-day-body.drag-invalid').forEach(d => d.classList.remove('drag-over', 'drag-invalid'));
+      const day = getDayColumnUnder(touch);
+      if (day) {
+        const rect = day.getBoundingClientRect();
+        const viewStart = Number(day.dataset.viewStart);
+        const viewEnd = Number(day.dataset.viewEnd);
+        const rawMinute = viewStart + ((touch.clientY - rect.top) / rect.height) * (viewEnd - viewStart);
+        const minute = Math.max(viewStart, Math.min(viewEnd - touchDrag.duration, Math.round(rawMinute / 15) * 15));
+        const valid = isValidDropTime(touchDrag.lane, minute, day.dataset.date, touchDrag.duration);
+        day.classList.add(valid ? 'drag-over' : 'drag-invalid');
+      }
+    }, { passive: false });
+
+    element.addEventListener('touchend', async event => {
+      if (!touchDrag || touchDrag.taskId !== element.dataset.taskId) return;
+      const td = touchDrag;
+      touchDrag = null;
+      document.body.classList.remove('planner-is-dragging');
+      if (td.ghostEl) td.ghostEl.remove();
+      td.sourceEl.style.opacity = '';
+      document.querySelectorAll('.planner-day-body.drag-over, .planner-day-body.drag-invalid').forEach(d => d.classList.remove('drag-over', 'drag-invalid'));
+      if (!td.moved) return;
+      const touch = event.changedTouches[0];
+      const day = getDayColumnUnder(touch);
+      if (!day) return;
+      const rect = day.getBoundingClientRect();
+      const viewStart = Number(day.dataset.viewStart);
+      const viewEnd = Number(day.dataset.viewEnd);
+      const rawMinute = viewStart + ((touch.clientY - rect.top) / rect.height) * (viewEnd - viewStart);
+      const minute = Math.max(viewStart, Math.min(viewEnd - td.duration, Math.round(rawMinute / 15) * 15));
+      if (!isValidDropTime(td.lane, minute, day.dataset.date, td.duration)) {
+        const label = td.lane === 'personal' ? 'Personal' : 'Work';
+        const isWeekend = new Date(`${day.dataset.date}T12:00:00Z`).getUTCDay() % 6 === 0;
+        const windowLabel = td.lane === 'personal'
+          ? (isWeekend ? 'weekend hours' : 'evening hours')
+          : 'work hours';
+        showMessage(`${label} tasks can only be placed in ${windowLabel}`, true);
+        return;
+      }
+      const startAt = `${day.dataset.date}T${timeFromMinutes(minute)}`;
+      showMessage(`Moving to ${timeFromMinutes(minute)}…`);
+      try {
+        await postJson(`/api/planner/tasks/${encodeURIComponent(td.taskId)}/schedule`, {
+          startAt,
+          durationMinutes: td.duration,
+        });
+        window.location.reload();
+      } catch (error) {
+        showMessage(error.message, true);
+      }
+    });
+  });
+
   // ── Unschedule button ───────────────────────────────────────────────────
 
   document.querySelectorAll('[data-unschedule]').forEach(button => {
@@ -194,7 +296,7 @@
     });
   });
 
-  // ── Resize handles ──────────────────────────────────────────────────────
+  // ── Resize handles (mouse) ─────────────────────────────────────────────
 
   document.querySelectorAll('[data-resize]').forEach(handle => {
     handle.addEventListener('mousedown', event => {
@@ -270,6 +372,40 @@
       element.dataset.duration = startDuration;
     }
   }
+
+  // ── Resize handles (touch) ──────────────────────────────────────────────
+
+  document.querySelectorAll('[data-resize]').forEach(handle => {
+    handle.addEventListener('touchstart', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const article = handle.closest('.planner-task-event');
+      if (!article) return;
+      const touch = event.touches[0];
+      const taskId = handle.dataset.resize;
+      const lane = article.classList.contains('planner-task-personal') ? 'personal' : 'work';
+      const startDuration = Number(article.dataset.duration || 30);
+      const minuteScale = getMinuteScale();
+      resizeState = { taskId, startY: touch.clientY, startDuration, element: article, minuteScale, lane };
+      article.classList.add('resizing');
+      document.body.classList.add('planner-is-resizing');
+    }, { passive: false });
+
+    handle.addEventListener('touchmove', event => {
+      if (!resizeState) return;
+      event.preventDefault();
+      const touch = event.touches[0];
+      const fakeEvent = { clientY: touch.clientY };
+      onResizeMove(fakeEvent);
+    }, { passive: false });
+
+    handle.addEventListener('touchend', event => {
+      if (!resizeState) return;
+      const touch = event.changedTouches[0];
+      const fakeEvent = { clientY: touch.clientY };
+      onResizeEnd(fakeEvent);
+    });
+  });
 
   // ── Auto-plan & preferences ─────────────────────────────────────────────
 
