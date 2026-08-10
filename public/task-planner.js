@@ -110,6 +110,13 @@
       .forEach(d => d.classList.remove('drag-over', 'drag-invalid'));
   }
 
+  // A dependency floor ("only after the linked meeting"); same local format both
+  // sides, so a lexical compare is a chronological one.
+  function beforeFloor(dateStr, minute, notBefore) {
+    if (!notBefore) return false;
+    return `${dateStr}T${timeFromMinutes(minute)}` < notBefore;
+  }
+
   function endPointerDrag() {
     const drag = pointerDrag;
     pointerDrag = null;
@@ -134,6 +141,7 @@
         taskId: element.dataset.taskId,
         duration: Math.max(15, Number(element.dataset.duration || 30)),
         lane: element.dataset.lane === 'personal' ? 'personal' : 'work',
+        notBefore: element.dataset.notBefore || null,
         sourceEl: element,
         ghostEl: null,
         startX: event.clientX,
@@ -168,7 +176,8 @@
       const day = dayColumnUnder(event.clientX, event.clientY);
       if (day) {
         const minute = snappedMinute(day, event.clientY, pointerDrag.duration);
-        const valid = isValidDropTime(pointerDrag.lane, minute, day.dataset.date, pointerDrag.duration);
+        const valid = isValidDropTime(pointerDrag.lane, minute, day.dataset.date, pointerDrag.duration)
+          && !beforeFloor(day.dataset.date, minute, pointerDrag.notBefore);
         day.classList.add(valid ? 'drag-over' : 'drag-invalid');
       }
     });
@@ -176,7 +185,7 @@
     const finish = async event => {
       if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
       const wasMoved = pointerDrag.moved;
-      const { taskId, duration, lane } = pointerDrag;
+      const { taskId, duration, lane, notBefore } = pointerDrag;
       const day = wasMoved ? dayColumnUnder(event.clientX, event.clientY) : null;
       endPointerDrag();
       if (!wasMoved) {
@@ -186,6 +195,10 @@
       }
       if (!day) return;
       const minute = snappedMinute(day, event.clientY, duration);
+      if (beforeFloor(day.dataset.date, minute, notBefore)) {
+        showMessage('This task can only start after the meeting it depends on', true);
+        return;
+      }
       if (!isValidDropTime(lane, minute, day.dataset.date, duration)) {
         const label = lane === 'personal' ? 'Personal' : 'Work';
         const isWeekend = new Date(`${day.dataset.date}T12:00:00Z`).getUTCDay() % 6 === 0;

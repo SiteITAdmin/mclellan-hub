@@ -51,7 +51,7 @@
           <input name="title" value="<%= task.title %>" required>
         </label>
         <label class="wide">Notes <span style="font-size:11px;opacity:.6;">priority, effort, and planner tags are managed by the controls</span>
-          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort|planner)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
+          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort|planner|after)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
         </label>
         <label>Priority
           <select name="priority">
@@ -69,6 +69,17 @@
             <% } %>
             <% if (taskTags.effort_minutes && ![5,15,30,60,120].includes(taskTags.effort_minutes)) { %>
               <option value="<%= taskTags.effort_minutes %>" selected><%= taskTags.effort_minutes %> min</option>
+            <% } %>
+          </select>
+        </label>
+        <label class="wide">Only after <span style="font-size:11px;opacity:.6;">(planner won't schedule or pull this task before the linked meeting finishes)</span>
+          <select name="after">
+            <option value="">— no dependency —</option>
+            <% for (const m of (upcomingMeetings || [])) { %>
+              <option value="<%= m.value %>" <%= taskTags.after === m.value ? 'selected' : '' %>><%= new Date(m.date + 'T12:00:00Z').toLocaleDateString('en-IE', { weekday:'short', day:'numeric', month:'short', timeZone:'UTC' }) %> <%= m.time %><%= m.endTime ? '–' + m.endTime : '' %> · <%= m.title %></option>
+            <% } %>
+            <% if (taskTags.after && !(upcomingMeetings || []).some(m => m.value === taskTags.after)) { %>
+              <option value="<%= taskTags.after %>" selected>Current dependency (<%= taskTags.after.startsWith('cal:') ? 'linked meeting' : taskTags.after %>)</option>
             <% } %>
           </select>
         </label>

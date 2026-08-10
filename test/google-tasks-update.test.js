@@ -44,13 +44,24 @@ test('priority/effort tags round-trip through notes without clobbering body', ()
 test('planner lane round-trips independently from priority and effort', () => {
   const planned = withPlannerTag('[priority: high] [effort: 60m]\n\nPrepare paper', 'personal');
   assert.deepEqual(parseTaskTags(planned), {
-    priority: 'high', effort_minutes: 60, planner_lane: 'personal',
+    priority: 'high', effort_minutes: 60, planner_lane: 'personal', after: null,
   });
   assert.equal(stripTaskTags(planned), 'Prepare paper');
 
   const edited = withTaskTags(planned, { priority: 'medium', effortMinutes: 30 });
   assert.equal(parseTaskTags(edited).planner_lane, 'personal', 'ordinary edits preserve planner selection');
   assert.equal(parseTaskTags(withPlannerTag(edited, null)).planner_lane, null);
+});
+
+test('after-dependency round-trips raw and is preserved by ordinary edits', () => {
+  const withDep = withTaskTags('Prepare paper', { priority: 'high', effortMinutes: 30, plannerLane: 'work', after: 'cal:AbC_123' });
+  assert.equal(parseTaskTags(withDep).after, 'cal:AbC_123', 'event id keeps its case');
+  assert.equal(stripTaskTags(withDep), 'Prepare paper');
+  // An edit that does not mention `after` must not drop it.
+  const edited = withTaskTags(withDep, { priority: 'low', effortMinutes: 30 });
+  assert.equal(parseTaskTags(edited).after, 'cal:AbC_123');
+  // Explicitly clearing it removes the tag.
+  assert.equal(parseTaskTags(withTaskTags(edited, { priority: 'low', effortMinutes: 30, after: '' })).after, null);
 });
 
 test('new-task effort helper defaults unsized notes to 30 minutes without overwriting estimates', () => {

@@ -87,6 +87,7 @@
                  tabindex="0"
                  data-task-id="<%= task.id %>"
                  data-lane="<%= task.planner_lane %>"
+                 data-not-before="<%= task.notBefore || '' %>"
                  data-duration="<%= task.planningDurationMinutes %>">
           <div class="planner-task-card-top">
             <a href="/crm/tasks/<%= task.id %>"><%= task.title %></a>
@@ -95,6 +96,7 @@
           <div class="planner-task-card-meta">
             <span class="planner-pill lane-<%= task.planner_lane %>"><%= task.planner_lane === 'personal' ? 'personal time' : 'work hours' %></span>
             <% if (task.priority) { %><span class="planner-pill"><%= task.priority %></span><% } %>
+            <% if (task.notBefore) { %><span class="planner-pill planner-dep-pill" title="Only after <%= task.dependencyTitle || 'its linked meeting' %>">🔒 after</span><% } %>
             <% if (task.due) { %><span>Due <%= new Date(String(task.due).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }) %></span><% } %>
             <% if (task.project_name || task.project_slug) { %><span><%= task.project_name || task.project_slug %></span><% } %>
           </div>
@@ -155,12 +157,13 @@
                            style="top:<%= top %>px;height:<%= height %>px"
                            data-task-id="<%= event.taskId || '' %>"
                            data-lane="<%= event.isTask ? (event.task?.planner_lane || 'work') : '' %>"
+                           data-not-before="<%= event.notBefore || '' %>"
                            data-duration="<%= event.durationMinutes || 30 %>"
                            data-event-date="<%= day.date %>"
                            data-event-start="<%= event.time || '' %>"
                            title="<%= event.time %>–<%= event.endTime %> · <%= event.title %><%= event.isLate ? ' · Late' : '' %>">
                     <% if (!event.isTask) { %><div class="planner-event-time"><%= event.time %><% if (event.endTime) { %>–<%= event.endTime %><% } %></div><% } %>
-                    <div class="planner-event-title"><% if (event.isLate) { %><span class="planner-late-marker" aria-label="Late" title="Scheduled after its due date">!</span><% } %><%= event.title %></div>
+                    <div class="planner-event-title"><% if (event.isLate) { %><span class="planner-late-marker" aria-label="Late" title="Scheduled after its due date">!</span><% } %><% if (event.notBefore) { %><span class="planner-dep-marker" aria-label="Has dependency" title="Only after <%= event.dependencyTitle || 'its linked meeting' %> — won't pull earlier">🔒</span><% } %><%= event.title %></div>
                     <% if (event.isTask) { %>
                       <button type="button" class="planner-unschedule" draggable="false" data-unschedule="<%= event.taskId %>" aria-label="Remove <%= event.title %> from calendar">×</button>
                       <div class="planner-resize-handle" draggable="false" data-resize="<%= event.taskId %>" title="Drag to resize"></div>
@@ -180,5 +183,5 @@
 
 <div class="planner-toast" id="planner-toast" role="status" aria-live="polite"></div>
 <script>window.__PLANNER__ = <%- plannerJson %>;</script>
-<script src="/task-planner.js?v=20260810c"></script>
+<script src="/task-planner.js?v=20260810d"></script>
 <%- include('partials/crm-foot') %>
