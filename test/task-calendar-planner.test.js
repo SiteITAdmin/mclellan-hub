@@ -8,6 +8,7 @@ const {
   normaliseDuration,
   computeAutoPlan,
   computeConflictReflow,
+  computeReshuffle,
   _test,
 } = require('../lib/task-calendar-planner');
 
@@ -223,4 +224,57 @@ test('transparent events stay free while opaque all-day events block the work da
     { date: '2026-08-10', time: '10:00', endDate: '2026-08-10', endTime: '10:30', allDay: false, transparency: 'opaque' },
   ], '2026-08-10', 9 * 60, 12 * 60);
   assert.deepEqual(intervals, [[540, 720], [600, 630]]);
+});
+
+test('reshuffle pulls a scheduled task earlier into a freed gap without moving anything later', () => {
+  // Appointment 09:00–10:00 is fixed. A task sits at 14:00 but the 10:00 gap is now free.
+  const result = computeReshuffle({
+    startDate: '2026-08-10',
+    endDate: '2026-08-11',
+    preferences: { workStart: '09:00', workEnd: '17:00' },
+    now: new Date('2026-08-10T06:00:00Z'),
+    appointments: [
+      { date: '2026-08-10', endDate: '2026-08-10', time: '09:00', endTime: '10:00', allDay: false, transparency: 'opaque' },
+    ],
+    scheduled: [
+      { task: { id: 'late-block', title: 'Late block', priority: 'medium', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-10', time: '14:00' },
+    ],
+  });
+  assert.equal(result.moves.length, 1);
+  assert.deepEqual(
+    [result.moves[0].fromAt, result.moves[0].startAt],
+    ['2026-08-10T14:00', '2026-08-10T10:00'],
+  );
+});
+
+test('reshuffle never pushes a block later and leaves already-compact blocks untouched', () => {
+  const result = computeReshuffle({
+    startDate: '2026-08-10',
+    endDate: '2026-08-11',
+    preferences: { workStart: '09:00', workEnd: '17:00' },
+    now: new Date('2026-08-10T06:00:00Z'),
+    appointments: [],
+    scheduled: [
+      { task: { id: 'a', title: 'A', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-10', time: '09:00' },
+      { task: { id: 'b', title: 'B', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-10', time: '09:30' },
+    ],
+  });
+  assert.deepEqual(result.moves, []);
+  assert.equal(result.unchanged, 2);
+});
+
+test('reshuffle pulls an overdue future block toward today and clears its late flag when it lands on/before due', () => {
+  // Task due 2026-08-10 but scheduled on 2026-08-11 (late). Today is the 10th with free work time.
+  const result = computeReshuffle({
+    startDate: '2026-08-10',
+    endDate: '2026-08-12',
+    preferences: { workStart: '09:00', workEnd: '17:00' },
+    now: new Date('2026-08-10T06:00:00Z'),
+    appointments: [],
+    scheduled: [
+      { task: { id: 'overdue', title: 'Overdue', effort_minutes: 30, due: '2026-08-10', planner_lane: 'work' }, date: '2026-08-11', time: '09:00' },
+    ],
+  });
+  assert.equal(result.moves[0].startAt, '2026-08-10T09:00');
+  assert.equal(result.moves[0].late, false);
 });

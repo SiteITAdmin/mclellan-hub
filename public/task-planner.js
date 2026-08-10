@@ -179,7 +179,12 @@
       const { taskId, duration, lane } = pointerDrag;
       const day = wasMoved ? dayColumnUnder(event.clientX, event.clientY) : null;
       endPointerDrag();
-      if (!wasMoved || !day) return;
+      if (!wasMoved) {
+        // A tap (no drag) on a task block opens it in the task page.
+        if (taskId) window.location.href = '/crm/tasks/' + encodeURIComponent(taskId);
+        return;
+      }
+      if (!day) return;
       const minute = snappedMinute(day, event.clientY, duration);
       if (!isValidDropTime(lane, minute, day.dataset.date, duration)) {
         const label = lane === 'personal' ? 'Personal' : 'Work';
@@ -336,7 +341,32 @@
   // ── Auto-plan & preferences ─────────────────────────────────────────────
 
   const autoButton = document.getElementById('planner-auto');
+  const reshuffleButton = document.getElementById('planner-reshuffle');
   const saveHoursButton = document.getElementById('planner-save-hours');
+
+  reshuffleButton?.addEventListener('click', async () => {
+    if (!window.confirm('Clear finished task blocks and pull remaining tasks earlier into any free time this week?')) return;
+    const original = reshuffleButton.textContent;
+    reshuffleButton.disabled = true;
+    reshuffleButton.textContent = 'Reshuffling…';
+    try {
+      const result = await postJson('/api/planner/reshuffle', {
+        startDate: data.startDate,
+        endDate: data.endDate,
+      });
+      const parts = [];
+      if (result.removedCompleted?.length) parts.push(`${result.removedCompleted.length} finished cleared`);
+      parts.push(`${result.moved.length} pulled earlier`);
+      if (result.lateCount) parts.push(`${result.lateCount} still late`);
+      if (result.failed?.length) parts.push(`${result.failed.length} failed`);
+      showMessage(parts.join(' · '), Boolean(result.failed?.length));
+      window.setTimeout(() => window.location.reload(), 900);
+    } catch (error) {
+      reshuffleButton.disabled = false;
+      reshuffleButton.textContent = original;
+      showMessage(error.message, true);
+    }
+  });
   saveHoursButton?.addEventListener('click', async () => {
     saveHoursButton.disabled = true;
     saveHoursButton.textContent = 'Saving…';

@@ -1907,6 +1907,20 @@ router.post('/api/planner/auto-plan', requireAuth, requireSameOrigin, writeLimit
   }
 });
 
+router.post('/api/planner/reshuffle', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { reshufflePlannerTasks } = require('../lib/task-calendar-planner');
+    const result = await reshufflePlannerTasks(req.hubUser, {
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('[planner] reshuffle failed:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.post('/api/planner/preferences', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   try {
     const { savePlannerPreferences } = require('../lib/task-calendar-planner');

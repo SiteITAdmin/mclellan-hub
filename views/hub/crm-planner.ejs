@@ -63,6 +63,7 @@
   </fieldset>
   <div class="planner-toolbar-actions">
     <button class="btn btn-sm btn-ghost" id="planner-save-hours" type="button">Save hours</button>
+    <button class="btn btn-ghost" id="planner-reshuffle" type="button" <%= calendarError ? 'disabled' : '' %>>Reshuffle · fill free time</button>
     <button class="btn" id="planner-auto" type="button" <%= calendarError || !snapshot.unscheduledTasks.length ? 'disabled' : '' %>>Auto-plan selected tasks</button>
   </div>
 </section>
@@ -179,5 +180,5 @@
 
 <div class="planner-toast" id="planner-toast" role="status" aria-live="polite"></div>
 <script>window.__PLANNER__ = <%- plannerJson %>;</script>
-<script src="/task-planner.js?v=20260810b"></script>
+<script src="/task-planner.js?v=20260810c"></script>
 <%- include('partials/crm-foot') %>
