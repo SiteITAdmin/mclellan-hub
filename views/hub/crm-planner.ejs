@@ -83,8 +83,9 @@
       <% } %>
       <% for (const task of snapshot.unscheduledTasks) { %>
         <article class="planner-task-card priority-<%= task.priority || 'none' %>"
-                 draggable="true" tabindex="0"
+                 tabindex="0"
                  data-task-id="<%= task.id %>"
+                 data-lane="<%= task.planner_lane %>"
                  data-duration="<%= task.planningDurationMinutes %>">
           <div class="planner-task-card-top">
             <a href="/crm/tasks/<%= task.id %>"><%= task.title %></a>
@@ -151,8 +152,8 @@
                 <% if (rawEnd > viewStartMinutes && rawStart < viewEndMinutes) { %>
                   <article class="planner-event <%= event.isTask ? 'planner-task-event planner-task-' + (event.task?.planner_lane || 'work') + (event.isLate ? ' planner-task-late' : '') : 'planner-calendar-event' %>"
                            style="top:<%= top %>px;height:<%= height %>px"
-                           <%= event.isTask ? 'draggable="true"' : '' %>
                            data-task-id="<%= event.taskId || '' %>"
+                           data-lane="<%= event.isTask ? (event.task?.planner_lane || 'work') : '' %>"
                            data-duration="<%= event.durationMinutes || 30 %>"
                            data-event-date="<%= day.date %>"
                            data-event-start="<%= event.time || '' %>"
@@ -178,5 +179,5 @@
 
 <div class="planner-toast" id="planner-toast" role="status" aria-live="polite"></div>
 <script>window.__PLANNER__ = <%- plannerJson %>;</script>
-<script src="/task-planner.js?v=20260810a"></script>
+<script src="/task-planner.js?v=20260810b"></script>
 <%- include('partials/crm-foot') %>

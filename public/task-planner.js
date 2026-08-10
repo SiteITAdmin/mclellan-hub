@@ -3,13 +3,11 @@
 (() => {
   const data = window.__PLANNER__ || {};
   const toast = document.getElementById('planner-toast');
-  let dragPayload = null;
-  let dragSourceElement = null;
 
   // ── Resize state ────────────────────────────────────────────────────────
   let resizeState = null;
-  // ── Touch drag state ────────────────────────────────────────────────────
-  let touchDrag = null; // { taskId, duration, lane, ghostEl, startX, startY, moved, sourceEl }
+  // ── Pointer drag-to-move state (mouse + touch + pen, one path) ───────────
+  let pointerDrag = null; // { pointerId, taskId, duration, lane, sourceEl, ghostEl, startX, startY, moved }
 
   function showMessage(message, error = false) {
     toast.textContent = message;
@@ -87,197 +85,121 @@
     return postJson('/api/planner/preferences', preferencesFromForm());
   }
 
-  // ── Drag to move (desktop) ──────────────────────────────────────────────
+  // ── Drag to move (pointer events: mouse + touch + pen) ──────────────────
+  // Native HTML5 drag-and-drop breaks inside the overflow:auto calendar scroller
+  // and is unimplemented on most mobile browsers. Pointer Events give one code
+  // path for every input and route all move/up back to the captured element, so
+  // hit-testing the target column with elementsFromPoint stays reliable.
 
-  function startDrag(element, event) {
-    const lane = element.classList.contains('planner-task-personal') ? 'personal' : 'work';
-    dragPayload = {
-      taskId: element.dataset.taskId,
-      durationMinutes: Number(element.dataset.duration || 30),
-      lane,
-    };
-    dragSourceElement = element;
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('application/json', JSON.stringify(dragPayload));
-    event.dataTransfer.setData('text/plain', dragPayload.taskId);
-    element.classList.add('dragging');
-    document.body.classList.add('planner-is-dragging');
+  const DRAG_THRESHOLD = 5;
+
+  function dayColumnUnder(x, y) {
+    return document.elementsFromPoint(x, y).find(el => el.classList?.contains('planner-day-body')) || null;
   }
 
-  document.querySelectorAll('[draggable="true"][data-task-id]').forEach(element => {
-    element.addEventListener('dragstart', event => {
-      if (event.target.closest('.planner-resize-handle, .planner-unschedule')) return;
-      startDrag(element, event);
-    });
-    element.addEventListener('dragend', () => {
-      if (dragSourceElement) dragSourceElement.classList.remove('dragging');
-      document.body.classList.remove('planner-is-dragging');
-      document.querySelectorAll('.planner-day-body.drag-over, .planner-day-body.drag-invalid').forEach(day => {
-        day.classList.remove('drag-over', 'drag-invalid');
-      });
-      dragPayload = null;
-      dragSourceElement = null;
-    });
-  });
-
-  document.querySelectorAll('.planner-day-body').forEach(day => {
-    day.addEventListener('dragover', event => {
-      if (!dragPayload) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      const rect = day.getBoundingClientRect();
-      const viewStart = Number(day.dataset.viewStart);
-      const viewEnd = Number(day.dataset.viewEnd);
-      const duration = Math.max(15, dragPayload.durationMinutes || 30);
-      const rawMinute = viewStart + ((event.clientY - rect.top) / rect.height) * (viewEnd - viewStart);
-      const minute = Math.max(viewStart, Math.min(viewEnd - duration, Math.round(rawMinute / 15) * 15));
-      const valid = isValidDropTime(dragPayload.lane, minute, day.dataset.date, duration);
-      day.classList.toggle('drag-over', valid);
-      day.classList.toggle('drag-invalid', !valid);
-      event.dataTransfer.dropEffect = valid ? 'move' : 'none';
-    });
-    day.addEventListener('dragleave', event => {
-      if (!day.contains(event.relatedTarget)) day.classList.remove('drag-over', 'drag-invalid');
-    });
-    day.addEventListener('drop', async event => {
-      event.preventDefault();
-      day.classList.remove('drag-over', 'drag-invalid');
-      let payload = dragPayload;
-      if (!payload) {
-        try { payload = JSON.parse(event.dataTransfer.getData('application/json')); } catch (_) {}
-      }
-      if (!payload?.taskId) return;
-      const rect = day.getBoundingClientRect();
-      const viewStart = Number(day.dataset.viewStart);
-      const viewEnd = Number(day.dataset.viewEnd);
-      const duration = Math.max(15, Number(payload.durationMinutes || 30));
-      const rawMinute = viewStart + ((event.clientY - rect.top) / rect.height) * (viewEnd - viewStart);
-      const minute = Math.max(viewStart, Math.min(viewEnd - duration, Math.round(rawMinute / 15) * 15));
-      if (!isValidDropTime(payload.lane, minute, day.dataset.date, duration)) {
-        const label = payload.lane === 'personal' ? 'Personal' : 'Work';
-        const isWeekend = new Date(`${day.dataset.date}T12:00:00Z`).getUTCDay() % 6 === 0;
-        const windowLabel = payload.lane === 'personal'
-          ? (isWeekend ? 'weekend hours' : 'evening hours')
-          : 'work hours';
-        showMessage(`${label} tasks can only be placed in ${windowLabel}`, true);
-        return;
-      }
-      const startAt = `${day.dataset.date}T${timeFromMinutes(minute)}`;
-      showMessage(`Moving to ${timeFromMinutes(minute)}…`);
-      try {
-        await postJson(`/api/planner/tasks/${encodeURIComponent(payload.taskId)}/schedule`, {
-          startAt,
-          durationMinutes: duration,
-        });
-        window.location.reload();
-      } catch (error) {
-        showMessage(error.message, true);
-      }
-    });
-  });
-
-  // ── Touch drag to move (mobile) ─────────────────────────────────────────
-
-  function getDayColumnUnder(touch) {
-    const els = document.elementsFromPoint(touch.clientX, touch.clientY);
-    return els.find(el => el.classList?.contains('planner-day-body')) || null;
+  function snappedMinute(day, clientY, duration) {
+    const rect = day.getBoundingClientRect();
+    const viewStart = Number(day.dataset.viewStart);
+    const viewEnd = Number(day.dataset.viewEnd);
+    const rawMinute = viewStart + ((clientY - rect.top) / rect.height) * (viewEnd - viewStart);
+    return Math.max(viewStart, Math.min(viewEnd - duration, Math.round(rawMinute / 15) * 15));
   }
 
-  document.querySelectorAll('[draggable="true"][data-task-id]').forEach(element => {
-    element.addEventListener('touchstart', event => {
-      if (event.target.closest('.planner-resize-handle, .planner-unschedule')) return;
-      event.preventDefault();
-      const touch = event.touches[0];
-      const lane = element.classList.contains('planner-task-personal') ? 'personal' : 'work';
-      touchDrag = {
+  function clearDropHints() {
+    document.querySelectorAll('.planner-day-body.drag-over, .planner-day-body.drag-invalid')
+      .forEach(d => d.classList.remove('drag-over', 'drag-invalid'));
+  }
+
+  function endPointerDrag() {
+    const drag = pointerDrag;
+    pointerDrag = null;
+    document.body.classList.remove('planner-is-dragging');
+    clearDropHints();
+    if (!drag) return null;
+    if (drag.ghostEl) drag.ghostEl.remove();
+    drag.sourceEl.style.opacity = '';
+    drag.sourceEl.classList.remove('planner-dragging');
+    try { drag.sourceEl.releasePointerCapture(drag.pointerId); } catch (_) {}
+    return drag;
+  }
+
+  document.querySelectorAll('[data-task-id]').forEach(element => {
+    if (!element.dataset.taskId) return;
+
+    element.addEventListener('pointerdown', event => {
+      if (event.button && event.button !== 0) return;
+      if (event.target.closest('.planner-resize-handle, .planner-unschedule, a')) return;
+      pointerDrag = {
+        pointerId: event.pointerId,
         taskId: element.dataset.taskId,
-        duration: Number(element.dataset.duration || 30),
-        lane,
+        duration: Math.max(15, Number(element.dataset.duration || 30)),
+        lane: element.dataset.lane === 'personal' ? 'personal' : 'work',
         sourceEl: element,
         ghostEl: null,
-        startX: touch.clientX,
-        startY: touch.clientY,
+        startX: event.clientX,
+        startY: event.clientY,
         moved: false,
       };
-    }, { passive: false });
+      element.setPointerCapture(event.pointerId);
+    });
 
-    element.addEventListener('touchmove', event => {
-      if (!touchDrag || touchDrag.taskId !== element.dataset.taskId) return;
-      // iOS commits to scroll-vs-gesture on the first touchmove: cancel from the
-      // very first move (like the resize handle does) or later preventDefault is
-      // ignored and the calendar scroll container eats the drag.
+    element.addEventListener('pointermove', event => {
+      if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+      const dx = event.clientX - pointerDrag.startX;
+      const dy = event.clientY - pointerDrag.startY;
+      if (!pointerDrag.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
       event.preventDefault();
-      const touch = event.touches[0];
-      const dx = touch.clientX - touchDrag.startX;
-      const dy = touch.clientY - touchDrag.startY;
-      if (!touchDrag.moved && Math.abs(dx) + Math.abs(dy) < 12) return;
-      if (!touchDrag.moved) {
-        touchDrag.moved = true;
-        touchDrag.sourceEl.style.opacity = '.35';
-        const ghost = touchDrag.sourceEl.cloneNode(true);
+      if (!pointerDrag.moved) {
+        pointerDrag.moved = true;
+        pointerDrag.sourceEl.style.opacity = '.35';
+        pointerDrag.sourceEl.classList.add('planner-dragging');
+        const ghost = pointerDrag.sourceEl.cloneNode(true);
         ghost.classList.add('planner-touch-ghost');
-        ghost.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;width:' +
-          touchDrag.sourceEl.offsetWidth + 'px;opacity:.88;transform:scale(1.04);' +
+        ghost.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;margin:0;width:' +
+          pointerDrag.sourceEl.offsetWidth + 'px;opacity:.9;transform:scale(1.03);' +
           'box-shadow:0 8px 24px rgba(0,0,0,.25);';
         document.body.appendChild(ghost);
-        touchDrag.ghostEl = ghost;
+        pointerDrag.ghostEl = ghost;
         document.body.classList.add('planner-is-dragging');
       }
-      if (touchDrag.ghostEl) {
-        touchDrag.ghostEl.style.left = (touch.clientX - touchDrag.sourceEl.offsetWidth / 2) + 'px';
-        touchDrag.ghostEl.style.top = (touch.clientY - 16) + 'px';
-      }
-      document.querySelectorAll('.planner-day-body.drag-over, .planner-day-body.drag-invalid').forEach(d => d.classList.remove('drag-over', 'drag-invalid'));
-      const day = getDayColumnUnder(touch);
+      pointerDrag.ghostEl.style.left = (event.clientX - pointerDrag.sourceEl.offsetWidth / 2) + 'px';
+      pointerDrag.ghostEl.style.top = (event.clientY - 16) + 'px';
+      clearDropHints();
+      const day = dayColumnUnder(event.clientX, event.clientY);
       if (day) {
-        const rect = day.getBoundingClientRect();
-        const viewStart = Number(day.dataset.viewStart);
-        const viewEnd = Number(day.dataset.viewEnd);
-        const rawMinute = viewStart + ((touch.clientY - rect.top) / rect.height) * (viewEnd - viewStart);
-        const minute = Math.max(viewStart, Math.min(viewEnd - touchDrag.duration, Math.round(rawMinute / 15) * 15));
-        const valid = isValidDropTime(touchDrag.lane, minute, day.dataset.date, touchDrag.duration);
+        const minute = snappedMinute(day, event.clientY, pointerDrag.duration);
+        const valid = isValidDropTime(pointerDrag.lane, minute, day.dataset.date, pointerDrag.duration);
         day.classList.add(valid ? 'drag-over' : 'drag-invalid');
       }
-    }, { passive: false });
+    });
 
-    element.addEventListener('touchend', async event => {
-      if (!touchDrag || touchDrag.taskId !== element.dataset.taskId) return;
-      const td = touchDrag;
-      touchDrag = null;
-      document.body.classList.remove('planner-is-dragging');
-      if (td.ghostEl) td.ghostEl.remove();
-      td.sourceEl.style.opacity = '';
-      document.querySelectorAll('.planner-day-body.drag-over, .planner-day-body.drag-invalid').forEach(d => d.classList.remove('drag-over', 'drag-invalid'));
-      if (!td.moved) return;
-      const touch = event.changedTouches[0];
-      const day = getDayColumnUnder(touch);
-      if (!day) return;
-      const rect = day.getBoundingClientRect();
-      const viewStart = Number(day.dataset.viewStart);
-      const viewEnd = Number(day.dataset.viewEnd);
-      const rawMinute = viewStart + ((touch.clientY - rect.top) / rect.height) * (viewEnd - viewStart);
-      const minute = Math.max(viewStart, Math.min(viewEnd - td.duration, Math.round(rawMinute / 15) * 15));
-      if (!isValidDropTime(td.lane, minute, day.dataset.date, td.duration)) {
-        const label = td.lane === 'personal' ? 'Personal' : 'Work';
+    const finish = async event => {
+      if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+      const wasMoved = pointerDrag.moved;
+      const { taskId, duration, lane } = pointerDrag;
+      const day = wasMoved ? dayColumnUnder(event.clientX, event.clientY) : null;
+      endPointerDrag();
+      if (!wasMoved || !day) return;
+      const minute = snappedMinute(day, event.clientY, duration);
+      if (!isValidDropTime(lane, minute, day.dataset.date, duration)) {
+        const label = lane === 'personal' ? 'Personal' : 'Work';
         const isWeekend = new Date(`${day.dataset.date}T12:00:00Z`).getUTCDay() % 6 === 0;
-        const windowLabel = td.lane === 'personal'
-          ? (isWeekend ? 'weekend hours' : 'evening hours')
-          : 'work hours';
+        const windowLabel = lane === 'personal' ? (isWeekend ? 'weekend hours' : 'evening hours') : 'work hours';
         showMessage(`${label} tasks can only be placed in ${windowLabel}`, true);
         return;
       }
       const startAt = `${day.dataset.date}T${timeFromMinutes(minute)}`;
       showMessage(`Moving to ${timeFromMinutes(minute)}…`);
       try {
-        await postJson(`/api/planner/tasks/${encodeURIComponent(td.taskId)}/schedule`, {
-          startAt,
-          durationMinutes: td.duration,
-        });
+        await postJson(`/api/planner/tasks/${encodeURIComponent(taskId)}/schedule`, { startAt, durationMinutes: duration });
         window.location.reload();
       } catch (error) {
         showMessage(error.message, true);
       }
-    });
+    };
+
+    element.addEventListener('pointerup', finish);
+    element.addEventListener('pointercancel', () => { endPointerDrag(); });
   });
 
   // ── Unschedule button ───────────────────────────────────────────────────
