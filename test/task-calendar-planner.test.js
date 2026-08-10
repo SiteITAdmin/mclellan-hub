@@ -9,6 +9,7 @@ const {
   computeAutoPlan,
   computeConflictReflow,
   computeReshuffle,
+  resolveTaskFloor,
   _test,
 } = require('../lib/task-calendar-planner');
 
@@ -277,4 +278,49 @@ test('reshuffle pulls an overdue future block toward today and clears its late f
   });
   assert.equal(result.moves[0].startAt, '2026-08-10T09:00');
   assert.equal(result.moves[0].late, false);
+});
+
+test('resolveTaskFloor floors on the linked event end, lapses when the event is gone', () => {
+  const eventsById = new Map([
+    ['evt1', { id: 'evt1', allDay: false, endDate: '2026-08-11', endTime: '15:30', title: 'Tuesday sync' }],
+  ]);
+  assert.deepEqual(
+    resolveTaskFloor({ after: 'cal:evt1' }, eventsById),
+    { atLocal: '2026-08-11T15:30', date: '2026-08-11', minute: 930, title: 'Tuesday sync' },
+  );
+  assert.equal(resolveTaskFloor({ after: 'cal:missing' }, eventsById), null);
+  assert.equal(resolveTaskFloor({ after: null }, eventsById), null);
+  assert.equal(resolveTaskFloor({ after: '2026-08-11T15:30' }, new Map()).atLocal, '2026-08-11T15:30');
+});
+
+test('auto-plan honours an after-dependency and will not place before the floor', () => {
+  const result = computeAutoPlan({
+    startDate: '2026-08-10',
+    endDate: '2026-08-13',
+    workStart: '09:00',
+    workEnd: '17:00',
+    now: new Date('2026-08-10T06:00:00Z'),
+    tasks: [
+      { id: 'dep', title: 'After meeting', effort_minutes: 30, due: '2026-08-11', planner_lane: 'work', notBefore: '2026-08-11T15:30' },
+    ],
+    events: [],
+  });
+  // Monday is free but blocked by the floor; lands Tuesday at/after 15:30.
+  assert.equal(result.placements[0].startAt, '2026-08-11T15:30');
+});
+
+test('reshuffle will not pull a dependent block earlier than its linked meeting', () => {
+  const result = computeReshuffle({
+    startDate: '2026-08-10',
+    endDate: '2026-08-13',
+    preferences: { workStart: '09:00', workEnd: '17:00' },
+    now: new Date('2026-08-11T06:00:00Z'),
+    appointments: [],
+    scheduled: [
+      // Sitting late on Tuesday afternoon; a big free morning exists but the floor blocks it.
+      { task: { id: 'dep', title: 'After meeting', effort_minutes: 30, planner_lane: 'work', notBefore: '2026-08-11T15:30' }, date: '2026-08-11', time: '16:30' },
+    ],
+  });
+  assert.equal(result.moves.length, 1);
+  assert.equal(result.moves[0].startAt, '2026-08-11T15:30'); // pulled up only to the floor, not the morning
 });

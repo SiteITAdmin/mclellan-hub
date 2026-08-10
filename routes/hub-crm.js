@@ -2309,7 +2309,21 @@ router.get('/crm/tasks/:id', requireAuth, async (req, res) => {
     ORDER BY status IN ('done','cancelled'), next_fire_at
   `).all(req.hubUser, task.id);
 
-  res.render('hub/crm-task', { ...crmPageData(req.hubUser), task, contacts, companies, projects, originMeeting, relatedReminders, taskTags });
+  // Upcoming timed calendar events power the "Only after" dependency picker.
+  // Read-only (no cache reconcile); degrade to an empty list if calendar is down.
+  let upcomingMeetings = [];
+  try {
+    const { listPlannerCalendarEvents, addIsoDays } = require('../lib/task-calendar-planner');
+    const today = todayIso();
+    const events = await listPlannerCalendarEvents(req.hubUser, { startDate: today, endDate: addIsoDays(today, 14) }, { reconcileCache: false });
+    upcomingMeetings = events
+      .filter(event => !event.isTask && !event.allDay && event.time)
+      .map(event => ({ value: `cal:${event.id}`, date: event.date, time: event.time, endTime: event.endTime, title: event.title }));
+  } catch (error) {
+    console.warn('[tasks] upcoming meetings load failed:', error.message);
+  }
+
+  res.render('hub/crm-task', { ...crmPageData(req.hubUser), task, contacts, companies, projects, originMeeting, relatedReminders, taskTags, upcomingMeetings });
 });
 
 router.post('/api/tasks/sync', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
@@ -2328,7 +2342,7 @@ router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimite
     contact_id: contactId, company_id: companyId, project_slug: projectSlug,
   } = req.body;
   let finalNotes = notes;
-  if (notes !== undefined && (req.body.priority !== undefined || req.body.effort_minutes !== undefined)) {
+  if (notes !== undefined && (req.body.priority !== undefined || req.body.effort_minutes !== undefined || req.body.after !== undefined)) {
     const { withTaskTags, parseTaskTags } = require('../lib/google-tasks');
     const existing = db.hub().prepare('SELECT notes FROM google_tasks WHERE id = ? AND user = ?')
       .get(req.params.id, req.hubUser);
@@ -2337,6 +2351,7 @@ router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimite
       priority: req.body.priority,
       effortMinutes: req.body.effort_minutes,
       plannerLane: parseTaskTags(existing.notes).planner_lane,
+      after: req.body.after,
     });
   }
   try {
