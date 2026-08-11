@@ -92,6 +92,9 @@
   // hit-testing the target column with elementsFromPoint stays reliable.
 
   const DRAG_THRESHOLD = 5;
+  // Dropped blocks snap to the half hour (:00/:30). A finer 15-min grid made it
+  // too easy to land on :15/:45 by accident — Douglas wants clean start times.
+  const DROP_SNAP_MINUTES = 30;
 
   function dayColumnUnder(x, y) {
     return document.elementsFromPoint(x, y).find(el => el.classList?.contains('planner-day-body')) || null;
@@ -102,7 +105,7 @@
     const viewStart = Number(day.dataset.viewStart);
     const viewEnd = Number(day.dataset.viewEnd);
     const rawMinute = viewStart + ((clientY - rect.top) / rect.height) * (viewEnd - viewStart);
-    return Math.max(viewStart, Math.min(viewEnd - duration, Math.round(rawMinute / 15) * 15));
+    return Math.max(viewStart, Math.min(viewEnd - duration, Math.round(rawMinute / DROP_SNAP_MINUTES) * DROP_SNAP_MINUTES));
   }
 
   function clearDropHints() {
