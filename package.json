@@ -7,7 +7,8 @@
     "dev": "node --watch server.js",
     "init-db": "node scripts/init-db.js",
     "test": "node --test test/*.test.js && node test/reminders-synthetic.js && node test/nudges-synthetic.js && node test/content-reminders-synthetic.js",
-    "test:integration": "node test/suggestions-synthetic.js"
+    "test:integration": "node test/suggestions-synthetic.js",
+    "change": "node scripts/hub-change.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",

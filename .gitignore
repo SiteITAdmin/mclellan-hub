@@ -44,3 +44,6 @@ scripts/repair/node_modules/
 # Node app and never deployed.
 /slugify.py
 /test_slugify.py
+
+# Change-management dashboard ticket data — not source, not tracked
+.hub-changes/
