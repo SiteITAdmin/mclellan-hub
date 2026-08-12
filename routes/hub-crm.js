@@ -2164,12 +2164,16 @@ router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (r
   try {
     const { withTaskTags } = require('../lib/google-tasks');
     const baseNotes = String(req.body.notes || '').trim();
-    const addToPlanner = req.body.planner_selected === true
-      || req.body.planner_selected === 'true' || req.body.planner_selected === '1' || req.body.planner_selected === 'on';
+    const assignee = String(req.body.assignee || '').trim();
+    // A task handed to someone else is not Douglas's to schedule: never put it in
+    // the planner, whichever way the form was filled in.
+    const addToPlanner = !assignee && (req.body.planner_selected === true
+      || req.body.planner_selected === 'true' || req.body.planner_selected === '1' || req.body.planner_selected === 'on');
     const notes = withTaskTags(baseNotes, {
       priority: req.body.priority,
       effortMinutes: req.body.effort_minutes,
       plannerLane: addToPlanner && ['work', 'personal'].includes(req.body.planner_lane) ? req.body.planner_lane : null,
+      assignee: assignee || null,
     });
     const task = await createTask(req.hubUser, {
       title,
@@ -2179,6 +2183,7 @@ router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (r
       contactId: req.body.contact_id || null,
       companyId: req.body.company_id || null,
       projectSlug: requestedProject || null,
+      assignee: assignee || null,
     });
     res.json({ ok: true, task });
   } catch (err) {
@@ -2342,19 +2347,35 @@ router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimite
     contact_id: contactId, company_id: companyId, project_slug: projectSlug,
   } = req.body;
   let finalNotes = notes;
-  if (notes !== undefined && (req.body.priority !== undefined || req.body.effort_minutes !== undefined || req.body.after !== undefined)) {
+  // Assigning a task away removes it from Douglas's planner: clear its lane and,
+  // if it already had a calendar block, delete that block. Derived below.
+  let clearPlannerBlock = false;
+  const assigneeProvided = req.body.assignee !== undefined;
+  const assignee = assigneeProvided ? String(req.body.assignee || '').trim() : undefined;
+  if (notes !== undefined && (req.body.priority !== undefined || req.body.effort_minutes !== undefined || req.body.after !== undefined || assigneeProvided)) {
     const { withTaskTags, parseTaskTags } = require('../lib/google-tasks');
     const existing = db.hub().prepare('SELECT notes FROM google_tasks WHERE id = ? AND user = ?')
       .get(req.params.id, req.hubUser);
     if (!existing) return res.status(404).json({ error: 'Task not found' });
+    const existingTags = parseTaskTags(existing.notes);
+    // A newly assigned task drops its planner lane; unassigning leaves the lane as it was.
+    const keepLane = assignee ? null : existingTags.planner_lane;
+    clearPlannerBlock = Boolean(assignee) && Boolean(existingTags.planner_lane);
     finalNotes = withTaskTags(String(notes), {
       priority: req.body.priority,
       effortMinutes: req.body.effort_minutes,
-      plannerLane: parseTaskTags(existing.notes).planner_lane,
+      plannerLane: keepLane,
       after: req.body.after,
+      ...(assigneeProvided && { assignee: assignee || null }),
     });
   }
   try {
+    if (clearPlannerBlock) {
+      const { unscheduleTask } = require('../lib/task-calendar-planner');
+      await unscheduleTask(req.hubUser, req.params.id).catch(err => {
+        console.warn('[tasks] unschedule on assign failed:', err.message);
+      });
+    }
     await updateTask(req.hubUser, req.params.id, {
       ...(title !== undefined && { title: String(title).trim() }),
       ...(notes !== undefined && { notes: String(finalNotes).trim() }),
