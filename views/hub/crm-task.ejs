@@ -17,6 +17,9 @@
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <% if (!task.deleted_at && task.status === 'needsAction') { %>
+      <% if (taskTags.assignee) { %>
+        <span class="crm-badge" style="background:rgba(37,99,235,.12);color:#1d4ed8;font-weight:600;" title="Assigned to someone else — not in your planner">→ Assigned to <%= taskTags.assignee %></span>
+      <% } else { %>
       <div class="task-planner-control task-planner-control-detail" data-task-planner-control data-task-id="<%= task.id %>" data-saved-lane="<%= taskTags.planner_lane || 'work' %>">
         <label title="Include this task in calendar planning">
           <input type="checkbox" <%= taskTags.planner_lane ? 'checked' : '' %> onchange="taskPlannerToggle(this)">
@@ -28,6 +31,7 @@
         </select>
         <span class="task-planner-state" aria-live="polite"></span>
       </div>
+      <% } %>
       <button class="btn" onclick="taskAction('<%= task.id %>', 'complete')">Mark done</button>
       <button class="btn" style="opacity:.6;" onclick="remindMe()" title="Set an escalating reminder for this task">🔔 Remind me</button>
       <% if (['document','email','agentmail'].includes(task.source)) { %>
@@ -51,7 +55,7 @@
           <input name="title" value="<%= task.title %>" required>
         </label>
         <label class="wide">Notes <span style="font-size:11px;opacity:.6;">priority, effort, and planner tags are managed by the controls</span>
-          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort|planner|after)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
+          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort|planner|after|assignee)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
         </label>
         <label>Priority
           <select name="priority">
@@ -113,6 +117,12 @@
               <option value="<%= p.slug %>" <%= task.project_slug === p.slug ? 'selected' : '' %>><%= p.name %></option>
             <% } %>
           </select>
+        </label>
+        <label class="wide">Assign to someone else <span style="font-size:11px;opacity:.6;">(takes it out of your planner and into "assigned to others"; leave blank to keep it yours)</span>
+          <input name="assignee" list="assignee-options" value="<%= taskTags.assignee || '' %>" placeholder="Name of whoever is doing it" autocomplete="off">
+          <datalist id="assignee-options">
+            <% for (const c of contacts) { %><option value="<%= c.name %>"></option><% } %>
+          </datalist>
         </label>
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn" type="submit">Save changes</button>

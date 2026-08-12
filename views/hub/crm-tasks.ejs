@@ -69,13 +69,21 @@
         <% for (const p of projects) { %><option value="<%= p.slug %>"><%= p.name %></option><% } %>
       </select>
     </label>
+    <label>Assign to (someone else)
+      <input name="assignee" list="assignee-options" placeholder="Leave blank if it's yours" autocomplete="off">
+      <datalist id="assignee-options">
+        <% for (const c of contacts) { %><option value="<%= c.name %>"></option><% } %>
+      </datalist>
+    </label>
     <button class="btn" type="submit">Add to Google Tasks</button>
     <p class="crm-muted task-form-msg" id="task-form-msg"></p>
   </form>
 </section>
 
 <!-- Task list -->
-<% const open = tasks.filter(t => t.status === 'needsAction' && !t.deleted_at); %>
+<% const openAll = tasks.filter(t => t.status === 'needsAction' && !t.deleted_at); %>
+<% const open = openAll.filter(t => !t.assignee); %>
+<% const assignedOut = openAll.filter(t => t.assignee); %>
 <% const done = tasks.filter(t => t.status === 'completed' && !t.deleted_at); %>
 <% const deleted = tasks.filter(t => t.deleted_at); %>
 
@@ -104,6 +112,30 @@
     <%- include('partials/task-row', { t, showHistory }) %>
   <% } %>
 </section>
+
+<% if (assignedOut.length) { %>
+<section class="section-card" style="margin-top:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+    <h2 style="margin:0;">Tasks assigned to others (<%= assignedOut.length %>)</h2>
+    <p class="crm-muted" style="margin:0;">Tracked but not on your calendar. Clear the assignee on a task to take it back.</p>
+  </div>
+  <%
+    const byAssignee = new Map();
+    for (const t of assignedOut) {
+      const key = t.assignee;
+      if (!byAssignee.has(key)) byAssignee.set(key, []);
+      byAssignee.get(key).push(t);
+    }
+    const assigneeNames = [...byAssignee.keys()].sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : 1);
+  %>
+  <% for (const name of assigneeNames) { %>
+    <h3 style="margin:14px 0 6px;font-size:15px;opacity:.8;">→ <%= name %> (<%= byAssignee.get(name).length %>)</h3>
+    <% for (const t of byAssignee.get(name)) { %>
+      <%- include('partials/task-row', { t, showHistory }) %>
+    <% } %>
+  <% } %>
+</section>
+<% } %>
 
 <% if (showHistory && done.length) { %>
 <section class="section-card" style="margin-top:16px;">

@@ -6,6 +6,7 @@
      data-task-priority="<%= t.priority || '' %>"
      data-task-effort="<%= t.effort_minutes || '' %>"
      data-task-planner="<%= t.planner_lane || '' %>"
+     data-task-assignee="<%= t.assignee || '' %>"
      data-task-project="<%= t.project_slug || '' %>"
      data-task-project-name="<%= (t.project_name || t.project_slug || '').toLowerCase() %>">
   <div class="crm-task-main">
@@ -32,6 +33,9 @@
       <% if (t.project_slug) { %>
         <a class="crm-badge subtle" href="/c/<%= t.project_slug %>"><%= t.project_name || t.project_slug %></a>
       <% } %>
+      <% if (t.assignee) { %>
+        <span class="crm-badge" style="background:rgba(37,99,235,.12);color:#1d4ed8;font-weight:600;" title="Assigned to someone else — not in your planner">→ <%= t.assignee %></span>
+      <% } %>
       <% if (!t.contact_name && !t.company_name && !t.project_slug && t.status === 'needsAction' && !t.deleted_at) { %>
         <a class="crm-badge subtle" href="/crm/tasks/<%= t.id %>" style="opacity:.7;" title="No person, company, or project linked — open to add context">+ add context</a>
       <% } %>
@@ -40,6 +44,7 @@
   </div>
   <div class="crm-task-actions">
     <% if (!t.deleted_at && t.status === 'needsAction') { %>
+      <% if (!t.assignee) { %>
       <div class="task-planner-control" data-task-planner-control data-task-id="<%= t.id %>" data-saved-lane="<%= t.planner_lane || 'work' %>">
         <label title="Include this task in calendar planning">
           <input type="checkbox" <%= t.planner_lane ? 'checked' : '' %> onchange="taskPlannerToggle(this)">
@@ -51,6 +56,7 @@
         </select>
         <span class="task-planner-state" aria-live="polite"></span>
       </div>
+      <% } %>
       <button class="btn btn-sm" onclick="taskAction('<%= t.id %>', 'complete')">Done</button>
       <% if (['document','email','agentmail'].includes(t.source)) { %>
         <button class="btn btn-sm btn-ghost" style="color:var(--crm-danger,#c0392b);" onclick="markTaskWrong('<%= t.id %>')">Wrong</button>

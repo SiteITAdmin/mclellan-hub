@@ -44,7 +44,7 @@ test('priority/effort tags round-trip through notes without clobbering body', ()
 test('planner lane round-trips independently from priority and effort', () => {
   const planned = withPlannerTag('[priority: high] [effort: 60m]\n\nPrepare paper', 'personal');
   assert.deepEqual(parseTaskTags(planned), {
-    priority: 'high', effort_minutes: 60, planner_lane: 'personal', after: null,
+    priority: 'high', effort_minutes: 60, planner_lane: 'personal', after: null, assignee: null,
   });
   assert.equal(stripTaskTags(planned), 'Prepare paper');
 
@@ -62,6 +62,17 @@ test('after-dependency round-trips raw and is preserved by ordinary edits', () =
   assert.equal(parseTaskTags(edited).after, 'cal:AbC_123');
   // Explicitly clearing it removes the tag.
   assert.equal(parseTaskTags(withTaskTags(edited, { priority: 'low', effortMinutes: 30, after: '' })).after, null);
+});
+
+test('assignee tag round-trips, survives ordinary edits, and clears the planner lane it should not coexist with', () => {
+  // An assigned-away task is captured but attributed to its doer.
+  const assigned = withTaskTags('Send the pack', { assignee: 'Sarah Doyle', priority: 'high' });
+  assert.equal(parseTaskTags(assigned).assignee, 'Sarah Doyle', 'name keeps its case and spaces');
+  assert.equal(stripTaskTags(assigned), 'Send the pack', 'the assignee tag is not shown in visible notes');
+  // An edit that does not mention assignee must not drop it.
+  assert.equal(parseTaskTags(withTaskTags(assigned, { effortMinutes: 60 })).assignee, 'Sarah Doyle');
+  // Explicitly clearing it removes the tag.
+  assert.equal(parseTaskTags(withTaskTags(assigned, { assignee: null })).assignee, null);
 });
 
 test('new-task effort helper defaults unsized notes to 30 minutes without overwriting estimates', () => {
