@@ -61,6 +61,8 @@ raw source → crm_source_triage → crm_duplicate_review → synthesis/provenan
 ```
 
 Engine: `lib/crm-knowledge-engine.js`. Operator surface: `/crm/knowledge`.
+WhatsApp stays one source per bubble; same-chat neighbours are prompt context,
+and a later turn may complete an earlier same-chat task (`crm_action_resolution`).
 Do not reintroduce direct CRM write paths (`CRM_LEGACY_DIRECT_WRITES=1` is
 rollback only).
 

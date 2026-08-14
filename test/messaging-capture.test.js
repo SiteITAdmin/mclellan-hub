@@ -16,6 +16,9 @@ const {
   captureMessagingMessage,
   buildEvidenceText,
   externalIdFromPayload,
+  messageDirection,
+  chatNeighborsForMessage,
+  formatMessagingChatContext,
 } = require('../lib/messaging-capture');
 const { sourceContext } = require('../lib/synthesis');
 
@@ -160,6 +163,53 @@ test('messaging evidence preserves explicit contact and project routing metadata
     projectId: 'project-dad',
     preferKind: 'project',
   });
+});
+
+test('same-chat neighbours are context around the current bubble, not the source', () => {
+  const user = 'test-douglas';
+  const chatId = '120363239923493562@g.us';
+  const question = captureMessagingMessage(user, {
+    platform: 'whatsapp',
+    external_message_id: 'wa-walk-q',
+    chat_id: chatId,
+    chat_name: 'Dad Information Group',
+    sender_name: 'Catriona Mclellan',
+    body: 'Is he walking okay? Back to usual shuffle but just with stick?',
+    received_at: 1786725558,
+    raw: { direction: 'inbound' },
+  });
+  const answer = captureMessagingMessage(user, {
+    platform: 'whatsapp',
+    external_message_id: 'wa-walk-a',
+    chat_id: chatId,
+    chat_name: 'Dad Information Group',
+    sender_name: 'Douglas McLellan',
+    body: 'Not sure. Was going to test that tomorrow.',
+    received_at: 1786725640,
+    raw: { direction: 'outbound' },
+  });
+  const later = captureMessagingMessage(user, {
+    platform: 'whatsapp',
+    external_message_id: 'wa-other-chat',
+    chat_id: 'someone-else@s.whatsapp.net',
+    sender_name: 'Liz',
+    body: 'When are you going back to Dublin?',
+    received_at: 1786725700,
+    raw: { direction: 'inbound' },
+  });
+
+  assert.equal(messageDirection(question.row), 'inbound');
+  assert.equal(messageDirection(answer.row), 'outbound');
+  const neighbors = chatNeighborsForMessage(user, question.row);
+  assert.equal(neighbors.length, 1);
+  assert.equal(neighbors[0].id, answer.id);
+  assert.ok(!neighbors.some(row => row.id === later.id));
+
+  const context = formatMessagingChatContext(user, question.row);
+  assert.match(context, /SAME-CHAT CONTEXT/);
+  assert.match(context, /outbound Douglas McLellan: Not sure/);
+  assert.doesNotMatch(context, /When are you going back to Dublin/);
+  assert.doesNotMatch(buildEvidenceText(question.row), /Not sure\. Was going to test that tomorrow/);
 });
 
 test('messaging evidence marks historical backfills as non-current evidence', () => {

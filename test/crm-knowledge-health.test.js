@@ -72,6 +72,31 @@ test('terminal action outcomes override a concurrent warning projection receipt'
   assert.deepEqual(state, { state: 'complete', reason: 'triage_no_durable_knowledge' });
 });
 
+test('uncertain chat-resolution reviews do not mark the answering source incomplete', () => {
+  const evidence = { source_kind: 'messaging_message', source_id: 'answer-1', revision_hash: 'revision-1' };
+  const payload = value => JSON.stringify({
+    pipeline_version: 'crm-evidence-actions-v2', source_revision: 'revision-1', ...value,
+  });
+  const state = _test.sourceCoverageState(evidence, [
+    {
+      receipt_order: 1, stage: 'crm_source_triage', source_kind: 'messaging_message', source_id: 'answer-1',
+      status: 'done', created_at: 1,
+      payload: payload({ should_synthesise: false, candidate_actions: [] }),
+    },
+    {
+      receipt_order: 2, stage: 'crm_action_projected', source_kind: 'messaging_message', source_id: 'answer-1',
+      status: 'done', created_at: 2, payload: payload({}),
+    },
+  ], [
+    {
+      source_kind: 'messaging_message', source_id: 'answer-1', source_revision: 'revision-1',
+      pipeline_version: 'crm-evidence-actions-v2', action_key: 'chat-resolve-1',
+      disposition: 'review', payload: payload({ chat_resolution: true }),
+    },
+  ]);
+  assert.deepEqual(state, { state: 'complete', reason: 'triage_no_durable_knowledge' });
+});
+
 test('coverage is incomplete after a crash immediately following triage', () => {
   const evidence = { source_kind: 'document', source_id: 'crash-after-triage', revision_hash: 'rev-crash' };
   const payload = value => JSON.stringify({

@@ -12,6 +12,46 @@ test('completed tasks are terminal and cannot project replacement tasks', () => 
   );
 });
 
+test('a fresh WhatsApp bubble sits inside the settle window', () => {
+  const now = 1_786_725_000;
+  assert.equal(
+    _test.isInsideMessagingSettleWindow({
+      source_kind: 'messaging_message',
+      ts: now - 60,
+    }, now),
+    true,
+  );
+  assert.equal(
+    _test.isInsideMessagingSettleWindow({
+      source_kind: 'messaging_message',
+      ts: now - _test.MESSAGING_SETTLE_SECONDS - 1,
+    }, now),
+    false,
+  );
+  assert.equal(
+    _test.isInsideMessagingSettleWindow({
+      source_kind: 'email_summary',
+      ts: now - 10,
+    }, now),
+    false,
+  );
+});
+
+test('chat resolution only auto-completes a high-confidence resolve', () => {
+  assert.equal(_test.classifyChatResolution({ decision: 'resolves', confidence: 0.9 }), 'apply');
+  assert.equal(_test.classifyChatResolution({ decision: 'resolves', confidence: 0.7 }), 'review');
+  assert.equal(_test.classifyChatResolution({ decision: 'unrelated', confidence: 0.99 }), 'ignore');
+  assert.equal(_test.classifyChatResolution({ decision: 'still_outstanding', confidence: 0.99 }), 'ignore');
+});
+
+test('messaging prompts treat an already-answered chat question as not outstanding', () => {
+  assert.match(PROMPTS.crm_source_triage, /SAME-CHAT CONTEXT/);
+  assert.match(PROMPTS.crm_source_triage, /later same-chat turn already answers/);
+  assert.match(PROMPTS.crm_action_projection, /Set actionability to fyi/);
+  assert.match(PROMPTS.crm_action_resolution, /decision": "resolves \| still_outstanding \| unrelated/);
+  assert.match(_test.ACTION_MESSAGING_GUARD, /neighbouring WhatsApp turns/);
+});
+
 test('historical messaging backfills cannot project stale actions', () => {
   assert.equal(
     _test.actionProjectionBlockReason('messaging_message', null, {

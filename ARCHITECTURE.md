@@ -230,7 +230,9 @@ Current CRM source kinds:
 | `crm_fact` | Existing curated facts, mostly legacy or manually entered context |
 | `messaging_message` | Live messages plus bounded releases from sealed historical archives |
 
-Prompt/model slots are visible in `/admin/models`: `crm_source_triage`, `crm_duplicate_review`, and `crm_action_projection`. Receipts are visible in `/admin/knowledge`. These receipts are the audit trail for "what did the model decide, using what source, and why?"
+Prompt/model slots are visible in `/admin/models`: `crm_source_triage`, `crm_duplicate_review`, `crm_action_projection`, and `crm_action_resolution`. Receipts are visible in `/admin/knowledge`. These receipts are the audit trail for "what did the model decide, using what source, and why?"
+
+WhatsApp/messaging sources stay one bubble each. Automatic selection holds a new `messaging_message` for five minutes so a reply can be captured first. Triage, duplicate review, and action projection then receive same-`chat_id` neighbours as prompt context only — never as the source text, so a later reply cannot change the revision hash. After projection, `crm_action_resolution` may complete an open task created from an earlier message in that chat when this turn clearly answers it. Uncertain resolutions stay in the action queue and do not mark the answering source incomplete. Historical backfill still cannot create or resolve live tasks.
 
 Important rules:
 

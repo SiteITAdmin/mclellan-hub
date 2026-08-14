@@ -139,7 +139,7 @@ should use route `all-incoming-whatsapp` with no forced contact or project.
 
 **C. Knowledge compile**
 
-The scheduled `crm_knowledge_engine` compiles new evidence. Check:
+The scheduled `crm_knowledge_engine` compiles new evidence. A new bubble is held for five minutes so a reply can be captured first; triage/projection then see same-chat neighbours as context. A later turn can complete an earlier same-chat task (`crm_action_resolution`) when it clearly answers the ask. Check:
 
 - `/admin/knowledge` receipts for `messaging_message`
 - Dad project report and Alister contact knowledge panel
