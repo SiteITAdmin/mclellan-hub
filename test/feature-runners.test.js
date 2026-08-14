@@ -18,7 +18,7 @@ test('high-volume extraction routes to Luna', () => {
 });
 
 test('CRM decisions route to Terra', () => {
-  for (const feature of ['crm_source_triage', 'crm_duplicate_review', 'crm_action_projection', 'entity_linker']) {
+  for (const feature of ['crm_source_triage', 'crm_duplicate_review', 'crm_action_projection', 'crm_action_resolution', 'entity_linker']) {
     const r = resolveFeatureRunner(feature);
     assert.equal(r.tier, 'terra', feature);
   }

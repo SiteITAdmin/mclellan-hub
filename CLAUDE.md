@@ -116,6 +116,8 @@ As of 27 June 2026, the CRM-bound ingest path is explicitly prompt-led:
 raw source -> crm_source_triage -> crm_duplicate_review -> synthesis/provenance merge -> crm_action_projection -> compiled atoms/events/tasks
 ```
 
+WhatsApp/messaging is still one source per bubble. Automatic selection holds a new message for five minutes; triage and projection then see same-chat neighbours as context so an already-answered question is not an outstanding action. After projection, `crm_action_resolution` may complete an earlier same-chat task when this turn clearly answers it. Do not add a message-link table.
+
 The implementation lives in `lib/crm-knowledge-engine.js` and runs through the `crm_knowledge_engine` job. It reads evidence from email summaries, AgentMail records, meeting intake, documents, CRM facts, and Google Tasks; it writes model decision receipts to `knowledge_receipts`; it projects only high-confidence actions into Google Tasks.
 
 Suggestion review is also evidence: Create task, Not this time, Dismiss, and Wrong are stored as descending implicit quality signals for later suggestion synthesis. Only Wrong is a hard correction and invokes the explained rule learner. A positive score teaches transferable qualities; it never authorises repeating or paraphrasing the same concrete action. Opportunity source IDs and semantic review against authoritative task history must block those repeats. Do not turn the outcomes into manual relationship rows or title-only blocklists.
