@@ -348,7 +348,7 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## System Report
-**Purpose:** Email Douglas at 21:00 every day with a plain-text summary of what the system did and whether it's healthy.
+**Purpose:** Email Douglas at 06:00 every day with a plain-text summary of what the system did and whether it's healthy.
 
 **Must include:**
 - Email and AgentMail processing counts
