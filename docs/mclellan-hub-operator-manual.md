@@ -759,7 +759,7 @@ These are minute checks inside `server.js`. They do not create persistent job ro
 | 16:00 daily | Europe/Dublin | Daily email digest |
 | 09:00 Saturday | Europe/Dublin | Newsletter review reminder |
 | 14:00 Sunday | Europe/Dublin | Weekly digest |
-| 21:00 daily | Europe/Dublin | Daily system report |
+| 06:00 daily | Europe/Dublin | Daily Consigliere / system report |
 
 ### Layer 3: Operating-system schedules
 
@@ -789,7 +789,7 @@ Other timed assessments are deterministic rather than LLM-led:
 - Content cadence checks assess LinkedIn and newsletter pipeline health.
 - CRM nudges assess birthdays, overdue follow-ups, and keep-warm cadence.
 - The reminder sweep assesses overdue tasks and whether reminder jobs have become detached.
-- The system report assesses module health each evening.
+- The system report assesses module health each morning at 06:00 Dublin.
 
 ### Reminder escalation
 

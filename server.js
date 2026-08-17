@@ -388,8 +388,8 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
-// ── Daily system report (21:00 Europe/Dublin) ─────────────────────────────────
-const SYSTEM_REPORT_HOUR   = parseInt(process.env.SYSTEM_REPORT_HOUR   || '21');
+// ── Daily system report (06:00 Europe/Dublin) ─────────────────────────────────
+const SYSTEM_REPORT_HOUR   = parseInt(process.env.SYSTEM_REPORT_HOUR   || '6');
 const SYSTEM_REPORT_MINUTE = parseInt(process.env.SYSTEM_REPORT_MINUTE || '0');
 
 setInterval(() => {
