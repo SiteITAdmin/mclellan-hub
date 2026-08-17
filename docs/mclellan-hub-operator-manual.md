@@ -48,7 +48,7 @@ The Hub is a private operating environment rather than a collection of isolated 
 
 ### Normal daily rhythm
 
-1. Read the morning CRM briefing in Google Chat.
+1. Read the Daily Consigliere Report in email.
 2. Use AI Chat for active work and keep project-specific work in its project.
 3. Review `/crm/tasks` and the relevant person or company before calls.
 4. Let email processing classify messages and create context or tasks.
@@ -64,7 +64,7 @@ The Hub is a private operating environment rather than a collection of isolated 
 - **Production:** Nginx in front of `hub.service` on the VPS.
 - **Identity:** Google OAuth for Hub users; separate protected admin/wiki routes.
 - **AI:** OpenRouter plus configured OpenAI and Google capabilities.
-- **Google Workspace:** Gmail, Calendar, Drive, Sheets, Tasks, and Google Chat.
+- **Google Workspace:** Gmail, Calendar, Drive, Sheets, and Tasks.
 - **Knowledge:** a derived knowledge layer (see below) compiled from all sources; the Obsidian/Synthadoc vault is one human-readable store feeding it.
 - **Public output:** Portfolio pages, CV tools, RSS feeds, and `llms.txt`.
 
@@ -212,20 +212,17 @@ Google Tasks requires an additional OAuth permission. If the Tasks page reports 
 
 ## 6. Calendar and Morning Briefing
 
-The Calendar integration reads today’s events. The automated CRM briefing combines Calendar events, relevant contacts and facts, follow-ups, wiki knowledge, and open Tasks, then sends the result to Google Chat.
+The Calendar integration reads today’s events. There is no Google Chat briefing. Day context is the 06:00 Daily Consigliere Report plus Calendar and `/crm/tasks`.
 
-### Morning briefing schedule
+### Calendar sync
 
 - Calendar sync: **06:45 Europe/Dublin**
-- CRM briefing: **07:30 Europe/London**
 
-### If the briefing is missing
+### If today’s meetings are missing
 
 1. Confirm `hub.service` is running.
 2. Check the Google refresh token and Calendar permission.
-3. Check the configured Google Chat destination.
-4. Inspect service logs for `[crm]` or briefing errors.
-5. Confirm a briefing was not already recorded for that date.
+3. Inspect service logs for `[crm]` or Calendar errors.
 
 ## 7. Email Intelligence
 
@@ -413,8 +410,6 @@ The Content tool at `/lin` supports the full drafting pipeline:
 7. Record the item in the Sheets content calendar.
 8. Track status, schedule, and publication.
 
-Google Chat/Hermes also accepts `linkedin <topic>` for a fast drafting workflow.
-
 Use the scoring stage as editorial feedback, not as an automatic publishing decision. Confirm facts, links, names, and public positioning before publication.
 
 ## 12. Flights
@@ -568,16 +563,14 @@ The LaunchAgent runs once when installed and writes its log to
 
 The dashboard reads deployed JSON data and normally does not require an application restart after a data-only update.
 
-## 15. Hermes and Google Chat
+## 15. Hermes (WhatsApp and CRM notes)
 
-Hermes provides a conversational route into Hub capabilities from Google Chat or a protected webhook. It supports CRM capture and lookup, briefing delivery, and commands such as LinkedIn drafting.
+Google Chat delivery is retired. Hermes WhatsApp capture still posts routed chat evidence to `/api/messaging/capture`. Intentional CRM notes still use the Hermes `dchat-crm` skill → `/api/crm/webhook`.
 
 ### Operational rules
 
 - Keep `HERMES_WEBHOOK_SECRET` private.
-- Configure the correct Google Chat webhook or app identity for each user.
 - Treat incoming commands as user actions and keep write endpoints authenticated.
-- Inspect service logs when Google Chat receives no reply; delivery and command processing fail at different stages.
 
 ## 16. Admin and Model Operations
 
@@ -773,7 +766,7 @@ The assessment is advisory:
 
 - It creates no booking or publication.
 - It stores evidence with each suggestion.
-- Open suggestions appear in the morning briefing. The old Google Chat suggestion-card path is not currently an active delivery surface.
+- Open suggestions appear on `/crm/suggestions`. There is no Google Chat card path.
 - `accept N` creates a task; `dismiss N` closes it; `why N` shows evidence.
 - Suggestions expire after 14 days.
 
@@ -1115,13 +1108,11 @@ API keys stored directly through Model Admin are database secrets and require th
 4. Re-run the workflow with representative input.
 5. Check for required JSON keys, placeholders, or completion tokens removed by the override.
 
-### Morning briefing missing
+### Consigliere report missing
 
-1. Check service uptime across 06:45-07:30.
-2. Confirm Calendar authorization.
-3. Confirm Google Chat delivery settings.
-4. Check whether today’s briefing was already recorded.
-5. Inspect `[crm]`, Calendar, Tasks, and Chat errors.
+1. Check service uptime around 06:00 Dublin.
+2. Confirm Calendar authorization if the TODAY section looks empty.
+3. Inspect `[system-report]` and AgentMail send errors.
 
 ### Deployment succeeded but behavior is old
 
