@@ -20,7 +20,7 @@ const ROOT = path.join(__dirname, '..');
 
 function walk(dir, out = []) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (['node_modules', '.git', 'data', 'preview', 'automation-discovery-run', 'test'].includes(ent.name)) continue;
+    if (['node_modules', '.git', 'data', 'preview', 'automation-discovery-run', 'test', '.claude'].includes(ent.name)) continue;
     const p = path.join(dir, ent.name);
     if (ent.isDirectory()) walk(p, out);
     else if (ent.name.endsWith('.js')) out.push(p);
@@ -72,7 +72,6 @@ const MODEL_ONLY_ALLOWED = new Set([
   'debrief_tts',
   'workday_transcription',
   'suggestions',
-  'work_daily_brief',
 ]);
 
 test('every PROMPTS key is registered in SYSTEM_MODEL_GROUPS', () => {
@@ -115,7 +114,7 @@ test('registered slots either have a PROMPTS default or are declared model-only'
   // prompt-bearing names.
   const suspicious = [...registered]
     .filter(k => !prompts.has(k) && !knownModelOnly.has(k))
-    .filter(k => !/^(embeddings|debrief_transcriber|debrief_tts|workday_transcription|suggestions|work_daily_brief)$/.test(k))
+    .filter(k => !/^(embeddings|debrief_transcriber|debrief_tts|workday_transcription|suggestions)$/.test(k))
     .sort();
   // These currently legitimately have no PROMPTS text (parent/model-only or voice handled above).
   // If a new slot lands without a prompt and isn't model-only, fail so we notice.

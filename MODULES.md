@@ -137,7 +137,7 @@ These are the tools the system runs on. They are not features — they are the f
 **Healthy looks like:**
 - A calendar event exists for every source (email, meeting_intake, etc.) that states both a specific date and a specific time Douglas must attend — not for plain due-by deadlines with no attendance component
 - No duplicate events for the same source event (enforced by `meetings.source` + `source_id`, mirroring Google Tasks' dedup pattern)
-- Created events appear in the Work Brief's Today/Coming Up sections the same day they're created, not only after the next 06:45 calendar sync — the create path (`lib/google-calendar.js`) upserts `meetings` directly rather than waiting on `syncCalendarMeetings`
+- Created events appear in Calendar / Planner the same day they're created, not only after the next 06:45 calendar sync — the create path (`lib/google-calendar.js`) upserts `meetings` directly rather than waiting on `syncCalendarMeetings`
 - A task checked for Planner and then dragged or auto-planned at `/crm/planner` has exactly one Google Calendar block carrying its Hub task ID. Moving patches that block; unscheduling or unchecking deletes only the block and leaves Google Tasks untouched
 - Saved working/evening/weekend windows are enforced for manual moves and auto-plan: work tasks use Monday–Friday work hours, personal tasks use weekday evenings or weekends
 - Within five minutes of a new or changed genuine Calendar appointment, any colliding scheduled task is patched into the next permitted free slot; later task blocks cascade only when necessary, and no replacement Calendar event is created
@@ -195,7 +195,7 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Retention contract:** Knowledge never disappears; it only leaves the default line of sight. Immutable predicates (date of birth, kinship — see `isImmutablePredicate` in `lib/knowledge-lint.js`) are exempt from decay and staleness. Mutable facts decay after 180 days unconfirmed and go `stale` after 365 — but stale atoms remain searchable in Ask the Hub (ranked below active, flagged to the model as possibly outdated), appear on entity pages behind the existing "show history" toggle, and are revived automatically if the fact reappears in any new source. Each weekly lint writes its decisions to `crm_context` (`knowledge_lint_last`) and the daily system report renders them under KNOWLEDGE, so nothing leaves view silently.
 
-**Interest radar:** `lib/interest-synthesis.js`, job `interest_synthesis_run` (daily 05:45, before the work brief). Joins recent meeting intakes with the upcoming meetings/calendar and asks the model which work topics Douglas is actively engaged with; writes `interest`-kind atoms (predicate `active_interest`) with provenance to the signals, plus a compiled radar cache in `crm_context` (`interest_radar`). The work daily brief reads the radar and pulls recent stories per topic (Exa search) into an "On your radar" section, each with the "why" naming the meeting or calendar entry that earned it. Interests fade from the brief 45 days after their last reconfirmation; the atoms live on.
+**Interest radar:** `lib/interest-synthesis.js`, job `interest_synthesis_run` (daily 05:45). Joins recent meeting intakes with the upcoming meetings/calendar and asks the model which work topics Douglas is actively engaged with; writes `interest`-kind atoms (predicate `active_interest`) with provenance to the signals, plus a compiled radar cache in `crm_context` (`interest_radar`). Read `getInterestRadar(user)` from any surface that needs it — do not build a separate topic store. Interests fade 45 days after their last reconfirmation; the atoms live on.
 
 **WhatsApp / messaging capture:** Hermes (Baileys) passively posts only explicitly routed chat evidence to `POST /api/messaging/capture` (`lib/messaging-capture.js` → `messaging_messages`). The complete source envelope preserves chat/sender/message provenance plus operator-supplied contact/project routing hints. Source kind `messaging_message` is consumed by `crm_knowledge_engine` like email/meetings — triage, duplicate review, atoms, high-confidence task projection. Automatic selection holds a new bubble for five minutes so a reply can land; triage/projection then see same-`chat_id` neighbours as context, not as the source. A later turn can complete an earlier same-chat task through `crm_action_resolution`. Setup: `docs/whatsapp-hermes-capture.md`. Intentional `/crm` notes still use the Hermes `dchat-crm` skill → `/api/crm/webhook`; family chat bulk path must not.
 
@@ -394,10 +394,10 @@ These are the tools the system runs on. They are not features — they are the f
 
 ---
 
-## Newsletter / Briefing (Afternoon)
-**Purpose:** Email Douglas at 16:00 with a digest of email received that day, newsletter content of interest, and RSS feed updates.
+## Newsletter / Briefing
+**Purpose:** Extract topics from incoming newsletters and RSS, and let Douglas review and generate a briefing at `/newsletter`. On-demand or format-scheduled briefings can still email a PDF. There is no Saturday reminder email and no 16:00 daily digest email.
 
-**Does not own:** Processing email (that's the email module)
+**Does not own:** Processing inbox mail (that's the email module)
 
 ---
 

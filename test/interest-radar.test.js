@@ -7,14 +7,6 @@ const {
   gatherInterestSignals, parseTopics, applyInterestTopics, getInterestRadar,
   RADAR_CONTEXT_KEY,
 } = require('../lib/interest-synthesis');
-const {
-  radarSectionHtml,
-  radarSectionText,
-  projectSalienceSectionHtml,
-  projectSalienceSectionText,
-  liveThreadSectionHtml,
-  liveThreadSectionText,
-} = require('../lib/work-daily-brief');
 
 const USER = '__test_radar';
 
@@ -110,70 +102,4 @@ test('the radar surfaces fresh active interests and drops retired ones', () => {
   db.hub().prepare(`UPDATE knowledge_atoms SET status = 'retired' WHERE user = ? AND subject_kind = 'interest'`).run(USER);
   assert.equal(getInterestRadar(USER).length, 0);
   db.hub().prepare(`UPDATE knowledge_atoms SET status = 'active' WHERE user = ? AND subject_kind = 'interest'`).run(USER);
-});
-
-test('the brief renders a radar section with stories and the why line', () => {
-  const items = [{
-    topic: 'cyber security in Microsoft 365',
-    why: 'Invited to cyber security training at Ops weekly; training Monday.',
-    stories: [
-      { title: 'New phishing wave targets M365 tenants', url: 'https://example.com/a', snippet: 'Attackers are abusing OAuth consent…' },
-      { title: 'Microsoft hardens Entra defaults', url: 'https://example.com/b', snippet: 'Conditional access changes roll out…' },
-    ],
-  }];
-  const html = radarSectionHtml(items);
-  assert.match(html, /On your radar/);
-  assert.match(html, /cyber security in Microsoft 365/);
-  assert.match(html, /Why: Invited to cyber security training/);
-  assert.match(html, /https:\/\/example.com\/a/);
-
-  const text = radarSectionText(items).join('\n');
-  assert.match(text, /ON YOUR RADAR/);
-  assert.match(text, /phishing wave/);
-
-  assert.equal(radarSectionHtml([]), '');
-  assert.deepEqual(radarSectionText([]), []);
-});
-
-test('the brief renders project salience highlights with matching evidence', () => {
-  const highlights = [{
-    project_slug: 'm365-modernisation',
-    title: 'M365 change work resembles a new Entra hardening signal',
-    body: 'The project has a recent meeting note about conditional access sequencing, and the radar stream includes a related Entra defaults rollout.',
-    matching_signal: 'Microsoft hardens Entra defaults',
-    project_evidence: ['conditional access sequencing discussed in Ops weekly'],
-  }];
-
-  const html = projectSalienceSectionHtml(highlights);
-  assert.match(html, /Project Signals/);
-  assert.match(html, /m365-modernisation/);
-  assert.match(html, /Microsoft hardens Entra defaults/);
-
-  const text = projectSalienceSectionText(highlights).join('\n');
-  assert.match(text, /PROJECT SIGNALS/);
-  assert.match(text, /conditional access sequencing/);
-
-  assert.equal(projectSalienceSectionHtml([]), '');
-  assert.deepEqual(projectSalienceSectionText([]), []);
-});
-
-test('the brief renders live threads as cross-source ideas', () => {
-  const threads = [{
-    title: 'Managing change across M365',
-    type: 'theme',
-    body: 'M365 adoption material, a Masterclass email, and hospital department meeting notes all point at change management as a live topic.',
-    whyNow: 'The theme appeared in separate email, newsletter, and meeting streams this week.',
-  }];
-
-  const html = liveThreadSectionHtml(threads);
-  assert.match(html, /Live Threads/);
-  assert.match(html, /Managing change across M365/);
-  assert.match(html, /Why now/);
-
-  const text = liveThreadSectionText(threads).join('\n');
-  assert.match(text, /LIVE THREADS/);
-  assert.match(text, /Masterclass email/);
-
-  assert.equal(liveThreadSectionHtml([]), '');
-  assert.deepEqual(liveThreadSectionText([]), []);
 });

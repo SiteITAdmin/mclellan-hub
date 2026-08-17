@@ -21,11 +21,9 @@ const {
 } = require('./lib/nakai-intelligence-pipeline');
 const { sendWeeklyDigest } = require('./lib/weekly-digest');
 const { sendRhStats } = require('./lib/rh-stats');
-const { sendWeeklyReminder } = require('./lib/newsletter-pipeline');
 const { ingestAllFeeds } = require('./lib/rss-ingest');
 const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
-const { sendWorkDailyBrief } = require('./lib/work-daily-brief');
 const { sendTodayM365DailyBriefing } = require('./scripts/build-m365-daily-briefing');
 const { sendTodayUSBlockBriefing } = require('./scripts/build-us-block-special-briefing');
 const {
@@ -244,18 +242,6 @@ setInterval(() => {
   sendTodayM365DailyBriefing().catch(err => console.error('[m365-briefing] error:', err));
 }, 60 * 1000);
 
-// ── Work Daily Brief (07:00 Europe/Dublin, Mon–Fri) ──────────────────────────
-const WORK_BRIEF_HOUR   = parseInt(process.env.WORK_BRIEF_HOUR   || '7');
-const WORK_BRIEF_MINUTE = parseInt(process.env.WORK_BRIEF_MINUTE || '0');
-
-setInterval(() => {
-  const now = nowIn('Europe/Dublin');
-  const day = now.getDay(); // 0=Sun, 6=Sat
-  if (day === 0 || day === 6) return;
-  if (now.getHours() !== WORK_BRIEF_HOUR || now.getMinutes() !== WORK_BRIEF_MINUTE) return;
-  sendWorkDailyBrief('douglas').catch(err => console.error('[work-brief] error:', err));
-}, 60 * 1000);
-
 // ── rholdsworthconsulting.com daily stats (07:00 Europe/Dublin) ──────────────
 setInterval(() => {
   const now = nowIn('Europe/Dublin');
@@ -310,15 +296,6 @@ setInterval(() => {
   if (now.getHours() !== 9 || now.getMinutes() !== 30) return;
   for (const user of BRIEFING_USERS) {
     ingestAllFeeds(user).catch(err => console.error(`[rss] ingest error for ${user}:`, err));
-  }
-}, 60 * 1000);
-
-// ── Newsletter Saturday reminder (09:00 Europe/Dublin, Saturday) ─────────────
-setInterval(() => {
-  const now = nowIn('Europe/Dublin');
-  if (now.getDay() !== 6 || now.getHours() !== 9 || now.getMinutes() !== 0) return;
-  for (const user of BRIEFING_USERS) {
-    sendWeeklyReminder(user).catch(err => console.error(`[newsletter] reminder error for ${user}:`, err));
   }
 }, 60 * 1000);
 

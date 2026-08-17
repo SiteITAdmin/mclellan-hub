@@ -51,7 +51,7 @@ Scheduled via job queue every 15 min. Stores AgentMail records and summaries as 
 An inbound email's project is decided by what the email is **about**, never by who sent it. `resolveProjectSlug()` (agentmail-processor.js) takes the model's content-derived `project_slug`, then the classifier's, and only then — as a last-resort tie-breaker — the sender-domain→company map. The sender domain establishes *whose world* the mail is (e.g. any `@beaconhospital.ie` address is Beacon work), it must not pick the specific project. Routing targets are filtered to **live** project slugs (`liveSlugs`), so mail can never be filed into an ended project; when content or the domain map points at a dead project the mail falls back to the live `beacon` default. Do not reintroduce a `companyProjectSlug`-first chain: that once buried nine live M365 emails in the closed Cybersecurity project (commit `bbd39761`).
 
 ### Project lifecycle vocabulary is unified
-"This project is dead" is one concept with one source of truth: `TERMINAL_PROJECT_STATUSES` in `lib/project-lifecycle.js` (`closed`, `completed`, `ended`, `done`, `archived`, `cancelled`, …). Every surface that hides or excludes projects — CRM lists, work briefs, the task-add guard, AgentMail routing — routes through `closedProjectIds`/`closedProjectSlugs`/`isProjectClosed`, so a project marked with **any** terminal word behaves identically. Do not add a new filter that keys off a single literal like `'closed'`; that split once left a `completed` project live enough to keep receiving mail.
+"This project is dead" is one concept with one source of truth: `TERMINAL_PROJECT_STATUSES` in `lib/project-lifecycle.js` (`closed`, `completed`, `ended`, `done`, `archived`, `cancelled`, …). Every surface that hides or excludes projects — CRM lists, the task-add guard, AgentMail routing — routes through `closedProjectIds`/`closedProjectSlugs`/`isProjectClosed`, so a project marked with **any** terminal word behaves identically. Do not add a new filter that keys off a single literal like `'closed'`; that split once left a `completed` project live enough to keep receiving mail.
 
 ### Ingest door — every capture is judged where it lands
 ```js
@@ -100,7 +100,7 @@ The Reshuffle button (`POST /api/planner/reshuffle` → `reshufflePlannerTasks`)
 
 Provider exactly-once delivery is not assumed. Before inserting, the planner reconciles by the private task ID; after an ambiguous insert error it performs the same lookup and adopts the remote event if present. Each schedule/move/remove attempt writes a `calendar_planner_effect` receipt. These placements are operational state, not relationship evidence or a new task-creation path.
 
-`GET /api/planner/print-today` is a read-only, on-demand PDF projection of today’s live planner snapshot. It does not archive a document or create calendar/task state: genuine appointments render in the calendar column, while task-backed Calendar mirrors render once in the scheduled-task checklist, with late blocks marked in red. The Work Brief applies the same provenance boundary and excludes `meetings.source='task_planner'` from its calendar sections because those actions already appear as tasks.
+`GET /api/planner/print-today` is a read-only, on-demand PDF projection of today’s live planner snapshot. It does not archive a document or create calendar/task state: genuine appointments render in the calendar column, while task-backed Calendar mirrors render once in the scheduled-task checklist, with late blocks marked in red.
 
 ### CRM layout — fluid shared surface
 
@@ -268,7 +268,7 @@ Knowledge never disappears; it only leaves the default line of sight. The weekly
 
 ### Interest radar
 
-`lib/interest-synthesis.js` (job `interest_synthesis_run`, daily 05:45) is the pattern for "the system joined the dots": recent meeting intakes + upcoming meetings/calendar → model names the topics Douglas is actively engaged with → `interest` atoms with provenance + a compiled cache (`crm_context` key `interest_radar`) → the work daily brief pulls recent stories per topic into an "On your radar" section. To make another surface interest-aware, read `getInterestRadar(user)` — do not build a separate topic store.
+`lib/interest-synthesis.js` (job `interest_synthesis_run`, daily 05:45) is the pattern for "the system joined the dots": recent meeting intakes + upcoming meetings/calendar → model names the topics Douglas is actively engaged with → `interest` atoms with provenance + a compiled cache (`crm_context` key `interest_radar`). To make a surface interest-aware, read `getInterestRadar(user)` — do not build a separate topic store.
 
 ### Agent team receipts
 
@@ -311,7 +311,7 @@ The 60-second tick in `server.js:242` drives all jobs. Jobs self-enqueue on comp
 | 09:30 | RSS feed ingest |
 | 06:00 | Daily Consigliere / system report |
 | 14:00 Sun | Weekly digest |
-| 09:00 Sat | Newsletter reminder |
+
 
 Check this list before adding a new schedule — the slot may already exist.
 

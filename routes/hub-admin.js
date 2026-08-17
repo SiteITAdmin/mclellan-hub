@@ -655,12 +655,8 @@ const SYSTEM_MODEL_GROUPS = [
     { feature: 'suggestion_rule_learner', scope: 'system', label: 'Suggestion rule learner', note: 'Learns a reusable relevance rule when a suggestion is marked wrong. Prompt only — runs on the Suggestion engine model.', fallback: 'prompt only (Suggestion engine model)' },
   ]},
   { id: 'daily-reports', label: 'Daily & weekly reports', slots: [
-    { feature: 'work_daily_brief',  scope: 'system', label: 'Work daily brief model', note: 'Model for all Work Daily Brief LLM calls: yesterday recap, today line, project signals.', fallback: 'anthropic/claude-haiku-4-5' },
     { feature: 'm365_daily_briefing', scope: 'system', label: 'M365 operations & security brief', note: 'Writes Douglas\'s source-backed daily M365, hybrid identity, Intune, Endpoint Central, SentinelOne and privileged-access briefing.', fallback: 'anthropic/claude-sonnet-4-6' },
     { feature: 'us_block_special_briefing', scope: 'system', label: 'US Block special edition', note: 'Synthesises the Mon/Wed/Fri US authority scan and may publish only a high-confidence direct Block/product story.', fallback: 'anthropic/claude-sonnet-4-6' },
-    { feature: 'work_brief_recap',  scope: 'system', label: 'Work brief — yesterday recap', note: 'Recaps yesterday\'s emails and meetings in 2-3 sentences. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
-    { feature: 'work_brief_today',  scope: 'system', label: 'Work brief — today line', note: 'One-sentence summary of today\'s calendar. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
-    { feature: 'work_brief_project_salience', scope: 'system', label: 'Work brief — project signals', note: 'Joins radar/briefing content to recent project evidence. Prompt only — runs on the Work daily brief model.', fallback: 'prompt only (Work daily brief model)' },
     { feature: 'weekly_digest',     scope: 'system', label: 'Weekly digest writer', note: 'Writes the Sunday weekly digest sections from chats, emails and CRM updates.', fallback: 'DIGEST_MODEL env or google/gemini-2.5-pro-preview' },
     { feature: 'daily_digest',      scope: 'system', label: 'Vault daily topic digest', note: 'Mac Mini vault job — summarises recent journal + email activity per project into a digest note.', fallback: 'deepseek/deepseek-v3.2' },
   ]},
