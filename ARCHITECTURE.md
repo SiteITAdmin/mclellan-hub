@@ -67,13 +67,7 @@ Subjects matching `SILENT_SUBJECT_RE` (email-processor.js:21) are dropped before
 
 ## Notifications
 
-### Google Chat (interactive cards)
-```js
-// lib/google-chat.js
-buildReminderCard(reminder)     // escalating reminder with action buttons
-buildSuggestionCard(suggestion) // accept/dismiss/why buttons (web review also offers Not this time and Wrong)
-```
-Auth: service account at `config/google-service-account.json`. Posts to Douglas/Nakai's spaces via Hermes bot.
+Google Chat delivery is retired. It never posted. Reminders live on `/crm/reminders`. Suggestions live on `/crm/suggestions` (and may email a high-salience opportunity). Do not add a Chat bot or `lib/google-chat.js` back.
 
 Opportunity suggestions follow `source signal → salience synthesis → stable source-ID gate → semantic duplicate review against authoritative task/suggestion history → candidate/email`. Scored outcomes teach transferable relevance qualities; they are terminal history and never permission to repeat the accepted action.
 
@@ -429,7 +423,6 @@ Read via: `GET /api/obsidian/notes` or `/api/obsidian/search`.
 | Google Drive | Document fetch | OAuth2 refresh token | lib/google-drive.js |
 | Google Calendar | Events | OAuth2 refresh token | googleapis client |
 | Google Tasks | Task creation | OAuth2 refresh token | lib/google-tasks.js |
-| Google Chat | Notifications | Service account JSON | lib/google-chat.js |
 | Exa | Neural web search | `EXA_API_KEY` | lib/router.js:60 |
 | Brave/Tavily | Fallback web search | `BRAVE_SEARCH_API_KEY` | lib/router.js:96 |
 | Synthadoc | YouTube/URL → notes | `SYNTHADOC_URL` (internal) | lib/hub-external.js:9 |
