@@ -2240,6 +2240,65 @@ router.post('/api/tasks/:id/complete', requireAuth, requireSameOrigin, writeLimi
   }
 });
 
+// Mark a task done AND spawn one or more follow-up tasks in a single click. The
+// follow-up carries provenance back to the completed task (source='task',
+// source_id='task:<parentId>:<n>') exactly like a meeting spawns tasks — no link
+// table, no link column. The parent↔child relationship is derived from that
+// string on the task page, and it inherits the parent's contact/company/project
+// so the connection travels with the knowledge graph. Follow-ups land
+// unscheduled (standard [effort: 30m], no planner lane) for Douglas to place.
+router.post('/api/tasks/:id/complete-followup', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const hub = db.hub();
+  const parent = hub.prepare('SELECT * FROM google_tasks WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!parent) return res.status(404).json({ error: 'Not found' });
+
+  const raw = Array.isArray(req.body.followups) ? req.body.followups : [req.body.followups];
+  const titles = raw.map(t => String(t || '').trim()).filter(Boolean);
+  if (!titles.length) return res.status(400).json({ error: 'At least one follow-up title required' });
+  const due = String(req.body.due || '').trim() || null;
+
+  // Inherit the parent's project only while it is still live — a follow-up must
+  // never resurrect a closed project. Drop the slug (task goes to the default
+  // list) rather than fail the whole action.
+  let projectSlug = parent.project_slug || null;
+  if (projectSlug) {
+    const project = hub.prepare('SELECT id FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, projectSlug);
+    if (!project || isProjectClosed(hub, req.hubUser, project.id)) projectSlug = null;
+  }
+
+  try {
+    // Complete first so the parent is closed even if a follow-up create fails.
+    try {
+      await completeTask(req.hubUser, parent.google_task_id, { origin: 'task-followup' });
+    } catch (err) {
+      console.error('[tasks] follow-up parent complete error', err);
+      hub.prepare(`
+        UPDATE google_tasks SET status = 'completed', completed_at = COALESCE(completed_at, unixepoch())
+         WHERE id = ?
+      `).run(parent.id);
+    }
+
+    const created = [];
+    for (let i = 0; i < titles.length; i++) {
+      const task = await createTask(req.hubUser, {
+        title: titles[i],
+        due,
+        source: 'task',
+        sourceId: `task:${parent.id}:${Date.now()}-${i}`,
+        contactId: parent.contact_id || null,
+        companyId: parent.company_id || null,
+        projectSlug,
+        origin: 'task-followup',
+      });
+      if (task) created.push({ id: task.localId, title: titles[i] });
+    }
+    res.json({ ok: true, created });
+  } catch (err) {
+    console.error('[tasks] complete-followup error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/tasks/:id/delete', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   try {
     const ok = await deleteTask(req.hubUser, req.params.id);
@@ -2314,6 +2373,21 @@ router.get('/crm/tasks/:id', requireAuth, async (req, res) => {
     ORDER BY status IN ('done','cancelled'), next_fire_at
   `).all(req.hubUser, task.id);
 
+  // Task→task follow-up links, derived from source_id provenance (no link table).
+  // A follow-up carries source='task', source_id='task:<parentId>:<n>'. The
+  // parent's follow-ups and this task's own parent are both read from that string.
+  let parentTask = null;
+  const parentMatch = task.source === 'task' && String(task.source_id || '').match(/^task:([^:]+):/);
+  if (parentMatch) {
+    parentTask = hub.prepare('SELECT id, title, status FROM google_tasks WHERE id = ? AND user = ?')
+      .get(parentMatch[1], req.hubUser);
+  }
+  const followupTasks = hub.prepare(`
+    SELECT id, title, status, deleted_at FROM google_tasks
+    WHERE user = ? AND source = 'task' AND source_id LIKE ? AND deleted_at IS NULL
+    ORDER BY created_at
+  `).all(req.hubUser, `task:${task.id}:%`);
+
   // Upcoming timed calendar events power the "Only after" dependency picker.
   // Read-only (no cache reconcile); degrade to an empty list if calendar is down.
   let upcomingMeetings = [];
@@ -2328,7 +2402,7 @@ router.get('/crm/tasks/:id', requireAuth, async (req, res) => {
     console.warn('[tasks] upcoming meetings load failed:', error.message);
   }
 
-  res.render('hub/crm-task', { ...crmPageData(req.hubUser), task, contacts, companies, projects, originMeeting, relatedReminders, taskTags, upcomingMeetings });
+  res.render('hub/crm-task', { ...crmPageData(req.hubUser), task, contacts, companies, projects, originMeeting, relatedReminders, taskTags, upcomingMeetings, parentTask, followupTasks });
 });
 
 router.post('/api/tasks/sync', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {

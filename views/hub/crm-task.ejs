@@ -33,6 +33,7 @@
       </div>
       <% } %>
       <button class="btn" onclick="taskAction('<%= task.id %>', 'complete')">Mark done</button>
+      <button class="btn" onclick="doneWithFollowup()" title="Mark this done and capture the tasks that came out of it">Done + add follow-up</button>
       <button class="btn" style="opacity:.6;" onclick="remindMe()" title="Set an escalating reminder for this task">🔔 Remind me</button>
       <% if (['document','email','agentmail'].includes(task.source)) { %>
         <button class="btn" style="color:var(--crm-danger,#c0392b);background:transparent;border:1px solid currentColor;" onclick="markTaskWrong('<%= task.id %>')">Wrong — teach extractor</button>
@@ -138,6 +139,19 @@
           <span style="font-size:13px;">Spawned by meeting: <a href="/crm/meeting/<%= originMeeting.id %>"><strong><%= originMeeting.title %></strong></a> <span class="crm-muted">(<%= originMeeting.meeting_date %>)</span></span>
         </div>
       <% } %>
+      <% if (typeof parentTask !== 'undefined' && parentTask) { %>
+        <div class="crm-action">
+          <span style="font-size:13px;">Follows on from: <a href="/crm/tasks/<%= parentTask.id %>"><strong><%= parentTask.title %></strong></a><% if (parentTask.status === 'completed') { %> <span class="crm-muted">(done)</span><% } %></span>
+        </div>
+      <% } %>
+      <% if (typeof followupTasks !== 'undefined' && followupTasks.length) { %>
+        <p style="font-size:13px;font-weight:600;margin:10px 0 4px;">Follow-ups from this task</p>
+        <% for (const f of followupTasks) { %>
+          <div class="crm-action">
+            <span style="font-size:13px;">→ <a href="/crm/tasks/<%= f.id %>"><%= f.title %></a><% if (f.status === 'completed') { %> <span class="crm-muted">(done)</span><% } %></span>
+          </div>
+        <% } %>
+      <% } %>
       <% if (task.project_slug) { %>
         <div class="crm-action"><span style="font-size:13px;">Project: <a href="/crm/project/<%= task.project_slug %>"><%= task.project_slug %></a></span></div>
       <% } %>
@@ -149,7 +163,7 @@
           </div>
         <% } %>
       <% } %>
-      <% if (!originMeeting && !task.project_slug && !relatedReminders.length) { %>
+      <% if (!originMeeting && !task.project_slug && !relatedReminders.length && !(typeof parentTask !== 'undefined' && parentTask) && !(typeof followupTasks !== 'undefined' && followupTasks.length)) { %>
         <p class="crm-muted">No origin meeting, project, or reminders linked yet.</p>
       <% } %>
     </section>
@@ -280,6 +294,49 @@ function remindMe() {
     const j = await r.json();
     if (j.ok) { msg.textContent = `#${j.reminder.short_code} set.`; setTimeout(() => location.reload(), 700); }
     else msg.textContent = j.error || 'Error';
+  };
+}
+
+// Mark done + capture the follow-up tasks that came out of this one. Several at
+// once — one per line. Each becomes a task linked back to this (now completed) one.
+function doneWithFollowup() {
+  document.getElementById('followup-pop')?.remove();
+  const pop = document.createElement('div');
+  pop.id = 'followup-pop';
+  pop.style.cssText = 'position:fixed;z-index:60;top:22%;left:50%;transform:translateX(-50%);background:var(--bg-card,#fff);border:1px solid var(--border,#ccc);border-radius:10px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.18);display:grid;gap:10px;min-width:340px;max-width:90vw;';
+  pop.innerHTML = `
+    <strong style="font-size:14px;">Mark done &amp; add follow-ups</strong>
+    <label style="font-size:12px;display:grid;gap:4px;">Follow-up tasks <span style="opacity:.6;">(one per line)</span>
+      <textarea id="followup-titles" rows="4" placeholder="e.g. Send Ken the OU list\nSet up the new user accounts" style="font-size:13px;padding:6px 8px;"></textarea>
+    </label>
+    <label style="font-size:12px;display:grid;gap:4px;">Due date <span style="opacity:.6;">(optional, applies to all)</span>
+      <input id="followup-due" type="date" style="font-size:13px;padding:4px 8px;">
+    </label>
+    <span style="font-size:11px;opacity:.6;">This task is completed and each follow-up is linked back to it. Follow-ups start unscheduled — add them to the planner later.</span>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-sm" id="followup-save">Done + create</button>
+      <button class="btn btn-sm btn-ghost" id="followup-cancel">Cancel</button>
+      <span id="followup-msg" style="font-size:12px;opacity:.7;"></span>
+    </div>`;
+  document.body.appendChild(pop);
+  const ta = pop.querySelector('#followup-titles');
+  ta.focus();
+  pop.querySelector('#followup-cancel').onclick = () => pop.remove();
+  pop.querySelector('#followup-save').onclick = async () => {
+    const followups = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
+    const msg = pop.querySelector('#followup-msg');
+    if (!followups.length) { msg.textContent = 'Add at least one follow-up.'; return; }
+    msg.textContent = 'Saving…';
+    try {
+      const r = await fetch(`/api/tasks/<%= task.id %>/complete-followup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ followups, due: pop.querySelector('#followup-due').value || null }),
+      });
+      const j = await r.json();
+      if (j.ok) window.location.href = '/crm/tasks';
+      else msg.textContent = j.error || 'Error';
+    } catch (err) { msg.textContent = err.message; }
   };
 }
 
