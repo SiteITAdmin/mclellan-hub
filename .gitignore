@@ -47,3 +47,9 @@ scripts/repair/node_modules/
 
 # Change-management dashboard ticket data — not source, not tracked
 .hub-changes/
+
+# Douglas's personal working documents kept in the repo root — not source
+/Beacon-Hospital-Handover.docx
+/Beacon-Hospital-Handover.md
+/Resignation-Ken-Murray.md
+/Resignation-Letter-Douglas-McLellan.docx
