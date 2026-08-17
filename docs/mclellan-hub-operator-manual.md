@@ -233,7 +233,6 @@ The Calendar integration reads today’s events. The automated CRM briefing comb
 
 - Gmail processing runs every 15 minutes.
 - AgentMail processing runs every 15 minutes.
-- A daily email digest is sent at 16:00 Europe/Dublin.
 
 ### What processing can do
 
@@ -302,8 +301,6 @@ Published briefings can appear through the Douglas portfolio’s RSS feed and `l
 Unpublish material that should no longer be public. Publishing is a deliberate public action; generated drafts remain private until published.
 
 ### Reminder
-
-A newsletter reminder runs on Saturday at 09:00.
 
 ## 9. Wiki, Synthadoc, Obsidian, and Boox
 
@@ -756,8 +753,6 @@ These are minute checks inside `server.js`. They do not create persistent job ro
 | 07:30 daily | Europe/London | Morning CRM briefing |
 | 08:00 daily | Europe/Dublin | Regulatory monitor |
 | 09:30 daily | Europe/Dublin | Creator RSS feed ingestion |
-| 16:00 daily | Europe/Dublin | Daily email digest |
-| 09:00 Saturday | Europe/Dublin | Newsletter review reminder |
 | 14:00 Sunday | Europe/Dublin | Weekly digest |
 | 06:00 daily | Europe/Dublin | Daily Consigliere / system report |
 
@@ -781,8 +776,6 @@ The assessment is advisory:
 - Open suggestions appear in the morning briefing. The old Google Chat suggestion-card path is not currently an active delivery surface.
 - `accept N` creates a task; `dismiss N` closes it; `why N` shows evidence.
 - Suggestions expire after 14 days.
-
-The work daily brief also surfaces compiled knowledge-layer signals. **Project Signals** compares recent project evidence from email summaries, meeting intakes, semantic retrieval, and compiled knowledge atoms against current radar/RSS/intelligence signals. **Live Threads** shows cross-source themes compiled by `live_thread_synthesis`, such as a change-management idea recurring across Gmail, newsletters, and meeting notes. Both sections are intentionally evidence-backed and quiet when the source material does not genuinely connect.
 
 Other timed assessments are deterministic rather than LLM-led:
 
