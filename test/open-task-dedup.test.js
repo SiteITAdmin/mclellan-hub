@@ -43,8 +43,10 @@ test.after(() => {
 
 test('a forwarded-briefing action links to the existing meeting task instead of creating a duplicate', async () => {
   // The M365 brief was forwarded; its paraphrased action re-enters projection.
+  // Real query-vs-stored-vector paraphrase scores are modest (~0.5–0.6), so the
+  // embedding only shortlists; the model adjudicator makes the call.
   const action = { title: 'Return the HLD', evidence: 'Forwarded M365 Operations & Security Brief line' };
-  const semanticSearchFn = async () => [{ source_id: 't-meeting-hld', score: 0.86 }]; // mid band
+  const semanticSearchFn = async () => [{ source_id: 't-meeting-hld', score: 0.58 }];
   const adjudicateFn = async () => true; // model confirms: same concrete action
   const match = await openTaskDuplicateMatch(USER, action, { semanticSearchFn, adjudicateFn });
   assert.ok(match, 'expected a duplicate match');
@@ -63,7 +65,7 @@ test('an exact restatement dedups on the title layer with no embeddings availabl
 
 test('distinct people are never merged — an Alan action does not collapse into the Alec task', async () => {
   const action = { title: 'Chase Alan for firm pilot-PC delivery dates' };
-  const semanticSearchFn = async () => [{ source_id: 't-alec', score: 0.88 }]; // mid band, high wording overlap
+  const semanticSearchFn = async () => [{ source_id: 't-alec', score: 0.60 }]; // high wording overlap, shortlisted
   const adjudicateFn = async () => false; // model: different person -> not the same action
   const match = await openTaskDuplicateMatch(USER, action, { semanticSearchFn, adjudicateFn });
   assert.equal(match, null, 'Alan action must survive as its own task');
@@ -78,15 +80,26 @@ test('a stale vector for a since-completed task cannot cause a false open-dedup'
   assert.equal(match, null, 'a completed task is not an open duplicate');
 });
 
-test('an unambiguous paraphrase auto-dedups above the safe floor without adjudication', async () => {
-  const action = { title: 'Return tidy HLD doc and progress the approval + sign-off' };
-  const semanticSearchFn = async () => [{ source_id: 't-meeting-hld', score: 0.95 }]; // >= auto floor
-  let adjudicated = false;
-  const adjudicateFn = async () => { adjudicated = true; return false; };
+test('a novel action (nothing clears the recall floor) is created without spending a model call', async () => {
+  const action = { title: 'Book flights to Tokyo for the family holiday in December' };
+  const semanticSearchFn = async () => []; // real semanticSearch applies the floor; nothing qualifies
+  const adjudicateFn = async () => { throw new Error('adjudicator must not run when the shortlist is empty'); };
   const match = await openTaskDuplicateMatch(USER, action, { semanticSearchFn, adjudicateFn });
-  assert.ok(match);
-  assert.equal(match.method, 'semantic');
-  assert.equal(adjudicated, false, 'auto floor must not spend a model call');
+  assert.equal(match, null, 'novel action must be created, not deduped');
+});
+
+test('adjudication is bounded to the most-similar live candidates (cost guard)', async () => {
+  const action = { title: 'Some densely-overlapping governance action' };
+  const semanticSearchFn = async () => [
+    { source_id: 't-meeting-hld', score: 0.59 },
+    { source_id: 't-alec', score: 0.55 },
+    { source_id: 't-meeting-hld', score: 0.52 }, // a third live candidate
+  ];
+  let calls = 0;
+  const adjudicateFn = async () => { calls += 1; return false; };
+  const match = await openTaskDuplicateMatch(USER, action, { semanticSearchFn, adjudicateFn });
+  assert.equal(match, null);
+  assert.ok(calls <= 2, `expected at most 2 model calls, got ${calls}`);
 });
 
 test('projectOneAction is wired to the open-corpus guard and treats a hit as an existing task, not a new one', () => {
