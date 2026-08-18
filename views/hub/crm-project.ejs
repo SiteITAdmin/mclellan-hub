@@ -24,6 +24,9 @@ async function taskAction(id, action) {
         <% const daysLeft = Math.ceil((Date.parse(projectMeta.deadline) - Date.now()) / 86400000); %>
         <span class="crm-badge subtle" <% if (daysLeft < 0) { %>style="color:var(--crm-danger,#c0392b);border-color:currentColor;"<% } %>>target <%= projectMeta.deadline %><%= daysLeft >= 0 ? ` · ${daysLeft}d left` : ` · ${-daysLeft}d over` %></span>
       <% } %>
+      <% if (isSnoozed) { %>
+        <span class="crm-badge" style="color:#b8860b;border-color:currentColor;">💤 snoozed</span>
+      <% } %>
     </div>
     <% if (projectMeta.scope) { %><p style="font-size:13px;margin-top:6px;"><%= projectMeta.scope %></p><% } %>
   </div>
@@ -49,6 +52,7 @@ async function taskAction(id, action) {
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn" type="submit">Save</button>
       <button class="btn btn-subtle" type="button" id="project-lifecycle-toggle"><%= projectHealth === 'closed' ? 'Reopen project' : 'Close project' %></button>
+      <button class="btn btn-subtle" type="button" id="project-snooze-toggle"><%= isSnoozed ? 'Wake project' : 'Snooze project' %></button>
       <span class="crm-muted" id="project-meta-msg" style="font-size:12px;">Stored as declared knowledge (manual atoms), not columns.</span>
     </div>
   </form>
@@ -366,6 +370,21 @@ document.getElementById('project-lifecycle-toggle').addEventListener('click', ()
   if (closing && !confirm('Close this project? Its data stays available, but it will leave active project views and daily work reports.')) return;
   status.value = closing ? 'closed' : 'active';
   form.requestSubmit();
+});
+document.getElementById('project-snooze-toggle').addEventListener('click', async () => {
+  const snoozing = <%= isSnoozed ? 'false' : 'true' %>;
+  if (snoozing && !confirm('Snooze this project? It and all its tasks leave your active views, and any planner calendar blocks for its tasks are removed. Everything comes back when you wake it.')) return;
+  const msg = document.getElementById('project-meta-msg');
+  msg.textContent = snoozing ? 'Snoozing…' : 'Waking…';
+  try {
+    const r = await fetch('/api/crm/project/<%= project.slug %>/snooze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snoozed: snoozing }),
+    });
+    const j = await r.json();
+    if (j.ok) { msg.textContent = snoozing ? `Snoozed${j.blocksRemoved ? ` · ${j.blocksRemoved} calendar block${j.blocksRemoved === 1 ? '' : 's'} cleared` : ''}.` : 'Woken.'; setTimeout(() => location.reload(), 700); }
+    else msg.textContent = j.error || 'Error';
+  } catch (err) { msg.textContent = err.message; }
 });
 document.getElementById('project-rename-form').addEventListener('submit', async e => {
   e.preventDefault();

@@ -51,12 +51,35 @@
           <span class="crm-badge subtle">Active <%= new Date(p.lastActivity * 1000).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %></span>
         <% } %>
       </div>
+      <button type="button" class="btn btn-ghost btn-sm project-snooze-btn" data-slug="<%= p.slug %>" data-snooze="1" style="margin-top:10px;font-size:12px;">💤 Snooze</button>
     </a>
   <% } %>
   <% if (!projects.length) { %>
-    <div class="crm-empty">No CRM projects with relationship evidence yet. Link people, companies, meetings, emails, tasks, or derived knowledge to a project and it will appear here.</div>
+    <div class="crm-empty">No active CRM projects. Link people, companies, meetings, emails, tasks, or derived knowledge to a project and it will appear here.</div>
   <% } %>
 </section>
+
+<% if (snoozedCount) { %>
+  <section style="margin-top:32px;">
+    <h2 style="margin:0 0 4px;font-size:18px;">💤 Snoozed <span class="crm-count"><%= snoozedCount %></span></h2>
+    <p class="crm-muted" style="font-size:13px;margin:0 0 14px;">Deferred workspaces. Their tasks are hidden from your task list and planner until you wake them.</p>
+    <div class="crm-card-grid">
+      <% for (const p of snoozedProjects) { %>
+        <a class="mgmt-card crm-link-card" href="/crm/project/<%= p.slug %>" style="opacity:.72;">
+          <div class="crm-card-title">
+            <span><%= p.name %></span>
+            <% if (p.openTasks > 0) { %><span class="crm-count"><%= p.openTasks %> task<%= p.openTasks !== 1 ? 's' : '' %></span><% } %>
+          </div>
+          <div class="crm-badges" style="margin-top:6px;">
+            <span class="crm-badge" style="color:#b8860b;border-color:currentColor;">snoozed</span>
+            <% if (p.deadline) { %><span class="crm-badge subtle">target <%= p.deadline %></span><% } %>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm project-snooze-btn" data-slug="<%= p.slug %>" data-snooze="0" style="margin-top:10px;font-size:12px;">Wake project</button>
+        </a>
+      <% } %>
+    </div>
+  </section>
+<% } %>
 
 <script>
 document.getElementById('toggle-add-project').addEventListener('click', () => {
@@ -66,6 +89,25 @@ document.getElementById('toggle-add-project').addEventListener('click', () => {
   section.style.display = open ? '' : 'none';
   btn.textContent = open ? '− Cancel' : '+ Add project';
   if (open) section.querySelector('input[name=name]').focus();
+});
+document.querySelectorAll('.project-snooze-btn').forEach(btn => {
+  btn.addEventListener('click', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const snoozing = btn.dataset.snooze === '1';
+    if (snoozing && !confirm('Snooze this project? It and all its tasks leave your active views, and any planner calendar blocks for its tasks are removed. Everything comes back when you wake it.')) return;
+    btn.disabled = true;
+    btn.textContent = snoozing ? 'Snoozing…' : 'Waking…';
+    try {
+      const r = await fetch('/api/crm/project/' + encodeURIComponent(btn.dataset.slug) + '/snooze', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snoozed: snoozing }),
+      });
+      const j = await r.json();
+      if (j.ok) location.reload();
+      else { btn.disabled = false; alert(j.error || 'Error'); }
+    } catch (err) { btn.disabled = false; alert(err.message); }
+  });
 });
 </script>
 <%- include('partials/crm-foot') %>

@@ -29,7 +29,7 @@ const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 const { sendEmail: amSendEmail } = require('../lib/agentmail');
 const { getCrmKnowledgeHealth } = require('../lib/crm-knowledge-health');
 const { isCanonicalMeetingEvidenceRow } = require('../lib/source-evidence');
-const { closedProjectIds, isProjectClosed, renameProject } = require('../lib/project-lifecycle');
+const { closedProjectIds, isProjectClosed, renameProject, snoozedProjectIds, isProjectSnoozed, setProjectSnooze } = require('../lib/project-lifecycle');
 
 const knowledgeRetryUsers = new Set();
 const duplicateReviewRetryOutcomes = new Set();
@@ -3427,6 +3427,37 @@ router.post('/api/crm/project/:slug/meta', requireAuth, requireSameOrigin, write
   res.json({ ok: true });
 });
 
+// Snooze / wake a project. Snoozing defers the whole workspace: it leaves active
+// project lists and its open tasks leave every aggregate task view, and any
+// Planner calendar blocks those tasks hold are removed so the time reopens.
+// Waking just clears the snooze — tasks return to the Planner inbox unscheduled
+// (we never auto-reschedule what snooze cleared).
+router.post('/api/crm/project/:slug/snooze', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const hub = db.hub();
+  const project = hub.prepare('SELECT id, name, slug FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, req.params.slug);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const snoozed = req.body.snoozed === true || req.body.snoozed === 'true' || req.body.snoozed === 1;
+  setProjectSnooze(hub, { user: req.hubUser, projectId: project.id, projectName: project.name, snoozed });
+
+  let blocksRemoved = 0;
+  if (snoozed) {
+    // Query by slug so the snooze atom we just wrote doesn't hide these tasks.
+    const openTasks = getCachedTasks(req.hubUser, { projectSlug: project.slug }, false);
+    if (openTasks.length) {
+      const { unscheduleTask } = require('../lib/task-calendar-planner');
+      for (const task of openTasks) {
+        try {
+          const result = await unscheduleTask(req.hubUser, task.id);
+          if (result?.removed) blocksRemoved += 1;
+        } catch (err) {
+          console.warn('[project-snooze] failed to clear planner block for task', task.id, err.message);
+        }
+      }
+    }
+  }
+  res.json({ ok: true, snoozed, blocksRemoved });
+});
+
 router.post('/api/crm/project/:slug/rename', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
   const project = hub.prepare('SELECT id FROM projects WHERE user = ? AND slug = ?').get(req.hubUser, req.params.slug);
@@ -3480,6 +3511,7 @@ router.get('/crm/projects', requireAuth, (req, res) => {
   const showClosed = req.query.show_closed === '1';
   const projects = crmProjectsForUser(req.hubUser, { includeClosed: showClosed });
   const closed = closedProjectIds(hub, req.hubUser);
+  const snoozedSet = snoozedProjectIds(hub, req.hubUser);
 
   // Annotate each project with open task count, last activity, and health
   const metaByProject = projectMetaAtoms(req.hubUser, projects.map(p => p.id));
@@ -3496,10 +3528,17 @@ router.get('/crm/projects', requireAuth, (req, res) => {
       health: closed.has(p.id) ? (meta.status || 'closed') : deriveProjectHealth(meta.status, lastMsg),
       manualStatus: meta.status || null,
       deadline: meta.deadline || null,
+      snoozed: snoozedSet.has(p.id),
     };
   });
+  const activeProjects = annotated.filter(p => !p.snoozed);
+  const snoozedProjects = annotated.filter(p => p.snoozed);
 
-  res.render('hub/crm-projects', { ...crmPageData(req.hubUser), projects: annotated, showClosed, closedCount: closed.size });
+  res.render('hub/crm-projects', {
+    ...crmPageData(req.hubUser),
+    projects: activeProjects, snoozedProjects,
+    showClosed, closedCount: closed.size, snoozedCount: snoozedProjects.length,
+  });
 });
 
 router.get('/crm/project/:slug', requireAuth, (req, res) => {
@@ -3620,13 +3659,14 @@ router.get('/crm/project/:slug', requireAuth, (req, res) => {
 
   const lastMsg = hub.prepare('SELECT MAX(ts) AS ts FROM messages WHERE project_id = ?').get(project.id)?.ts;
   const projectHealth = isProjectClosed(hub, req.hubUser, project.id) ? (projectMeta.status || 'closed') : deriveProjectHealth(projectMeta.status, lastMsg);
+  const isSnoozed = isProjectSnoozed(hub, req.hubUser, project.id);
 
   res.render('hub/crm-project', {
     ...crmPageData(req.hubUser),
     project, tasks, contacts, directContactIds: [...directContactIds],
     availableContacts, linkedCompanies, linkedCompanyIds: [...linkedCompanyIds],
     availableCompanies, recentEmails, projectFacts: dedupedProjectFacts, projectKnowledgeEvents, recentMessages, showHistory, todayIsoStr,
-    projectDocs, knowledgeByPredicate, projectMeta, milestones, projectHealth,
+    projectDocs, knowledgeByPredicate, projectMeta, milestones, projectHealth, isSnoozed,
   });
 });
 
