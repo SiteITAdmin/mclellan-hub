@@ -361,7 +361,7 @@
   const saveHoursButton = document.getElementById('planner-save-hours');
 
   reshuffleButton?.addEventListener('click', async () => {
-    if (!window.confirm('Clear finished task blocks and pull remaining tasks earlier into any free time this week?')) return;
+    if (!window.confirm('Clear finished task blocks and move any overdue tasks stuck in the past into the next free time slots?')) return;
     const original = reshuffleButton.textContent;
     reshuffleButton.disabled = true;
     reshuffleButton.textContent = 'Reshuffling…';
@@ -372,7 +372,7 @@
       });
       const parts = [];
       if (result.removedCompleted?.length) parts.push(`${result.removedCompleted.length} finished cleared`);
-      parts.push(`${result.moved.length} pulled earlier`);
+      parts.push(`${result.moved.length} moved forward`);
       if (result.lateCount) parts.push(`${result.lateCount} still late`);
       if (result.failed?.length) parts.push(`${result.failed.length} failed`);
       showMessage(parts.join(' · '), Boolean(result.failed?.length));

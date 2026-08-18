@@ -63,7 +63,7 @@
   </fieldset>
   <div class="planner-toolbar-actions">
     <button class="btn btn-sm btn-ghost" id="planner-save-hours" type="button">Save hours</button>
-    <button class="btn btn-ghost" id="planner-reshuffle" type="button" <%= calendarError ? 'disabled' : '' %>>Reshuffle · fill free time</button>
+    <button class="btn btn-ghost" id="planner-reshuffle" type="button" <%= calendarError ? 'disabled' : '' %>>Reshuffle · rescue overdue</button>
     <button class="btn" id="planner-auto" type="button" <%= calendarError || !snapshot.unscheduledTasks.length ? 'disabled' : '' %>>Auto-plan selected tasks</button>
   </div>
 </section>
@@ -163,7 +163,7 @@
                            data-event-start="<%= event.time || '' %>"
                            title="<%= event.time %>–<%= event.endTime %> · <%= event.title %><%= event.isLate ? ' · Late' : '' %>">
                     <% if (!event.isTask) { %><div class="planner-event-time"><%= event.time %><% if (event.endTime) { %>–<%= event.endTime %><% } %></div><% } %>
-                    <div class="planner-event-title"><% if (event.isLate) { %><span class="planner-late-marker" aria-label="Late" title="Scheduled after its due date">!</span><% } %><% if (event.notBefore) { %><span class="planner-dep-marker" aria-label="Has dependency" title="Only after <%= event.dependencyTitle || 'its linked meeting' %> — won't pull earlier">🔒</span><% } %><%= event.title %></div>
+                    <div class="planner-event-title"><% if (event.isLate) { %><span class="planner-late-marker" aria-label="Late" title="Scheduled after its due date">!</span><% } %><% if (event.notBefore) { %><span class="planner-dep-marker" aria-label="Has dependency" title="Only after <%= event.dependencyTitle || 'its linked meeting' %> — won't schedule before it">🔒</span><% } %><%= event.title %></div>
                     <% if (event.isTask) { %>
                       <button type="button" class="planner-unschedule" draggable="false" data-unschedule="<%= event.taskId %>" aria-label="Remove <%= event.title %> from calendar">×</button>
                       <div class="planner-resize-handle" draggable="false" data-resize="<%= event.taskId %>" title="Drag to resize"></div>

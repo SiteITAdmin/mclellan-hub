@@ -1910,10 +1910,11 @@ router.post('/api/planner/auto-plan', requireAuth, requireSameOrigin, writeLimit
 router.post('/api/planner/reshuffle', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   try {
     const { reshufflePlannerTasks } = require('../lib/task-calendar-planner');
-    const result = await reshufflePlannerTasks(req.hubUser, {
-      startDate: req.body.startDate,
-      endDate: req.body.endDate,
-    });
+    // Reshuffle is self-anchoring: it always reaches back to collect blocks
+    // stranded in the past and forward to re-home them, independent of whatever
+    // week the user is currently viewing. Passing the visible range here would
+    // reintroduce the bug where past-day blocks were never fetched.
+    const result = await reshufflePlannerTasks(req.hubUser, {});
     res.json({ ok: true, ...result });
   } catch (error) {
     console.error('[planner] reshuffle failed:', error);

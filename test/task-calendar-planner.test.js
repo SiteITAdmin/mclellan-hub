@@ -227,57 +227,75 @@ test('transparent events stay free while opaque all-day events block the work da
   assert.deepEqual(intervals, [[540, 720], [600, 630]]);
 });
 
-test('reshuffle pulls a scheduled task earlier into a freed gap without moving anything later', () => {
-  // Appointment 09:00–10:00 is fixed. A task sits at 14:00 but the 10:00 gap is now free.
+test('reshuffle pushes a block stranded on an earlier day into the earliest free future slot', () => {
+  // Monday 14:00 block; now it is Tuesday morning. It can never be worked at its
+  // Monday time, so it must move forward to the first free permitted slot today.
   const result = computeReshuffle({
-    startDate: '2026-08-10',
-    endDate: '2026-08-11',
+    startDate: '2026-08-09',
+    endDate: '2026-08-16',
     preferences: { workStart: '09:00', workEnd: '17:00' },
-    now: new Date('2026-08-10T06:00:00Z'),
+    now: new Date('2026-08-11T06:00:00Z'), // Tuesday 07:00 local
     appointments: [
-      { date: '2026-08-10', endDate: '2026-08-10', time: '09:00', endTime: '10:00', allDay: false, transparency: 'opaque' },
+      { date: '2026-08-11', endDate: '2026-08-11', time: '09:00', endTime: '10:00', allDay: false, transparency: 'opaque' },
     ],
     scheduled: [
-      { task: { id: 'late-block', title: 'Late block', priority: 'medium', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-10', time: '14:00' },
+      { task: { id: 'stranded', title: 'Stranded', priority: 'medium', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-10', time: '14:00' },
     ],
   });
   assert.equal(result.moves.length, 1);
   assert.deepEqual(
     [result.moves[0].fromAt, result.moves[0].startAt],
-    ['2026-08-10T14:00', '2026-08-10T10:00'],
+    ['2026-08-10T14:00', '2026-08-11T10:00'], // Tuesday, just after the fixed 09:00–10:00 appointment
   );
 });
 
-test('reshuffle never pushes a block later and leaves already-compact blocks untouched', () => {
+test('reshuffle leaves future blocks exactly where they are', () => {
   const result = computeReshuffle({
-    startDate: '2026-08-10',
-    endDate: '2026-08-11',
+    startDate: '2026-08-09',
+    endDate: '2026-08-16',
     preferences: { workStart: '09:00', workEnd: '17:00' },
-    now: new Date('2026-08-10T06:00:00Z'),
+    now: new Date('2026-08-11T06:00:00Z'), // Tuesday 07:00 local
     appointments: [],
     scheduled: [
-      { task: { id: 'a', title: 'A', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-10', time: '09:00' },
-      { task: { id: 'b', title: 'B', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-10', time: '09:30' },
+      // Both sit in the future relative to now; reshuffle must not touch them.
+      { task: { id: 'a', title: 'A', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-11', time: '14:00' },
+      { task: { id: 'b', title: 'B', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-12', time: '09:00' },
     ],
   });
   assert.deepEqual(result.moves, []);
-  assert.equal(result.unchanged, 2);
+  assert.equal(result.unchanged, 0);
 });
 
-test('reshuffle pulls an overdue future block toward today and clears its late flag when it lands on/before due', () => {
-  // Task due 2026-08-10 but scheduled on 2026-08-11 (late). Today is the 10th with free work time.
+test("reshuffle rescues a block whose slot already ended earlier today, but not one still ahead today", () => {
   const result = computeReshuffle({
-    startDate: '2026-08-10',
-    endDate: '2026-08-12',
+    startDate: '2026-08-09',
+    endDate: '2026-08-16',
     preferences: { workStart: '09:00', workEnd: '17:00' },
-    now: new Date('2026-08-10T06:00:00Z'),
+    now: new Date('2026-08-11T11:00:00Z'), // Tuesday 12:00 local
     appointments: [],
     scheduled: [
-      { task: { id: 'overdue', title: 'Overdue', effort_minutes: 30, due: '2026-08-10', planner_lane: 'work' }, date: '2026-08-11', time: '09:00' },
+      { task: { id: 'done-slot', title: 'Ended', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-11', time: '09:00' }, // ended 09:30, in the past
+      { task: { id: 'ahead', title: 'Ahead', effort_minutes: 30, planner_lane: 'work' }, date: '2026-08-11', time: '15:00' }, // still ahead, untouched
     ],
   });
-  assert.equal(result.moves[0].startAt, '2026-08-10T09:00');
-  assert.equal(result.moves[0].late, false);
+  assert.equal(result.moves.length, 1);
+  assert.equal(result.moves[0].taskId, 'done-slot');
+  assert.equal(result.moves[0].startAt, '2026-08-11T12:00'); // earliest free slot from noon
+});
+
+test('reshuffle marks a rescued block late when its due date is already behind it', () => {
+  const result = computeReshuffle({
+    startDate: '2026-08-09',
+    endDate: '2026-08-16',
+    preferences: { workStart: '09:00', workEnd: '17:00' },
+    now: new Date('2026-08-11T06:00:00Z'),
+    appointments: [],
+    scheduled: [
+      { task: { id: 'overdue', title: 'Overdue', effort_minutes: 30, due: '2026-08-10', planner_lane: 'work' }, date: '2026-08-10', time: '14:00' },
+    ],
+  });
+  assert.equal(result.moves[0].startAt, '2026-08-11T09:00');
+  assert.equal(result.moves[0].late, true); // landed Tuesday, due Monday
 });
 
 test('resolveTaskFloor floors on the linked event end, lapses when the event is gone', () => {
@@ -309,18 +327,19 @@ test('auto-plan honours an after-dependency and will not place before the floor'
   assert.equal(result.placements[0].startAt, '2026-08-11T15:30');
 });
 
-test('reshuffle will not pull a dependent block earlier than its linked meeting', () => {
+test('reshuffle will not rescue a dependent block earlier than its linked meeting floor', () => {
   const result = computeReshuffle({
-    startDate: '2026-08-10',
-    endDate: '2026-08-13',
+    startDate: '2026-08-09',
+    endDate: '2026-08-16',
     preferences: { workStart: '09:00', workEnd: '17:00' },
-    now: new Date('2026-08-11T06:00:00Z'),
+    now: new Date('2026-08-11T06:00:00Z'), // Tuesday morning
     appointments: [],
     scheduled: [
-      // Sitting late on Tuesday afternoon; a big free morning exists but the floor blocks it.
-      { task: { id: 'dep', title: 'After meeting', effort_minutes: 30, planner_lane: 'work', notBefore: '2026-08-11T15:30' }, date: '2026-08-11', time: '16:30' },
+      // Stranded on Monday, but its floor sits on Tuesday 15:30; the free Tuesday
+      // morning must be skipped and the block placed no earlier than the floor.
+      { task: { id: 'dep', title: 'After meeting', effort_minutes: 30, planner_lane: 'work', notBefore: '2026-08-11T15:30' }, date: '2026-08-10', time: '10:00' },
     ],
   });
   assert.equal(result.moves.length, 1);
-  assert.equal(result.moves[0].startAt, '2026-08-11T15:30'); // pulled up only to the floor, not the morning
+  assert.equal(result.moves[0].startAt, '2026-08-11T15:30');
 });
