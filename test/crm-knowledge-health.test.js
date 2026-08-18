@@ -2,7 +2,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { _test } = require('../lib/crm-knowledge-health');
+const { isExcludedEvidence, _test } = require('../lib/crm-knowledge-health');
+
+test('knowledge health excludes a forwarded Hub briefing through the canonical boundary', () => {
+  assert.equal(isExcludedEvidence({
+    source_kind: 'email_summary',
+    row: { subject: 'Fwd: M365 Operations & Security Brief 018 - 18 August 2026' },
+  }), true);
+  assert.equal(isExcludedEvidence({
+    source_kind: 'email_summary',
+    row: { subject: 'Fwd: Please approve the agency invoice' },
+  }), false);
+});
 
 test('knowledge health uses the latest receipt for each source and stage', () => {
   const health = _test.summariseKnowledgeReceipts([

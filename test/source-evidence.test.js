@@ -257,10 +257,24 @@ test('Nakai daily briefing mail Douglas sends is excluded, not read as his own c
     source_kind: 'email_summary',
     row: { subject: 'M365 Operations & Security Brief 003 - 3 August 2026', direction: 'sent' },
   }), true);
+  // 18 August production incident: forwarding Brief 018 between Douglas's
+  // accounts added Fwd/FW and bypassed the subject-prefix boundary.
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'Fwd: M365 Operations & Security Brief 018 - 18 August 2026', direction: 'sent' },
+  }), true);
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'RE: FW: M365 Operations & Security Brief 018 - 18 August 2026', direction: 'received' },
+  }), true);
   // A real commitment Douglas sends to a contact must still be evidence.
   assert.equal(isCanonicalEvidenceExcluded({
     source_kind: 'email_summary',
     row: { subject: 'Re: project update', direction: 'sent' },
+  }), false);
+  assert.equal(isCanonicalEvidenceExcluded({
+    source_kind: 'email_summary',
+    row: { subject: 'Fwd: Please approve the agency invoice', direction: 'sent' },
   }), false);
 });
 
