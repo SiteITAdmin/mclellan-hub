@@ -233,6 +233,33 @@ test("the Hub's own briefing content never becomes one of Douglas's tasks", asyn
   assert.equal(result.reason, 'canonical_source_excluded');
 });
 
+test("forwarding the Hub's M365 briefing between Douglas's accounts still creates no tasks", async () => {
+  // Exact shape of the 18 August production incident. The body is preserved
+  // and searchable, but it is derived Hub output rather than new evidence.
+  const evidence = 'Jane Whelan ’ s E3 administrative function/licence gap for RoPA and data-protection work [S25] [S9]';
+  const id = inboundEmail({
+    subject: 'Fwd: M365 Operations & Security Brief 018 - 18 August 2026',
+    body: `MCLELLAN HUB · PRIVATE OPERATIONS INTELLIGENCE\n${evidence}`,
+    from: 'Douglas McLellan',
+    fromEmail: 'douglas.mclellan@beaconhospital.ie',
+    direction: 'sent',
+  });
+
+  const { result, created } = await runEmail(id, {
+    asks: [{
+      action: 'Verify Jane Whelan’s E3 administrative function and licence gap is resolved',
+      evidence,
+      actionability: 'implied',
+      confidence: 0.98,
+    }],
+  });
+
+  assert.equal(created.length, 0);
+  assert.equal(result.reason, 'canonical_source_excluded');
+  assert.equal(result.exclusion_reason, 'hub_generated_report');
+  assert.deepEqual(outcomesFor(id), [], 'excluded derived output must never reach action outcomes');
+});
+
 test('an ask the model forgets to carry forward is left visible, not lost', async () => {
   // Triage found two asks; projection returned only one. The dropped one must
   // surface as a review outcome. Silent loss between two stages is precisely

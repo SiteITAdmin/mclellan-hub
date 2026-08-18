@@ -97,11 +97,18 @@ test('a later body backfill is admitted again as a new revision', () => {
 });
 
 test("the Hub's own report mail is admitted as excluded, not as a failure", () => {
-  const id = email({ subject: 'Daily Consigliere Report — 3 August', body: 'Everything is fine.' });
+  const id = email({
+    subject: 'Fwd: M365 Operations & Security Brief 018 - 18 August 2026',
+    body: 'Jane Whelan ’ s E3 administrative function/licence gap for RoPA and data-protection work [S25] [S9]',
+  });
   const result = admitSource(user, 'email_summary', id, { ingester: 'gmail:received' });
 
   assert.equal(result.excluded, true);
-  assert.equal(receipts(id)[0].status, 'skipped', 'a deliberate boundary is not a capture error');
+  assert.equal(result.exclusion_reason, 'hub_generated_report');
+  const receipt = receipts(id)[0];
+  assert.equal(receipt.status, 'skipped', 'a deliberate boundary is not a capture error');
+  assert.match(receipt.summary, /hub_generated_report/);
+  assert.equal(JSON.parse(receipt.payload).exclusion_reason, 'hub_generated_report');
 });
 
 test('an ingester that captured nothing readable is named as silently failing', () => {
