@@ -965,10 +965,15 @@ router.get('/admin/knowledge', requireHubAdmin, (req, res) => {
 
 // Retroactive dedup: find and merge atoms where one value is a substring of another
 // within the same (subject_label, predicate) group. Safe to run multiple times.
-router.post('/admin/knowledge/dedup', requireHubAdmin, (req, res) => {
+router.post('/admin/knowledge/dedup', requireHubAdmin, async (req, res) => {
   try {
+    // Cheap deterministic pass first (exact/substring), then the paraphrase-aware
+    // semantic pass that collapses reworded duplicates and auto-resolves any that
+    // match a fact already approved or rejected.
     const result = dedupAtoms(req.hubUser);
-    res.json({ ok: true, ...result });
+    const { dedupProposedAtoms } = require('../lib/atom-dedup');
+    const semantic = await dedupProposedAtoms(req.hubUser);
+    res.json({ ok: true, ...result, semantic });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
