@@ -19,7 +19,7 @@ const {
 } = require('./hub-shared');
 const {
   createTask, createSubtask, updateTask,
-  syncTasks, completeTask, deleteTask, deleteTaskEverywhere, restoreTask,
+  syncTasks, syncTasksIfStale, completeTask, deleteTask, deleteTaskEverywhere, restoreTask,
   getTask, getCachedTasks,
 } = require('../lib/google-tasks');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
@@ -1675,7 +1675,7 @@ router.post('/api/crm/facts/:id/delete', requireAuth, requireSameOrigin, writeLi
 router.get('/api/mobile/tasks', requireAuth, async (req, res) => {
   let syncError = null;
   try {
-    await syncTasks(req.hubUser);
+    await syncTasksIfStale(req.hubUser);
   } catch (err) {
     syncError = err.message;
   }
@@ -1769,7 +1769,7 @@ router.get('/crm/tasks', requireAuth, async (req, res) => {
   const showHistory = req.query.show_history === '1';
   let syncError = null;
   try {
-    await syncTasks(req.hubUser);
+    await syncTasksIfStale(req.hubUser);
   } catch (err) {
     console.warn('[tasks] sync on page load failed:', err.message);
     syncError = err.message;
@@ -1801,7 +1801,7 @@ router.get('/crm/planner', requireAuth, async (req, res) => {
   let taskSyncError = null;
   let calendarError = null;
   try {
-    await syncTasks(req.hubUser);
+    await syncTasksIfStale(req.hubUser);
   } catch (error) {
     taskSyncError = error.message;
     console.warn('[planner] task sync failed:', error.message);
@@ -2346,8 +2346,10 @@ router.post('/api/tasks/:id/restore', requireAuth, requireSameOrigin, writeLimit
 });
 
 router.get('/crm/tasks/:id', requireAuth, async (req, res) => {
-  // Sync from Google first so the page always shows fresh data (due dates, etc.)
-  try { await syncTasks(req.hubUser); } catch (err) {
+  // Sync from Google first so the page shows fresh data (due dates, etc.) —
+  // throttled so the reload right after a save doesn't re-pull what the write
+  // already cached locally.
+  try { await syncTasksIfStale(req.hubUser); } catch (err) {
     console.warn('[tasks] sync on detail load failed:', err.message);
   }
   const task = getTask(req.hubUser, req.params.id);
@@ -3445,14 +3447,19 @@ router.post('/api/crm/project/:slug/snooze', requireAuth, requireSameOrigin, wri
     const openTasks = getCachedTasks(req.hubUser, { projectSlug: project.slug }, false);
     if (openTasks.length) {
       const { unscheduleTask } = require('../lib/task-calendar-planner');
-      for (const task of openTasks) {
+      const { mapWithConcurrency } = require('../lib/concurrency');
+      // Each unscheduleTask targets its own task's calendar block (reconciled by
+      // hubTaskId), so clearing distinct tasks in parallel cannot collide.
+      const removed = await mapWithConcurrency(openTasks, 5, async (task) => {
         try {
           const result = await unscheduleTask(req.hubUser, task.id);
-          if (result?.removed) blocksRemoved += 1;
+          return result?.removed ? 1 : 0;
         } catch (err) {
           console.warn('[project-snooze] failed to clear planner block for task', task.id, err.message);
+          return 0;
         }
-      }
+      });
+      blocksRemoved = removed.reduce((sum, n) => sum + n, 0);
     }
   }
   res.json({ ok: true, snoozed, blocksRemoved });
