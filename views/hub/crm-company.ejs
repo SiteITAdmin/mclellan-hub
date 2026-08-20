@@ -19,6 +19,19 @@ async function taskAction(id, action) {
         <label>Type<select name="type"><option value="">Not set</option><% for (const type of ['employer','client','vendor','partner']) { %><option value="<%= type %>" <%= company.type === type ? 'selected' : '' %>><%= type %></option><% } %></select></label>
         <label class="wide">Website<input name="website" type="url" value="<%= company.website || '' %>"></label>
         <label class="wide">Notes<textarea name="notes" rows="3"><%= company.notes || '' %></textarea></label>
+        <% for (const f of (identity || [])) { %>
+          <label class="wide"><%= f.label %>
+            <% if (f.multiline) { %>
+              <textarea name="<%= f.key %>" rows="2" data-identity="<%= f.key %>"><%= f.value %></textarea>
+            <% } else { %>
+              <input name="<%= f.key %>" value="<%= f.value %>" data-identity="<%= f.key %>">
+            <% } %>
+            <% if (f.suggestion) { %>
+              <span class="crm-muted" style="display:block;font-size:12px;margin-top:4px;">Found in ingested email:
+                <a href="#" class="crm-suggest-fill" data-field="<%= f.key %>" data-value="<%= f.suggestion %>"><%= f.suggestion %></a></span>
+            <% } %>
+          </label>
+        <% } %>
         <button class="btn" type="submit">Save details</button>
       </form>
       <form class="crm-danger-form" method="post" action="/crm/company/<%= company.id %>/delete" onsubmit="return confirm('Delete this company? Meetings and facts will be kept without the company link.')">
@@ -150,6 +163,16 @@ document.getElementById('company-task-form').addEventListener('submit', async e 
     if (j.ok) { msg.textContent = 'Added!'; e.target.reset(); setTimeout(() => location.reload(), 800); }
     else msg.textContent = j.error || 'Error';
   } catch (err) { msg.textContent = err.message; }
+});
+</script>
+
+<script>
+document.querySelectorAll('.crm-suggest-fill').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const field = document.querySelector(`[data-identity="${link.dataset.field}"]`);
+    if (field) { field.value = link.dataset.value; field.focus(); }
+  });
 });
 </script>
 
