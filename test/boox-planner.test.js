@@ -82,6 +82,14 @@ test('every navigation target the pages link to actually exists', () => {
   const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(match => match[1]));
   const targets = new Set([...html.matchAll(/href="#([^"]+)"/g)].map(match => match[1]));
   for (const target of targets) assert.ok(ids.has(target), `dangling planner link: #${target}`);
+  // A page nothing links to cannot be reached: a PDF has no back button.
+  for (const id of ids) {
+    if (id === 'today') continue;
+    assert.ok(targets.has(id), `orphaned planner page: #${id}`);
+  }
+  for (const tile of ['t-open', 't-blocked', 't-overdue', 't-unplanned']) {
+    assert.ok(targets.has(tile), `dashboard tile does not link anywhere: #${tile}`);
+  }
   assert.ok(ids.has(`d-${TODAY}`));
   assert.ok(ids.has('p-beacon'));
   assert.ok(html.includes('Awaiting signature'));
@@ -93,4 +101,17 @@ test('planner pages never leak raw html from task titles', () => {
   const html = renderPlannerHtml(model);
   assert.ok(!html.includes('<script>alert(1)</script>'));
   assert.ok(html.includes('&lt;script&gt;'));
+});
+
+test('a section that spills onto extra pages still links to all of them', () => {
+  const many = Array.from({ length: 40 }, (_, index) => task(`t${index}`, { due: addIsoDays(TODAY, index % 20) }));
+  const model = assemblePlannerModel({ snapshot: snapshotFor(many, []), today: TODAY });
+  const html = renderPlannerHtml(model);
+  const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(match => match[1]));
+  const targets = new Set([...html.matchAll(/href="#([^"]+)"/g)].map(match => match[1]));
+  assert.ok(ids.has('t-open-2'), 'expected a second page of open tasks');
+  for (const id of ids) {
+    if (id === 'today') continue;
+    assert.ok(targets.has(id), `orphaned planner page: #${id}`);
+  }
 });
