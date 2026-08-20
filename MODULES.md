@@ -150,6 +150,23 @@ These are the tools the system runs on. They are not features — they are the f
 
 ---
 
+## Boox reference planner
+**Purpose:** Put the Hub's next 90 days on the 13.3" e-ink tablet as one navigable PDF — cover/today, month grids, week spreads, a page per day, the task inbox, live projects with their compiled knowledge, and open actions by person — rebuilt nightly and pushed to the Drive folder the Boox syncs. It replaces a bought static planner PDF with one made from live Hub data.
+
+**Healthy looks like:**
+- The Drive file is refreshed every night (job `boox_planner_publish`, 04:50 Dublin) and the planner screen shows when it last went out
+- Every navigation target resolves in the PDF: the nav bar, the month tab rail, every month cell, week column heading and day page anchor
+- Every task, project and person row links out to the live Hub record it came from
+- The window is built from consecutive in-range planner snapshots (the snapshot API is capped at 31 days) with events merged and a task blocked in a later chunk counted as scheduled
+- A failed push is visible on `/crm/planner` with its error, not silently stale
+- Project pages read compiled `knowledge_atoms`, not hand-maintained project text
+
+**Does not own:** Handwriting. The planner is regenerated nightly, so it is read-only by design — an e-ink annotation layer keyed to a file that keeps changing is not a safe place to write. Notes are made in a normal Boox notebook and return through the Boox → Drive ingest path. It also owns no scheduling: it never places, moves or creates anything, and stores no planner state beyond the Drive file id in `crm_context`.
+
+**Health check:** `crm_context.boox_planner_drive_file` holds `publishedAt` within the last ~24h, a non-null `fileId`, and `lastError: null`. `node -e "require('./lib/boox-planner').createBooxPlannerPdf('douglas')"` produces a multi-page PDF whose page count matches the number of rendered sections (no overflow pages).
+
+---
+
 ## Google Tasks
 **Purpose:** Be the single task list for Douglas. Every actionable item from every source ends up here. Douglas should never need to manually create tasks from information the system already has.
 

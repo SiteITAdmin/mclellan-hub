@@ -96,6 +96,18 @@ Provider exactly-once delivery is not assumed. Before inserting, the planner rec
 
 `GET /api/planner/print-today` is a read-only, on-demand PDF projection of today’s live planner snapshot. It does not archive a document or create calendar/task state: genuine appointments render in the calendar column, while task-backed Calendar mirrors render once in the scheduled-task checklist, with late blocks marked in red.
 
+### Boox reference planner — the Hub as a navigable e-ink book (20 August 2026)
+
+`lib/boox-planner.js` renders the next 90 days as one hyperlinked PDF sized to the Onyx Note Max 4:3 panel: today, month grids, week spreads, a page per day, the task inbox (overdue / unplanned / assigned to others), live projects with their compiled `knowledge_atoms`, and open actions grouped by person. It is a derived view — no planner table, no new storage, nothing created. Every row links back to the Hub record it came from, so the device is a reading surface with a way home rather than a copy of the data.
+
+It is **read-only by design**. Boox keeps handwriting in an annotation layer keyed to the file it was drawn on, so a document rebuilt every night cannot also be the page Douglas writes on. Writing stays in an ordinary Boox notebook, which already returns through the Boox → Drive ingest path (`docs/boox-drive-ingest.md`). Do not add form fields, blank writing pages, or a "save my notes" path to this artifact — the outbound book and the inbound notebook are deliberately different files.
+
+The window is assembled from consecutive 28-day planner snapshots because `getPlannerSnapshot` is capped at 31 days (it backs a week view and a live Calendar read); events are merged by ID and a task blocked out in a later chunk counts as scheduled. Every page has a hard content box and every list a row cap with a visible "+n more", so a busy day can never spill into an unstyled overflow page.
+
+Layout is HTML rendered by Chrome (`page.pdf`), which preserves `#anchor` links as named PDF destinations and absolute URLs as URI actions — that is what makes the tab rail, month cells and day pages tappable in NeoReader. Verified against the generated file's annotations before the module was written; keep hrefs as plain anchors, never JS handlers.
+
+Delivery is a push, because the device pulls: `boox_planner_publish` runs nightly at 04:50 Dublin (after the synthesis jobs refresh project knowledge) and updates **the same Drive file in place** in `onyx/NoteMax/Hub Planner` — a new file per day would leave the tablet holding a folder of stale planners. The file id lives in `crm_context.boox_planner_drive_file` with the last publish time and last error; `/crm/planner` shows both, and offers "Download PDF" (`GET /api/planner/boox-planner.pdf`) and "Send to Drive now" (`POST /api/planner/boox-planner/publish`). `BOOX_PLANNER_DRIVE_FOLDER_PATH`, `BOOX_PLANNER_FILENAME` and `BOOX_PLANNER_PUBLISH=0` configure/disable it.
+
 ### CRM layout — fluid shared surface
 
 All CRM views inherit their layout from `views/hub/partials/crm-head.ejs` and `public/crm.css`. The CRM canvas is viewport-fluid with clamped gutters and spacing rather than a fixed centred width. Card collections add columns as room appears; detail views keep a weighted primary/sidebar split until the tablet breakpoint; forms gain a third column only on wide screens. The Planner uses the same fluid canvas, keeps a wider task inbox on large displays, and stacks the inbox above the calendar before the seven-day grid becomes cramped. Narrow screens may scroll the calendar itself, but must never make the document horizontally overflow. Keep readable caps on prose/source views locally; do not reintroduce a global fixed-width CRM wrapper or page-specific copies of these breakpoints.

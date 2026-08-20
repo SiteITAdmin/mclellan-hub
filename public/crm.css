@@ -200,6 +200,10 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-toolbar input[type="time"] { padding: 8px 10px; margin-top: 4px; }
 .planner-toolbar-actions { display: flex; gap: 7px; align-items: center; }
 .planner-toolbar .btn:disabled { opacity: .45; cursor: not-allowed; }
+.planner-boox { display: flex; flex-wrap: wrap; gap: clamp(12px, 1.2vw, 22px); align-items: center; justify-content: space-between; padding: var(--crm-card-pad); margin-bottom: var(--crm-layout-gap); }
+.planner-boox h2 { margin: 2px 0 0; }
+.planner-boox .planner-instruction { margin: 5px 0 0; max-width: 68ch; }
+.planner-boox strong { color: var(--crm-danger); }
 .planner-shell { display: grid; grid-template-columns: clamp(270px, 18vw, 350px) minmax(0, 1fr); gap: var(--crm-layout-gap); align-items: start; }
 .planner-inbox { position: sticky; top: 84px; padding: clamp(18px, 1.3vw, 26px); max-height: calc(100vh - 110px); overflow: hidden; display: flex; flex-direction: column; }
 .planner-inbox-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }

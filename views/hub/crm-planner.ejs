@@ -68,6 +68,29 @@
   </div>
 </section>
 
+<section class="section-card planner-boox">
+  <div>
+    <p class="crm-eyebrow">E-ink</p>
+    <h2>Boox reference planner</h2>
+    <p class="planner-instruction">A tappable 90-day PDF of the calendar, tasks, projects and people — rebuilt nightly and pushed to Drive for the Note Max. It is read-only: write in a notebook, not on these pages.</p>
+    <p class="planner-instruction" id="boox-status">
+      <% if (booxPlanner?.publishedAt) { %>
+        Last sent to Drive <%= new Date(booxPlanner.publishedAt * 1000).toLocaleString('en-IE', { timeZone: 'Europe/Dublin', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) %>
+        · <%= booxPlanner.folderPath %>/<%= booxPlanner.name %> · <%= Math.round((booxPlanner.bytes || 0) / 1024) %> KB
+      <% } else { %>
+        Not sent to Drive yet.
+      <% } %>
+      <% if (booxPlanner?.lastError) { %>
+        <strong>Last push failed: <%= booxPlanner.lastError %></strong>
+      <% } %>
+    </p>
+  </div>
+  <div class="planner-toolbar-actions">
+    <a class="btn btn-sm btn-ghost" href="/api/planner/boox-planner.pdf" target="_blank" rel="noopener">Download PDF</a>
+    <button class="btn btn-sm" id="boox-publish" type="button">Send to Drive now</button>
+  </div>
+</section>
+
 <div class="planner-shell">
   <aside class="planner-inbox section-card" aria-label="Unscheduled tasks">
     <div class="planner-inbox-head">

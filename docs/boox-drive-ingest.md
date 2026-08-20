@@ -1,5 +1,11 @@
 # Boox Drive Notebook Ingest
 
+This is the **inbound** half of the Boox loop. The outbound half — the nightly
+hyperlinked reference planner the Hub pushes to the tablet — is a separate file
+in a separate folder (`onyx/NoteMax/Hub Planner`, see ARCHITECTURE.md → Boox
+reference planner). They are deliberately kept apart: the planner is rebuilt
+every night, so it can never be the file handwriting lives in.
+
 Hermes can import Boox / Onyx handwritten note exports from Google Drive once per day. Handwritten notebooks should be treated as a raw inbox first, then renamed, OCR-reviewed, and deliberately approved for Synthadoc/Hermes ingestion.
 
 The daily job:

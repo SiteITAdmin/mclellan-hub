@@ -383,6 +383,22 @@
       showMessage(error.message, true);
     }
   });
+  const booxButton = document.getElementById('boox-publish');
+  booxButton?.addEventListener('click', async () => {
+    const original = booxButton.textContent;
+    booxButton.disabled = true;
+    booxButton.textContent = 'Building…';
+    try {
+      const result = await postJson('/api/planner/boox-planner/publish', {});
+      showMessage(`Planner sent to Drive · ${result.folderPath}/${result.name} · ${Math.round((result.bytes || 0) / 1024)} KB`);
+      window.setTimeout(() => window.location.reload(), 900);
+    } catch (error) {
+      booxButton.disabled = false;
+      booxButton.textContent = original;
+      showMessage(error.message, true);
+    }
+  });
+
   saveHoursButton?.addEventListener('click', async () => {
     saveHoursButton.disabled = true;
     saveHoursButton.textContent = 'Saving…';

@@ -1842,6 +1842,7 @@ router.get('/crm/planner', requireAuth, async (req, res) => {
     previousStart: addIsoDays(startDate, -7),
     nextStart: addIsoDays(startDate, 7),
     todayStart: plannerWeekStart(),
+    booxPlanner: require('../lib/boox-planner').readDriveState(req.hubUser),
   });
 });
 
@@ -1876,6 +1877,42 @@ router.get('/api/planner/print-today', requireAuth, async (req, res) => {
     res.send(pdf);
   } catch (error) {
     console.error('[planner] print today failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Boox reference planner — the whole rolling window as one navigable PDF for
+// the e-ink tablet. Read-only by design: it is rebuilt nightly, so it must
+// never be the surface Douglas writes on.
+router.get('/api/planner/boox-planner.pdf', requireAuth, async (req, res) => {
+  try {
+    const { createBooxPlannerPdf } = require('../lib/boox-planner');
+    const { pdf, model } = await createBooxPlannerPdf(req.hubUser, {
+      days: req.query.days,
+      orientation: req.query.orientation === 'landscape' ? 'landscape' : 'portrait',
+    });
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Hub Planner ${model.today}.pdf"`,
+      'Cache-Control': 'no-store',
+    });
+    res.send(pdf);
+  } catch (error) {
+    console.error('[boox-planner] build failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/api/planner/boox-planner/publish', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  try {
+    const { runBooxPlannerPublish } = require('../lib/boox-planner');
+    const state = await runBooxPlannerPublish(req.hubUser, {
+      days: req.body?.days,
+      orientation: req.body?.orientation === 'landscape' ? 'landscape' : 'portrait',
+    });
+    res.json({ ok: true, ...state });
+  } catch (error) {
+    console.error('[boox-planner] publish failed:', error);
     res.status(500).json({ error: error.message });
   }
 });
