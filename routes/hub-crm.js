@@ -544,6 +544,11 @@ router.post('/crm/companies', requireAuth, requireSameOrigin, writeLimiter, (req
   res.redirect(`/crm/company/${id}`);
 });
 
+const {
+  COMPANY_IDENTITY_FIELDS, COMPANY_IDENTITY_PREDICATES,
+  upsertManualCompanyAtom, companyIdentity,
+} = require('../lib/company-identity');
+
 router.get('/crm/company/:id', requireAuth, (req, res) => {
   const hub = db.hub();
   const company = hub.prepare('SELECT * FROM companies WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
@@ -578,11 +583,15 @@ router.get('/crm/company/:id', requireAuth, (req, res) => {
   const showHistory = req.query.show_history === '1';
   const tasks = getCachedTasks(req.hubUser, { companyId: company.id }, showHistory);
   const { knowledgeByPredicate } = knowledgeGroupsForEntity(req.hubUser, 'company', company.id, { includeStale: showHistory });
+  // The identity predicates get their own dedicated card, so drop them from the
+  // generic knowledge panel to avoid showing the same fact twice.
+  for (const pred of COMPANY_IDENTITY_PREDICATES) delete knowledgeByPredicate[pred];
+  const identity = companyIdentity(req.hubUser, company);
 
   res.render('hub/crm-company', {
     ...crmPageData(req.hubUser), company, contacts,
     meetings, upcomingMeetings, pastMeetings,
-    facts, availableContacts, tasks, showHistory, knowledgeByPredicate,
+    facts, availableContacts, tasks, showHistory, knowledgeByPredicate, identity,
   });
 });
 
@@ -635,6 +644,11 @@ router.post('/crm/company/:id', requireAuth, requireSameOrigin, writeLimiter, (r
     req.params.id, req.hubUser
   );
   if (!result.changes) return res.status(404).send('Company not found');
+  // Identity fields are declared knowledge (manual atoms), not company columns.
+  const company = { id: req.params.id, name };
+  for (const field of COMPANY_IDENTITY_FIELDS) {
+    if (field.key in req.body) upsertManualCompanyAtom(req.hubUser, company, field.key, req.body[field.key]);
+  }
   for (const contact of hub.prepare(
     'SELECT contact_id AS id FROM contact_companies WHERE company_id = ?'
   ).all(req.params.id)) {
