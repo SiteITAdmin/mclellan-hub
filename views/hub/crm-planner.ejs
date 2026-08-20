@@ -72,7 +72,7 @@
   <div>
     <p class="crm-eyebrow">E-ink</p>
     <h2>Boox reference planner</h2>
-    <p class="planner-instruction">A tappable 90-day PDF of the calendar, tasks, projects and people — rebuilt nightly and pushed to Drive for the Note Max. It is read-only: write in a notebook, not on these pages.</p>
+    <p class="planner-instruction">A tappable 90-day PDF of the calendar, tasks, projects, people and note pages — one file per day, named for its date, pushed to Drive for the Note Max each morning. Today's file is created once and never rewritten, so anything you handwrite on it stays.</p>
     <p class="planner-instruction" id="boox-status">
       <% if (booxPlanner?.publishedAt) { %>
         Last sent to Drive <%= new Date(booxPlanner.publishedAt * 1000).toLocaleString('en-IE', { timeZone: 'Europe/Dublin', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) %>

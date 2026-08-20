@@ -389,7 +389,18 @@
     booxButton.disabled = true;
     booxButton.textContent = 'Building…';
     try {
-      const result = await postJson('/api/planner/boox-planner/publish', {});
+      let result = await postJson('/api/planner/boox-planner/publish', {});
+      if (result.skipped === 'already_published') {
+        // Today's file may already carry handwriting synced back from the Boox.
+        if (!window.confirm(`${result.name} is already in Drive. Rebuild it? Anything you have handwritten on today's file will be replaced.`)) {
+          booxButton.disabled = false;
+          booxButton.textContent = original;
+          showMessage('Left today\u2019s file as it is.');
+          return;
+        }
+        booxButton.textContent = 'Rebuilding…';
+        result = await postJson('/api/planner/boox-planner/publish', { force: true });
+      }
       showMessage(`Planner sent to Drive · ${result.folderPath}/${result.name} · ${Math.round((result.bytes || 0) / 1024)} KB`);
       window.setTimeout(() => window.location.reload(), 900);
     } catch (error) {

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { assemblePlannerModel, renderPlannerHtml } = require('../lib/boox-planner');
+const { assemblePlannerModel, renderPlannerHtml, plannerFileName } = require('../lib/boox-planner');
 const { addIsoDays } = require('../lib/task-calendar-planner');
 
 const TODAY = '2026-08-20';
@@ -114,4 +114,45 @@ test('a section that spills onto extra pages still links to all of them', () => 
     if (id === 'today') continue;
     assert.ok(targets.has(id), `orphaned planner page: #${id}`);
   }
+});
+
+test('note pages exist for appointments, never for task blocks', () => {
+  const blocked = task('t1');
+  const events = [
+    {
+      id: 'evt-1', date: TODAY, time: '09:30', endTime: '10:15', allDay: false,
+      title: 'Beacon steering call', location: 'Google Meet', isTask: false,
+      attendees: [{ name: 'Alan Reid', email: 'alan@example.com' }],
+    },
+    {
+      id: 'evt-2', date: TODAY, time: '14:00', endTime: '14:30', allDay: false,
+      title: blocked.title, isTask: true, taskId: 't1', task: blocked,
+    },
+    { id: 'evt-3', date: addIsoDays(TODAY, 2), allDay: true, endDate: addIsoDays(TODAY, 3), title: 'Bank holiday', isTask: false },
+  ];
+  const model = assemblePlannerModel({
+    snapshot: snapshotFor([blocked], events),
+    today: TODAY,
+    contactsByEmail: new Map([['alan@example.com', { id: 'c1', name: 'Alan Reid', email: 'alan@example.com' }]]),
+    adhocNotePages: 3,
+  });
+  assert.deepEqual(model.meetingNotes.map(meeting => meeting.id), ['evt-1']);
+  assert.equal(model.meetingNotes[0].attendees[0].contact.id, 'c1');
+
+  const html = renderPlannerHtml(model);
+  const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(match => match[1]));
+  const targets = new Set([...html.matchAll(/href="#([^"]+)"/g)].map(match => match[1]));
+  assert.ok(ids.has('notes'));
+  assert.ok(ids.has(model.meetingNotes[0].noteId));
+  assert.ok(ids.has('note-3'), 'expected the requested blank pages');
+  assert.ok(targets.has(model.meetingNotes[0].noteId), 'the day page must link to the meeting note page');
+  for (const id of ids) {
+    if (id === 'today') continue;
+    assert.ok(targets.has(id), `orphaned planner page: #${id}`);
+  }
+});
+
+test('each day gets its own Drive file so handwriting is never overwritten', () => {
+  assert.equal(plannerFileName('2026-08-21'), 'Hub Planner 2026-08-21.pdf');
+  assert.notEqual(plannerFileName('2026-08-21'), plannerFileName('2026-08-22'));
 });

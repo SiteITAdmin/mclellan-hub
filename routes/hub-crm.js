@@ -1909,6 +1909,7 @@ router.post('/api/planner/boox-planner/publish', requireAuth, requireSameOrigin,
     const state = await runBooxPlannerPublish(req.hubUser, {
       days: req.body?.days,
       orientation: req.body?.orientation === 'landscape' ? 'landscape' : 'portrait',
+      force: req.body?.force === true,
     });
     res.json({ ok: true, ...state });
   } catch (error) {
