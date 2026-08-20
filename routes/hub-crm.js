@@ -20,7 +20,7 @@ const {
 const {
   createTask, createSubtask, updateTask,
   syncTasks, syncTasksIfStale, completeTask, deleteTask, deleteTaskEverywhere, restoreTask,
-  getTask, getCachedTasks,
+  getTask, getCachedTasks, isStartDeferred,
 } = require('../lib/google-tasks');
 const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
@@ -1793,7 +1793,7 @@ router.get('/crm/tasks', requireAuth, async (req, res) => {
   const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   const projects = hub.prepare('SELECT id, slug, name FROM projects WHERE user = ? ORDER BY name').all(req.hubUser);
-  res.render('hub/crm-tasks', { ...crmPageData(req.hubUser), tasks, showHistory, contacts, companies, projects, syncError });
+  res.render('hub/crm-tasks', { ...crmPageData(req.hubUser), tasks, showHistory, contacts, companies, projects, syncError, isStartDeferred });
 });
 
 function plannerWeekStart(value = null) {
@@ -2227,6 +2227,7 @@ router.post('/api/tasks', requireAuth, requireSameOrigin, writeLimiter, async (r
       effortMinutes: req.body.effort_minutes,
       plannerLane: addToPlanner && ['work', 'personal'].includes(req.body.planner_lane) ? req.body.planner_lane : null,
       assignee: assignee || null,
+      start: req.body.start || null,
     });
     const task = await createTask(req.hubUser, {
       title,
@@ -2481,7 +2482,7 @@ router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimite
   let clearPlannerBlock = false;
   const assigneeProvided = req.body.assignee !== undefined;
   const assignee = assigneeProvided ? String(req.body.assignee || '').trim() : undefined;
-  if (notes !== undefined && (req.body.priority !== undefined || req.body.effort_minutes !== undefined || req.body.after !== undefined || assigneeProvided)) {
+  if (notes !== undefined && (req.body.priority !== undefined || req.body.effort_minutes !== undefined || req.body.after !== undefined || req.body.start !== undefined || assigneeProvided)) {
     const { withTaskTags, parseTaskTags } = require('../lib/google-tasks');
     const existing = db.hub().prepare('SELECT notes FROM google_tasks WHERE id = ? AND user = ?')
       .get(req.params.id, req.hubUser);
@@ -2495,6 +2496,7 @@ router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimite
       effortMinutes: req.body.effort_minutes,
       plannerLane: keepLane,
       after: req.body.after,
+      ...(req.body.start !== undefined && { start: req.body.start || null }),
       ...(assigneeProvided && { assignee: assignee || null }),
     });
   }

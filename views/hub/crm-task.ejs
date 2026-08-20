@@ -56,7 +56,7 @@
           <input name="title" value="<%= task.title %>" required>
         </label>
         <label class="wide">Notes <span style="font-size:11px;opacity:.6;">priority, effort, and planner tags are managed by the controls</span>
-          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort|planner|after|assignee)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
+          <textarea name="notes" rows="5" placeholder="Context, links, background…"><%= (() => { const s = String(task.notes || '').replace(/\[\s*(priority|effort|planner|after|assignee|start)\s*:\s*[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n'); return s.trim(); })() %></textarea>
         </label>
         <label>Priority
           <select name="priority">
@@ -87,6 +87,9 @@
               <option value="<%= taskTags.after %>" selected>Current dependency (<%= taskTags.after.startsWith('cal:') ? 'linked meeting' : taskTags.after %>)</option>
             <% } %>
           </select>
+        </label>
+        <label>Start date <span style="font-size:11px;opacity:.6;">(not before — a date over 2 weeks out is held off your Google list until it's near, and the planner won't schedule it earlier)</span>
+          <input name="start" type="date" value="<%= taskTags.start || '' %>">
         </label>
         <label>Due date <span style="font-size:11px;opacity:.6;">(syncs to Google)</span>
           <input name="due" type="date" value="<%= task.due || '' %>">

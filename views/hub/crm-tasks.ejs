@@ -24,6 +24,7 @@
   <form class="crm-form-grid" id="task-add-form">
     <label class="wide">Title<input name="title" required placeholder="What needs doing?"></label>
     <label class="wide">Notes<input name="notes" placeholder="Optional details or context"></label>
+    <label>Start date<input name="start" type="date" title="Not before — a date over 2 weeks out is held off your Google list until it's near"></label>
     <label>Due date<input name="due" type="date"></label>
     <label>Priority
       <select name="priority">
@@ -82,7 +83,8 @@
 
 <!-- Task list -->
 <% const openAll = tasks.filter(t => t.status === 'needsAction' && !t.deleted_at); %>
-<% const open = openAll.filter(t => !t.assignee); %>
+<% const startsLater = openAll.filter(t => !t.assignee && isStartDeferred(t.start)); %>
+<% const open = openAll.filter(t => !t.assignee && !isStartDeferred(t.start)); %>
 <% const assignedOut = openAll.filter(t => t.assignee); %>
 <% const done = tasks.filter(t => t.status === 'completed' && !t.deleted_at); %>
 <% const deleted = tasks.filter(t => t.deleted_at); %>
@@ -112,6 +114,18 @@
     <%- include('partials/task-row', { t, showHistory }) %>
   <% } %>
 </section>
+
+<% if (startsLater.length) { %>
+<section class="section-card" style="margin-top:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+    <h2 style="margin:0;">Starts later (<%= startsLater.length %>)</h2>
+    <p class="crm-muted" style="margin:0;">Held off your Google Tasks list until ~2 weeks before their start date. Not scheduled until then.</p>
+  </div>
+  <% for (const t of startsLater.slice().sort((a, b) => String(a.start).localeCompare(String(b.start)))) { %>
+    <%- include('partials/task-row', { t, showHistory }) %>
+  <% } %>
+</section>
+<% } %>
 
 <% if (assignedOut.length) { %>
 <section class="section-card" style="margin-top:16px;">
