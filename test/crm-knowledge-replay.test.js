@@ -69,7 +69,10 @@ function makeTaskEvidenceForUser(testUser, id, title, status) {
 
 function actionFor(evidence, quote, extra = {}) {
   return {
-    title: 'Send requested document',
+    // The production open-corpus guard is source-agnostic, so unrelated test
+    // sources need distinct provider-facing titles unless a case deliberately
+    // exercises duplicate handling.
+    title: `Send requested document ${evidence.source_id}`,
     // The triage ask is stable even when the projection model refines its
     // provider-facing title on replay.
     triage_action: 'Send requested document',
