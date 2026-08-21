@@ -277,10 +277,13 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ── Prompt/model effectiveness board (18th 05:00 Europe/Dublin) ─────────────
-// One frontier reviewer rotates monthly. Scores below the threshold are sent
-// independently to the other two panel models; only unanimous recommendations
-// are emailed. The board is advisory and never changes prompts or assignments.
+// Retired 21 Aug 2026 — the monthly panel was built for the OpenRouter era and
+// production no longer calls OpenRouter. Off by default; set
+// MODEL_EFFECTIVENESS_ENABLED=1 to restore the schedule. Manual runs via the
+// admin route and scripts/run-model-effectiveness-review.js still work.
+const MODEL_EFFECTIVENESS_ENABLED = process.env.MODEL_EFFECTIVENESS_ENABLED === '1';
 setInterval(() => {
+  if (!MODEL_EFFECTIVENESS_ENABLED) return;
   const now = nowIn('Europe/Dublin');
   const { report } = readEffectivenessReport();
   const { progress } = readEffectivenessProgress();
