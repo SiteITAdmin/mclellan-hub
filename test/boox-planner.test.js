@@ -13,6 +13,8 @@ function task(id, overrides = {}) {
     status: 'needsAction',
     deleted_at: null,
     due: overrides.due || null,
+    effective_due: overrides.effectiveDue || null,
+    is_overdue: overrides.isOverdue,
     priority: overrides.priority || null,
     planner_lane: overrides.lane || 'work',
     assignee: overrides.assignee || null,
@@ -52,6 +54,19 @@ test('overdue counts exclude tasks that already hold a time block', () => {
   const model = assemblePlannerModel({ snapshot: snapshotFor([stranded, blocked], events), today: TODAY });
   assert.deepEqual(model.overdue.map(item => item.id), ['t1']);
   assert.equal(model.counts.scheduled, 1);
+});
+
+test('overdue counts use a dependency-adjusted due date', () => {
+  const deferred = task('t-deferred', { due: '2026-08-01', effectiveDue: '2026-10-05' });
+  const model = assemblePlannerModel({ snapshot: snapshotFor([deferred], []), today: TODAY });
+  assert.deepEqual(model.overdue, []);
+  assert.equal(model.counts.overdue, 0);
+});
+
+test('overdue counts honour the derived reminder deadline state', () => {
+  const reminderOverdue = task('t-reminder-overdue', { due: '2026-08-25', isOverdue: true });
+  const model = assemblePlannerModel({ snapshot: snapshotFor([reminderOverdue], []), today: TODAY });
+  assert.deepEqual(model.overdue.map(item => item.id), ['t-reminder-overdue']);
 });
 
 test('a task assigned to someone else is tracked, never planned', () => {

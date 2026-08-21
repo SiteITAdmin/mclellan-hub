@@ -1,8 +1,7 @@
-<% const _todayIso = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }); %>
 <div class="crm-task-row<%= t.deleted_at ? ' task-deleted' : t.status === 'completed' ? ' task-done' : '' %>"
      data-task-status="<%= t.deleted_at ? 'deleted' : t.status === 'completed' ? 'completed' : 'open' %>"
-     data-task-due="<%= t.due ? String(t.due).slice(0, 10) : '' %>"
-     data-task-overdue="<%= t.due && t.status === 'needsAction' && !t.deleted_at && String(t.due).slice(0, 10) < _todayIso ? '1' : '0' %>"
+     data-task-due="<%= t.effective_due || (t.due ? String(t.due).slice(0, 10) : '') %>"
+     data-task-overdue="<%= t.is_overdue ? '1' : '0' %>"
      data-task-priority="<%= t.priority || '' %>"
      data-task-effort="<%= t.effort_minutes || '' %>"
      data-task-planner="<%= t.planner_lane || '' %>"
@@ -21,8 +20,13 @@
       <% if (t.effort_minutes) { %><span class="crm-badge subtle"><%= t.effort_minutes >= 60 ? (t.effort_minutes / 60) + 'h' : t.effort_minutes + 'm' %></span><% } %>
       <% if (t.subtask_total) { %><span class="crm-badge subtle"><%= t.subtask_open %>/<%= t.subtask_total %> subtasks</span><% } %>
       <% if (t.due) { %>
-        <% const isOverdue = t.status === 'needsAction' && !t.deleted_at && String(t.due).slice(0, 10) < new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }); %>
+        <% const isOverdue = Boolean(t.is_overdue); %>
+        <% const depDeferred = Boolean(t.dependency_deferred); %>
         <span class="crm-badge" <%- isOverdue ? 'style="background:rgba(192,57,43,.12);color:var(--crm-danger,#c0392b);font-weight:600;" title="Overdue — escalating reminder active"' : '' %>><%= isOverdue ? '🔔 overdue · ' : '' %><%= new Date(t.due).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) %></span>
+        <% if (depDeferred) { %>
+          <% const _floorDate = String(t.dep_not_before).slice(0, 10); const _floorTime = String(t.dep_not_before).slice(11, 16); %>
+          <span class="crm-badge" style="background:rgba(37,99,235,.12);color:#1d4ed8;" title="Stored due date unchanged; overdue status and automatic reminders wait until this dependency clears">🔒 not before <%= new Date(`${_floorDate}T12:00:00Z`).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) %><%= _floorTime && _floorTime !== '00:00' ? ` ${_floorTime}` : '' %><%= t.dep_title ? ` · ${t.dep_title}` : '' %></span>
+        <% } %>
       <% } %>
       <% if (t.contact_name) { %>
         <a class="crm-badge" href="/crm/contact/<%= t.contact_id %>"><%= t.contact_name %></a>

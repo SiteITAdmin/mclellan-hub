@@ -12,6 +12,7 @@ fs.copyFileSync(path.join(__dirname, '..', 'data', 'hub.db'), tempDb);
 process.env.HUB_DB_PATH = tempDb;
 
 const db = require('../lib/db');
+const { getCachedTasks } = require('../lib/google-tasks');
 const {
   PLANNER_SOURCE,
   listPlannerCalendarEvents,
@@ -20,6 +21,8 @@ const {
   getPlannerPreferences,
   savePlannerPreferences,
   reflowPlannerConflicts,
+  applyTaskDependencyTiming,
+  isTaskEffectivelyOverdue,
 } = require('../lib/task-calendar-planner');
 
 const user = 'task-planner-integration';
@@ -137,6 +140,40 @@ test('planner hours persist in the existing CRM context store', () => {
     eveningStart: '18:30', eveningEnd: '21:00',
     weekendStart: '10:00', weekendEnd: '17:00',
   });
+});
+
+test('cached meeting and start-date floors defer due and reminder timing without rewriting either', () => {
+  const meetingTaskId = 'planner-task-deferred-reminder';
+  db.hub().prepare(`
+    INSERT INTO meetings
+      (id, user, title, meeting_date, meeting_time, duration_mins, calendar_event_id, source)
+    VALUES ('meeting-deferred-reminder', ?, 'REDACTION/PURVIEW', '2026-08-25', '11:30', 60, 'calendar-deferred-reminder', 'calendar')
+  `).run(user);
+  db.hub().prepare(`
+    INSERT INTO google_tasks
+      (id, user, google_task_id, task_list_id, title, notes, due, deadline, status, source)
+    VALUES (?, ?, 'google-task-deferred-reminder', '@default', 'Demonstrate redaction',
+      '[after: cal:calendar-deferred-reminder]', '2026-08-25', '2026-08-20T09:00', 'needsAction', 'manual')
+  `).run(meetingTaskId, user);
+  const meetingTask = db.hub().prepare('SELECT * FROM google_tasks WHERE id = ?').get(meetingTaskId);
+  const timedMeetingTask = applyTaskDependencyTiming(user, meetingTask);
+  assert.equal(timedMeetingTask.dep_not_before, '2026-08-25T12:30', 'Dublin summer time must not add a second UTC offset');
+  assert.equal(timedMeetingTask.effective_due, undefined, 'the stored due date already matches the dependency day');
+  assert.equal(timedMeetingTask.effective_deadline, '2026-08-25T12:30');
+  assert.equal(isTaskEffectivelyOverdue(timedMeetingTask, new Date('2026-08-21T12:00:00Z')), false);
+  assert.equal(isTaskEffectivelyOverdue(timedMeetingTask, new Date('2026-08-25T11:31:00Z')), true);
+  const cachedMeetingTask = getCachedTasks(user).find(task => task.id === meetingTaskId);
+  assert.equal(cachedMeetingTask.effective_deadline, '2026-08-25T12:30');
+  assert.equal(typeof cachedMeetingTask.is_overdue, 'boolean');
+
+  const startTask = {
+    id: 'start-deferred', user, title: 'Write policies', status: 'needsAction', deleted_at: null,
+    notes: '[start: 2026-10-05]', due: '2026-08-16', deadline: '2026-08-16T09:00',
+  };
+  const timedStartTask = applyTaskDependencyTiming(user, startTask);
+  assert.equal(timedStartTask.effective_due, '2026-10-05');
+  assert.equal(timedStartTask.effective_deadline, '2026-10-05T00:00');
+  assert.equal(timedStartTask.dependency_deferred, true);
 });
 
 test('an interrupted insert reconciles the remote block instead of duplicating it', async () => {

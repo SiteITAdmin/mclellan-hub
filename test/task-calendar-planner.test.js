@@ -10,6 +10,8 @@ const {
   computeConflictReflow,
   computeReshuffle,
   resolveTaskFloor,
+  taskEffectiveDueDate,
+  isTaskEffectivelyOverdue,
   _test,
 } = require('../lib/task-calendar-planner');
 
@@ -309,6 +311,27 @@ test('resolveTaskFloor floors on the linked event end, lapses when the event is 
   assert.equal(resolveTaskFloor({ after: 'cal:missing' }, eventsById), null);
   assert.equal(resolveTaskFloor({ after: null }, eventsById), null);
   assert.equal(resolveTaskFloor({ after: '2026-08-11T15:30' }, new Map()).atLocal, '2026-08-11T15:30');
+});
+
+test('dependency-adjusted timing is the overdue and late-marker boundary', () => {
+  const task = {
+    status: 'needsAction', deleted_at: null,
+    due: '2026-08-20', deadline: '2026-08-20T09:00',
+    effective_due: '2026-08-25', effective_deadline: '2026-08-25T12:30',
+  };
+  assert.equal(taskEffectiveDueDate(task), '2026-08-25');
+  assert.equal(isTaskEffectivelyOverdue(task, new Date('2026-08-21T12:00:00Z')), false);
+  assert.equal(isTaskEffectivelyOverdue(task, new Date('2026-08-25T11:31:00Z')), true);
+
+  const plan = computeAutoPlan({
+    startDate: '2026-08-25', endDate: '2026-08-27',
+    workStart: '09:00', workEnd: '17:00',
+    now: new Date('2026-08-25T06:00:00Z'),
+    tasks: [{ ...task, id: 'deferred', title: 'Deferred', planner_lane: 'work', effort_minutes: 30, notBefore: '2026-08-25T12:30' }],
+    events: [],
+  });
+  assert.equal(plan.placements[0].startAt, '2026-08-25T12:30');
+  assert.equal(plan.placements[0].late, false);
 });
 
 test('auto-plan honours an after-dependency and will not place before the floor', () => {

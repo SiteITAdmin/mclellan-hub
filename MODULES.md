@@ -139,6 +139,7 @@ These are the tools the system runs on. They are not features — they are the f
 - No duplicate events for the same source event (enforced by `meetings.source` + `source_id`, mirroring Google Tasks' dedup pattern)
 - Created events appear in Calendar / Planner the same day they're created, not only after the next 06:45 calendar sync — the create path (`lib/google-calendar.js`) upserts `meetings` directly rather than waiting on `syncCalendarMeetings`
 - A task checked for Planner and then dragged or auto-planned at `/crm/planner` has exactly one Google Calendar block carrying its Hub task ID. Moving patches that block; unscheduling or unchecking deletes only the block and leaves Google Tasks untouched
+- A task blocked by `[after:]` or `[start:]` is not labelled, briefed, printed, or pinged as overdue before that derived floor; stored due and reminder fields remain unchanged, and a queued automatic reminder rechecks the floor before delivery
 - Saved working/evening/weekend windows are enforced for manual moves and auto-plan: work tasks use Monday–Friday work hours, personal tasks use weekday evenings or weekends
 - Within five minutes of a new or changed genuine Calendar appointment, any colliding scheduled task is patched into the next permitted free slot; later task blocks cascade only when necessary, and no replacement Calendar event is created
 - An interrupted provider response is reconciled through the event's private `hubTaskId` before another insert is attempted

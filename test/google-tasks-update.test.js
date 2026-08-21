@@ -44,7 +44,7 @@ test('priority/effort tags round-trip through notes without clobbering body', ()
 test('planner lane round-trips independently from priority and effort', () => {
   const planned = withPlannerTag('[priority: high] [effort: 60m]\n\nPrepare paper', 'personal');
   assert.deepEqual(parseTaskTags(planned), {
-    priority: 'high', effort_minutes: 60, planner_lane: 'personal', after: null, assignee: null,
+    priority: 'high', effort_minutes: 60, planner_lane: 'personal', after: null, assignee: null, start: null,
   });
   assert.equal(stripTaskTags(planned), 'Prepare paper');
 

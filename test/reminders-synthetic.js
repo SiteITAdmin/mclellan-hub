@@ -25,6 +25,7 @@ function check(label, fn) {
 function cleanup() {
   hub.prepare("DELETE FROM reminders WHERE source LIKE 'synthtest%' OR title LIKE '%synthtest%' OR dedup_key LIKE '%synthtest%'").run();
   hub.prepare("DELETE FROM google_tasks WHERE source = ? ").run(MARK);
+  hub.prepare("DELETE FROM meetings WHERE source = ?").run(MARK);
   hub.prepare("DELETE FROM system_jobs WHERE type IN ('reminder_fire') AND json_extract(payload, '$.reminderId') NOT IN (SELECT id FROM reminders)").run();
   hub.prepare("DELETE FROM crm_facts WHERE source = ?").run(MARK);
   hub.prepare("DELETE FROM contacts WHERE name = 'Synthtest Person'").run();
@@ -112,6 +113,41 @@ function cleanup() {
   reminders.sweepReminders(USER);
   check('second sweep adds nothing (idempotent)', () =>
     assert.strictEqual(hub.prepare("SELECT COUNT(*) AS n FROM reminders WHERE dedup_key = ?").get(`task-overdue:${taskId}`).n, 1));
+
+  console.log('5b. Dependency-aware overdue reminder lifecycle');
+  const deferredTaskId = uuid();
+  hub.prepare(`
+    INSERT INTO google_tasks (id, user, google_task_id, title, notes, due, deadline, status, source, source_id)
+    VALUES (?, ?, ?, 'synthtest deferred task', '[start: 2099-10-05]', '2026-06-01', '2026-06-01T09:00', 'needsAction', ?, ?)
+  `).run(deferredTaskId, USER, 'synthtest-deferred-gtask-' + Date.now(), MARK, MARK);
+  const premature = reminders.createReminder(USER, {
+    kind: 'task', targetId: deferredTaskId, title: 'Overdue: synthtest deferred task',
+    remindAt: Math.floor(Date.now() / 1000), source: 'task-overdue', dedupKey: `task-overdue:${deferredTaskId}`,
+  });
+  hub.prepare("UPDATE reminders SET status = 'stale', next_fire_at = NULL WHERE id = ?").run(premature.id);
+  reminders.sweepReminders(USER);
+  check('future start cancels an existing false overdue reminder', () => {
+    const row = hub.prepare('SELECT * FROM reminders WHERE id = ?').get(premature.id);
+    assert.strictEqual(row.status, 'cancelled');
+    assert.strictEqual(row.source, 'task-overdue-deferred');
+  });
+
+  hub.prepare("UPDATE google_tasks SET notes = '[start: 2020-01-01]' WHERE id = ?").run(deferredTaskId);
+  reminders.sweepReminders(USER);
+  check('deferred reminder reactivates when its dependency floor has passed', () => {
+    const row = hub.prepare('SELECT * FROM reminders WHERE id = ?').get(premature.id);
+    assert.strictEqual(row.status, 'scheduled');
+    assert.strictEqual(row.source, 'task-overdue');
+    assert(row.next_fire_at);
+  });
+
+  hub.prepare("UPDATE google_tasks SET notes = '[start: 2099-10-05]' WHERE id = ?").run(deferredTaskId);
+  await reminders.fireReminder(premature.id);
+  check('fire-time backstop stops a queued reminder after the floor moves', () => {
+    const row = hub.prepare('SELECT * FROM reminders WHERE id = ?').get(premature.id);
+    assert.strictEqual(row.status, 'cancelled');
+    assert.strictEqual(row.source, 'task-overdue-deferred');
+  });
 
   console.log('6. Cancel-on-resolve (task completed outside the reminder loop)');
   hub.prepare("UPDATE google_tasks SET status = 'completed' WHERE id = ?").run(taskId);
