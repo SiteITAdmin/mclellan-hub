@@ -2,7 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { RUNNERS, configuredRunner, commandFor, textFromOutput } = require('../lib/subscription-agent');
+const { RUNNERS, configuredRunner, commandFor, textFromOutput, fallbackConfig } = require('../lib/subscription-agent');
+const { resolveFeatureRunner, MODELS } = require('../lib/feature-runners');
 
 test('Nakai maps to local Claude Opus at high effort', () => {
   const command = commandFor(RUNNERS.nakai_daily_briefing, 'system');
@@ -72,4 +73,33 @@ test('opencode NDJSON output extracts only assistant text', () => {
   assert.equal(out, 'first thought\n{"ok":true}');
   // A non-event payload falls back to the raw text.
   assert.equal(textFromOutput(config, 'plain response'), 'plain response');
+});
+
+// Opus availability fallback (21 Aug 2026): when the Opus lane fails — e.g.
+// "model at capacity" on 20 Aug — the job retries once on Grok 4.6 via the
+// local Grok CLI. Still subscription-CLI plane; zero OpenRouter.
+test('opus tier declares grok-4.6 as its availability fallback', () => {
+  assert.equal(MODELS.grok46.runner, 'grok');
+  assert.equal(MODELS.grok46.model, 'grok-4.6');
+  for (const feature of ['nakai_daily_briefing', 'repair_agent', 'hub_chat_opus']) {
+    assert.equal(resolveFeatureRunner(feature).fallbackTo, 'grok46', `${feature} falls back to grok46`);
+  }
+});
+
+test('non-opus tiers have no availability fallback by default', () => {
+  assert.equal(resolveFeatureRunner('cross_entity_synthesis').fallbackTo, null);
+  assert.equal(resolveFeatureRunner('email_classifier').fallbackTo, null);
+});
+
+test('fallbackConfig swaps opus config onto the grok CLI lane', () => {
+  const primary = resolveFeatureRunner('nakai_daily_briefing');
+  const fb = fallbackConfig({ ...primary });
+  if (!fb) return assert.ok('grok CLI not present on this host — skip');
+  assert.equal(fb.runner, 'grok');
+  assert.equal(fb.model, 'grok-4.6');
+  assert.equal(fb.tier, 'grok46');
+  assert.equal(fb.fallbackTo, null);
+  // Non-fallback and self-referential configs resolve to nothing.
+  assert.equal(fallbackConfig({ ...primary, fallbackTo: null }), null);
+  assert.equal(fallbackConfig({ ...primary, fallbackTo: 'nope' }), null);
 });

@@ -62,6 +62,7 @@ async function processJob(job) {
     allowTools: featureConfig.allowTools,
     jsonMode: featureConfig.jsonMode,
     tier: featureConfig.tier,
+    fallbackTo: featureConfig.fallbackTo || null,
   };
   if (config.runner === 'local') {
     throw new Error(`Feature ${job.feature} is a local specialist and cannot run on the CLI worker`);
@@ -87,6 +88,7 @@ async function processJob(job) {
       effort: local.effort,
       tier: local.tier,
       durationMs: local.durationMs,
+      ...(local.fallbackFrom ? { fallbackFrom: local.fallbackFrom } : {}),
     },
   });
   console.log(`[subscription-agent-worker] completed ${job.feature} ${job.id} (${local.runner}/${local.model}/${local.effort})`);
