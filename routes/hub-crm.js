@@ -2063,6 +2063,24 @@ router.post('/crm/questions/owner', requireAuth, requireSameOrigin, writeLimiter
   }
 });
 
+router.post('/crm/questions/attribution', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
+  const key = String(req.body.key || '').trim();
+  try {
+    const { answerAttributionCorrection } = require('../lib/crm-clarifications');
+    const result = await answerAttributionCorrection(req.hubUser, {
+      key,
+      intakeId: String(req.body.intake_id || '').trim(),
+      reviewKey: String(req.body.review_key || '').trim(),
+      question: String(req.body.question || '').trim(),
+      contactId: String(req.body.contact_id || '').trim() || null,
+    });
+    questionsRedirect(res, { saved: `Correction applied${result.contact?.name ? `: ${result.contact.name}` : ''}.` });
+  } catch (err) {
+    console.error('[crm questions attribution]', err);
+    questionsRedirect(res, { error: err.message, key });
+  }
+});
+
 router.post('/crm/questions/alias', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const key = String(req.body.key || '').trim();
   try {

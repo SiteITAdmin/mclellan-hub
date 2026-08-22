@@ -14,6 +14,7 @@ process.env.HUB_DB_PATH = tmpDb;
 
 const db = require('../lib/db');
 const engine = require('../lib/crm-knowledge-engine');
+const attribution = require('../lib/attribution-reconciliation');
 const { CRM_KNOWLEDGE_PIPELINE_VERSION } = require('../lib/source-evidence');
 const { queueCrmKnowledgeEngine } = require('../lib/crm-knowledge-queue');
 const jobs = require('../lib/job-queue');
@@ -208,4 +209,31 @@ test('global CRM successors use the queue transaction so concurrent target handl
   assert.equal(rows.length, 1);
   assert.equal(rows[0].id, left.jobId);
   clearJobs();
+});
+
+test('attribution reconciliation processes one source per user and keeps a recurring successor', async () => {
+  clearJobs();
+  const calls = [];
+  const original = attribution.runAttributionReconciliation;
+  attribution.runAttributionReconciliation = async (user, options) => {
+    calls.push({ user, options });
+    return { processed: user === 'douglas' ? 1 : 0, applied: 0, reviews: 0, errors: 0, remaining: user === 'douglas' ? 2 : 0 };
+  };
+  const started = Math.floor(Date.now() / 1000);
+  try {
+    await jobs._test.handlers.attribution_reconciliation();
+    assert.deepEqual(calls, [
+      { user: 'douglas', options: { limit: 1 } },
+      { user: 'nakai', options: { limit: 1 } },
+    ]);
+    const successor = db.hub().prepare(`
+      SELECT run_at FROM system_jobs
+      WHERE type = 'attribution_reconciliation' AND status = 'pending'
+    `).get();
+    assert.ok(successor);
+    assert.ok(successor.run_at >= started + 295 && successor.run_at <= started + 305);
+  } finally {
+    attribution.runAttributionReconciliation = original;
+    clearJobs();
+  }
 });

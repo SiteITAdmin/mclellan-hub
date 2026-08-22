@@ -24,6 +24,15 @@ test('CRM decisions route to Terra', () => {
   }
 });
 
+test('whole-transcript attribution reconciliation uses the dedicated GPT-5.6 Terra runner', () => {
+  const r = resolveFeatureRunner('attribution_reconciliation');
+  assert.equal(r.tier, 'terra');
+  assert.equal(r.runner, 'codex');
+  assert.equal(r.model, 'gpt-5.6-terra');
+  assert.equal(r.effort, 'high');
+  assert.ok(r.maxInputChars >= 200000);
+});
+
 test('cross-entity synthesis is Sonnet not Luna', () => {
   const r = resolveFeatureRunner('cross_entity_synthesis');
   assert.equal(r.tier, 'sonnet');

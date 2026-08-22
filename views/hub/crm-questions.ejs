@@ -5,6 +5,7 @@
   .q-card[data-kind="meeting_question"] { border-left-color:#7c3aed; }
   .q-card[data-kind="task_owner"] { border-left-color:#0284c7; }
   .q-card[data-kind="person_alias"] { border-left-color:#059669; }
+  .q-card[data-kind="attribution_correction"] { border-left-color:#d97706; }
   .q-card:target { box-shadow:0 0 0 3px color-mix(in srgb, var(--accent,#7c6af5) 40%, transparent); }
   .q-question { margin:2px 0 6px; font-size:1.05rem; font-weight:600; line-height:1.4; }
   .q-context { color:var(--crm-muted,#667085); font-size:12px; margin:0 0 10px; }
@@ -30,7 +31,7 @@
   <div>
     <p class="crm-eyebrow">Open questions</p>
     <h1><%= groups.total %> thing<%= groups.total === 1 ? '' : 's' %> the Hub can't decide without you</h1>
-    <p>Every question here was raised by a nightly check against your own meetings and records. Answering one writes it into the knowledge layer with a link back to where it came from, and the checks stop asking.</p>
+    <p>Every question here was raised by a recurring check against your own meetings and records. Answering one writes it into the knowledge layer with a link back to where it came from, and the checks stop asking.</p>
     <% if (!showAll && groups.shown < groups.total) { %>
       <p class="crm-muted">Showing the <%= groups.shown %> most recent. <a href="/crm/questions?all=1">Show all <%= groups.total %></a>.</p>
     <% } else if (showAll && groups.total > 15) { %>
@@ -58,6 +59,55 @@
 
 <% if (!groups.total) { %>
   <section class="section-card q-empty">Nothing open. Every question the checks raised has an answer.</section>
+<% } %>
+
+<% if (groups.attribution_corrections.length) { %>
+  <h2 style="margin:26px 0 0;font-size:15px;">Attribution corrections (<%= groups.counts.attribution_corrections %>)</h2>
+  <% for (const item of groups.attribution_corrections) { %>
+    <section class="section-card q-card" data-kind="attribution_correction" id="q-<%= item.key %>">
+      <p class="q-question"><%= item.question %></p>
+      <p class="q-context">
+        <a href="/crm/meeting-intake?intake=<%= item.intake_id %>">Open the full meeting</a>
+        · whole-transcript GPT-5.6 Terra review
+        <% if (item.confidence) { %> · <%= Math.round(item.confidence * 100) %>% confidence<% } %>
+      </p>
+      <% if (item.evidence) { %>
+        <div class="q-excerpt">
+          <p class="q-excerpt-head"><strong>Source evidence</strong></p>
+          <blockquote><%= item.evidence %></blockquote>
+        </div>
+      <% } %>
+      <% if (item.owners && item.owners.length) { %>
+        <p class="q-note">Linked evidence currently names: <%= item.owners.map(owner => owner.name).join(', ') %>.</p>
+      <% } %>
+      <form class="q-form" method="post" action="/crm/questions/attribution">
+        <input type="hidden" name="key" value="<%= item.key %>">
+        <input type="hidden" name="intake_id" value="<%= item.intake_id %>">
+        <input type="hidden" name="review_key" value="<%= item.review_key %>">
+        <input type="hidden" name="question" value="<%= item.question %>">
+        <div class="q-row">
+          <label>Correct person
+            <select name="contact_id">
+              <option value=""><%= item.proposed_contact_name ? `Use proposed: ${item.proposed_contact_name}` : 'No person / apply removal' %></option>
+              <% for (const contact of contacts) { %>
+                <option value="<%= contact.id %>" <%= item.proposed_contact_id === contact.id ? 'selected' : '' %>><%= contact.name %></option>
+              <% } %>
+            </select>
+          </label>
+          <button class="btn primary" type="submit">Apply correction</button>
+        </div>
+      </form>
+      <form method="post" action="/crm/questions/discard" class="q-discard">
+        <input type="hidden" name="key" value="<%= item.key %>">
+        <input type="hidden" name="kind" value="attribution_correction">
+        <input type="hidden" name="question" value="<%= item.question %>">
+        <input type="hidden" name="source_kind" value="meeting_intake">
+        <input type="hidden" name="source_id" value="<%= item.intake_id %>">
+        <button class="btn subtle" type="submit">Keep current attribution</button>
+      </form>
+      <p class="q-note">This correction is stored as source-backed attribution evidence. It does not create an alias.</p>
+    </section>
+  <% } %>
 <% } %>
 
 <% if (groups.meeting_questions.length) { %>
