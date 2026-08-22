@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), override: false });
+
 const { runAttributionReconciliation } = require('../lib/attribution-reconciliation');
 
 function argValue(name) {
