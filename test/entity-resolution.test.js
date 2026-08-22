@@ -4,8 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../lib/db');
 const {
+  aliasCollidesWithOtherContact,
   findExactContact,
-  isAmbiguousBareFirstName,
   learnAlias,
   resolveMeetingEntities,
 } = require('../lib/entity-resolution');
@@ -30,7 +30,7 @@ function seed() {
     .run(id, USER, name, JSON.stringify(aliases));
   add('er_ken', 'Ken Murray', ['Ken']);
   add('er_alec', 'Alec Hirst', ['Alec Kangley']);
-  add('er_duncan', 'Duncan Sackfield', ['Nick']);
+  add('er_duncan', 'Duncan Sackfield', []);
   add('er_nick', 'Nick Chin', []);
 }
 
@@ -62,11 +62,19 @@ test('deterministic pass relinks garbled/partial names via existing aliases and 
   assert.equal(result.warningsStripped, 2);
 });
 
-test('a unique bare first name is safe to learn; an ambiguous one is context-only', () => {
+test('the alias invariant: a name denoting another contact can never be an alias', () => {
   const list = contacts();
-  assert.equal(isAmbiguousBareFirstName('Ken', list, 'er_ken'), false, 'only one Ken exists');
-  assert.equal(isAmbiguousBareFirstName('Nick', list, 'er_duncan'), true, 'Nick Chin and Duncan(aka Nick) collide');
-  assert.equal(isAmbiguousBareFirstName('Alec Kangley', list, 'er_alec'), false, 'a full name is distinctive');
+  assert.equal(aliasCollidesWithOtherContact('Ken', 'er_ken', list), false, 'only one Ken exists');
+  assert.equal(aliasCollidesWithOtherContact('Nick', 'er_duncan', list), true, 'Nick Chin exists, so Nick is not Duncan');
+  assert.equal(aliasCollidesWithOtherContact('Alec Kangley', 'er_alec', list), false, 'a distinctive full name is fine');
+});
+
+test('learnAlias refuses to alias a contact to a name that denotes a different contact', () => {
+  const duncan = contacts().find(c => c.id === 'er_duncan');
+  const learned = learnAlias(USER, duncan, 'Nick', { source: 'human_correction' });
+  assert.equal(learned, false, 'Nick belongs to Nick Chin; it cannot become Duncan\'s alias');
+  const after = db.hub().prepare('SELECT aliases FROM contacts WHERE id = ?').get('er_duncan').aliases;
+  assert.equal(after, '[]', 'Duncan gains no alias');
 });
 
 test('a transcript name that is itself a known person is not flagged as someone else\'s near-name', () => {
