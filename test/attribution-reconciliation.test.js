@@ -6,7 +6,9 @@ const db = require('../lib/db');
 const {
   runAttributionReconciliation,
   evidenceIsExact,
+  isAskableAttributionReview,
   reconcileTaskAssignee,
+  settleOpenAttributionReviews,
   _test,
 } = require('../lib/attribution-reconciliation');
 const { withTaskTags, parseTaskTags } = require('../lib/google-tasks');
@@ -16,6 +18,9 @@ const USER = '__test_attribution_reconciliation';
 const REVIEW_USER = '__test_attribution_review';
 const CLEAR_USER = '__test_attribution_clear_owner';
 const STICKY_USER = '__test_attribution_sticky_review';
+const FACT_USER = '__test_attribution_fact_unlink';
+const SELF_USER = '__test_attribution_self_fact';
+const SETTLE_USER = '__test_attribution_settle';
 
 function cleanupUser(user) {
   const hub = db.hub();
@@ -82,6 +87,9 @@ test.before(() => {
   cleanupUser(REVIEW_USER);
   cleanupUser(CLEAR_USER);
   cleanupUser(STICKY_USER);
+  cleanupUser(FACT_USER);
+  cleanupUser(SELF_USER);
+  cleanupUser(SETTLE_USER);
   seedFullPath();
 });
 
@@ -90,6 +98,9 @@ test.after(() => {
   cleanupUser(REVIEW_USER);
   cleanupUser(CLEAR_USER);
   cleanupUser(STICKY_USER);
+  cleanupUser(FACT_USER);
+  cleanupUser(SELF_USER);
+  cleanupUser(SETTLE_USER);
 });
 
 test('whole-source reconciliation repairs extraction, atoms, outcomes and the existing task once', async () => {
@@ -302,4 +313,226 @@ test('a stabilization pass cannot silently drop an unresolved review', async () 
   const third = await runAttributionReconciliation(STICKY_USER, { reviewer });
   assert.equal(third.processed, 0);
   assert.equal(openClarifications(STICKY_USER).filter(item => item.kind === 'attribution_correction').length, 1);
+});
+
+test('organisational fact unlinks auto-apply and never become questions', async () => {
+  const hub = db.hub();
+  addContact(FACT_USER, 'fact-douglas', 'Douglas McLellan');
+  const transcript = ['Douglas McLellan | 00:01', 'We do not have a retention policy.'].join('\n');
+  hub.prepare(`
+    INSERT INTO meeting_intakes (id,user,title,transcript,extraction,status,created_at)
+    VALUES ('fact-intake',?,'Policy meeting',?,?,'processed',unixepoch())
+  `).run(FACT_USER, transcript, JSON.stringify({
+    meeting: { attendees: [{ name: 'Douglas McLellan', matched_contact: 'Douglas McLellan' }] },
+    action_register: [],
+    crm_updates: [{ subject: 'Douglas McLellan', matched_contact: 'Douglas McLellan', type: 'fact', text: 'The organisation does not have a retention policy.' }],
+  }));
+  hub.prepare(`
+    INSERT INTO knowledge_atoms
+      (id,user,subject_kind,subject_id,subject_label,predicate,value,source_refs,confidence,status,derived_by)
+    VALUES ('fact-atom',?,'contact','fact-douglas','Douglas McLellan','fact',
+      'The organisation does not currently have a clear data retention policy.',
+      '[{"kind":"meeting_intake","id":"fact-intake"}]',0.9,'active','test')
+  `).run(FACT_USER);
+
+  const reviewer = async (_user, packet) => ({
+    parsed: {
+      decisions: packet.targets.filter(target => target.kind === 'fact_subject').map(target => ({
+        target_key: target.key,
+        verdict: 'remove_link',
+        contact_id: null,
+        confidence: 0.995,
+        evidence_quote: 'We do not have a retention policy.',
+        reason: 'This is an organisational fact, not a personal fact about Douglas.',
+      })),
+    },
+    modelId: 'codex/gpt-5.6-terra',
+  });
+
+  const run = await runAttributionReconciliation(FACT_USER, { reviewer });
+  assert.ok(run.applied >= 1);
+  assert.equal(run.reviews, 0);
+  assert.equal(openClarifications(FACT_USER).filter(item => item.kind === 'attribution_correction').length, 0);
+  const atom = hub.prepare('SELECT subject_kind, subject_id FROM knowledge_atoms WHERE id = ?').get('fact-atom');
+  assert.equal(atom.subject_kind, 'unresolved_person');
+  assert.equal(atom.subject_id, null);
+});
+
+test('first-person self facts are not unlinked or asked', async () => {
+  const hub = db.hub();
+  addContact(SELF_USER, 'self-douglas', 'Douglas McLellan');
+  const transcript = ['Douglas McLellan | 00:01', 'they are sitting in my OneDrive and the SharePoint.'].join('\n');
+  hub.prepare(`
+    INSERT INTO meeting_intakes (id,user,title,transcript,extraction,status,created_at)
+    VALUES ('self-intake',?,'Drive meeting',?,?,'processed',unixepoch())
+  `).run(SELF_USER, transcript, JSON.stringify({
+    meeting: { attendees: [{ name: 'Douglas McLellan', matched_contact: 'Douglas McLellan' }] },
+    action_register: [],
+    crm_updates: [],
+  }));
+  hub.prepare(`
+    INSERT INTO knowledge_atoms
+      (id,user,subject_kind,subject_id,subject_label,predicate,value,source_refs,confidence,status,derived_by)
+    VALUES ('self-atom',?,'contact','self-douglas','Douglas McLellan','fact',
+      'Files sitting in my OneDrive would raise the record count.',
+      '[{"kind":"meeting_intake","id":"self-intake"}]',0.9,'active','test')
+  `).run(SELF_USER);
+
+  const reviewer = async (_user, packet) => ({
+    parsed: {
+      decisions: packet.targets.filter(target => target.kind === 'fact_subject').map(target => ({
+        target_key: target.key,
+        verdict: 'remove_link',
+        contact_id: null,
+        confidence: 0.998,
+        evidence_quote: 'they are sitting in my OneDrive and the SharePoint.',
+        reason: 'The claim concerns record count, not Douglas as subject.',
+      })),
+    },
+    modelId: 'codex/gpt-5.6-terra',
+  });
+
+  const run = await runAttributionReconciliation(SELF_USER, { reviewer });
+  assert.equal(run.applied, 0);
+  assert.equal(run.reviews, 0);
+  assert.equal(openClarifications(SELF_USER).filter(item => item.kind === 'attribution_correction').length, 0);
+  const atom = hub.prepare('SELECT subject_kind, subject_id FROM knowledge_atoms WHERE id = ?').get('self-atom');
+  assert.equal(atom.subject_kind, 'contact');
+  assert.equal(atom.subject_id, 'self-douglas');
+});
+
+test('only person-decidable attribution reviews are askable', () => {
+  assert.equal(isAskableAttributionReview({
+    target_kind: 'fact_subject', verdict: 'remove_link', gate_reason: 'destructive_unlink_requires_review',
+    current_contact: { name: 'Douglas McLellan' },
+  }), false);
+  assert.equal(isAskableAttributionReview({
+    target_kind: 'fact_subject', verdict: 'correct_link',
+    current_contact: { name: 'Ken Murray' }, proposed_contact_name: 'Alan Garland',
+  }), false);
+  assert.equal(isAskableAttributionReview({
+    target_kind: 'action_owner', verdict: 'correct_link',
+    current_contact: { name: 'Nicola Wolfe' }, proposed_contact_name: 'Douglas McLellan',
+  }), true);
+  assert.equal(isAskableAttributionReview({
+    target_kind: 'attendee', verdict: 'not_participant', gate_reason: 'scheduled_attendee_requires_review',
+    written_name: 'Alister McLellan',
+  }), true);
+  assert.equal(isAskableAttributionReview({
+    target_kind: 'attendee', verdict: 'remove_link', gate_reason: 'destructive_unlink_requires_review',
+    current_contact: { name: 'Douglas McLellan' },
+  }), false);
+  assert.equal(isAskableAttributionReview({
+    target_kind: 'attendee', verdict: 'needs_review', gate_reason: 'model_requested_review',
+    written_name: 'Speaker_1',
+  }), false);
+  assert.equal(isAskableAttributionReview({
+    target_kind: 'projected_action_owner', verdict: 'needs_review', gate_reason: 'model_requested_review',
+    current_contact: { name: 'Nicola Wolfe' }, written_name: 'Nicola',
+  }), false);
+  assert.equal(isAskableAttributionReview({
+    target_kind: 'task_owner_conflict', verdict: 'needs_review',
+    gate_reason: 'linked_action_outcomes_disagree_on_owner',
+  }), true);
+});
+
+test('settling stored reviews applies organisational unlinks and drops the rest', async () => {
+  const hub = db.hub();
+  const { writeReceipt } = require('../lib/crm-receipts');
+  addContact(SETTLE_USER, 'settle-douglas', 'Douglas McLellan');
+  addContact(SETTLE_USER, 'settle-nick', 'Nick Chin');
+  const transcript = ['Douglas McLellan | 00:01', 'We do not have a retention policy.', 'Nick | 00:10', 'I will send it.'].join('\n');
+  hub.prepare(`
+    INSERT INTO meeting_intakes (id,user,title,transcript,extraction,status,created_at)
+    VALUES ('settle-intake',?,'Settle meeting',?,?,'processed',unixepoch())
+  `).run(SETTLE_USER, transcript, JSON.stringify({
+    meeting: { attendees: [{ name: 'Nick', matched_contact: 'Duncan Sackfield' }] },
+    action_register: [{ owner: 'Duncan Sackfield', matched_contact: 'Duncan Sackfield', owner_type: 'known_person', task: 'Send it' }],
+    crm_updates: [],
+  }));
+  hub.prepare(`
+    INSERT INTO knowledge_atoms
+      (id,user,subject_kind,subject_id,subject_label,predicate,value,source_refs,confidence,status,derived_by)
+    VALUES ('settle-atom',?,'contact','settle-douglas','Douglas McLellan','fact',
+      'The organisation does not currently have a clear data retention policy.',
+      '[{"kind":"meeting_intake","id":"settle-intake"}]',0.9,'active','test')
+  `).run(SETTLE_USER);
+
+  const packet = require('../lib/attribution-reconciliation').buildPacket(SETTLE_USER,
+    hub.prepare('SELECT * FROM meeting_intakes WHERE id = ?').get('settle-intake'));
+  const factTarget = packet.targets.find(target => target.key === 'atom:settle-atom');
+  const actionTarget = packet.targets.find(target => target.kind === 'action_owner');
+  writeReceipt(SETTLE_USER, 'meeting_intake', 'settle-intake', 'attribution_reconciliation', {
+    status: 'review',
+    summary: '0 attribution correction(s) applied; 2 need review; 0 task assignee(s) repaired.',
+    payload: {
+      reviews: [
+        {
+          review_key: 'fact-unlink',
+          target_key: factTarget.key,
+          target_kind: 'fact_subject',
+          verdict: 'remove_link',
+          current_contact: { id: 'settle-douglas', name: 'Douglas McLellan' },
+          proposed_contact_id: null,
+          proposed_contact_name: null,
+          written_name: 'Douglas McLellan',
+          confidence: 0.995,
+          evidence_quote: 'We do not have a retention policy.',
+          reason: 'Organisational fact.',
+          gate_reason: 'destructive_unlink_requires_review',
+          context: factTarget.context,
+        },
+        {
+          review_key: 'junk-fact',
+          target_key: factTarget.key,
+          target_kind: 'fact_subject',
+          verdict: 'needs_review',
+          current_contact: { id: 'settle-douglas', name: 'Douglas McLellan' },
+          proposed_contact_id: null,
+          proposed_contact_name: null,
+          written_name: 'Douglas McLellan',
+          confidence: 0.82,
+          evidence_quote: 'We do not have a retention policy.',
+          reason: 'Unsure.',
+          gate_reason: 'model_requested_review',
+          context: factTarget.context,
+        },
+        {
+          review_key: 'person-swap',
+          target_key: actionTarget.key,
+          target_kind: 'action_owner',
+          verdict: 'correct_link',
+          current_contact: actionTarget.current_contact,
+          proposed_contact_id: 'settle-nick',
+          proposed_contact_name: 'Nick Chin',
+          written_name: 'Duncan Sackfield',
+          confidence: 0.99,
+          evidence_quote: 'I will send it.',
+          reason: 'Nick owns the action.',
+          gate_reason: 'below_auto_correct_confidence',
+          context: actionTarget.context,
+        },
+      ],
+      state_hash_after: 'stale',
+    },
+    modelKey: 'attribution_reconciliation',
+    pipelineVersion: 'meeting-attribution-reconciliation-v1',
+  });
+
+  assert.ok(openClarifications(SETTLE_USER).some(item => item.kind === 'attribution_correction' && item.review_key === 'person-swap'));
+  assert.equal(openClarifications(SETTLE_USER).some(item => item.review_key === 'junk-fact'), false);
+
+  const dry = await settleOpenAttributionReviews(SETTLE_USER, { apply: false });
+  assert.equal(dry.applied, 1);
+  assert.equal(dry.kept, 1);
+  assert.ok(dry.dropped >= 1);
+
+  const applied = await settleOpenAttributionReviews(SETTLE_USER, { apply: true });
+  assert.equal(applied.applied, 1);
+  assert.equal(applied.kept, 1);
+  const atom = hub.prepare('SELECT subject_kind FROM knowledge_atoms WHERE id = ?').get('settle-atom');
+  assert.equal(atom.subject_kind, 'unresolved_person');
+  const remaining = openClarifications(SETTLE_USER).filter(item => item.kind === 'attribution_correction');
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].proposed_contact_name, 'Nick Chin');
 });
