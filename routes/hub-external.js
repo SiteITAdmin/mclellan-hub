@@ -5,6 +5,7 @@ const {
   captureMessagingMessage,
   recentMessagingMessages,
   buildEvidenceText,
+  recordMessagesCaptureHeartbeat,
 } = require('../lib/messaging-capture');
 const {
   writeLimiter, messagingCaptureLimiter, workerLimiter, requireAuth, requireSameOrigin, requireHermesAuth,
@@ -102,8 +103,8 @@ router.post('/api/obsidian/note', requireHermesAuth, writeLimiter, (req, res) =>
   }
 });
 
-// ── Messaging capture (WhatsApp via Hermes) ───────────────────────────────────
-// Raw evidence only. Hermes posts allowlisted WhatsApp messages here; the CRM
+// ── Messaging capture (WhatsApp + Apple Messages) ─────────────────────────────
+// Raw evidence only. Trusted Mac/WhatsApp readers post messages here; the CRM
 // knowledge engine (source kind messaging_message) decides atoms/tasks.
 // Auth: Authorization: Bearer <HERMES_WEBHOOK_SECRET>
 
@@ -126,6 +127,16 @@ router.post('/api/messaging/capture', requireHermesAuth, messagingCaptureLimiter
     console.error('[messaging capture]', err);
     const status = /required/i.test(err.message) ? 400 : 500;
     res.status(status).json({ error: err.message });
+  }
+});
+
+router.post('/api/messaging/heartbeat', requireHermesAuth, messagingCaptureLimiter, (req, res) => {
+  try {
+    recordMessagesCaptureHeartbeat(req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[messaging heartbeat]', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

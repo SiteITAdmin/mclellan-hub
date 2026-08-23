@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.mclellan.hub.messages-capture</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>HOME</key><string>/Users/dm_mini</string>
+    <key>USER</key><string>dm_mini</string>
+    <key>LOGNAME</key><string>dm_mini</string>
+    <key>PATH</key><string>/opt/homebrew/opt/node@24/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>ProgramArguments</key><array>
+    <string>/opt/homebrew/opt/node@24/bin/node</string>
+    <string>/Users/dm_mini/Documents/mclellan hub/scripts/messages-capture-worker.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/dm_mini/Documents/mclellan hub</string>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>60</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/Users/dm_mini/Library/Logs/mclellan-hub.messages-capture.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/dm_mini/Library/Logs/mclellan-hub.messages-capture.err.log</string>
+</dict></plist>

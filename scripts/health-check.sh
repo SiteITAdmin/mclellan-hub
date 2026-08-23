@@ -57,6 +57,12 @@ else
   echo "  · Content research Mac worker not loaded (ok if VPS driver is not mac)"
 fi
 
+if launchctl print "gui/$(id -u)/com.mclellan.hub.messages-capture" >/dev/null 2>&1; then
+  ok "Apple Messages capture worker launchd loaded"
+else
+  echo "  · Apple Messages capture worker not loaded (install with scripts/install-messages-capture-worker.sh)"
+fi
+
 SYNTHADOC_PY="$ROOT/.tools/synthadoc-venv/bin/python"
 if [ -x "$SYNTHADOC_PY" ] && "$SYNTHADOC_PY" --version >/dev/null 2>&1; then
   ok "Synthadoc Python venv ($("$SYNTHADOC_PY" --version 2>&1))"

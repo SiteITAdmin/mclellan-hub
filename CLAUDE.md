@@ -116,7 +116,7 @@ As of 27 June 2026, the CRM-bound ingest path is explicitly prompt-led:
 raw source -> crm_source_triage -> crm_duplicate_review -> synthesis/provenance merge -> crm_action_projection -> compiled atoms/events/tasks
 ```
 
-WhatsApp/messaging is still one source per bubble. Automatic selection holds a new message for five minutes; triage and projection then see same-chat neighbours as context so an already-answered question is not an outstanding action. After projection, `crm_action_resolution` may complete an earlier same-chat task when this turn clearly answers it. Do not add a message-link table.
+WhatsApp/Apple messaging is still one source per bubble. Apple Messages capture is a read-only Mac worker that starts at the current `chat.db` row, captures new received and sent text through `/api/messaging/capture`, and never silently backfills history; its cursor advances only after acceptance/de-duplication and its heartbeat belongs in daily INGEST. Automatic selection holds a new message for five minutes; triage and projection then see same-chat neighbours as context so an already-answered question is not an outstanding action. After projection, `crm_action_resolution` may complete an earlier same-chat task when this turn clearly answers it. Do not add a message-link table.
 
 The implementation lives in `lib/crm-knowledge-engine.js` and runs through the `crm_knowledge_engine` job. It reads evidence from email summaries, AgentMail records, meeting intake, documents, CRM facts, and Google Tasks; it writes model decision receipts to `knowledge_receipts`; it projects only high-confidence actions into Google Tasks.
 

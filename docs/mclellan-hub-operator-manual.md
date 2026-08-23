@@ -563,14 +563,15 @@ The LaunchAgent runs once when installed and writes its log to
 
 The dashboard reads deployed JSON data and normally does not require an application restart after a data-only update.
 
-## 15. Hermes (WhatsApp and CRM notes)
+## 15. Messaging (WhatsApp, Apple Messages, and CRM notes)
 
-Google Chat delivery is retired. Hermes WhatsApp capture still posts routed chat evidence to `/api/messaging/capture`. Intentional CRM notes still use the Hermes `dchat-crm` skill → `/api/crm/webhook`.
+Google Chat delivery is retired. Hermes WhatsApp capture and the read-only Mac Apple Messages worker both post raw chat evidence to `/api/messaging/capture`. Apple capture runs every minute as `com.mclellan.hub.messages-capture`, starts at the current provider row rather than importing history, and keeps its cursor under `~/Library/Application Support/McLellan Hub/`. Setup and recovery: `docs/apple-messages-capture.md`. Intentional CRM notes still use the Hermes `dchat-crm` skill → `/api/crm/webhook`.
 
 ### Operational rules
 
 - Keep `HERMES_WEBHOOK_SECRET` private.
 - Treat incoming commands as user actions and keep write endpoints authenticated.
+- Do not delete the Apple Messages cursor to request a historical backfill; old messages require an explicit bounded evidence-only import.
 
 ## 16. Admin and Model Operations
 
