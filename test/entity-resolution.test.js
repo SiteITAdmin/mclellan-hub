@@ -30,6 +30,7 @@ function seed() {
     .run(id, USER, name, JSON.stringify(aliases));
   add('er_ken', 'Ken Murray', ['Ken']);
   add('er_alec', 'Alec Hirst', ['Alec Kangley']);
+  add('er_alan', 'Alan Garland', ['Alan']);
   add('er_duncan', 'Duncan Sackfield', []);
   add('er_nick', 'Nick Chin', []);
 }
@@ -60,6 +61,32 @@ test('deterministic pass relinks garbled/partial names via existing aliases and 
   assert.equal(extraction.warnings.length, 1, 'only the non-identity warning survives');
   assert.match(extraction.warnings[0], /plan versions/);
   assert.equal(result.warningsStripped, 2);
+});
+
+test('deterministic source identity corrects a contradictory model assignment', async () => {
+  const extraction = {
+    meeting: {
+      attendees: [
+        { name: 'Alan', matched_contact: 'Alec Hirst' },
+        { name: 'Alec Hirst', matched_contact: 'Nick Chin' },
+      ],
+    },
+    action_register: [
+      { owner: 'Alan', matched_contact: 'Alec Hirst', owner_type: 'known_person', task: 'send plan' },
+    ],
+  };
+  const result = await resolveMeetingEntities({
+    user: USER,
+    extraction,
+    contacts: contacts(),
+    useModel: false,
+    sourceId: 'er_wrong_links',
+  });
+  assert.equal(extraction.meeting.attendees[0].matched_contact, 'Alan Garland');
+  assert.equal(extraction.meeting.attendees[1].matched_contact, 'Alec Hirst');
+  assert.equal(extraction.action_register[0].matched_contact, 'Alan Garland');
+  assert.equal(result.resolved.length, 2);
+  assert.ok(result.resolved.every(item => item.method === 'deterministic_correction'));
 });
 
 test('the alias invariant: a name denoting another contact can never be an alias', () => {

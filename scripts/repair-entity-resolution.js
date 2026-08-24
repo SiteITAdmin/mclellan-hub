@@ -1,15 +1,16 @@
 'use strict';
 
-// Repair already-stored meeting-intake extractions whose person names never
-// linked to a contact, using the durable aliases that now exist.
+// Repair already-stored meeting-intake extractions whose person names are
+// missing a contact or contradict the deterministic source identity.
 //
 // Why this exists: the exact-string linker left matched_contact null on names
 // audio garbled ("Alec Kangley") or shortened (a bare "Ken"). Those names are
 // now aliases on the right contacts, but the frozen extraction JSON still says
 // "not matched", so the Questions board kept surfacing them. This re-runs the
-// deterministic (exact/alias) resolution over each stored extraction and strips
-// the stale "not in the known CRM" warnings — fixing the data that the code fix
-// only prevents going forward (Rule 4).
+// deterministic source-identity resolution over each stored extraction,
+// corrects an already-wrong model assignment when the source name uniquely
+// identifies someone, and strips stale "not in the known CRM" warnings —
+// fixing the data that the code fix only prevents going forward (Rule 4).
 //
 // Deterministic only by default: no model plane, no cost, no corpus re-queue —
 // it re-applies matching that current aliases already make free. Pass --model to
