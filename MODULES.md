@@ -138,7 +138,7 @@ These are the tools the system runs on. They are not features — they are the f
 **Healthy looks like:**
 - A calendar event exists for every source (email, meeting_intake, etc.) that states both a specific date and a specific time Douglas must attend — not for plain due-by deadlines with no attendance component
 - No duplicate events for the same source event (enforced by `meetings.source` + `source_id`, mirroring Google Tasks' dedup pattern)
-- Created events appear in Calendar / Planner the same day they're created, not only after the next 06:45 calendar sync — the create path (`lib/google-calendar.js`) upserts `meetings` directly rather than waiting on `syncCalendarMeetings`
+- Created events appear in Calendar / Planner the same day they're created, not only after the next 06:45 calendar sync — the create path (`lib/google-calendar.js`) upserts `meetings` directly rather than waiting on `syncCalendarMeetings`. Planner task blocks stay in that cache with `source='task_planner'` and never appear on `/crm/meetings`
 - A task checked for Planner and then dragged or auto-planned at `/crm/planner` has exactly one Google Calendar block carrying its Hub task ID. Moving patches that block; unscheduling or unchecking deletes only the block and leaves Google Tasks untouched
 - A task blocked by `[after:]` or `[start:]` is not labelled, briefed, printed, or pinged as overdue before that derived floor; stored due and reminder fields remain unchanged, and a queued automatic reminder rechecks the floor before delivery
 - Saved working/evening/weekend windows are enforced for manual moves and auto-plan: work tasks use Monday–Friday work hours, personal tasks use weekday evenings or weekends
@@ -148,7 +148,7 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Does not own:** The task list or task meaning (that's Google Tasks and the CRM knowledge engine), meeting debriefs/notes (that's CRM meeting intake). Planner placement is operational scheduling, not a new relationship or knowledge claim.
 
-**Health check:** `/crm/knowledge`'s `crm_action_projected` stage receipts include an `event_projection` count; task placement writes `calendar_planner_effect` receipts. A scheduled open task has one `meetings` row with `source='task_planner'`, its remote event ID, and its task ID in `source_id`.
+**Health check:** `/crm/knowledge`'s `crm_action_projected` stage receipts include an `event_projection` count; task placement writes `calendar_planner_effect` receipts. A scheduled open task has one `meetings` row with `source='task_planner'`, its remote event ID, and its task ID in `source_id`. That row is planner occupancy: `/crm/planner` shows it, `/crm/meetings` does not.
 
 ---
 

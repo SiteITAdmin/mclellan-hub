@@ -1,6 +1,6 @@
 <%- include('partials/crm-head', { title: 'Meetings', active: 'meetings' }) %>
 <section class="crm-hero">
-  <div><p class="crm-eyebrow">Connected CRM</p><h1>Meetings</h1><p>Stored calendar events and manually captured conversations.</p></div>
+  <div><p class="crm-eyebrow">Connected CRM</p><h1>Meetings</h1><p>Calendar appointments and captured conversations. Planner task blocks stay on the planner.</p></div>
   <form method="post" action="/crm/meetings/sync-calendar"><button class="btn" type="submit">Sync calendar</button></form>
 </section>
 <% if (typeof query !== 'undefined' && query.synced) { %><p class="crm-notice">Synced <%= query.synced %> events and matched <%= query.matched || 0 %> attendees.</p><% } %>

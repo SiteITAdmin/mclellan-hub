@@ -193,6 +193,7 @@ router.get('/', requireAuth, async (req, res) => {
     const nowPart = type => nowParts.find(part => part.type === type)?.value;
     const todayIso = `${nowPart('year')}-${nowPart('month')}-${nowPart('day')}`;
     const currentTime = `${nowPart('hour')}:${nowPart('minute')}`;
+    const { crmMeetingSql } = require('../lib/meeting-kind');
     const meetRow = hub.prepare(
       `SELECT id, title, meeting_date
        FROM meetings
@@ -201,6 +202,7 @@ router.get('/', requireAuth, async (req, res) => {
            meeting_date < ?
            OR (meeting_date = ? AND meeting_time != '' AND meeting_time <= ?)
          )
+         AND ${crmMeetingSql('')}
        ORDER BY meeting_date DESC, meeting_time DESC, created_at DESC
        LIMIT 1`
     ).get(user, todayIso, todayIso, currentTime);

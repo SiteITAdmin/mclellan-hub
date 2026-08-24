@@ -8,10 +8,16 @@ const {
   buildBriefingText,
   fetchTodayCalendarEvents,
   syncCalendarMeetings,
+  listCrmMeetings,
   parseJsonArray,
   syncContactVaultFact,
   syncContactVaultProfile,
 } = require('../lib/crm');
+const {
+  isTaskPlannerMeetingRow,
+  plannerTaskIdFromMeeting,
+  crmMeetingSql,
+} = require('../lib/meeting-kind');
 const { readNote, searchNotes, writeNote } = require('../lib/obsidian-vault');
 const { uuid } = require('../lib/id');
 const {
@@ -428,6 +434,7 @@ router.get('/crm/contact/:id', requireAuth, (req, res) => {
     JOIN meetings m ON m.id = ma.meeting_id
     LEFT JOIN companies co ON co.id = m.company_id
     WHERE ma.contact_id = ? AND m.user = ?
+      AND ${crmMeetingSql('m')}
     ORDER BY m.meeting_date ASC, m.meeting_time ASC
   `).all(contact.id, req.hubUser);
   const todayIsoStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
@@ -560,6 +567,7 @@ router.get('/crm/company/:id', requireAuth, (req, res) => {
   `).all(company.id);
   const allCompanyMeetings = hub.prepare(`
     SELECT * FROM meetings WHERE user = ? AND company_id = ?
+      AND ${crmMeetingSql('')}
     ORDER BY meeting_date ASC, meeting_time ASC
   `).all(req.hubUser, company.id);
   const todayIsoStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' });
@@ -676,15 +684,7 @@ router.post('/crm/company/:id/delete', requireAuth, requireSameOrigin, writeLimi
 
 router.get('/crm/meetings', requireAuth, (req, res) => {
   const hub = db.hub();
-  const meetings = hub.prepare(`
-    SELECT m.*, co.name AS company_name, COUNT(ma.contact_id) AS attendee_count
-    FROM meetings m
-    LEFT JOIN companies co ON co.id = m.company_id
-    LEFT JOIN meeting_attendees ma ON ma.meeting_id = m.id
-    WHERE m.user = ?
-    GROUP BY m.id
-    ORDER BY m.meeting_date DESC, m.meeting_time DESC
-  `).all(req.hubUser);
+  const meetings = listCrmMeetings(req.hubUser);
   const contacts = hub.prepare('SELECT id, name FROM contacts WHERE user = ? ORDER BY name').all(req.hubUser);
   const companies = hub.prepare('SELECT id, name FROM companies WHERE user = ? ORDER BY name').all(req.hubUser);
   res.render('hub/crm-meetings', {
@@ -740,6 +740,7 @@ router.get('/crm/meeting-intake', requireAuth, (req, res) => {
     FROM meetings m
     LEFT JOIN companies co ON co.id = m.company_id
     WHERE m.user = ?
+      AND ${crmMeetingSql('m')}
     ORDER BY m.meeting_date DESC, m.meeting_time DESC
     LIMIT 80
   `).all(req.hubUser);
@@ -1102,8 +1103,11 @@ router.post('/crm/meeting-intake/:id/update', requireAuth, requireSameOrigin, wr
     .map(name => name.trim())
     .filter(Boolean);
 
-  if (meetingId && !hub.prepare('SELECT id FROM meetings WHERE id = ? AND user = ?').get(meetingId, req.hubUser)) {
-    return res.status(400).send('Selected meeting was not found');
+  if (meetingId) {
+    const selectedMeeting = hub.prepare('SELECT * FROM meetings WHERE id = ? AND user = ?').get(meetingId, req.hubUser);
+    if (!selectedMeeting || isTaskPlannerMeetingRow(selectedMeeting)) {
+      return res.status(400).send('Selected meeting was not found');
+    }
   }
   if (projectSlug && !hub.prepare('SELECT slug FROM projects WHERE slug = ? AND user = ?').get(projectSlug, req.hubUser)) {
     return res.status(400).send('Selected project was not found');
@@ -1336,6 +1340,11 @@ router.get('/crm/meeting/:id', requireAuth, (req, res) => {
     WHERE m.id = ? AND m.user = ?
   `).get(req.params.id, req.hubUser);
   if (!meeting) return res.status(404).send('Meeting not found');
+  if (isTaskPlannerMeetingRow(meeting)) {
+    const taskId = plannerTaskIdFromMeeting(meeting);
+    if (taskId) return res.redirect(`/crm/tasks/${encodeURIComponent(taskId)}`);
+    return res.status(404).send('Meeting not found');
+  }
   const attendees = hub.prepare(`
     SELECT c.* FROM meeting_attendees ma JOIN contacts c ON c.id = ma.contact_id
     WHERE ma.meeting_id = ? ORDER BY c.name
@@ -1366,7 +1375,7 @@ router.post('/crm/meeting/:id/fact', requireAuth, requireSameOrigin, writeLimite
   const contact = hub.prepare('SELECT id FROM contacts WHERE id = ? AND user = ?').get(req.body.contact_id, req.hubUser);
   const fact = String(req.body.fact || '').trim();
   const factType = ['fact', 'decision', 'action', 'note'].includes(req.body.fact_type) ? req.body.fact_type : 'fact';
-  if (!meeting || !contact || !fact) return res.status(400).send('Meeting, subject, and text required');
+  if (!meeting || isTaskPlannerMeetingRow(meeting) || !contact || !fact) return res.status(400).send('Meeting, subject, and text required');
   const validContactIds = new Set(
     hub.prepare('SELECT id FROM contacts WHERE user = ?').all(req.hubUser).map(row => row.id)
   );
@@ -1382,8 +1391,8 @@ router.post('/crm/meeting/:id/fact', requireAuth, requireSameOrigin, writeLimite
 
 router.post('/crm/meeting/:id', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
-  const meeting = hub.prepare('SELECT id FROM meetings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
-  if (!meeting) return res.status(404).send('Meeting not found');
+  const meeting = hub.prepare('SELECT * FROM meetings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!meeting || isTaskPlannerMeetingRow(meeting)) return res.status(404).send('Meeting not found');
   const title = String(req.body.title || '').trim();
   const meetingDate = String(req.body.meeting_date || '').trim();
   if (!title || !meetingDate) return res.status(400).send('Title and date required');
@@ -1413,8 +1422,8 @@ router.post('/crm/meeting/:id', requireAuth, requireSameOrigin, writeLimiter, (r
 
 router.post('/crm/meeting/:id/delete', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
   const hub = db.hub();
-  const meeting = hub.prepare('SELECT id FROM meetings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
-  if (!meeting) return res.status(404).send('Meeting not found');
+  const meeting = hub.prepare('SELECT * FROM meetings WHERE id = ? AND user = ?').get(req.params.id, req.hubUser);
+  if (!meeting || isTaskPlannerMeetingRow(meeting)) return res.status(404).send('Meeting not found');
   hub.transaction(() => {
     hub.prepare('DELETE FROM meeting_attendees WHERE meeting_id = ?').run(meeting.id);
     hub.prepare('UPDATE crm_facts SET meeting_id = NULL WHERE meeting_id = ? AND user = ?').run(meeting.id, req.hubUser);
@@ -1734,6 +1743,7 @@ router.get('/api/mobile/crm/contact/:id', requireAuth, (req, res) => {
     JOIN meetings m ON m.id = ma.meeting_id
     LEFT JOIN companies co ON co.id = m.company_id
     WHERE ma.contact_id = ? AND m.user = ?
+      AND ${crmMeetingSql('m')}
     ORDER BY m.meeting_date DESC, m.meeting_time DESC
     LIMIT 30
   `).all(contact.id, req.hubUser);
@@ -2757,6 +2767,7 @@ function buildProjectReportEvidence(user, project, { days = 90 } = {}) {
       LEFT JOIN company_projects cop ON cop.company_id = m.company_id AND cop.project_id = ?
      WHERE m.user = ?
        AND m.meeting_date >= ?
+       AND ${crmMeetingSql('m')}
        AND (mi.project_slug = ? OR cp.project_id IS NOT NULL OR cop.project_id IS NOT NULL)
      ORDER BY m.meeting_date DESC, COALESCE(m.meeting_time,'') DESC
      LIMIT 20
