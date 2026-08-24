@@ -39,7 +39,7 @@ test('synthesis does not offer unrelated entities to the LLM linker', () => {
 test('synthesis refuses hallucinated contact subjects absent from the source', () => {
   const matched = resolveByName('M365 Rollout', entities, {});
 
-  assert.equal(matched.id, 'contact-m365');
+  assert.equal(matched, null, 'a duplicate exact label needs source context or model adjudication');
   assert.equal(canResolveByName({ subject: 'M365 Rollout' }, matched, {}, 'Mistral AI issued an invoice.'), false);
 });
 
@@ -53,6 +53,15 @@ test('synthesis allows contact resolution when the source actually names the con
     {},
     'Ken Murray approved the Vault 365 setup for VIP Backups.'
   ), true);
+});
+
+test('synthesis does not deterministically partial-match similar person names', () => {
+  const people = [
+    { kind: 'contact', id: 'alan', label: 'Alan Garland', aliases: ['Alan'] },
+    { kind: 'contact', id: 'alec', label: 'Alec Hirst', aliases: ['Alec Kangley'] },
+  ];
+  assert.equal(resolveByName('Alan Hirst', people, {}), null);
+  assert.equal(resolveByName('Alen', people, {}), null);
 });
 
 test('synthesis keeps source-routed project as a candidate for project emails', () => {

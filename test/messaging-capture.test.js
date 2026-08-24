@@ -165,6 +165,28 @@ test('messaging evidence preserves explicit contact and project routing metadata
   });
 });
 
+test('messaging capture resolves a unique alias before CRM model stages', () => {
+  const hub = db.hub();
+  hub.prepare(`INSERT OR IGNORE INTO contacts (id, user, name, aliases) VALUES (?, ?, ?, ?)`)
+    .run('contact-nakai', 'test-douglas', 'Nakai McLellan', '["Nakai Mutenga","Kai"]');
+
+  const captured = captureMessagingMessage('test-douglas', {
+    platform: 'messages',
+    external_message_id: 'imessage-kai-1',
+    sender_name: 'Kai Mutenga',
+    sender_id: 'kaimutenga@icloud.com',
+    chat_id: 'iMessage;-;kaimutenga@icloud.com',
+    body: 'Can you send the document?',
+    raw: { direction: 'inbound' },
+  });
+
+  const routing = require('../lib/messaging-capture').routingMetadata(captured.row);
+  assert.equal(captured.identity.status, 'matched');
+  assert.equal(routing.contact_id, 'contact-nakai');
+  assert.equal(routing.contact_name, 'Nakai McLellan');
+  assert.equal(sourceContext('test-douglas', 'messaging_message', captured.row).contactId, 'contact-nakai');
+});
+
 test('same-chat neighbours are context around the current bubble, not the source', () => {
   const user = 'test-douglas';
   const chatId = '120363239923493562@g.us';

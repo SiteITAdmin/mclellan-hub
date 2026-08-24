@@ -125,6 +125,60 @@ test('Gmail received and sent capture full provider material before classificati
   });
 });
 
+test('raw Gmail capture resolves aliases before classification and preserves the contact anchor', () => {
+  const hub = db.hub();
+  hub.prepare(`
+    INSERT OR IGNORE INTO contacts (id, user, name, email, phone, aliases)
+    VALUES (?, ?, ?, '', '', ?)
+  `).run('raw-contact-nakai', user, 'Nakai McLellan', '["Nakai Mutenga","Kai"]');
+  const email = {
+    id: 'raw-gmail-kai',
+    subject: 'Identity before model',
+    fromName: 'Kai Mutenga',
+    fromEmail: 'kaimutenga@icloud.com',
+    receivedAt: 1771000002,
+    bodyText: 'Please send the final document.',
+    rawHeaders: [],
+    labelIds: ['INBOX'],
+  };
+
+  const identity = gmailCapture.captureRawGmailEmail(hub, user, email);
+  assert.equal(identity.status, 'matched');
+  assert.equal(identity.contact.id, 'raw-contact-nakai');
+  assert.equal(emailRow(email.id).contact_id, 'raw-contact-nakai');
+
+  const providerEmail = { ...email, id: 'provider-raw-gmail-kai' };
+  gmailProvider.captureFetchedRawGmailEmail(user, providerEmail);
+  assert.equal(emailRow(providerEmail.id).contact_id, 'raw-contact-nakai');
+
+  const sent = {
+    id: 'raw-gmail-sent-kai',
+    subject: 'Sent identity before model',
+    toName: 'Kai Mutenga',
+    toEmail: 'kaimutenga@icloud.com',
+    sentAt: 1771000003,
+    bodyText: 'Here is the final document.',
+    rawHeaders: [],
+    labelIds: ['SENT'],
+  };
+  gmailCapture.captureRawGmailEmail(hub, user, sent, { direction: 'sent' });
+  assert.equal(emailRow(sent.id).contact_id, 'raw-contact-nakai');
+});
+
+test('raw AgentMail capture resolves the sender before its classifiers', () => {
+  const hub = db.hub();
+  const externalId = 'raw-agentmail-kai';
+  const email = {
+    fromName: 'Kai Mutenga',
+    fromEmail: 'kaimutenga@icloud.com',
+    subject: 'AgentMail identity before model',
+    receivedAt: 1771000004,
+    bodyText: 'Please review this.',
+  };
+  agentmailCapture.captureRawAgentMail(hub, user, externalId, { thread_id: 'thread-kai' }, email);
+  assert.equal(emailRow(`agentmail:${externalId}`).contact_id, 'raw-contact-nakai');
+});
+
 test('Gmail attachment-backed MIME text is materialized before received and sent raw capture', async () => {
   const hub = db.hub();
   const receivedBody = `${'r'.repeat(500_321)}\nTAIL RECEIVED ATTACHMENT ASK`;

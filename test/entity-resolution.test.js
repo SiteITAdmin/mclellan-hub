@@ -69,6 +69,14 @@ test('the alias invariant: a name denoting another contact can never be an alias
   assert.equal(aliasCollidesWithOtherContact('Alec Kangley', 'er_alec', list), false, 'a distinctive full name is fine');
 });
 
+test('duplicate exact aliases fail closed instead of selecting the first contact', () => {
+  const list = [
+    { id: 'one', name: 'One Person', aliases: '["Shared"]' },
+    { id: 'two', name: 'Two Person', aliases: '["Shared"]' },
+  ];
+  assert.equal(findExactContact(list, 'Shared'), null);
+});
+
 test('learnAlias refuses to alias a contact to a name that denotes a different contact', () => {
   const duncan = contacts().find(c => c.id === 'er_duncan');
   const learned = learnAlias(USER, duncan, 'Nick', { source: 'human_correction' });
