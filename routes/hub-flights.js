@@ -3,6 +3,7 @@ const router = express.Router();
 const fetch = require('../lib/fetch');
 const db = require('../lib/db');
 const { uuid } = require('../lib/id');
+const { actualsMatchSchedule } = require('../lib/flight-status');
 const {
   writeLimiter, uploadLimiter, upload, requireAuth, requireSameOrigin,
 } = require('./hub-shared');
@@ -449,7 +450,7 @@ router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, writeLim
   }
 
   const candidates = db.hub().prepare(`
-    SELECT id, flight_number, flight_date, direction FROM flights
+    SELECT id, flight_number, flight_date, direction, scheduled_dep, scheduled_arr FROM flights
     WHERE user = ? AND flight_number != '' AND (scheduled_dep = '' OR actual_arr = '')
       AND flight_date < date('now')
     ORDER BY flight_date ASC
@@ -465,6 +466,11 @@ router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, writeLim
     try {
       const data = await aerodataboxLookup(row.flight_number, row.flight_date, row.direction);
       if (!data) { failed++; results.push({ id: row.id, ok: false, error: 'No data' }); continue; }
+      if (!actualsMatchSchedule(row.scheduled_dep, data.actual_dep, row.scheduled_arr, data.actual_arr)) {
+        failed++;
+        results.push({ id: row.id, ok: false, error: 'Live times do not match this row\'s schedule' });
+        continue;
+      }
       if (!data.status) data.status = 'completed';
 
       db.hub().prepare(`

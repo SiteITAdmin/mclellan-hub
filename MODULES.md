@@ -107,7 +107,7 @@ These are the tools the system runs on. They are not features — they are the f
 
 **Health check:** `SELECT COUNT(*) FROM flights WHERE status='completed' AND (actual_dep='' OR actual_arr='')` should return 0 for flights in the last 30 days. Any non-zero result means AeroDataBox parsing is broken.
 
-**Known limitations:** AeroDataBox field is `revisedTime` not `actualTime` — this was a silent failure for months. If actual times stop appearing on completed flights, check the field name first.
+**Known limitations:** AeroDataBox field is `revisedTime` not `actualTime` — this was a silent failure for months. If actual times stop appearing on completed flights, check the field name first. Calendar import must not treat Hub check-in/prep planner blocks (`Check in online: FR812…`) as flights; those are tasks, and looking up that event's date against AeroDataBox writes another day's times onto a ghost row.
 
 ---
 

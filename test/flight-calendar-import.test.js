@@ -60,6 +60,56 @@ test('calendar flight import writes a scheduled tracker row once with provenance
   assert.equal(importCalendarFlights({ user: 'douglas', hub, events: [event] }).importedRows.length, 0);
 });
 
+test('check-in and planner task blocks are not imported as flights', () => {
+  assert.equal(extractFlightFromCalendarEvent({
+    id: '0dkg07m1i227j2odiinbffpkdc',
+    summary: 'Check in online: FR812 DUB-EDI (2026-08-12)',
+    date: '2026-08-13',
+    time: '19:30',
+    durationMins: 30,
+    isAllDay: false,
+    location: '',
+    notes: 'Scheduled from McLellan Hub task task-checkin.',
+    hubSource: 'task_planner',
+    hubTaskId: 'task-checkin',
+  }), null);
+  assert.equal(extractFlightFromCalendarEvent({
+    summary: 'Pre-flight: FR817 EDI-DUB on 2026-08-17',
+    date: '2026-08-16',
+    time: '16:15',
+    durationMins: 30,
+    isAllDay: false,
+  }), null);
+  assert.equal(extractFlightFromCalendarEvent({
+    summary: 'FR812 DUB-EDI',
+    date: '2026-08-13',
+    time: '19:30',
+    durationMins: 70,
+    isAllDay: false,
+    isTask: true,
+    hubSource: 'task_planner',
+  }), null);
+
+  const hub = flightDb();
+  const imported = importCalendarFlights({
+    user: 'douglas',
+    hub,
+    events: [{
+      id: 'checkin-block',
+      summary: 'Check in online: FR812 DUB-EDI (2026-08-12)',
+      date: '2026-08-13',
+      time: '19:30',
+      durationMins: 30,
+      isAllDay: false,
+      location: '',
+      notes: '',
+    }],
+    report: [],
+  });
+  assert.equal(imported.importedRows.length, 0);
+  assert.equal(hub.prepare('SELECT COUNT(*) AS n FROM flights').get().n, 0);
+});
+
 test('calendar parser reads compact all-day airline itinerary titles', () => {
   const outbound = extractFlightFromCalendarEvent({
     summary: '27 SEPT 15:45 Dublin 3h 45m FR7235 20:30 Malta',
