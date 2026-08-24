@@ -18,6 +18,7 @@ test('the flight log is the four requested years', () => {
 
 test('year query picks a log year and otherwise uses the current Dublin year', () => {
   assert.equal(resolveFlightLogYear('2024'), '2024');
+  assert.equal(resolveFlightLogYear('all'), 'all');
   assert.equal(resolveFlightLogYear('2019', new Date('2026-08-24T12:00:00Z')), '2026');
   assert.equal(resolveFlightLogYear('', new Date('2026-08-24T12:00:00Z')), '2026');
 });
@@ -36,6 +37,7 @@ test('year counts cover every logged flight in 2023–2026', () => {
     { year: '2023', total: 0 },
   ]);
   assert.equal(flightsInYear(flights, '2026').length, 2);
+  assert.equal(flightsInYear(flights, 'all').length, 4);
   assert.equal(computeFlightStats(flightsInYear(flights, '2026')).total, 1);
 });
 
@@ -43,6 +45,7 @@ test('the flights page lists each year with its total under the title', async ()
   const html = await ejs.renderFile(path.join(__dirname, '../views/hub/flights.ejs'), {
     user: 'douglas',
     selectedYear: '2026',
+    allTotal: 70,
     years: [
       { year: '2026', total: 18 },
       { year: '2025', total: 22 },
@@ -68,6 +71,8 @@ test('the flights page lists each year with its total under the title', async ()
   assert.match(html, /href="\/flights\?year=2023"/);
   assert.match(html, />2026<\/span>\s*<span class="count">18</);
   assert.match(html, />2023<\/span>\s*<span class="count">14</);
+  assert.match(html, /href="\/flights\?year=all"/);
+  assert.match(html, />All years<\/span>\s*<span class="count">70</);
   assert.match(html, /aria-current="page"/);
   assert.match(html, /No flights logged in 2026/);
 });

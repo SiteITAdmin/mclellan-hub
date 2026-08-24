@@ -271,6 +271,12 @@ table.fl-table thead th:first-child {
             <span class="count"><%= year.total %></span>
           </a>
         <% } %>
+        <a class="fl-year-chip <%= selectedYear === 'all' ? 'active' : '' %>"
+           href="/flights?year=all"
+           <% if (selectedYear === 'all') { %>aria-current="page"<% } %>>
+          <span>All years</span>
+          <span class="count"><%= allTotal %></span>
+        </a>
       </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -283,8 +289,8 @@ table.fl-table thead th:first-child {
   <div class="fl-stats">
     <div class="fl-stat">
       <div class="fl-stat-value"><%= stats.total %></div>
-      <div class="fl-stat-label"><%= selectedYear %> flights</div>
-      <div class="fl-stat-sub"><%= years.find(y => y.year === selectedYear)?.total || 0 %> in the log · <%= stats.cancelled %> cancelled</div>
+      <div class="fl-stat-label"><%= selectedYear === 'all' ? 'All years' : selectedYear + ' flights' %></div>
+      <div class="fl-stat-sub"><%= selectedYear === 'all' ? allTotal : (years.find(y => y.year === selectedYear)?.total || 0) %> in the log · <%= stats.cancelled %> cancelled</div>
     </div>
 
     <% if (stats.onTimePct !== null) { %>
@@ -420,7 +426,7 @@ table.fl-table thead th:first-child {
   <!-- Flights table -->
   <% if (flights.length === 0) { %>
   <div class="fl-empty">
-    <p>No flights logged in <%= selectedYear %>. Add a flight to start this year’s log.</p>
+    <p><% if (selectedYear === 'all') { %>No flights logged yet.<% } else { %>No flights logged in <%= selectedYear %>.<% } %> Add a flight to start this year’s log.</p>
     <button class="fl-add-btn" id="add-flight-btn-empty">+ Add first flight</button>
   </div>
   <% } else { %>

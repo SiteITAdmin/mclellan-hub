@@ -19,6 +19,7 @@ const FLIGHT_DIRECTIONS = [
 ];
 const FLIGHT_STATUSES = ['scheduled', 'completed', 'cancelled', 'diverted'];
 const FLIGHT_LOG_YEARS = ['2026', '2025', '2024', '2023'];
+const FLIGHT_LOG_ALL = 'all';
 
 function dublinYear(now = new Date()) {
   return now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Dublin' }).slice(0, 4);
@@ -29,7 +30,9 @@ function flightYear(flight) {
 }
 
 function resolveFlightLogYear(requested, now = new Date()) {
-  const year = String(requested || '').slice(0, 4);
+  const raw = String(requested || '').trim().toLowerCase();
+  if (raw === FLIGHT_LOG_ALL || raw === 'all years') return FLIGHT_LOG_ALL;
+  const year = raw.slice(0, 4);
   if (FLIGHT_LOG_YEARS.includes(year)) return year;
   const current = dublinYear(now);
   return FLIGHT_LOG_YEARS.includes(current) ? current : FLIGHT_LOG_YEARS[0];
@@ -37,6 +40,7 @@ function resolveFlightLogYear(requested, now = new Date()) {
 
 function flightsInYear(flights, year) {
   const selected = String(year);
+  if (selected === FLIGHT_LOG_ALL) return flights || [];
   return (flights || []).filter(flight => flightYear(flight) === selected);
 }
 
@@ -176,21 +180,32 @@ function computeFlightStats(flights) {
   };
 }
 
+function decorateFlights(rows) {
+  return rows.map(f => ({
+    ...f,
+    dep_delay: flightDelay(f.scheduled_dep, f.actual_dep),
+    arr_delay: flightDelay(f.scheduled_arr, f.actual_arr),
+  }));
+}
+
+function flightLogPage(raw, requestedYear) {
+  const selectedYear = resolveFlightLogYear(requestedYear);
+  const yearRaw = flightsInYear(raw, selectedYear);
+  return {
+    flights: decorateFlights(yearRaw),
+    stats: computeFlightStats(yearRaw),
+    years: yearCounts(raw),
+    selectedYear,
+    allTotal: (raw || []).length,
+  };
+}
+
 router.get('/flights', requireAuth, (req, res) => {
   const user = req.hubUser;
   const raw = db.hub().prepare(
     'SELECT * FROM flights WHERE user = ? ORDER BY flight_date DESC, created_at DESC'
   ).all(user);
-  const selectedYear = resolveFlightLogYear(req.query.year);
-  const years = yearCounts(raw);
-  const yearRaw = flightsInYear(raw, selectedYear);
-  const flights = yearRaw.map(f => ({
-    ...f,
-    dep_delay: flightDelay(f.scheduled_dep, f.actual_dep),
-    arr_delay: flightDelay(f.scheduled_arr, f.actual_arr),
-  }));
-  const stats = computeFlightStats(yearRaw);
-  res.render('hub/flights', { user, flights, stats, years, selectedYear });
+  res.render('hub/flights', { user, ...flightLogPage(raw, req.query.year) });
 });
 
 // Mobile app JSON (bearer auth via mobileBearerBridge) — same rows + stats the
@@ -199,19 +214,7 @@ router.get('/api/mobile/flights', requireAuth, (req, res) => {
   const raw = db.hub().prepare(
     'SELECT * FROM flights WHERE user = ? ORDER BY flight_date DESC, created_at DESC'
   ).all(req.hubUser);
-  const selectedYear = resolveFlightLogYear(req.query.year);
-  const yearRaw = flightsInYear(raw, selectedYear);
-  const flights = yearRaw.map(f => ({
-    ...f,
-    dep_delay: flightDelay(f.scheduled_dep, f.actual_dep),
-    arr_delay: flightDelay(f.scheduled_arr, f.actual_arr),
-  }));
-  res.json({
-    flights,
-    stats: computeFlightStats(yearRaw),
-    years: yearCounts(raw),
-    selectedYear,
-  });
+  res.json(flightLogPage(raw, req.query.year));
 });
 
 router.post('/api/flights', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
@@ -542,10 +545,12 @@ router.post('/api/flights/bulk-lookup', requireAuth, requireSameOrigin, writeLim
 module.exports = router;
 module.exports._test = {
   FLIGHT_LOG_YEARS,
+  FLIGHT_LOG_ALL,
   dublinYear,
   flightYear,
   resolveFlightLogYear,
   flightsInYear,
   yearCounts,
   computeFlightStats,
+  flightLogPage,
 };
