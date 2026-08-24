@@ -54,6 +54,19 @@ body.hub-page { height: auto !important; min-height: 100vh; overflow: auto !impo
 .fl-stat.bad  .fl-stat-value { color: var(--error); }
 
 /* ── Direction row ────────────────────────────────────────────────────────── */
+.fl-year-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.fl-year-chip {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text); text-decoration: none;
+}
+.fl-year-chip:hover { border-color: var(--accent); color: var(--text); text-decoration: none; }
+.fl-year-chip.active {
+  background: rgba(86,83,232,.1); border-color: var(--accent); color: var(--text);
+}
+.fl-year-chip .count { color: var(--accent); font-size: 15px; }
+
 .fl-dir-row { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
 .fl-dir-chip {
   background: var(--surface2); border: 1px solid var(--border);
@@ -249,6 +262,16 @@ table.fl-table thead th:first-child {
       <a href="/_home" class="fl-back">← Hub home</a>
       <h1 class="fl-title">Dublin ↔ Edinburgh Flights</h1>
       <p class="fl-subtitle">Personal flight log — scheduled vs actual times, delay tracking</p>
+      <div class="fl-year-row" role="navigation" aria-label="Flights by year">
+        <% for (const year of years) { %>
+          <a class="fl-year-chip <%= year.year === selectedYear ? 'active' : '' %>"
+             href="/flights?year=<%= year.year %>"
+             <% if (year.year === selectedYear) { %>aria-current="page"<% } %>>
+            <span><%= year.year %></span>
+            <span class="count"><%= year.total %></span>
+          </a>
+        <% } %>
+      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="fl-add-btn" style="background:var(--surface);color:var(--accent);border:1px solid var(--accent);" id="import-btn">Import Excel</button>
@@ -260,8 +283,8 @@ table.fl-table thead th:first-child {
   <div class="fl-stats">
     <div class="fl-stat">
       <div class="fl-stat-value"><%= stats.total %></div>
-      <div class="fl-stat-label">Total flights</div>
-      <div class="fl-stat-sub"><%= stats.cancelled %> cancelled</div>
+      <div class="fl-stat-label"><%= selectedYear %> flights</div>
+      <div class="fl-stat-sub"><%= years.find(y => y.year === selectedYear)?.total || 0 %> in the log · <%= stats.cancelled %> cancelled</div>
     </div>
 
     <% if (stats.onTimePct !== null) { %>
@@ -397,7 +420,7 @@ table.fl-table thead th:first-child {
   <!-- Flights table -->
   <% if (flights.length === 0) { %>
   <div class="fl-empty">
-    <p>No flights logged yet. Add your first DUB ↔ EDI flight to get started.</p>
+    <p>No flights logged in <%= selectedYear %>. Add a flight to start this year’s log.</p>
     <button class="fl-add-btn" id="add-flight-btn-empty">+ Add first flight</button>
   </div>
   <% } else { %>

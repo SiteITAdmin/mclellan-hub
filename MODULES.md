@@ -97,6 +97,7 @@ These are the tools the system runs on. They are not features — they are the f
 **Purpose:** Track every Ryanair flight Douglas takes from booking email through to actual departure and arrival times.
 
 **Healthy looks like:**
+- `/flights` is a year-by-year personal log (2023–2026) of scheduled vs actual times and delays, with each year’s total on the year chips
 - Every Ryanair booking email has produced a row in `flights` with `status='scheduled'`
 - Every scheduled flight within 48h has a prep task in Google Tasks
 - Every scheduled flight within 24h has a check-in task in Google Tasks
