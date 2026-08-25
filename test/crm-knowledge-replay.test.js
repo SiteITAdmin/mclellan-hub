@@ -160,6 +160,262 @@ test('stable evidence identity makes replay create zero duplicate side effects',
   assert.match(seenSourceIds[0], /^crm-action:[a-f0-9]{64}$/);
 });
 
+test('identity enrichment and paraphrasing cannot recreate a task from an old message', async () => {
+  const id = `crm-replay-message-${++messageNumber}`;
+  const quote = 'Please bring Dad his phone charger tomorrow.';
+  db.hub().prepare(`
+    INSERT INTO messaging_messages
+      (id, user, platform, external_message_id, chat_id, chat_name, is_group,
+       sender_id, sender_name, body, received_at, raw_json, status, created_at)
+    VALUES (?, ?, 'whatsapp', ?, 'dad-chat', 'Dad', 1, 'catriona', 'Catriona', ?, ?, ?, 'received', ?)
+  `).run(
+    id, user, `${id}-provider`, quote, TEST_EVIDENCE_TS_BASE + messageNumber,
+    JSON.stringify({ route: { project_slug: 'dad', project_name: 'Dad', contact_name: 'Catriona McLellan' } }),
+    TEST_EVIDENCE_TS_BASE + messageNumber,
+  );
+  const firstEvidence = resolveSourceEvidence(user, 'messaging_message', id);
+  let calls = 0;
+  const dependencies = {
+    createTaskFn: async () => {
+      calls += 1;
+      return { localId: 'identity-enrichment-first-task' };
+    },
+  };
+  const first = await project(firstEvidence, actionFor(firstEvidence, quote, {
+    title: 'Bring Dad his phone charger tomorrow',
+    triage_action: 'Bring Dad his phone charger tomorrow',
+  }), dependencies);
+  assert.equal(first.created, 1);
+
+  db.hub().prepare('UPDATE messaging_messages SET raw_json = ? WHERE id = ?').run(
+    JSON.stringify({
+      contact_id: 'contact-catriona',
+      contact_name: 'Catriona McLellan',
+      identity_resolution: {
+        status: 'matched',
+        contact_id: 'contact-catriona',
+        contact_name: 'Catriona McLellan',
+        matched_by: ['canonical_name'],
+      },
+      route: { project_slug: 'dad', project_name: 'Dad', contact_name: 'Catriona McLellan' },
+    }),
+    id,
+  );
+  const enrichedEvidence = resolveSourceEvidence(user, 'messaging_message', id);
+  assert.notEqual(enrichedEvidence.revision_hash, firstEvidence.revision_hash);
+  assert.equal(enrichedEvidence.action_revision_hash, firstEvidence.action_revision_hash);
+
+  const replay = await project(enrichedEvidence, actionFor(enrichedEvidence, quote, {
+    title: 'Take the phone charger to Dad',
+    triage_action: 'Take Dad the required phone charger',
+  }), dependencies);
+  assert.equal(replay.created, 0);
+  assert.equal(replay.skipped, 1);
+  assert.equal(calls, 1, 'the identity-enriched replay made no second provider call');
+  assert.match(replay.details[0].reason, /^same_source_evidence_(?:already_projected|existing_task)$/);
+});
+
+test('a completed old-message projection stays terminal when linked metadata later reveals an action', async () => {
+  const replayUser = `crm-old-message-terminal-${++messageNumber}`;
+  const id = `crm-old-message-terminal-source-${messageNumber}`;
+  const quote = 'Please take Dad his clean clothes tomorrow.';
+  db.hub().prepare(`
+    INSERT INTO messaging_messages
+      (id, user, platform, external_message_id, chat_id, chat_name, is_group,
+       sender_id, sender_name, body, received_at, raw_json, status, created_at)
+    VALUES (?, ?, 'whatsapp', ?, 'dad-terminal-chat', 'Dad', 1,
+            'catriona', 'Catriona', ?, ?, ?, 'received', ?)
+  `).run(
+    id, replayUser, `${id}-provider`, quote, TEST_EVIDENCE_TS_BASE + messageNumber,
+    JSON.stringify({ route: { contact_name: 'Catriona' } }),
+    TEST_EVIDENCE_TS_BASE + messageNumber,
+  );
+  const original = resolveSourceEvidence(replayUser, 'messaging_message', id);
+  writeReceipt(replayUser, original.source_kind, original.source_id, 'crm_action_projected', {
+    status: 'done',
+    summary: 'Legacy projection completed with no candidate actions.',
+    payload: { candidates: [] },
+    sourceRevision: original.revision_hash,
+  });
+
+  db.hub().prepare('UPDATE messaging_messages SET raw_json = ? WHERE id = ?').run(
+    JSON.stringify({
+      contact_id: 'contact-catriona',
+      contact_name: 'Catriona McLellan',
+      identity_resolution: { status: 'matched', contact_id: 'contact-catriona' },
+      route: { project_slug: 'dad', project_name: 'Dad', contact_name: 'Catriona McLellan' },
+    }),
+    id,
+  );
+  const enriched = resolveSourceEvidence(replayUser, 'messaging_message', id);
+  assert.notEqual(enriched.revision_hash, original.revision_hash);
+  assert.equal(enriched.action_revision_hash, original.action_revision_hash);
+  const candidate = triageCandidateFor(enriched, {
+    title: 'Take Dad his clean clothes tomorrow',
+    triage_action: 'Take Dad his clean clothes tomorrow',
+    evidence: quote,
+    actionability: 'explicit_ask',
+    confidence: 0.96,
+  });
+  let projectionCalls = 0;
+  let providerCalls = 0;
+  const result = await _test.processSourceClaimed(
+    replayUser,
+    enriched,
+    { entities: [], entityFacts: [], budget: { n: 0 } },
+    {
+      dependencies: {
+        triageSourceFn: async () => ({
+          parsed: {
+            should_synthesise: false,
+            candidate_actions: [candidate],
+            source_summary: 'A task was discovered after identity enrichment.',
+          },
+          modelId: 'terminal-task-lane-test',
+        }),
+        reviewDuplicateFn: async () => ({
+          parsed: { decision: 'new', confidence: 0.96, reason: 'Newly recognised action.' },
+          modelId: 'terminal-task-lane-test',
+        }),
+        projectActionsFn: async () => {
+          projectionCalls += 1;
+          return { parsed: { actions: [] }, modelId: 'must-not-run' };
+        },
+        createTaskFn: async () => {
+          providerCalls += 1;
+          return { localId: 'must-not-create-old-message-task' };
+        },
+      },
+    },
+  );
+
+  assert.equal(projectionCalls, 0, 'unchanged old source content never re-enters the projection model');
+  assert.equal(providerCalls, 0, 'unchanged old source content never reaches the task provider');
+  assert.equal(result.errors, 0);
+  const outcome = _test.getActionOutcome(replayUser, enriched, candidate.candidate_key);
+  assert.equal(outcome.disposition, 'dismissed');
+  assert.equal(outcome.reason, 'unchanged_action_content_already_projected');
+});
+
+test('linked metadata cannot auto-promote an old projection review into a task', () => {
+  const reviewUser = `crm-old-message-review-${++messageNumber}`;
+  const id = `crm-old-message-review-source-${messageNumber}`;
+  const quote = 'Could you check whether the assessment is still on Monday?';
+  db.hub().prepare(`
+    INSERT INTO messaging_messages
+      (id, user, platform, external_message_id, chat_id, chat_name, is_group,
+       sender_id, sender_name, body, received_at, raw_json, status, created_at)
+    VALUES (?, ?, 'whatsapp', ?, 'review-chat', 'Family', 1,
+            'family', 'Family', ?, ?, '{}', 'received', ?)
+  `).run(
+    id, reviewUser, `${id}-provider`, quote, TEST_EVIDENCE_TS_BASE + messageNumber,
+    TEST_EVIDENCE_TS_BASE + messageNumber,
+  );
+  const original = resolveSourceEvidence(reviewUser, 'messaging_message', id);
+  writeReceipt(reviewUser, original.source_kind, original.source_id, 'crm_action_projected', {
+    status: 'review',
+    summary: 'The original projection required a person to decide.',
+    payload: { candidates: [] },
+    sourceRevision: original.revision_hash,
+  });
+  db.hub().prepare('UPDATE messaging_messages SET raw_json = ? WHERE id = ?').run(
+    JSON.stringify({ contact_id: 'contact-family', route: { project_slug: 'dad' } }),
+    id,
+  );
+  const enriched = resolveSourceEvidence(reviewUser, 'messaging_message', id);
+  const candidate = triageCandidateFor(enriched, {
+    title: 'Check whether the assessment is still on Monday',
+    triage_action: 'Check whether the assessment is still on Monday',
+    evidence: quote,
+    actionability: 'explicit_ask',
+    confidence: 0.9,
+  });
+  const priorProjection = _test.reusableActionProjectionForContent(reviewUser, enriched);
+  assert.equal(priorProjection.row.status, 'review');
+  const projection = _test.reuseProjectedActionContent(reviewUser, enriched, [candidate], priorProjection);
+  assert.equal(projection.created, 0);
+  assert.equal(projection.review, 1);
+  const outcome = _test.getActionOutcome(reviewUser, enriched, candidate.candidate_key);
+  assert.equal(outcome.disposition, 'review');
+  assert.equal(outcome.reason, 'unchanged_action_content_review_requires_human');
+});
+
+test('genuinely changed action-bearing content opens a new projection lane', async () => {
+  const changedUser = `crm-changed-action-content-${++messageNumber}`;
+  const id = `crm-changed-action-content-source-${messageNumber}`;
+  const original = makeEvidenceForUser(changedUser, id, 'The attached report is for reference only.');
+  writeReceipt(changedUser, original.source_kind, original.source_id, 'crm_action_projected', {
+    status: 'done',
+    summary: 'Original source projection completed.',
+    payload: {
+      candidates: [],
+      action_revision: original.action_revision_hash,
+    },
+    sourceRevision: original.revision_hash,
+  });
+
+  const quote = 'Please send the signed report to Alex today.';
+  db.hub().prepare('UPDATE email_summaries SET body_text = ? WHERE id = ? AND user = ?')
+    .run(quote, id, changedUser);
+  const changed = resolveSourceEvidence(changedUser, 'email_summary', id);
+  assert.notEqual(changed.action_revision_hash, original.action_revision_hash);
+  assert.equal(_test.reusableActionProjectionForContent(changedUser, changed), null);
+  const candidate = triageCandidateFor(changed, {
+    title: 'Send the signed report to Alex today',
+    triage_action: 'Send the signed report to Alex today',
+    evidence: quote,
+    actionability: 'explicit_ask',
+    confidence: 0.96,
+  });
+  let projectionCalls = 0;
+  let providerCalls = 0;
+  const result = await _test.processSourceClaimed(
+    changedUser,
+    changed,
+    { entities: [], entityFacts: [], budget: { n: 0 } },
+    {
+      dependencies: {
+        triageSourceFn: async () => ({
+          parsed: {
+            should_synthesise: false,
+            candidate_actions: [candidate],
+            source_summary: 'The source now contains a real request.',
+          },
+          modelId: 'changed-task-lane-test',
+        }),
+        reviewDuplicateFn: async () => ({
+          parsed: { decision: 'new', confidence: 0.96, reason: 'Changed raw evidence.' },
+          modelId: 'changed-task-lane-test',
+        }),
+        projectActionsFn: async () => {
+          projectionCalls += 1;
+          return {
+            parsed: {
+              actions: [{
+                candidate_key: candidate.candidate_key,
+                title: candidate.action,
+                evidence: quote,
+                actionability: 'explicit_ask',
+                confidence: 0.96,
+              }],
+            },
+            modelId: 'changed-task-lane-test',
+          };
+        },
+        createTaskFn: async () => {
+          providerCalls += 1;
+          return { localId: `changed-action-task-${messageNumber}` };
+        },
+      },
+    },
+  );
+
+  assert.equal(projectionCalls, 1);
+  assert.equal(providerCalls, 1);
+  assert.equal(result.errors, 0);
+  assert.equal(_test.getActionOutcome(changedUser, changed, candidate.candidate_key).disposition, 'task_created');
+});
+
 test('an ambiguous side-effect error fails closed and becomes an actionable review', async () => {
   const quote = 'Please review the procurement pack.';
   const evidence = makeEvidence(quote);

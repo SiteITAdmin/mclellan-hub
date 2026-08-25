@@ -126,6 +126,7 @@ These are the tools the system runs on. They are not features — they are the f
 - Every question the nightly quality boards raise is answerable at `/crm/questions`, and answering one writes knowledge instead of only clearing a flag: a meeting question becomes a `decision` atom on its project, an unowned action becomes an `open_commitment` atom on a real person (with the transcript's name kept as an alias), an alias clash becomes a `distinct_from`/`same_person_as` atom. A board that asks something Douglas cannot answer anywhere is an incomplete feature
 - `attribution_reconciliation` regularly compares complete meeting transcripts with their extracted attendees/actions/facts, compiled atoms, projected outcomes, and task assignees. Its explicit GPT-5.6 Terra pass fills clear missing links, repairs quote-backed high-confidence wrong links, and auto-unlinks compiled facts that are not about the linked person. Only person-decidable leftovers (scheduled-attendee conflicts, person-vs-person owner changes, action/attendee ambiguity, task-owner conflicts) go to `/crm/questions`; confirmed attribution corrections are source-specific and must never become aliases
 - Placeholder speakers block new intake before processing; the quality board must not reopen speaker mapping on already-processed legacy transcripts that no longer have an editable mapping step
+- A source whose action-bearing content already completed projection never creates a later task merely because contact/project/routing links were enriched; knowledge may be recompiled, but the task lane stays terminal until the faithful raw action content changes
 
 **Does not own:** Tasks (those go to Google Tasks), calendar events (that's Calendar), document storage (that's Projects/Documents)
 
@@ -179,6 +180,7 @@ These are the tools the system runs on. They are not features — they are the f
 **Healthy looks like:**
 - Tasks exist from all active sources: `email`, `agentmail`, `document`, `mycelium`, `crm`
 - No duplicate tasks for the same source event (enforced by `source_id` uniqueness)
+- A completed or deleted source-backed task is terminal human state; a replay, title paraphrase, pipeline change, or embedding-model change cannot recreate it from the same unchanged evidence
 - Flight prep and check-in tasks exist for upcoming flights
 - CRM edits that Google can store (title, notes, due, complete) land on the remote task immediately — not only in the local cache
 - Changing a task's project moves it to that project's Google Tasks list; deleting in the CRM removes the open item from Google (restore re-creates it)

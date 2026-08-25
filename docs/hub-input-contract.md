@@ -108,12 +108,12 @@ Every stage writes a receipt keyed by source kind/id, current revision, and
 pipeline version. `error`, `review`, and incomplete outcomes remain replayable;
 retrying must not erase the earlier receipt.
 
-Automatic OpenRouter CRM processing is **new evidence only**. A pipeline-version
+Automatic CRM processing is **new evidence only**. A pipeline-version
 bump must not re-queue the historical corpus: same-revision completion under any
 prior pipeline version is grandfathered, and evidence older than
 `CRM_KNOWLEDGE_AUTO_PROCESS_AFTER` is frozen for automatic selection (manual
-source-scoped replay remains available). OpenRouter spend after a top-up should
-be ordinary daily arrivals, not a full re-atomisation. For each triage action candidate,
+source-scoped replay remains available). Subscription-model usage should be
+ordinary daily arrivals, not a full re-atomisation. For each triage action candidate,
 `crm_action_outcomes` records the exact source span and a stable source-derived
 `action_key`. The task/calendar outbox writes `pending_task` or
 `pending_event` before an external call and uses stable `source`/`source_id`
@@ -121,6 +121,19 @@ values. On replay, if local/remote reconciliation is ambiguous or a pending
 side effect cannot be proven, it fails closed into visible review/error rather
 than issuing another external call; stable keys are not a remote exactly-once
 guarantee and only support local reconciliation.
+
+Knowledge revision and task identity are separate. `revision_hash` may change
+when the Hub learns a better contact, project, or routing link, but
+`action_revision_hash` is derived only from the faithful action-bearing body,
+transcript, or task content. A done or review `crm_action_projected` receipt
+closes automatic projection for that action revision: later linked-data
+enrichment may re-triage and resynthesise knowledge, but it must reuse the prior
+projection and make zero projection-model or task-provider calls. A prior review
+remains human-gated. Legacy messaging receipts have the same authority because
+captured message bodies are immutable. A new raw
+source or genuinely changed action-bearing content receives a new projection
+lane. Exact same-source evidence and prior terminal outcomes additionally stop
+a paraphrased candidate from resurrecting completed or deleted work.
 
 Incomplete/error recovery is stage-aware. A valid current-revision triage or
 duplicate-review receipt is reused verbatim, covered action outcomes are not

@@ -55,6 +55,19 @@ gates capture and never decides meaning.
 bypasses `createTask`, and do not turn the gate into a blocker — a wrong
 refusal costs Douglas a task he needed.
 
+**Task projection is one-shot per action-bearing source content.** Source
+revision and action revision are deliberately different. Identity resolution,
+project routing, and other linked-data enrichment may revise a source and
+refresh its compiled knowledge, but they cannot reopen its completed task lane
+while the faithful body/transcript/task content is unchanged. A completed
+`crm_action_projected` done/review receipt closes automatic projection for that
+action revision; an unresolved review stays human-gated. Old messages with
+legacy receipts are grandfathered because a captured bubble's body is
+immutable. Only genuinely changed raw action content or a genuinely new source
+gets a new automatic projection pass. Prior exact same-source evidence and
+completed/deleted task outcomes remain terminal even if a later model
+paraphrases the title or the embedding model changes.
+
 When a module misbehaves, the goal is that it can be named and fixed on its
 own. If fixing one reader requires editing the engine, the ingesters and the
 task layer together, that is the bug, not the fix.

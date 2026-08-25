@@ -127,6 +127,56 @@ test('mutable mailbox labels cannot revise email evidence or action identity', (
   assert.notEqual(resolveSourceEvidence(user, 'email_summary', id).revision_hash, first.revision_hash);
 });
 
+test('messaging identity enrichment cannot revise provider action identity', () => {
+  const hub = db.hub();
+  const id = 'source-evidence-message-action-stability';
+  const body = 'Please bring Dad his phone charger tomorrow.';
+  hub.prepare(`
+    INSERT INTO messaging_messages
+      (id, user, platform, external_message_id, chat_id, chat_name, is_group,
+       sender_id, sender_name, body, received_at, raw_json, status, created_at)
+    VALUES (?, ?, 'whatsapp', ?, 'dad-chat', 'Dad', 1, 'catriona', 'Catriona', ?, ?, ?, 'received', ?)
+  `).run(
+    id, user, 'source-evidence-message-action-stability-provider', body, 1770000003,
+    JSON.stringify({
+      route: {
+        project_slug: 'dad',
+        project_name: 'Dad',
+        contact_name: 'Catriona McLellan',
+      },
+    }),
+    1770000003,
+  );
+
+  const first = resolveSourceEvidence(user, 'messaging_message', id);
+  const firstSpan = locateEvidenceSpan(first, body);
+  const firstActionKey = stableActionKey(first, firstSpan);
+  hub.prepare('UPDATE messaging_messages SET raw_json = ? WHERE id = ?').run(
+    JSON.stringify({
+      contact_id: 'contact-catriona',
+      contact_name: 'Catriona McLellan',
+      identity_resolution: {
+        status: 'matched',
+        contact_id: 'contact-catriona',
+        contact_name: 'Catriona McLellan',
+        matched_by: ['canonical_name'],
+      },
+      route: {
+        project_slug: 'dad',
+        project_name: 'Dad',
+        contact_name: 'Catriona McLellan',
+      },
+    }),
+    id,
+  );
+
+  const enriched = resolveSourceEvidence(user, 'messaging_message', id);
+  const enrichedSpan = locateEvidenceSpan(enriched, body);
+  assert.notEqual(enriched.revision_hash, first.revision_hash, 'knowledge revision may reflect richer linking context');
+  assert.equal(enriched.action_revision_hash, first.action_revision_hash, 'raw action-bearing content did not change');
+  assert.equal(stableActionKey(enriched, enrichedSpan), firstActionKey, 'identity enrichment cannot mint another provider action');
+});
+
 test('saved debrief transcripts are faithful, revisioned evidence and blank sessions stay ineligible', () => {
   const hub = db.hub();
   hub.prepare(`
