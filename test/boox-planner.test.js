@@ -171,3 +171,23 @@ test('each day gets its own Drive file so handwriting is never overwritten', () 
   assert.equal(plannerFileName('2026-08-21'), 'Hub Planner 2026-08-21.pdf');
   assert.notEqual(plannerFileName('2026-08-21'), plannerFileName('2026-08-22'));
 });
+
+test('a printed task reads as its title alone, but the assigned list keeps the person', () => {
+  const scheduled = task('t-plain', {
+    title: 'Send the pier survey', lane: 'personal', priority: 'high',
+    projectName: 'Harbour Works', project: 'harbour-works', contactName: 'Alec Ryan',
+  });
+  const delegated = task('t-assigned', { title: 'Chase the insurer', assignee: 'Kai Mutenga' });
+  const events = [{
+    id: 'e-plain', date: TODAY, time: '09:00', endTime: '09:30', allDay: false,
+    title: scheduled.title, isTask: true, taskId: 't-plain', task: scheduled,
+  }];
+  const html = renderPlannerHtml(assemblePlannerModel({
+    snapshot: snapshotFor([scheduled, delegated], events), today: TODAY,
+  }));
+  assert.ok(html.includes('Send the pier survey'));
+  for (const leak of ['Personal', 'Harbour Works', 'Alec Ryan', 'high priority']) {
+    assert.ok(!html.includes(`class="s">${leak}`), `${leak} should not be printed on a task row`);
+  }
+  assert.ok(html.includes('with Kai Mutenga'), 'the assigned list keeps its person');
+});
