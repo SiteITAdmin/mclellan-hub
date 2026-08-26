@@ -1,0 +1,12 @@
+.gradle/
+build/
+*/build/
+local.properties
+.idea/
+*.iml
+captures/
+.DS_Store
+# Never commit a keystore or the baked-in token.
+*.jks
+*.keystore
+token.properties

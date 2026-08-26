@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A simple planner grid mark, black on white, in the adaptive safe zone. -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M34,30h40a4,4 0,0 1,4 4v40a4,4 0,0 1,-4 4h-40a4,4 0,0 1,-4 -4v-40a4,4 0,0 1,4 -4zM34,44h40M34,58h40M48,34v44M62,34v44" />
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="3"
+        android:pathData="M34,44h40M34,58h40M48,34v44M62,34v44" />
+</vector>

@@ -1,0 +1,8 @@
+<resources>
+    <!-- A flat light theme: an e-ink panel has no use for elevation, ripples, or
+         colour accents, and animations ghost on the display. -->
+    <style name="Theme.BooxHubPlanner" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:windowBackground">@color/white</item>
+        <item name="android:statusBarColor">@color/white</item>
+    </style>
+</resources>
