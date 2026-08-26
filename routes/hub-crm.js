@@ -1928,6 +1928,69 @@ router.post('/api/planner/boox-planner/publish', requireAuth, requireSameOrigin,
   }
 });
 
+// ── Native Boox planner app (bearer-authed via HUB_BOOX_TOKEN) ────────────────
+// The offline app pulls one payload it can store locally and reason over with no
+// WiFi. It reuses the same live planner window the nightly PDF is built from
+// (fetchPlannerWindow assembles >31 days from in-range snapshots) plus the full
+// task mirror, so the app renders day/week/month/task views from the local copy.
+// Full-state pull by design: this is a single-user system with a small corpus,
+// and correctness beats a delta cursor here. `serverTime` lets the app show
+// "last synced"; real deltas are a later hardening step, not implied by this.
+router.get('/api/boox/sync', requireAuth, async (req, res) => {
+  try {
+    const { fetchPlannerWindow, isoToday } = require('../lib/boox-planner');
+    const { listHandwrittenNotes } = require('../lib/boox-notes');
+    const days = Math.max(7, Math.min(180, Number(req.query.days) || 90));
+    const today = isoToday();
+    try { await syncTasksIfStale(req.hubUser); } catch (_) { /* stale mirror is still usable offline */ }
+    const window = await fetchPlannerWindow(req.hubUser, today, days);
+    res.json({
+      ok: true,
+      serverTime: Math.floor(Date.now() / 1000),
+      today,
+      planner: {
+        startDate: window.startDate,
+        endDate: window.endDate,
+        days: window.days,
+        events: window.events,
+        unscheduledTasks: window.unscheduledTasks,
+        preferences: window.preferences,
+      },
+      tasks: getCachedTasks(req.hubUser, {}, false),
+      // The app knows which handwritten pages the hub already holds, so an
+      // offline retry queue can drop captures the hub has acknowledged.
+      notes: listHandwrittenNotes({ limit: 200 }).map(note => note.captureId),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// The handwriting ingest door. The device sends raw ink (PNG/JPEG/PDF); no
+// recognition happens here or on the device. The page lands in the same vault
+// raw inbox the Boox → Drive loop uses, and the existing hub recognition/review
+// workflow OCRs it there. Idempotent on captureId so an offline retry cannot
+// double-land a page. See lib/boox-notes.js.
+router.post('/api/boox/notes', requireAuth, requireSameOrigin, uploadLimiter, upload.single('file'), async (req, res) => {
+  try {
+    const { storeHandwrittenNote } = require('../lib/boox-notes');
+    if (!req.file) return res.status(400).json({ error: 'file is required' });
+    const record = storeHandwrittenNote({
+      captureId: req.body.captureId,
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      title: req.body.title,
+      capturedAt: req.body.capturedAt,
+      linkedDate: req.body.linkedDate,
+      linkedEventId: req.body.linkedEventId,
+      pageRef: req.body.pageRef,
+    });
+    res.json({ ok: true, ...record });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.post('/api/planner/tasks/:id/schedule', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   try {
     const { scheduleTask } = require('../lib/task-calendar-planner');

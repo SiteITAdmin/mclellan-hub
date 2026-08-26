@@ -47,6 +47,10 @@ function mobileBearerBridge(req, res, next) {
       process.env.DEBRIEF_MOBILE_TOKEN,
       process.env.WORKDAY_MOBILE_TOKEN,
       process.env.WORKDAY_WEBHOOK_SECRET,
+      // Device-scoped token for the sideloaded Boox planner app. Kept separate
+      // from HUB_MOBILE_TOKEN so a lost tablet can be revoked on its own without
+      // signing every other native app out.
+      process.env.HUB_BOOX_TOKEN,
     ].filter(Boolean);
     if (tokens.some(t => auth === `Bearer ${t}`)) {
       req.mobileAuth = true;
