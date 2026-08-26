@@ -25,6 +25,7 @@ const { ingestAllFeeds } = require('./lib/rss-ingest');
 const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
 const { sendTodayM365DailyBriefing } = require('./scripts/build-m365-daily-briefing');
+const { sendTodayNewsletterDigestBriefing } = require('./scripts/build-newsletter-digest-briefing');
 const { sendTodayUSBlockBriefing } = require('./scripts/build-us-block-special-briefing');
 const {
   readGovernanceReport,
@@ -240,6 +241,25 @@ setInterval(() => {
   if (day === 0 || day === 6) return;
   if (now.getHours() !== M365_BRIEF_HOUR || now.getMinutes() !== M365_BRIEF_MINUTE) return;
   sendTodayM365DailyBriefing().catch(err => console.error('[m365-briefing] error:', err));
+}, 60 * 1000);
+
+// ── Newsletter Intelligence Brief (hourly catch-up 11:00–22:00 Europe/Dublin) ─
+// The newsletter digest from the home server lands at variable times, so this
+// polls hourly and builds+sends only digests not already filed (edition-keyed).
+const NEWSLETTER_BRIEF_START_HOUR = parseInt(process.env.NEWSLETTER_BRIEF_START_HOUR || '11');
+const NEWSLETTER_BRIEF_END_HOUR = parseInt(process.env.NEWSLETTER_BRIEF_END_HOUR || '22');
+let newsletterBriefRunning = false;
+setInterval(() => {
+  const now = nowIn('Europe/Dublin');
+  if (now.getHours() < NEWSLETTER_BRIEF_START_HOUR || now.getHours() > NEWSLETTER_BRIEF_END_HOUR) return;
+  if (newsletterBriefRunning) return;
+  newsletterBriefRunning = true;
+  sendTodayNewsletterDigestBriefing()
+    .then(result => {
+      if (!result.skipped) console.log('[newsletter-briefing] scheduled run:', result.queued ? `queued ${result.jobId}` : `sent edition ${result.manifest?.edition}`);
+    })
+    .catch(err => console.error('[newsletter-briefing] error:', err.message))
+    .finally(() => { newsletterBriefRunning = false; });
 }, 60 * 1000);
 
 // ── rholdsworthconsulting.com daily stats (07:00 Europe/Dublin) ──────────────
