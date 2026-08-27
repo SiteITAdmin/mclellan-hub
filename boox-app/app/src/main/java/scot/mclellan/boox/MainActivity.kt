@@ -147,14 +147,26 @@ class MainActivity : AppCompatActivity() {
 
     private fun openNote(linkedDate: String, eventId: String?, label: String?) {
         // Prefer the device's native Notes app (full raw-pen feel, eraser, pen
-        // button) via its quick-note entry; pages return to the hub through the
-        // existing Boox → Drive ingest loop. The in-app capture stays as the
-        // fallback if the native app is missing — it uploads with provenance
-        // through /api/boox/notes.
+        // button); pages return to the hub through the existing Boox → Drive
+        // ingest loop. ScribbleActivity parses OPEN_NOTE_BEAN (fastjson2 →
+        // OpenNoteBean) and with create=true opens its Create Note screen with
+        // the title prefilled — that name is the note's provenance in Drive.
+        // The in-app capture stays as the fallback if the native app is missing
+        // — it uploads with provenance through /api/boox/notes.
+        // Day note → "Planner 2026-08-27"; meeting note → "<meeting title> 2026-08-27".
+        val noteTitle = if (eventId != null) {
+            (label ?: "").replace("Note · ", "").ifBlank { "Meeting" } + " " + linkedDate
+        } else {
+            "Planner $linkedDate"
+        }
+        val bean = org.json.JSONObject()
+            .put("title", noteTitle)
+            .put("create", true)
+            .toString()
         val native = android.content.Intent().setClassName(
             "com.onyx.android.note",
-            "com.onyx.android.note.note.ui.CreateQuickNoteActivity",
-        )
+            "com.onyx.android.note.note.ui.ScribbleActivity",
+        ).putExtra("OPEN_NOTE_BEAN", bean)
         try {
             startActivity(native)
         } catch (_: Exception) {
