@@ -4,7 +4,7 @@
 // Newsletter Intelligence Brief — daily PDF from the Douglas Newsletters
 // digest account (douglasnewsletters@agentmail.to). Source of truth is the
 // captured digest email in email_summaries; synthesis runs on the Mac
-// subscription worker (Sonnet slot); PDF render and send happen hub-side.
+// subscription worker (ChatGPT Go/Codex slot); PDF render and send happen hub-side.
 
 const fs = require('fs');
 const path = require('path');
@@ -129,7 +129,7 @@ function getStoredBriefing(edition) {
 }
 
 async function requestModel(userPrompt) {
-  const modelId = getSystemModelId('newsletter_digest_briefing', 'system', 'anthropic/claude-sonnet-4-6');
+  const modelId = getSystemModelId('newsletter_digest_briefing', 'system', 'openai/gpt-5.6-luna');
   const started = Date.now();
   const r = await fetch('hub-model://v1/chat/completions', {
     method: 'POST', timeout: 300000,
@@ -155,17 +155,41 @@ Complete digest text follows. It has already had sponsor-labelled blocks removed
 ${digestText}`;
 }
 
+function promptPath(edition) {
+  return path.join(OUT_DIR, `newsletter-briefing-${edition}-prompt.md`);
+}
+
+function writeWorkPrompt(edition, promptText) {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(promptPath(edition), promptText, 'utf8');
+}
+
+function stripFence(markdown) {
+  const trimmed = String(markdown || '').trim();
+  const fenced = trimmed.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/i);
+  return (fenced ? fenced[1] : trimmed).trim();
+}
+
+function snippet(text) {
+  return String(text || '').replace(/\s+/g, ' ').slice(0, 180);
+}
+
 async function generateMarkdown({ meta, text }) {
   const userPrompt = buildUserPrompt(meta, text);
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(path.join(OUT_DIR, `newsletter-briefing-${meta.edition}-prompt.md`), `${SYSTEM_PROMPT}\n\n${userPrompt}`, 'utf8');
+  const systemPrompt = configuredPrompt();
+  const promptText = `${systemPrompt}\n\n${userPrompt}`;
 
   const jobs = require('../lib/subscription-agent-jobs');
   if (jobs.enabled()) {
-    const queued = jobs.enqueue({ feature: 'newsletter_digest_briefing', dedupeKey: meta.edition, payload: { meta, systemPrompt: configuredPrompt(), userPrompt } });
+    const queued = jobs.enqueue({
+      feature: 'newsletter_digest_briefing',
+      dedupeKey: meta.edition,
+      payload: { meta, systemPrompt, userPrompt, promptText },
+    });
     return { queued: true, ...queued };
   }
   if (process.platform !== 'darwin' && process.env.SUBSCRIPTION_AGENT_LOCAL !== '1') throw new Error('No subscription worker configured (SUBSCRIPTION_AGENT_WORKER_ENABLED=1)');
+  writeWorkPrompt(meta.edition, promptText);
   const markdown = await requestModel(userPrompt);
   return { markdown };
 }
@@ -175,10 +199,15 @@ function configuredPrompt() {
 }
 
 function validateMarkdown(markdown, meta) {
-  const text = String(markdown || '').trim();
-  if (!/^# Newsletter Intelligence Brief/m.test(text)) throw new Error('Newsletter briefing response is missing the required title');
+  const text = stripFence(markdown);
+  if (!text) throw new Error('Newsletter briefing response is empty');
+  if (!/^# Newsletter Intelligence Brief/m.test(text)) {
+    throw new Error(`Newsletter briefing response is missing the required title (got: ${snippet(text)})`);
+  }
   for (const heading of REQUIRED_HEADINGS) {
-    if (!new RegExp(`^## ${heading}$`, 'm').test(text)) throw new Error(`Newsletter briefing response is missing ${heading}`);
+    if (!new RegExp(`^## ${heading}$`, 'm').test(text)) {
+      throw new Error(`Newsletter briefing response is missing ${heading} (got: ${snippet(text)})`);
+    }
   }
   return text;
 }
@@ -208,7 +237,8 @@ function archiveBriefing(artifacts, meta) {
   fs.copyFileSync(artifacts.mdPath, paths.mdPath);
   fs.copyFileSync(artifacts.htmlPath, paths.htmlPath);
   fs.copyFileSync(artifacts.pdfPath, paths.pdfPath);
-  fs.copyFileSync(path.join(OUT_DIR, `newsletter-briefing-${meta.edition}-prompt.md`), paths.promptPath);
+  const promptSrc = promptPath(meta.edition);
+  if (fs.existsSync(promptSrc)) fs.copyFileSync(promptSrc, paths.promptPath);
   const prior = readJson(path.join(dir, 'manifest.json'), {});
   const manifest = {
     ...prior, edition: meta.edition, date: meta.iso, label: meta.label, title: meta.title,
@@ -220,6 +250,8 @@ function archiveBriefing(artifacts, meta) {
 }
 
 async function finalizeBriefing({ meta, markdown }) {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(path.join(OUT_DIR, `newsletter-briefing-${meta.edition}-response.md`), String(markdown || ''), 'utf8');
   const text = validateMarkdown(markdown, meta);
   const artifacts = await renderArtifacts(text, meta);
   return archiveBriefing(artifacts, meta);
@@ -275,6 +307,8 @@ async function sendTodayNewsletterDigestBriefing({ force = false } = {}) {
 }
 
 async function completeRemoteNewsletterDigestBriefing(payload, markdown) {
+  const promptText = payload.promptText || `${payload.systemPrompt || configuredPrompt()}\n\n${payload.userPrompt || ''}`;
+  writeWorkPrompt(payload.meta.edition, promptText);
   const manifest = await finalizeBriefing({ meta: payload.meta, markdown });
   const sent = await sendStoredBriefing(payload.meta.edition);
   return { edition: payload.meta.edition, sentAt: sent.manifest.sentAt, to: sent.manifest.to, pdfPath: manifest.pdfPath, execution: 'subscription_remote' };

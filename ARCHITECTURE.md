@@ -177,7 +177,9 @@ pass a stable task code for receipts.
 | Luna | email_classifier, atom_extractor, crm_parser, agentmail, task extract |
 | Terra | crm_source_triage, crm_duplicate_review, crm_action_projection, digests |
 | Grok | content research, multi-search planning |
-| Sonnet | cross_entity_synthesis, wiki, newsletter briefing, m365/us-block |
+| ChatGPT Go/Codex (`gpt-5.6-luna`) | newsletter_digest_briefing |
+| Grok CLI (grok-4.6) | Opus availability fallback |
+| Sonnet | cross_entity_synthesis, wiki, on-demand newsletter briefing, m365/us-block |
 | Opus | nakai_daily_briefing, exceptional adjudication |
 | Local | embeddings (Ollama qwen3-embedding), STT/TTS when configured |
 

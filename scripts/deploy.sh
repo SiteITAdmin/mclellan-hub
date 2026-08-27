@@ -101,6 +101,8 @@ echo "==> Enforcing sensitive file permissions..."
   "chown root:hub /app &&
    chmod 750 /app &&
    install -d -o hub -g hub -m 700 /app/data /app/exports &&
+   install -d -o hub -g hub -m 755 /app/data/newsletter-briefings /app/data/m365-briefings /app/data/nakai-briefings /app/data/us-block-briefings &&
+   chown -R hub:hub /app/data/newsletter-briefings &&
    install -d -o hub -g hub -m 750 /app/public/knowledge /app/public/knowledge/douglas /app/public/knowledge/nakai &&
    chown -R hub:hub /app/public/knowledge &&
    find /app/public/knowledge -type d -exec chmod 750 {} + &&

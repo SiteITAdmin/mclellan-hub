@@ -246,12 +246,14 @@ setInterval(() => {
 // ── Newsletter Intelligence Brief (hourly catch-up 11:00–22:00 Europe/Dublin) ─
 // The newsletter digest from the home server lands at variable times, so this
 // polls hourly and builds+sends only digests not already filed (edition-keyed).
+// Minute-zero only: a failed edition must not re-queue a model every 60 seconds.
 const NEWSLETTER_BRIEF_START_HOUR = parseInt(process.env.NEWSLETTER_BRIEF_START_HOUR || '11');
 const NEWSLETTER_BRIEF_END_HOUR = parseInt(process.env.NEWSLETTER_BRIEF_END_HOUR || '22');
 let newsletterBriefRunning = false;
 setInterval(() => {
   const now = nowIn('Europe/Dublin');
   if (now.getHours() < NEWSLETTER_BRIEF_START_HOUR || now.getHours() > NEWSLETTER_BRIEF_END_HOUR) return;
+  if (now.getMinutes() !== 0) return;
   if (newsletterBriefRunning) return;
   newsletterBriefRunning = true;
   sendTodayNewsletterDigestBriefing()

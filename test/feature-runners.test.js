@@ -73,6 +73,17 @@ test('nakai daily briefing is Opus', () => {
   assert.equal(r.tier, 'opus');
 });
 
+test('newsletter digest briefing uses ChatGPT Go/Codex with a full-edition markdown output cap', () => {
+  const r = resolveFeatureRunner('newsletter_digest_briefing');
+  assert.equal(r.tier, 'luna');
+  assert.equal(r.runner, 'codex');
+  assert.equal(r.model, 'gpt-5.6-luna');
+  assert.equal(r.effort, 'high');
+  assert.equal(r.jsonMode, false);
+  assert.ok(r.maxInputChars >= 200000);
+  assert.ok(r.maxOutputChars >= 120000);
+});
+
 test('unknown features default to Terra, never openrouter', () => {
   const r = resolveFeatureRunner('brand_new_unknown_feature_xyz');
   assert.equal(r.tier, 'terra');

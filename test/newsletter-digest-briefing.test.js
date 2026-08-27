@@ -59,3 +59,31 @@ test('validateMarkdown enforces required house structure', () => {
   }
   assert.throws(() => validateMarkdown('# Wrong Title\n\n## Executive Readout\n\n## Coverage and Source Health\n\n## Sources', meta), /required title/);
 });
+
+test('validateMarkdown unwraps a fenced markdown response', () => {
+  const meta = { edition: '002' };
+  const inner = [
+    '# Newsletter Intelligence Brief 002',
+    'Wednesday, 26 August 2026',
+    '',
+    '## Executive Readout',
+    '- item',
+    '',
+    '## Coverage and Source Health',
+    '- 9 of 10 emails carried editorial content.',
+    '',
+    '## Sources',
+    '1. TLDR AI',
+  ].join('\n');
+  assert.strictEqual(validateMarkdown('```markdown\n' + inner + '\n```', meta), inner);
+});
+
+test('validateMarkdown includes a snippet when the title is missing', () => {
+  let err;
+  try {
+    validateMarkdown('Selected model is at capacity. Please try a different model.', { edition: '002' });
+  } catch (caught) { err = caught; }
+  assert.ok(err);
+  assert.match(err.message, /required title/);
+  assert.match(err.message, /at capacity/);
+});

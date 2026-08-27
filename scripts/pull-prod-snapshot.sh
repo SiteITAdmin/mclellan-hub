@@ -36,7 +36,8 @@ fs.mkdirSync(out, { recursive: true });
 const source = '/app/data/hub.db';
 const target = path.join(out, 'hub.db');
 const db = new Database(source, { readonly: true, fileMustExist: true });
-db.backup(target).then(() => {
+(async () => {
+  await db.backup(target);
   const info = {
     source,
     target,
@@ -44,7 +45,7 @@ db.backup(target).then(() => {
     sizeBytes: fs.statSync(target).size,
   };
   fs.writeFileSync(path.join(out, 'snapshot.json'), JSON.stringify(info, null, 2) + '\\n');
-}).catch(err => {
+})().catch(err => {
   console.error(err);
   process.exit(1);
 });

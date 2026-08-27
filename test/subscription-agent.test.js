@@ -78,6 +78,16 @@ test('opencode NDJSON output extracts only assistant text', () => {
 // Opus availability fallback (21 Aug 2026): when the Opus lane fails — e.g.
 // "model at capacity" on 20 Aug — the job retries once on Grok 4.6 via the
 // local Grok CLI. Still subscription-CLI plane; zero OpenRouter.
+test('newsletter digest briefing runs through the ChatGPT Go/Codex CLI', () => {
+  const config = resolveFeatureRunner('newsletter_digest_briefing');
+  const command = commandFor(config, 'system prompt');
+  assert.match(command.command, /(?:^|\/)codex$/);
+  assert.deepEqual(command.args.slice(0, 5), ['exec', '--model', 'gpt-5.6-luna', '--config', 'model_reasoning_effort=high']);
+  const modelIdx = command.args.indexOf('--model');
+  assert.equal(command.args[modelIdx + 1], 'gpt-5.6-luna');
+  assert.ok(command.args.includes('-'), 'the full digest is passed through stdin, not a command argument');
+});
+
 test('opus tier declares grok-4.6 as its availability fallback', () => {
   assert.equal(MODELS.grok46.runner, 'grok');
   assert.equal(MODELS.grok46.model, 'grok-4.6');

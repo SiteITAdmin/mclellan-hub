@@ -421,6 +421,8 @@ These are the tools the system runs on. They are not features — they are the f
 ## Newsletter / Briefing
 **Purpose:** Extract topics from incoming newsletters and RSS, and let Douglas review and generate a briefing at `/newsletter`. On-demand or format-scheduled briefings can still email a PDF. There is no Saturday reminder email and no 16:00 daily digest email.
 
+**Daily digest briefing:** `scripts/build-newsletter-digest-briefing.js` rewrites each `douglasnewsletters@agentmail.to` digest into a Newsletter Intelligence Brief. Edition is the coverage date from the digest subject (2026-08-25 = 001). Hub enqueues `newsletter_digest_briefing` on the ChatGPT Go/Codex (`gpt-5.6-luna`) Mac worker; completion files `data/newsletter-briefings/<edition>/` and emails the PDF via AgentMail. Catch-up is hourly 11:00–22:00 Dublin, once per unfiled edition. The store directory must be writable by `hub` — a root-owned leftover from a manual 001 build blocked the whole pipeline with EACCES. Output cap must be large enough for a keep-all-editorial rewrite (not the 32k slot default).
+
 **Does not own:** Processing inbox mail (that's the email module)
 
 ---
