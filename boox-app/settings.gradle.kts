@@ -10,7 +10,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Onyx / Boox pen + device SDK is published here; pulled in at Phase 3.
+        // Onyx / Boox pen + device SDK (raw e-ink pen capture) lives on Onyx's
+        // own Maven repo, not Maven Central.
+        maven { url = uri("https://repo.boox.com/repository/maven-public/") }
         maven { url = uri("https://jitpack.io") }
     }
 }

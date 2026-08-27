@@ -48,20 +48,38 @@ object PlannerViews {
     }
 
     // ── Day ────────────────────────────────────────────────────────────────
-    fun renderDay(ctx: Context, into: LinearLayout, data: SyncResponse, focus: LocalDate) {
+    fun renderDay(
+        ctx: Context, into: LinearLayout, data: SyncResponse, focus: LocalDate,
+        onTask: (Task) -> Unit = {},
+        onNewNote: (linkedDate: String, eventId: String?, label: String?) -> Unit = { _, _, _ -> },
+    ) {
         val iso = iso(focus)
         val weekday = focus.dayOfWeek.getDisplayName(TextStyle.FULL, UK)
         into.addView(ctx.text(weekday, 26f, bold = true))
         into.addView(ctx.text(focus.format(dayHeaderFmt), 15f, color = MUTED))
+        into.addView(noteButton(ctx, "＋ Note for this day") {
+            onNewNote(iso, null, "Note · ${focus.format(dayHeaderFmt)}")
+        })
         into.addView(ctx.rule(marginV = 10))
 
         val items = eventsOn(data, focus)
+        val taskById = data.tasks.associateBy { it.id }
         if (items.isEmpty()) {
             into.addView(ctx.text("No appointments or scheduled tasks.", 16f, color = MUTED).also {
                 it.setPadding(0, ctx.dp(12), 0, 0)
             })
         } else {
-            items.forEach { into.addView(dayEventCard(ctx, it)) }
+            items.forEach { e ->
+                val card = dayEventCard(ctx, e)
+                if (e.isTaskBlock) {
+                    // A scheduled task block is actionable — tap it to act on the task.
+                    taskById[e.taskId]?.let { t -> card.setOnClickListener { onTask(t) } }
+                } else {
+                    // A real appointment — tap it to take a linked handwritten note.
+                    card.setOnClickListener { onNewNote(e.date, e.id, "Note · ${e.title}") }
+                }
+                into.addView(card)
+            }
         }
 
         // Tasks genuinely due today that aren't placed on the calendar yet.
@@ -71,11 +89,25 @@ object PlannerViews {
         }
         if (dueUnscheduled.isNotEmpty()) {
             into.addView(ctx.sectionHeader("Due today · unscheduled", dueUnscheduled.size))
-            dueUnscheduled.forEach { into.addView(taskCard(ctx, it)) }
+            dueUnscheduled.forEach { into.addView(taskCard(ctx, it, onClick = { onTask(it) })) }
         }
     }
 
-    private fun dayEventCard(ctx: Context, e: Event): View {
+    private fun noteButton(ctx: Context, label: String, onClick: () -> Unit): View {
+        return ctx.text(label, 15f, bold = true).apply {
+            setPadding(ctx.dp(12), ctx.dp(10), ctx.dp(12), ctx.dp(10))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(FILL)
+                cornerRadius = ctx.dp(6).toFloat()
+            }
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp.topMargin = ctx.dp(8)
+            layoutParams = lp
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun dayEventCard(ctx: Context, e: Event): LinearLayout {
         val cardV = ctx.card()
         val rowLp = LinearLayout.LayoutParams(MATCH, WRAP)
         val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = rowLp }
@@ -217,7 +249,10 @@ object PlannerViews {
         }
 
     // ── Tasks ──────────────────────────────────────────────────────────────
-    fun renderTasks(ctx: Context, into: LinearLayout, data: SyncResponse) {
+    fun renderTasks(
+        ctx: Context, into: LinearLayout, data: SyncResponse,
+        onTask: (Task) -> Unit = {},
+    ) {
         val scheduled = scheduledTaskIds(data)
         val mine = data.tasks.filter { it.isOpen && it.isMine }
         val overdue = mine.filter { it.isOverdue }
@@ -230,7 +265,7 @@ object PlannerViews {
         fun group(title: String, list: List<Task>, scheduledTag: Boolean = false) {
             if (list.isEmpty()) return
             into.addView(ctx.sectionHeader(title, list.size))
-            list.forEach { into.addView(taskCard(ctx, it, scheduledTag)) }
+            list.forEach { t -> into.addView(taskCard(ctx, t, scheduledTag, onClick = { onTask(t) })) }
         }
 
         into.addView(ctx.text("Open tasks (mine): ${mine.size}", 15f, color = MUTED).apply {
@@ -247,7 +282,9 @@ object PlannerViews {
         }
     }
 
-    private fun taskCard(ctx: Context, t: Task, scheduledTag: Boolean = false): View {
+    private fun taskCard(
+        ctx: Context, t: Task, scheduledTag: Boolean = false, onClick: (() -> Unit)? = null,
+    ): View {
         val cardV = ctx.card()
         cardV.addView(ctx.text(t.title.ifBlank { "(untitled)" }, 17f, bold = true))
         val bits = mutableListOf<String>()
@@ -257,11 +294,13 @@ object PlannerViews {
         t.effortMinutes?.let { bits.add("${it}m") }
         t.projectName?.takeIf { it.isNotBlank() }?.let { bits.add(it) }
         if (t.subtaskTotal > 0) bits.add("subtasks ${t.subtaskOpen}/${t.subtaskTotal} open")
+        if (t.id.startsWith("local:")) bits.add("unsynced")
         if (bits.isNotEmpty()) {
             cardV.addView(ctx.text(bits.joinToString("  ·  "), 13f, color = MUTED).apply {
                 setPadding(0, ctx.dp(4), 0, 0)
             })
         }
+        onClick?.let { cb -> cardV.setOnClickListener { cb() } }
         return cardV
     }
 
