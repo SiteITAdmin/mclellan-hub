@@ -146,13 +146,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openNote(linkedDate: String, eventId: String?, label: String?) {
-        val intent = android.content.Intent(this, NoteActivity::class.java).apply {
-            putExtra(NoteActivity.EXTRA_LINKED_DATE, linkedDate)
-            putExtra(NoteActivity.EXTRA_LINKED_EVENT_ID, eventId)
-            putExtra(NoteActivity.EXTRA_PAGE_REF, if (eventId != null) "event" else "day")
-            putExtra(NoteActivity.EXTRA_TITLE, label)
+        // Prefer the device's native Notes app (full raw-pen feel, eraser, pen
+        // button) via its quick-note entry; pages return to the hub through the
+        // existing Boox → Drive ingest loop. The in-app capture stays as the
+        // fallback if the native app is missing — it uploads with provenance
+        // through /api/boox/notes.
+        val native = android.content.Intent().setClassName(
+            "com.onyx.android.note",
+            "com.onyx.android.note.note.ui.CreateQuickNoteActivity",
+        )
+        try {
+            startActivity(native)
+        } catch (_: Exception) {
+            val intent = android.content.Intent(this, NoteActivity::class.java).apply {
+                putExtra(NoteActivity.EXTRA_LINKED_DATE, linkedDate)
+                putExtra(NoteActivity.EXTRA_LINKED_EVENT_ID, eventId)
+                putExtra(NoteActivity.EXTRA_PAGE_REF, if (eventId != null) "event" else "day")
+                putExtra(NoteActivity.EXTRA_TITLE, label)
+            }
+            startActivity(intent)
         }
-        startActivity(intent)
     }
 
     override fun onResume() {

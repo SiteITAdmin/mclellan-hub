@@ -4,11 +4,10 @@
     android:layout_height="match_parent"
     android:background="@android:color/white">
 
-    <!-- The raw-drawing surface. Pen strokes render straight to the e-ink
-         controller here; the toolbar rect is excluded so writing under the
-         buttons doesn't draw. -->
-    <SurfaceView
-        android:id="@+id/surface"
+    <!-- Stylus drawing surface (standard MotionEvent capture, not the Onyx raw
+         SDK — see DrawingView). Fills the screen; the toolbar sits on top. -->
+    <scot.mclellan.boox.DrawingView
+        android:id="@+id/drawing"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 

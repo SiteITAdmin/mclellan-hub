@@ -54,14 +54,6 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-
-    // The Onyx pen/native modules each bundle their own libc++_shared.so; take
-    // the first, they are the same runtime.
-    packaging {
-        jniLibs {
-            pickFirsts += "**/libc++_shared.so"
-        }
-    }
 }
 
 dependencies {
@@ -79,8 +71,8 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // Onyx raw-pen capture (paper-like e-ink drawing). Used only to capture and
-    // export ink; no on-device recognition — OCR stays at the hub.
-    implementation("com.onyx.android.sdk:onyxsdk-pen:1.5.4.2")
+    // Only the lightweight Onyx *device* SDK (not the raw-pen SDK, whose region
+    // mapping is broken on this firmware). Used purely to refresh the drawing
+    // view in fast e-ink DU mode so pen strokes feel snappy. OCR stays at the hub.
     implementation("com.onyx.android.sdk:onyxsdk-device:1.3.5.2")
 }
