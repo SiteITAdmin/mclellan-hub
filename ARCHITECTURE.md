@@ -201,7 +201,7 @@ If the local embedder is unavailable, calls fail closed (`EMBEDDINGS_UNAVAILABLE
 do not fall back to OpenRouter. Historical vectors are preserved; backfill skips.
 Chunks: max 1200 chars, 150-char overlap, sentence-boundary aware.  
 Storage: `embeddings` table (`source_kind`, `source_id`, `user`, `vector`, `chunk_text`).  
-Backfill: `embed_backfill` job — runs automatically. Do not call `embed()` in bulk inline; add source rows and let the job pick them up.
+Backfill: `embed_backfill` job — runs automatically. Its `remaining` count includes only complete, indexable evidence and retryable failures; incomplete raw captures are admission-health work, not embedding work. Per-pass limits cap attempts as well as successes so a local embedder outage cannot scan/call across the full corpus. Do not call `embed()` in bulk inline; add source rows and let the job pick them up.
 
 ---
 
@@ -227,6 +227,8 @@ a stale worker's token can never finish or overwrite its replacement's lease).
 Use these rather than reimplementing either inside a stage.
 
 Scheduled via `crm_knowledge_engine` in `lib/job-queue.js`. The job reviews raw and intermediate source evidence, records prompt decisions in `knowledge_receipts`, merges provenance into existing atoms when the source confirms or supersedes known knowledge, and projects only high-confidence required actions into Google Tasks.
+
+`synthesis_run` is a nightly compatibility entry point, not a second rapid retry chain; `crm_knowledge_engine` alone owns change-driven backlog recovery. The nightly atom review pass uses embedding recall plus `crm_duplicate_review`, then stores both `same` and `different` decisions against the exact pair-content revision in `knowledge_receipts`. An unchanged pair is never re-adjudicated, and a saved `same` decision retains its canonical atom across later passes.
 
 Source revision is broader than task identity. Routing, contact resolution, or
 other linked-data metadata can change `revision_hash`, legitimately causing

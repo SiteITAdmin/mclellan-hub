@@ -15,6 +15,10 @@ process.env.HUB_DB_PATH = tmpDb;
 const db = require('../lib/db');
 const engine = require('../lib/crm-knowledge-engine');
 const attribution = require('../lib/attribution-reconciliation');
+const synthesis = require('../lib/synthesis');
+const projection = require('../lib/knowledge-projection');
+const atomDedup = require('../lib/atom-dedup');
+const reminders = require('../lib/reminders');
 const { CRM_KNOWLEDGE_PIPELINE_VERSION } = require('../lib/source-evidence');
 const { queueCrmKnowledgeEngine } = require('../lib/crm-knowledge-queue');
 const jobs = require('../lib/job-queue');
@@ -234,6 +238,34 @@ test('attribution reconciliation processes one source per user and keeps a recur
     assert.ok(successor.run_at >= started + 295 && successor.run_at <= started + 305);
   } finally {
     attribution.runAttributionReconciliation = original;
+    clearJobs();
+  }
+});
+
+test('nightly synthesis never creates a five-minute retry chain from health-only remaining sources', async () => {
+  clearJobs();
+  const fixedNextRun = Math.floor(Date.now() / 1000) + 20 * 60 * 60;
+  const originalRunSynthesis = synthesis.runSynthesis;
+  const originalProjectAll = projection.projectAllEntities;
+  const originalDedup = atomDedup.dedupProposedAtoms;
+  const originalNextDublin = reminders.epochAtNextDublin;
+  synthesis.runSynthesis = async () => ({ processed: 0, remaining: 99 });
+  projection.projectAllEntities = () => ({ written: 0 });
+  atomDedup.dedupProposedAtoms = async () => ({ collapsed: 0 });
+  reminders.epochAtNextDublin = () => fixedNextRun;
+
+  try {
+    await jobs._test.handlers.synthesis_run();
+    const successor = db.hub().prepare(`
+      SELECT run_at FROM system_jobs
+      WHERE type = 'synthesis_run' AND status = 'pending'
+    `).get();
+    assert.equal(successor?.run_at, fixedNextRun);
+  } finally {
+    synthesis.runSynthesis = originalRunSynthesis;
+    projection.projectAllEntities = originalProjectAll;
+    atomDedup.dedupProposedAtoms = originalDedup;
+    reminders.epochAtNextDublin = originalNextDublin;
     clearJobs();
   }
 });

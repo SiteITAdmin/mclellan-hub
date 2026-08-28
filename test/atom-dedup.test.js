@@ -107,6 +107,32 @@ test('dedupProposedAtoms leaves genuinely distinct facts alone', async () => {
   assert.equal(res.collapsed, 0);
 });
 
+test('a different verdict is persisted and never spends another model call for unchanged atoms', async () => {
+  const user = 'distinct-sticky';
+  insertAtom({ user, value: 'Ken will review the job description.', status: 'proposed' });
+  insertAtom({ user, value: 'Discuss the role profile next week.', status: 'proposed' });
+  let calls = 0;
+  const alwaysNear = async () => [1, 0, 0];
+  const alwaysDifferent = async () => { calls += 1; return false; };
+
+  const first = await dedupProposedAtoms(user, {
+    embedFn: alwaysNear,
+    cosineFn,
+    adjudicateFn: alwaysDifferent,
+  });
+  const second = await dedupProposedAtoms(user, {
+    embedFn: alwaysNear,
+    cosineFn,
+    adjudicateFn: alwaysDifferent,
+  });
+
+  assert.equal(calls, 1, 'the pair is adjudicated only once across repeated runs');
+  assert.equal(first.adjudications, 1);
+  assert.equal(first.decisionsPersisted, 1);
+  assert.equal(second.adjudications, 0);
+  assert.ok(second.decisionsReused >= 1);
+});
+
 test('dedupProposedAtoms collapses two proposals to one survivor (one review, not many)', async () => {
   const user = 'two-proposed';
   const a = insertAtom({ user, value: 'H3O Digital Limited is registered in England and Wales, number 10986998.', status: 'proposed', confidence: 0.99, refId: 'x1' });
@@ -116,6 +142,21 @@ test('dedupProposedAtoms collapses two proposals to one survivor (one review, no
   assert.equal(survivors.length, 1, 'exactly one proposal survives for review');
   assert.equal(res.collapsed, 1);
   assert.equal(survivors[0], a, 'the higher-confidence proposal is kept');
+});
+
+test('a dedup-retired proposal cannot become canonical and retire the survivor on a later run', async () => {
+  const user = 'two-proposed-repeat';
+  const a = insertAtom({ user, value: 'VAT No.: GB279886811', status: 'proposed', confidence: 0.99 });
+  const b = insertAtom({ user, value: 'The VAT number is GB279886811.', status: 'proposed', confidence: 0.9 });
+  let calls = 0;
+  const same = async () => { calls += 1; return true; };
+
+  await dedupProposedAtoms(user, { embedFn, cosineFn, adjudicateFn: same });
+  await dedupProposedAtoms(user, { embedFn, cosineFn, adjudicateFn: same });
+
+  assert.equal(calls, 1, 'the saved same-fact decision is reused');
+  assert.equal(statusOf(a), 'proposed', 'the original canonical remains reviewable');
+  assert.equal(statusOf(b), 'retired', 'the duplicate remains retired');
 });
 
 test('embeddings unavailable → dedup fails closed, nothing collapsed', async () => {
