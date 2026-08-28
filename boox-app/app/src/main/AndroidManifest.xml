@@ -2,6 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Android 11+ package visibility: needed to query the native Notes app's
+         note database (open-or-create) and to launch it, plus to hand a task
+         URL to a browser. -->
+    <queries>
+        <package android:name="com.onyx.android.note" />
+        <provider android:authorities="com.onyx.android.sdk.note.ContentProvider" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 

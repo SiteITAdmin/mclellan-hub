@@ -146,38 +146,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openNote(linkedDate: String, eventId: String?, label: String?) {
-        // Prefer the device's native Notes app (full raw-pen feel, eraser, pen
-        // button); pages return to the hub through the existing Boox → Drive
-        // ingest loop. ScribbleActivity parses OPEN_NOTE_BEAN (fastjson2 →
-        // OpenNoteBean) and with create=true opens its Create Note screen with
-        // the title prefilled — that name is the note's provenance in Drive.
-        // The in-app capture stays as the fallback if the native app is missing
-        // — it uploads with provenance through /api/boox/notes.
+        // The device's native Notes app owns the real pen experience, so notes
+        // live there and return to the hub through the existing Boox → Drive
+        // ingest loop; the note's name is its provenance. NativeNotes reopens
+        // today's note if it already exists rather than making a second one.
         // Day note → "Planner 2026-08-27"; meeting note → "<meeting title> 2026-08-27".
         val noteTitle = if (eventId != null) {
             (label ?: "").replace("Note · ", "").ifBlank { "Meeting" } + " " + linkedDate
         } else {
             "Planner $linkedDate"
         }
-        val bean = org.json.JSONObject()
-            .put("title", noteTitle)
-            .put("create", true)
-            .toString()
-        val native = android.content.Intent().setClassName(
-            "com.onyx.android.note",
-            "com.onyx.android.note.note.ui.ScribbleActivity",
-        ).putExtra("OPEN_NOTE_BEAN", bean)
-        try {
-            startActivity(native)
-        } catch (_: Exception) {
-            val intent = android.content.Intent(this, NoteActivity::class.java).apply {
+        if (NativeNotes.openOrCreate(this, noteTitle)) return
+
+        // Native app unavailable: fall back to in-app capture, which uploads
+        // with day/event provenance through /api/boox/notes.
+        startActivity(
+            android.content.Intent(this, NoteActivity::class.java).apply {
                 putExtra(NoteActivity.EXTRA_LINKED_DATE, linkedDate)
                 putExtra(NoteActivity.EXTRA_LINKED_EVENT_ID, eventId)
                 putExtra(NoteActivity.EXTRA_PAGE_REF, if (eventId != null) "event" else "day")
                 putExtra(NoteActivity.EXTRA_TITLE, label)
-            }
-            startActivity(intent)
-        }
+            },
+        )
     }
 
     override fun onResume() {
@@ -189,17 +179,40 @@ class MainActivity : AppCompatActivity() {
 
     // ── Write actions ──────────────────────────────────────────────────────
     private fun showTaskActions(task: Task) {
-        val labels = arrayOf("Mark done", "Set due date…")
+        // Quick actions stay in-app and work offline; anything deeper opens the
+        // task's real Hub page in the browser, which is the only surface that can
+        // safely edit lane/effort/start/dependency (they live as tags inside the
+        // task notes and would be easy to clobber by hand elsewhere).
+        val canOpenInHub = !task.id.startsWith("local:")
+        val labels = if (canOpenInHub) {
+            arrayOf("Mark done", "Set due date…", "Open in Hub")
+        } else {
+            arrayOf("Mark done", "Set due date…")
+        }
         AlertDialog.Builder(this)
             .setTitle(task.title.ifBlank { "Task" })
             .setItems(labels) { _, which ->
                 when (which) {
                     0 -> queue { repo.enqueueComplete(task) }
                     1 -> pickDate(task.dueForDisplay) { iso -> queue { repo.enqueueReschedule(task, iso) } }
+                    2 -> openTaskInHub(task)
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /** Open this task's page on the Hub website in the device browser. The
+     *  browser holds its own login session; the app's bearer is not shared with
+     *  it, so the first visit needs a one-time sign-in. */
+    private fun openTaskInHub(task: Task) {
+        val url = "${BuildConfig.HUB_BASE_URL}/crm/tasks/${task.id}"
+        val intent = android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse(url),
+        )
+        if (runCatching { startActivity(intent); true }.getOrDefault(false)) return
+        android.widget.Toast.makeText(this, "No browser available", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private fun showNewTaskDialog() {
