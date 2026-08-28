@@ -58,7 +58,7 @@ An inbound email's project is decided by what the email is **about**, never by w
 // lib/source-admission.js
 admitSource(user, sourceKind, rowOrId, { ingester })
 ```
-Called by `gmail.js` `captureFetchedRawGmailEmail`, `agentmail-processor.js` `captureRawAgentMail`, `meeting-intake.js`, and `messaging-capture.js` immediately after the raw row is written. Writes a `knowledge_receipts` row at stage `source_admitted` (`done` / `review` / `error` / `skipped`), idempotent per source revision. **A new ingest path must call this.** Completeness is judged where the capture happened, so "AgentMail isn't reading emails" is something the Hub reports in the daily INGEST section rather than something Douglas has to infer from a task that never appeared. Admission never gates capture, and it decides nothing about meaning. See MODULES.md → Ingest Door.
+Called by `gmail.js` `captureFetchedRawGmailEmail`, `agentmail-processor.js` `captureRawAgentMail`, `meeting-intake.js`, and `messaging-capture.js` immediately after the raw row is written. Writes a `knowledge_receipts` row at stage `source_admitted` (`done` / `review` / `error` / `skipped`), idempotent per source revision. **A new ingest path must call this.** Completeness is judged where the capture happened, so "AgentMail isn't reading emails" is something the Hub reports in the daily INGEST section rather than something Douglas has to infer from a task that never appeared. Admission never gates capture, and it decides nothing about meaning. Capture quality is different from meaning: an unintelligible meeting transcript (`unintelligible_transcript` in `lib/transcript-quality.js`) is recorded as an admission error because the captured bytes are not language, not because the Hub guessed the topic. See MODULES.md → Ingest Door.
 
 ### Silent-filter list
 Subjects matching `SILENT_SUBJECT_RE` (email-processor.js:21) are dropped before processing. Add patterns there, not in calling code.
@@ -288,6 +288,8 @@ Task priority, effort, planner lane, an optional after-dependency, and an option
 ### Meeting intake preview (6 Jul 2026)
 
 Drafts can run "Preview extraction" (`previewMeetingIntake` in `lib/meeting-intake.js`): the extraction is stored in `extraction.preview` keyed by a hash of (transcript, title, date, project); submit reuses it when inputs are unchanged, so review costs no second model call. The extraction schema includes attendee `engagement`, meeting-level `risk_flags`/`decision_quality`/`urgency`/`confidence`, and per-action `blocked_by`/`success_criteria`, all flowing into the meeting markdown the engine reads.
+
+A transcript that is not language — Krisp collapsing thousands of STT fragments into one `00:00` speaker turn, or the extractor warning that the audio is severely degraded — never reaches that preview. `processMeetingTranscript` and the Krisp webhook fail closed with `MONUMENTAL TRANSCRIPT FAILURE`, admit the row as `unintelligible_transcript`, and leave the raw capture in place. The daily INGEST section raises a `NEEDS YOU` line. `/crm/questions` does not inherit the opening 85 words of noise as if they were a question.
 
 ### Meeting entity resolution (22 Aug 2026)
 

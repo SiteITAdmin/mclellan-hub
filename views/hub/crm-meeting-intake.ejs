@@ -74,6 +74,7 @@
   const activePreviewTitle = activeIntake.title || activeIntake.meeting_title || activeOptions.title || 'Meeting transcript';
   const activeStaleProcessing = Boolean(typeof activeIntakeStaleProcessing !== 'undefined' && activeIntakeStaleProcessing);
   const activeLiveProcessing = activeIntake.status === 'processing' && !activeStaleProcessing;
+  const unintelligibleFailure = String(activeIntake.error || '').includes('MONUMENTAL TRANSCRIPT FAILURE');
 %>
   <section class="section-card" style="margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
@@ -89,12 +90,12 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <% if (activeIntake.meeting_id) { %><a class="btn btn-sm" href="/crm/meeting/<%= activeIntake.meeting_id %>">Open meeting</a><% } %>
-        <% if (activeIntake.status === 'draft' || activeIntake.status === 'error') { %>
+        <% if (!unintelligibleFailure && (activeIntake.status === 'draft' || activeIntake.status === 'error')) { %>
           <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/preview">
             <button class="btn btn-sm btn-ghost" type="submit"><%= activeExtraction.preview ? 'Re-run preview' : 'Preview extraction' %></button>
           </form>
         <% } %>
-        <% if (activeIntake.status === 'draft' || activeIntake.status === 'error' || activeStaleProcessing) { %>
+        <% if (!unintelligibleFailure && (activeIntake.status === 'draft' || activeIntake.status === 'error' || activeStaleProcessing)) { %>
           <form method="post" action="/crm/meeting-intake/<%= activeIntake.id %>/save">
             <button class="btn btn-sm" type="submit"><%= activeStaleProcessing ? 'Retry CRM processing' : 'Submit to CRM' %></button>
           </form>
@@ -108,6 +109,12 @@
         <% } %>
       </div>
     </div>
+    <% if (unintelligibleFailure) { %>
+      <p class="crm-notice" style="margin:12px 0 0;border-left:4px solid #a33;">
+        <strong>Monumental transcript failure.</strong> <%= activeIntake.error %>
+        This recording was not turned into questions, facts, or tasks.
+      </p>
+    <% } %>
     <% if (activeStaleProcessing) { %>
       <p class="crm-muted" style="margin:10px 0 0;color:#9a6700;">The earlier processing lease expired. The preserved transcript can be reviewed or retried; a live processing lease remains blocked.</p>
     <% } %>
@@ -285,7 +292,7 @@
         </label>
         <div class="wide" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <button class="btn btn-ghost" type="submit" name="action" value="save">Save review changes</button>
-          <% if (activeIntake.status === 'draft' || activeIntake.status === 'error' || activeStaleProcessing) { %>
+          <% if (!unintelligibleFailure && (activeIntake.status === 'draft' || activeIntake.status === 'error' || activeStaleProcessing)) { %>
             <button class="btn" type="submit" name="action" value="submit"><%= activeStaleProcessing ? 'Retry CRM processing' : 'Submit to CRM' %></button>
           <% } else if (activeIntake.status === 'needs_speaker_review') { %>
             <button class="btn" type="button" disabled style="opacity:.55;cursor:not-allowed;">Submit after speaker names</button>
@@ -300,7 +307,7 @@
         <p style="white-space:pre-wrap;margin:0;"><%= activeIntake.summary %></p>
       </div>
     <% } %>
-    <% if (activeIntake.error) { %>
+    <% if (!unintelligibleFailure && activeIntake.error) { %>
       <p class="crm-muted" style="margin:12px 0 0;color:#a33;"><%= activeIntake.error %></p>
     <% } %>
     <% if (activeIntake.status === 'processed' || activeIntake.status === 'processing') { %>
@@ -392,9 +399,11 @@
             <% } %>
             <% if (item.status === 'draft' || item.status === 'error' || staleProcessing) { %>
               <a class="btn btn-sm btn-ghost" href="/crm/meeting-intake?draft=<%= item.id %>">Review</a>
+              <% if (!String(item.error || '').includes('MONUMENTAL TRANSCRIPT FAILURE')) { %>
               <form method="post" action="/crm/meeting-intake/<%= item.id %>/save">
                 <button class="btn btn-sm" type="submit"><%= staleProcessing ? 'Retry' : 'Submit' %></button>
               </form>
+              <% } %>
             <% } %>
             <% if (!liveProcessing) { %>
               <form method="post" action="/crm/meeting-intake/<%= item.id %>/delete" class="intake-delete-form" data-intake-id="<%= item.id %>">

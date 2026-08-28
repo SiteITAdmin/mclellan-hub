@@ -46,7 +46,10 @@ verdict is recorded against the ingester that captured it. A source that cannot
 be read is a visible failure belonging to a named module, reported in the daily
 INGEST section — not something to be inferred three stages later from a task
 that never appeared. Adding an ingest path means calling this. Admission never
-gates capture and never decides meaning.
+gates capture and never decides meaning. Capture quality is not meaning: an
+unintelligible meeting transcript (Krisp dumping thousands of STT fragments as
+one speaker turn) is `unintelligible_transcript` — a monumental ingest error,
+not CRM questions, facts, or tasks. See `lib/transcript-quality.js`.
 
 **The effect gate** (`lib/effect-gate.js`, inside `google-tasks.js`
 `createTask`). Reading fans out; writing does not. Every task carries a declared

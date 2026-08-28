@@ -407,3 +407,21 @@ test('long evidence is deterministically overlapping and retains the tail', () =
   assert.ok(first.some(chunk => chunk.text.includes('TAIL-CANDIDATE')));
   assert.ok(first[1].start < first[0].end, 'chunks overlap rather than dropping boundary evidence');
 });
+
+test('an unintelligible meeting transcript is incomplete evidence, not a meeting', () => {
+  const fragments = [];
+  for (let i = 0; i < 400; i++) {
+    fragments.push('Something.', 'The man had black teeth.', "I don't know.", 'Yeah.');
+  }
+  const transcript = ['Douglas McLellan | 00:00', ...fragments].join('\n');
+  db.hub().prepare(`
+    INSERT INTO meeting_intakes
+      (id, user, title, transcript, status, extraction, created_counts)
+    VALUES (?, ?, ?, ?, 'draft', '{}', '{}')
+  `).run('source-evidence-noise-meeting', user, 'Mobile recording', transcript);
+
+  const evidence = resolveSourceEvidence(user, 'meeting_intake', 'source-evidence-noise-meeting');
+  assert.equal(evidence.complete, false);
+  assert.equal(evidence.completeness, 'unintelligible_transcript');
+  assert.match(evidence.text, /black teeth/);
+});

@@ -54,7 +54,11 @@ captured or retry row remains eligible for refetch and processing.
   mixed/related siblings are preserved in order, including HTML/plain forwarded
   tails. Unavailable attachment-backed text fails closed for retry.
 - Meeting evidence uses the transcript; a summary-only intake is explicitly
-  incomplete. A complete transcript remains canonical when the preliminary
+  incomplete. An unintelligible transcript — thousands of STT fragments dumped
+  as one speaker turn, or an extractor warning that the audio is severely
+  degraded — is `unintelligible_transcript`, not a meeting: the raw capture is
+  kept, admission is an error, and nothing is extracted into CRM, questions, or
+  tasks. A complete transcript remains canonical when the preliminary
   meeting extractor errors, and a stale `processing` lease re-enters recovery;
   only a live processing lease is temporarily excluded. Debrief sessions use
   `debrief_sessions.transcript` as canonical evidence; a missing transcript is

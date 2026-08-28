@@ -11,6 +11,7 @@ const {
   speakerReviewForTranscript,
   applySpeakerMap,
 } = require('../lib/meeting-intake');
+const { intakeClarificationIssues } = require('../lib/hub-quality-board');
 
 const USER = '__test_meeting_intake_contact_boundary';
 
@@ -220,4 +221,65 @@ test('explicit project selection remains the only meeting project route', async 
   assert.equal(intake.project_slug, 'selected-project');
   const doc = h.prepare('SELECT project_id FROM documents WHERE user = ?').get(USER);
   assert.equal(doc.project_id, projectId);
+});
+
+test('unintelligible transcripts fail closed before any extraction model call', async () => {
+  const h = db.hub();
+  const fragments = [];
+  for (let i = 0; i < 400; i++) {
+    fragments.push('Something.', 'The man had black teeth.', "I don't know.", 'Yeah.');
+  }
+  const transcript = ['Douglas McLellan | 00:00', ...fragments].join('\n');
+  const intakeId = uuid();
+  let modelCalls = 0;
+  await assert.rejects(
+    processMeetingTranscript(USER, {
+      intakeId,
+      transcript,
+      title: 'Mobile recording - nonsense',
+      extractMeetingIntelligenceFn: async () => {
+        modelCalls += 1;
+        throw new Error('model should not have been called');
+      },
+    }),
+    /MONUMENTAL TRANSCRIPT FAILURE/,
+  );
+  assert.equal(modelCalls, 0);
+  const stored = h.prepare('SELECT status, error, meeting_id, extraction FROM meeting_intakes WHERE id = ? AND user = ?')
+    .get(intakeId, USER);
+  assert.equal(stored.status, 'error');
+  assert.match(stored.error, /MONUMENTAL TRANSCRIPT FAILURE/);
+  assert.equal(stored.meeting_id, null);
+  assert.equal(h.prepare('SELECT COUNT(*) AS n FROM meetings WHERE user = ?').get(USER).n, 0);
+  const extraction = JSON.parse(stored.extraction);
+  assert.equal(extraction.transcript_quality.unintelligible, true);
+  assert.equal(
+    intakeClarificationIssues([stored], []).length,
+    0,
+    'garbage STT must not become /crm/questions cards',
+  );
+});
+
+test('an extractor warning that the transcript is severely degraded still fails the intake', async () => {
+  const h = db.hub();
+  const intakeId = uuid();
+  await assert.rejects(
+    processMeetingTranscript(USER, {
+      intakeId,
+      transcript: 'Speaker 1 | 00:00\nWe discussed the RoPA register and agreed Neil will circulate the draft on Friday.',
+      title: 'Looks structured',
+      extractMeetingIntelligenceFn: async () => ({
+        meeting: { title: 'Looks structured', date: '2026-08-25', summary: 'Noise.', attendees: [] },
+        crm_updates: [{ subject: 'Alister McLellan', text: 'Dad is in a care home.', type: 'fact' }],
+        action_register: [],
+        open_questions: ['What was the spoof sender?'],
+        warnings: ['The transcript is severely degraded and contains substantial unrelated or unintelligible material.'],
+      }),
+    }),
+    /MONUMENTAL TRANSCRIPT FAILURE/,
+  );
+  const stored = h.prepare('SELECT status, error, meeting_id FROM meeting_intakes WHERE id = ?').get(intakeId);
+  assert.equal(stored.status, 'error');
+  assert.equal(stored.meeting_id, null);
+  assert.equal(h.prepare('SELECT COUNT(*) AS n FROM meetings WHERE user = ?').get(USER).n, 0);
 });

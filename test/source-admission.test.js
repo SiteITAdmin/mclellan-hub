@@ -167,3 +167,29 @@ test('an unknown source kind is refused rather than silently recorded', () => {
   assert.equal(result.admitted, false);
   assert.equal(result.reason, 'unsupported_source_kind');
 });
+
+test('an unintelligible Krisp transcript is an admission error, named in INGEST', () => {
+  const fragments = [];
+  for (let i = 0; i < 400; i++) {
+    fragments.push('Something.', 'The man had black teeth.', "I don't know.", 'Yeah.');
+  }
+  const transcript = ['Douglas McLellan | 00:00', ...fragments].join('\n');
+  const id = `admission-noise-${++seq}`;
+  db.hub().prepare(`
+    INSERT INTO meeting_intakes
+      (id, user, title, transcript, status, extraction, created_counts)
+    VALUES (?, ?, ?, ?, 'draft', '{}', '{}')
+  `).run(id, user, 'Mobile recording', transcript);
+
+  const result = admitSource(user, 'meeting_intake', id, { ingester: 'krisp' });
+  assert.equal(result.admitted, true);
+  assert.equal(result.complete, false);
+  assert.equal(result.completeness, 'unintelligible_transcript');
+  const receipt = receipts(id)[0];
+  assert.equal(receipt.status, 'error');
+  assert.match(receipt.summary, /unintelligible transcript/);
+
+  const section = require('../lib/system-report').ingestSection(user);
+  assert.match(section, /NEEDS YOU — krisp captured 1 unintelligible transcript/);
+  assert.match(section, new RegExp(`/crm/meeting-intake\\?intake=${id}`));
+});

@@ -1008,12 +1008,18 @@ router.post('/api/krisp/webhook', writeLimiter, (req, res) => {
 
   const intakeId = uuid();
   const { speakerReviewForTranscript } = require('../lib/meeting-intake');
+  const {
+    assessTranscriptIntelligibility,
+    monumentalTranscriptError,
+  } = require('../lib/transcript-quality');
   const speakerReview = speakerReviewForTranscript(normalized.transcript);
-  const status = speakerReview ? 'needs_speaker_review' : 'draft';
+  const quality = assessTranscriptIntelligibility(normalized.transcript);
+  const status = quality.unintelligible ? 'error' : speakerReview ? 'needs_speaker_review' : 'draft';
+  const error = quality.unintelligible ? monumentalTranscriptError(quality) : null;
   hub.prepare(`
     INSERT INTO meeting_intakes
-      (id, user, meeting_id, project_slug, title, source_filename, transcript, status, extraction, created_counts)
-    VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, '{}')
+      (id, user, meeting_id, project_slug, title, source_filename, transcript, status, error, extraction, created_counts)
+    VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, '{}')
   `).run(
     intakeId,
     user,
@@ -1021,6 +1027,7 @@ router.post('/api/krisp/webhook', writeLimiter, (req, res) => {
     normalized.sourceKey,
     normalized.transcript,
     status,
+    error,
     JSON.stringify({
       source: 'krisp',
       krisp: {
@@ -1034,11 +1041,19 @@ router.post('/api/krisp/webhook', writeLimiter, (req, res) => {
         meeting_id: '',
         project_slug: null,
       },
+      ...(quality.unintelligible ? { transcript_quality: quality } : {}),
       ...(speakerReview ? { speaker_review: speakerReview } : {}),
     })
   );
 
-  res.json({ ok: true, intakeId, status });
+  try {
+    const { admitSource } = require('../lib/source-admission');
+    admitSource(user, 'meeting_intake', intakeId, { ingester: 'krisp' });
+  } catch (err) {
+    console.error(`[krisp webhook] source admission failed for ${intakeId}:`, err.message);
+  }
+
+  res.json({ ok: true, intakeId, status, ...(error ? { error } : {}) });
 });
 
 router.post('/crm/meeting-intake', requireAuth, requireSameOrigin, uploadLimiter, upload.single('transcript_file'), async (req, res) => {
