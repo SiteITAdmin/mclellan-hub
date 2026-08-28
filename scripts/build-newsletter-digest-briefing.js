@@ -13,13 +13,14 @@ const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
 const { PROMPTS } = require('../lib/prompts');
 const { openRouterHeaders, TASK_CODES } = require('../lib/openrouter-attribution');
 const { logUsageFromResponse } = require('../lib/openrouter-usage');
+const { listMessages, getMessage } = require('../lib/agentmail');
 
 const ROOT = path.join(__dirname, '..');
 const STORE_DIR = path.join(ROOT, 'data', 'newsletter-briefings');
 const OUT_DIR = process.env.NEWSLETTER_BRIEFING_WORK_DIR || path.join(STORE_DIR, '.work');
 const START_DATE = process.env.NEWSLETTER_BRIEFING_START_DATE || '2026-08-25';
 const DIGEST_SENDER = process.env.NEWSLETTER_DIGEST_SENDER || 'douglasnewsletters@agentmail.to';
-const NEWSLETTER_LABEL = 'Resources/Newsletters';
+const NEWSLETTER_INBOX = process.env.NEWSLETTER_BRIEFING_INBOX || DIGEST_SENDER;
 
 const SYSTEM_PROMPT = PROMPTS.newsletter_digest_briefing;
 const REQUIRED_HEADINGS = ['Executive Readout', 'Coverage and Source Health', 'Sources'];
@@ -62,21 +63,61 @@ function parseDigestSubject(subject) {
   return { coverageIso: new Date(parsed).toISOString().slice(0, 10), emailCount: Number(match[2]) };
 }
 
-function findCapturedNewsletterRows(hub, coverageIso) {
-  const centre = Date.parse(`${coverageIso}T12:00:00Z`) / 1000;
-  return hub.prepare(`
-    SELECT id, subject, from_name, from_email, body_text, received_at, gmail_message_id
-      FROM email_summaries
-     WHERE gmail_label = ?
-       AND ingestion_status IN ('processed', 'promotion_processed')
-       AND received_at >= ? AND received_at < ?
-       AND from_email <> ? AND subject NOT LIKE 'Newsletter digest%'
-     ORDER BY received_at ASC
-  `).all(NEWSLETTER_LABEL, centre - (14 * 60 * 60), centre + (14 * 60 * 60), DIGEST_SENDER)
-    .filter(row => isoInDublin(Number(row.received_at) * 1000) === coverageIso)
-    .filter(row => String(row.from_email || '').toLowerCase() !== DIGEST_SENDER.toLowerCase())
-    .filter(row => !/^Newsletter digest\b/i.test(String(row.subject || '').trim()))
-    .filter(row => String(row.body_text || '').trim());
+function pageMessages(page) {
+  if (Array.isArray(page)) return page;
+  return page?.messages || page?.data || [];
+}
+
+function messageId(message) {
+  return String(message?.message_id || message?.id || '').trim();
+}
+
+function senderDetails(from) {
+  const raw = String(from || '').trim();
+  const match = raw.match(/^(.*?)\s*<([^>]+)>$/);
+  return {
+    from_name: String(match?.[1] || raw).trim().replace(/^['"]|['"]$/g, ''),
+    from_email: String(match?.[2] || raw).trim().toLowerCase(),
+  };
+}
+
+function receivedAt(message) {
+  const ms = new Date(message?.timestamp || message?.received_at || message?.created_at || 0).getTime();
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
+}
+
+async function findCapturedNewsletterRows(coverageIso, { list = listMessages, get = getMessage } = {}) {
+  const listed = [];
+  let pageToken;
+  for (let pageCount = 0; pageCount < 10; pageCount++) {
+    const page = await list({ inbox: NEWSLETTER_INBOX, limit: 100, pageToken });
+    const messages = pageMessages(page);
+    listed.push(...messages.filter(message =>
+      isoInDublin(message?.timestamp || message?.received_at || message?.created_at || 0) === coverageIso
+      && !(message.labels || []).includes('sent')
+      && !/^Newsletter digest\b/i.test(String(message.subject || '').trim())
+    ));
+    pageToken = page?.next_page_token || page?.nextPageToken;
+    if (!pageToken) break;
+  }
+
+  const rows = [];
+  for (const listedMessage of listed) {
+    const id = messageId(listedMessage);
+    if (!id) continue;
+    const full = await get(id, NEWSLETTER_INBOX);
+    const sender = senderDetails(full?.from || listedMessage.from);
+    const body_text = String(full?.text || full?.extracted_text || full?.preview || '').trim();
+    if (!body_text || sender.from_email === DIGEST_SENDER.toLowerCase()) continue;
+    rows.push({
+      id,
+      subject: full?.subject || listedMessage.subject || '(no subject)',
+      ...sender,
+      body_text,
+      received_at: receivedAt(full) || receivedAt(listedMessage),
+    });
+  }
+  return rows.sort((a, b) => a.received_at - b.received_at);
 }
 
 function previousDublinCoverageDate(now = Date.now()) {
@@ -96,11 +137,11 @@ function sourcePacket(rows) {
 
 // This deliberately selects one named day only. Missed days are not polled or
 // backfilled by the scheduler: a manual repair remains explicit and observable.
-function briefingForCoverageDate(hub, coverageIso) {
+async function briefingForCoverageDate(coverageIso, options) {
   const edition = editionForCoverageDate(coverageIso);
   if (!edition) return null;
   if (fs.existsSync(path.join(storedDir(edition), 'manifest.json'))) return null;
-  const rows = findCapturedNewsletterRows(hub, coverageIso);
+  const rows = await findCapturedNewsletterRows(coverageIso, options);
   if (!rows.length) return null;
   const meta = {
     edition,
@@ -110,7 +151,7 @@ function briefingForCoverageDate(hub, coverageIso) {
     emailCount: rows.length,
     sourceNewsletterIds: rows.map(row => row.id),
     sourceSubjects: rows.map(row => row.subject),
-    sourceKind: 'captured_newsletters_previous_dublin_day',
+    sourceKind: 'agentmail_newsletters_previous_dublin_day',
     asOfEpoch: Math.floor(Date.now() / 1000),
   };
   return { meta, text: sourcePacket(rows), receivedAt: rows[rows.length - 1].received_at };
@@ -311,9 +352,8 @@ async function sendStoredBriefing(edition, { force = false } = {}) {
 
 async function buildPreviousDayNewsletterBriefing({ now = Date.now() } = {}) {
   loadDotEnv();
-  const db = require('../lib/db');
   const coverageIso = previousDublinCoverageDate(now);
-  const found = briefingForCoverageDate(db.hub(), coverageIso);
+  const found = await briefingForCoverageDate(coverageIso);
   if (!found) return { skipped: true, reason: `no unbuilt captured newsletters for ${coverageIso}`, coverageIso };
   const generated = await generateMarkdown(found);
   if (generated.queued) return { queued: true, jobId: generated.jobId, meta: found.meta };

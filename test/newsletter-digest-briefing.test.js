@@ -37,14 +37,16 @@ test('editions before start date are inactive', () => {
   assert.strictEqual(editionForCoverageDate('2026-08-24'), null);
 });
 
-test('previous Dublin day selection uses original newsletter evidence only, without a catch-up scan', () => {
+test('previous Dublin day selection uses the newsletter AgentMail inbox only, without a catch-up scan', async () => {
   const rows = [
-    { id: 'wanted', subject: 'Editorial newsletter', from_name: 'Editor', from_email: 'editor@example.com', body_text: 'Full editorial body', received_at: Date.parse('2026-08-27T10:00:00Z') / 1000 },
-    { id: 'digest', subject: 'Newsletter digest — Wednesday 26 August 2026 (9 emails)', from_name: 'Hub', from_email: 'douglasnewsletters@agentmail.to', body_text: 'Wrapper', received_at: Date.parse('2026-08-27T08:00:00Z') / 1000 },
-    { id: 'other-day', subject: 'Older newsletter', from_name: 'Editor', from_email: 'editor@example.com', body_text: 'Older body', received_at: Date.parse('2026-08-26T10:00:00Z') / 1000 },
+    { message_id: 'wanted', subject: 'Editorial newsletter', from: 'Editor <editor@example.com>', timestamp: '2026-08-27T10:00:00Z', labels: ['received'] },
+    { message_id: 'digest', subject: 'Newsletter digest — Wednesday 26 August 2026 (9 emails)', from: 'Hub <douglasnewsletters@agentmail.to>', timestamp: '2026-08-27T08:00:00Z', labels: ['sent'] },
+    { message_id: 'other-day', subject: 'Older newsletter', from: 'Editor <editor@example.com>', timestamp: '2026-08-26T10:00:00Z', labels: ['received'] },
   ];
-  const hub = { prepare: () => ({ all: () => rows }) };
-  const found = _test.briefingForCoverageDate(hub, '2026-08-27');
+  const found = await _test.briefingForCoverageDate('2026-08-27', {
+    list: async () => ({ messages: rows }),
+    get: async id => id === 'wanted' ? { ...rows[0], text: 'Full editorial body' } : { ...rows[1], text: 'Wrapper' },
+  });
   assert.equal(found.meta.iso, '2026-08-27');
   assert.equal(found.meta.emailCount, 1);
   assert.deepStrictEqual(found.meta.sourceNewsletterIds, ['wanted']);
