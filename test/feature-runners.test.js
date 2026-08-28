@@ -82,6 +82,7 @@ test('newsletter digest briefing uses ChatGPT Go/Codex with a full-edition markd
   assert.equal(r.jsonMode, false);
   assert.ok(r.maxInputChars >= 350000);
   assert.ok(r.maxOutputChars >= 120000);
+  assert.equal(r.retries, 1);
 });
 
 test('unknown features default to Terra, never openrouter', () => {
