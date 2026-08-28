@@ -7,6 +7,7 @@ const {
   parseDigestSubject,
   editionForCoverageDate,
   validateMarkdown,
+  _test,
 } = require('../scripts/build-newsletter-digest-briefing');
 
 test('parseDigestSubject extracts coverage date and email count', () => {
@@ -34,6 +35,25 @@ test('editions anchor to the coverage date with 25 Aug 2026 as edition 001', () 
 
 test('editions before start date are inactive', () => {
   assert.strictEqual(editionForCoverageDate('2026-08-24'), null);
+});
+
+test('previous Dublin day selection uses original newsletter evidence only, without a catch-up scan', () => {
+  const rows = [
+    { id: 'wanted', subject: 'Editorial newsletter', from_name: 'Editor', from_email: 'editor@example.com', body_text: 'Full editorial body', received_at: Date.parse('2026-08-27T10:00:00Z') / 1000 },
+    { id: 'digest', subject: 'Newsletter digest — Wednesday 26 August 2026 (9 emails)', from_name: 'Hub', from_email: 'douglasnewsletters@agentmail.to', body_text: 'Wrapper', received_at: Date.parse('2026-08-27T08:00:00Z') / 1000 },
+    { id: 'other-day', subject: 'Older newsletter', from_name: 'Editor', from_email: 'editor@example.com', body_text: 'Older body', received_at: Date.parse('2026-08-26T10:00:00Z') / 1000 },
+  ];
+  const hub = { prepare: () => ({ all: () => rows }) };
+  const found = _test.briefingForCoverageDate(hub, '2026-08-27');
+  assert.equal(found.meta.iso, '2026-08-27');
+  assert.equal(found.meta.emailCount, 1);
+  assert.deepStrictEqual(found.meta.sourceNewsletterIds, ['wanted']);
+  assert.match(found.text, /Full editorial body/);
+  assert.doesNotMatch(found.text, /Wrapper|Older body/);
+});
+
+test('previousDublinCoverageDate is the preceding calendar day', () => {
+  assert.equal(_test.previousDublinCoverageDate(Date.parse('2026-08-28T04:30:00Z')), '2026-08-27');
 });
 
 test('validateMarkdown enforces required house structure', () => {

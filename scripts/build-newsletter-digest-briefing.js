@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-// Newsletter Intelligence Brief — daily PDF from the Douglas Newsletters
-// digest account (douglasnewsletters@agentmail.to). Source of truth is the
-// captured digest email in email_summaries; synthesis runs on the Mac
-// subscription worker (ChatGPT Go/Codex slot); PDF render and send happen hub-side.
+// Newsletter Intelligence Brief — one PDF each morning from the previous
+// Dublin day's captured newsletter evidence. Synthesis runs once on the Mac
+// ChatGPT Go/Codex worker; render and send happen hub-side.
 
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +19,7 @@ const STORE_DIR = path.join(ROOT, 'data', 'newsletter-briefings');
 const OUT_DIR = process.env.NEWSLETTER_BRIEFING_WORK_DIR || path.join(STORE_DIR, '.work');
 const START_DATE = process.env.NEWSLETTER_BRIEFING_START_DATE || '2026-08-25';
 const DIGEST_SENDER = process.env.NEWSLETTER_DIGEST_SENDER || 'douglasnewsletters@agentmail.to';
+const NEWSLETTER_LABEL = 'Resources/Newsletters';
 
 const SYSTEM_PROMPT = PROMPTS.newsletter_digest_briefing;
 const REQUIRED_HEADINGS = ['Executive Readout', 'Coverage and Source Health', 'Sources'];
@@ -44,8 +44,7 @@ function labelInDublin(date) {
   return new Date(date).toLocaleDateString('en-GB', { timeZone: 'Europe/Dublin', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-// Edition is anchored to the coverage date (the newsletters' own day), not the
-// build date, so a digest that lands late still files under its correct day.
+// Edition is anchored to the coverage date, rather than the build date.
 function editionForCoverageDate(iso) {
   const start = Date.parse(`${START_DATE}T00:00:00Z`);
   const current = Date.parse(`${iso}T00:00:00Z`);
@@ -63,40 +62,58 @@ function parseDigestSubject(subject) {
   return { coverageIso: new Date(parsed).toISOString().slice(0, 10), emailCount: Number(match[2]) };
 }
 
-function findDigestRows(hub) {
+function findCapturedNewsletterRows(hub, coverageIso) {
+  const centre = Date.parse(`${coverageIso}T12:00:00Z`) / 1000;
   return hub.prepare(`
-    SELECT id, subject, body_text, received_at, gmail_message_id
+    SELECT id, subject, from_name, from_email, body_text, received_at, gmail_message_id
       FROM email_summaries
-     WHERE from_email = ? AND subject LIKE 'Newsletter digest%'
+     WHERE gmail_label = ?
        AND ingestion_status IN ('processed', 'promotion_processed')
+       AND received_at >= ? AND received_at < ?
+       AND from_email <> ? AND subject NOT LIKE 'Newsletter digest%'
      ORDER BY received_at ASC
-  `).all(DIGEST_SENDER);
+  `).all(NEWSLETTER_LABEL, centre - (14 * 60 * 60), centre + (14 * 60 * 60), DIGEST_SENDER)
+    .filter(row => isoInDublin(Number(row.received_at) * 1000) === coverageIso)
+    .filter(row => String(row.from_email || '').toLowerCase() !== DIGEST_SENDER.toLowerCase())
+    .filter(row => !/^Newsletter digest\b/i.test(String(row.subject || '').trim()))
+    .filter(row => String(row.body_text || '').trim());
 }
 
-// Oldest unbuilt digest first — self-heals days that were missed. A digest is
-// built once; identity is the edition derived from its coverage date.
-function nextUnbuiltDigest(hub) {
-  for (const row of findDigestRows(hub)) {
-    const parsed = parseDigestSubject(row.subject);
-    if (!parsed) continue;
-    const edition = editionForCoverageDate(parsed.coverageIso);
-    if (!edition) continue;
-    const manifestPath = path.join(storedDir(edition), 'manifest.json');
-    if (fs.existsSync(manifestPath)) continue;
-    if (!String(row.body_text || '').trim()) continue;
-    const meta = {
-      edition,
-      iso: parsed.coverageIso,
-      label: labelInDublin(`${parsed.coverageIso}T12:00:00Z`),
-      title: `Newsletter Intelligence Brief ${edition}`,
-      emailCount: parsed.emailCount,
-      sourceDigestId: row.id,
-      sourceSubject: row.subject,
-      asOfEpoch: Math.floor(Date.now() / 1000),
-    };
-    return { meta, text: String(row.body_text), receivedAt: row.received_at };
-  }
-  return null;
+function previousDublinCoverageDate(now = Date.now()) {
+  const current = isoInDublin(now);
+  return new Date(Date.parse(`${current}T12:00:00Z`) - 86400000).toISOString().slice(0, 10);
+}
+
+function sourcePacket(rows) {
+  return rows.map((row, index) => [
+    `===== SOURCE ${index + 1}: ${String(row.subject || 'Untitled newsletter').trim()} =====`,
+    `From: ${String(row.from_name || '').trim()} <${String(row.from_email || '').trim()}>`,
+    `Received: ${new Date(Number(row.received_at) * 1000).toISOString()}`,
+    '',
+    String(row.body_text).trim(),
+  ].join('\n')).join('\n\n');
+}
+
+// This deliberately selects one named day only. Missed days are not polled or
+// backfilled by the scheduler: a manual repair remains explicit and observable.
+function briefingForCoverageDate(hub, coverageIso) {
+  const edition = editionForCoverageDate(coverageIso);
+  if (!edition) return null;
+  if (fs.existsSync(path.join(storedDir(edition), 'manifest.json'))) return null;
+  const rows = findCapturedNewsletterRows(hub, coverageIso);
+  if (!rows.length) return null;
+  const meta = {
+    edition,
+    iso: coverageIso,
+    label: labelInDublin(`${coverageIso}T12:00:00Z`),
+    title: `Newsletter Intelligence Brief ${edition}`,
+    emailCount: rows.length,
+    sourceNewsletterIds: rows.map(row => row.id),
+    sourceSubjects: rows.map(row => row.subject),
+    sourceKind: 'captured_newsletters_previous_dublin_day',
+    asOfEpoch: Math.floor(Date.now() / 1000),
+  };
+  return { meta, text: sourcePacket(rows), receivedAt: rows[rows.length - 1].received_at };
 }
 
 function storedDir(edition) {
@@ -150,7 +167,7 @@ Edition: ${meta.edition}
 Coverage date: ${meta.label}
 Source emails: ${meta.emailCount}
 
-Complete digest text follows. It has already had sponsor-labelled blocks removed by capture, but tracking links, referral prompts, subscription housekeeping and advertising remain — strip those per your rules.
+Complete captured newsletter text follows. Keep every item of editorial content. Strip sponsors, tracking links, referral prompts, subscription housekeeping and advertising per your rules.
 
 ${digestText}`;
 }
@@ -242,7 +259,9 @@ function archiveBriefing(artifacts, meta) {
   const prior = readJson(path.join(dir, 'manifest.json'), {});
   const manifest = {
     ...prior, edition: meta.edition, date: meta.iso, label: meta.label, title: meta.title,
-    emailCount: meta.emailCount, sourceDigestId: meta.sourceDigestId, sourceSubject: meta.sourceSubject,
+    emailCount: meta.emailCount, sourceKind: meta.sourceKind || 'legacy_digest',
+    sourceNewsletterIds: meta.sourceNewsletterIds || (meta.sourceDigestId ? [meta.sourceDigestId] : []),
+    sourceSubjects: meta.sourceSubjects || (meta.sourceSubject ? [meta.sourceSubject] : []),
     ...paths, generatedAt: new Date().toISOString(), sentAt: prior.sentAt || null, to: prior.to || null,
   };
   writeJson(path.join(dir, 'manifest.json'), manifest);
@@ -290,18 +309,19 @@ async function sendStoredBriefing(edition, { force = false } = {}) {
   return { ok: true, skipped: false, manifest: updated };
 }
 
-async function buildNewsletterDigestBriefing() {
+async function buildPreviousDayNewsletterBriefing({ now = Date.now() } = {}) {
   loadDotEnv();
   const db = require('../lib/db');
-  const found = nextUnbuiltDigest(db.hub());
-  if (!found) return { skipped: true, reason: 'no unbuilt newsletter digest' };
+  const coverageIso = previousDublinCoverageDate(now);
+  const found = briefingForCoverageDate(db.hub(), coverageIso);
+  if (!found) return { skipped: true, reason: `no unbuilt captured newsletters for ${coverageIso}`, coverageIso };
   const generated = await generateMarkdown(found);
   if (generated.queued) return { queued: true, jobId: generated.jobId, meta: found.meta };
   return { manifest: await finalizeBriefing({ meta: found.meta, markdown: generated.markdown }), meta: found.meta };
 }
 
-async function sendTodayNewsletterDigestBriefing({ force = false } = {}) {
-  const built = await buildNewsletterDigestBriefing();
+async function sendPreviousDayNewsletterBriefing({ force = false, now = Date.now() } = {}) {
+  const built = await buildPreviousDayNewsletterBriefing({ now });
   if (built.skipped || built.queued) return built;
   return sendStoredBriefing(built.meta.edition, { force });
 }
@@ -317,7 +337,7 @@ async function completeRemoteNewsletterDigestBriefing(payload, markdown) {
 async function main() {
   const send = process.argv.includes('--send');
   const force = process.argv.includes('--force');
-  const result = send ? await sendTodayNewsletterDigestBriefing({ force }) : await buildNewsletterDigestBriefing();
+  const result = send ? await sendPreviousDayNewsletterBriefing({ force }) : await buildPreviousDayNewsletterBriefing();
   console.log(JSON.stringify(result, null, 2));
 }
 
@@ -325,7 +345,7 @@ if (require.main === module) main().catch(err => { console.error(err); process.e
 
 module.exports = {
   START_DATE, DIGEST_SENDER, parseDigestSubject, editionForCoverageDate, listStoredBriefings,
-  getStoredBriefing, validateMarkdown, emailPayload, buildNewsletterDigestBriefing,
-  sendTodayNewsletterDigestBriefing, sendStoredBriefing, completeRemoteNewsletterDigestBriefing,
-  _test: { nextUnbuiltDigest },
+  getStoredBriefing, validateMarkdown, emailPayload, buildPreviousDayNewsletterBriefing,
+  sendPreviousDayNewsletterBriefing, sendStoredBriefing, completeRemoteNewsletterDigestBriefing,
+  _test: { briefingForCoverageDate, findCapturedNewsletterRows, previousDublinCoverageDate, sourcePacket },
 };

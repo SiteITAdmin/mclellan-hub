@@ -80,7 +80,7 @@ test('newsletter digest briefing uses ChatGPT Go/Codex with a full-edition markd
   assert.equal(r.model, 'gpt-5.6-luna');
   assert.equal(r.effort, 'high');
   assert.equal(r.jsonMode, false);
-  assert.ok(r.maxInputChars >= 200000);
+  assert.ok(r.maxInputChars >= 350000);
   assert.ok(r.maxOutputChars >= 120000);
 });
 

@@ -25,7 +25,7 @@ const { ingestAllFeeds } = require('./lib/rss-ingest');
 const { sendSystemReport } = require('./lib/system-report');
 const { processJobs, seedJobs } = require('./lib/job-queue');
 const { sendTodayM365DailyBriefing } = require('./scripts/build-m365-daily-briefing');
-const { sendTodayNewsletterDigestBriefing } = require('./scripts/build-newsletter-digest-briefing');
+const { sendPreviousDayNewsletterBriefing } = require('./scripts/build-newsletter-digest-briefing');
 const { sendTodayUSBlockBriefing } = require('./scripts/build-us-block-special-briefing');
 const {
   readGovernanceReport,
@@ -243,20 +243,16 @@ setInterval(() => {
   sendTodayM365DailyBriefing().catch(err => console.error('[m365-briefing] error:', err));
 }, 60 * 1000);
 
-// ── Newsletter Intelligence Brief (hourly catch-up 11:00–22:00 Europe/Dublin) ─
-// The newsletter digest from the home server lands at variable times, so this
-// polls hourly and builds+sends only digests not already filed (edition-keyed).
-// Minute-zero only: a failed edition must not re-queue a model every 60 seconds.
-const NEWSLETTER_BRIEF_START_HOUR = parseInt(process.env.NEWSLETTER_BRIEF_START_HOUR || '11');
-const NEWSLETTER_BRIEF_END_HOUR = parseInt(process.env.NEWSLETTER_BRIEF_END_HOUR || '22');
+// ── Newsletter Intelligence Brief (05:30 Europe/Dublin, previous day) ───────
+const NEWSLETTER_BRIEF_HOUR = parseInt(process.env.NEWSLETTER_BRIEF_HOUR || '5');
+const NEWSLETTER_BRIEF_MINUTE = parseInt(process.env.NEWSLETTER_BRIEF_MINUTE || '30');
 let newsletterBriefRunning = false;
 setInterval(() => {
   const now = nowIn('Europe/Dublin');
-  if (now.getHours() < NEWSLETTER_BRIEF_START_HOUR || now.getHours() > NEWSLETTER_BRIEF_END_HOUR) return;
-  if (now.getMinutes() !== 0) return;
+  if (now.getHours() !== NEWSLETTER_BRIEF_HOUR || now.getMinutes() !== NEWSLETTER_BRIEF_MINUTE) return;
   if (newsletterBriefRunning) return;
   newsletterBriefRunning = true;
-  sendTodayNewsletterDigestBriefing()
+  sendPreviousDayNewsletterBriefing()
     .then(result => {
       if (!result.skipped) console.log('[newsletter-briefing] scheduled run:', result.queued ? `queued ${result.jobId}` : `sent edition ${result.manifest?.edition}`);
     })
