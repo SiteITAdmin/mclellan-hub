@@ -36,7 +36,7 @@ interface SyncDao {
     suspend fun save(cache: SyncCache)
 }
 
-@Database(entities = [SyncCache::class, OutboxOp::class], version = 3, exportSchema = false)
+@Database(entities = [SyncCache::class, OutboxOp::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun syncDao(): SyncDao
     abstract fun outboxDao(): OutboxDao
@@ -69,12 +69,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v3 → v4 adds the richer task-creation fields to the outbox.
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE outbox_ops ADD COLUMN priority TEXT")
+                db.execSQL("ALTER TABLE outbox_ops ADD COLUMN effortMinutes INTEGER")
+                db.execSQL("ALTER TABLE outbox_ops ADD COLUMN start TEXT")
+                db.execSQL("ALTER TABLE outbox_ops ADD COLUMN noteText TEXT")
+            }
+        }
+
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "hub-planner.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
     }
 }

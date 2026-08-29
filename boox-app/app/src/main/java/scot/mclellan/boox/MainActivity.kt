@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnSync.setOnClickListener { sync() }
         binding.btnNew.setOnClickListener { showNewTaskDialog() }
+        binding.btnPlan.setOnClickListener { showPlanMenu() }
         binding.tabDay.setOnClickListener { setTab(Tab.DAY) }
         binding.tabWeek.setOnClickListener { setTab(Tab.WEEK) }
         binding.tabMonth.setOnClickListener { setTab(Tab.MONTH) }
@@ -215,45 +216,124 @@ class MainActivity : AppCompatActivity() {
         android.widget.Toast.makeText(this, "No browser available", android.widget.Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * Planner placement, matching the Hub's own two explicit actions. Both are
+     * server-side over the live calendar and deliberately never queued offline:
+     * Auto-plan places tasks that have no block yet, Reshuffle only rescues
+     * blocks whose slot has already passed (it never drags future work earlier).
+     */
+    private fun showPlanMenu() {
+        val labels = arrayOf("Auto-plan unscheduled", "Reshuffle overdue blocks")
+        AlertDialog.Builder(this)
+            .setTitle("Plan")
+            .setItems(labels) { _, which ->
+                if (which == 0) runPlannerAction("Auto-plan") { repo.autoPlan() }
+                else runPlannerAction("Reshuffle") { repo.reshuffle() }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun runPlannerAction(name: String, action: suspend () -> Unit) {
+        binding.btnPlan.isEnabled = false
+        binding.tvSynced.text = "$name…"
+        lifecycleScope.launch {
+            val failure = runCatching { action() }.exceptionOrNull()
+            if (failure != null) {
+                android.widget.Toast.makeText(
+                    this@MainActivity,
+                    "$name failed — needs a connection",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            }
+            binding.btnPlan.isEnabled = true
+            sync() // pull the new placements (or restore the label on failure)
+        }
+    }
+
     private fun showNewTaskDialog() {
         val ctx = this
         val pad = dp(16)
         var chosenDue: String? = null
+        var chosenStart: String? = null
 
         val titleField = EditText(ctx).apply { hint = "Task title" }
+        val notesField = EditText(ctx).apply { hint = "Notes (optional)" }
+
+        // Lane, priority and effort mirror the Hub's own new-task form: they are
+        // written as the Google-visible notes tags the planner reads, via
+        // /api/tasks. Radio rows rather than spinners — far easier to hit with a
+        // pen on e-ink, and every option stays visible without a popup redraw.
         val lanes = RadioGroup(ctx).apply {
             orientation = RadioGroup.HORIZONTAL
             addView(RadioButton(ctx).apply { id = 1; text = "Inbox"; isChecked = true })
             addView(RadioButton(ctx).apply { id = 2; text = "Work" })
             addView(RadioButton(ctx).apply { id = 3; text = "Personal" })
         }
+        val priorities = RadioGroup(ctx).apply {
+            orientation = RadioGroup.HORIZONTAL
+            addView(RadioButton(ctx).apply { id = 10; text = "None"; isChecked = true })
+            addView(RadioButton(ctx).apply { id = 11; text = "Low" })
+            addView(RadioButton(ctx).apply { id = 12; text = "Med" })
+            addView(RadioButton(ctx).apply { id = 13; text = "High" })
+        }
+        val efforts = RadioGroup(ctx).apply {
+            orientation = RadioGroup.HORIZONTAL
+            addView(RadioButton(ctx).apply { id = 15; text = "15m" })
+            addView(RadioButton(ctx).apply { id = 30; text = "30m"; isChecked = true })
+            addView(RadioButton(ctx).apply { id = 60; text = "1h" })
+            addView(RadioButton(ctx).apply { id = 120; text = "2h" })
+        }
+
         val dueBtn = TextView(ctx).apply {
             text = "Due date: none"
             setTextColor(INK)
-            setPadding(0, dp(8), 0, dp(8))
-            setOnClickListener {
-                pickDate(null) { iso -> chosenDue = iso; text = "Due date: $iso" }
-            }
+            setPadding(0, dp(10), 0, dp(10))
+            setOnClickListener { pickDate(null) { iso -> chosenDue = iso; text = "Due date: $iso" } }
         }
+        val startBtn = TextView(ctx).apply {
+            text = "Start date: none"
+            setTextColor(INK)
+            setPadding(0, dp(2), 0, dp(10))
+            setOnClickListener { pickDate(null) { iso -> chosenStart = iso; text = "Start date: $iso" } }
+        }
+
         val body = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, 0)
             addView(titleField)
+            addView(notesField)
             addView(text("Lane", 13f, color = MUTED).apply { setPadding(0, dp(12), 0, dp(4)) })
             addView(lanes)
+            addView(text("Priority", 13f, color = MUTED).apply { setPadding(0, dp(10), 0, dp(4)) })
+            addView(priorities)
+            addView(text("Effort", 13f, color = MUTED).apply { setPadding(0, dp(10), 0, dp(4)) })
+            addView(efforts)
             addView(dueBtn)
+            addView(startBtn)
         }
 
         AlertDialog.Builder(ctx)
             .setTitle("New task")
-            .setView(body)
+            .setView(android.widget.ScrollView(ctx).apply { addView(body) })
             .setPositiveButton("Create") { _, _ ->
                 val title = titleField.text.toString().trim()
                 if (title.isEmpty()) return@setPositiveButton
                 val lane = when (lanes.checkedRadioButtonId) {
                     2 -> "work"; 3 -> "personal"; else -> null
                 }
-                queue { repo.enqueueCreate(title, lane, chosenDue) }
+                val priority = when (priorities.checkedRadioButtonId) {
+                    11 -> "low"; 12 -> "medium"; 13 -> "high"; else -> null
+                }
+                val effort = efforts.checkedRadioButtonId.takeIf { it > 0 }
+                queue {
+                    repo.enqueueCreate(
+                        title = title, lane = lane, due = chosenDue,
+                        priority = priority, effortMinutes = effort,
+                        start = chosenStart,
+                        noteText = notesField.text.toString().trim().ifBlank { null },
+                    )
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()

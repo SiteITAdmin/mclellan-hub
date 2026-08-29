@@ -32,6 +32,13 @@ data class OutboxOp(
     val createdAt: Long,
     val attempts: Int = 0,
     val lastError: String? = null,
+    // Richer task creation, mirroring the Hub's own new-task form. These map to
+    // the Google-visible notes tags the planner reads ([priority:], [effort:],
+    // [start:]) — set through /api/tasks, never written here directly.
+    val priority: String? = null,
+    val effortMinutes: Int? = null,
+    val start: String? = null,
+    val noteText: String? = null,
     // Handwritten-note upload (type = note). The raw ink is a PNG on disk; the
     // provenance ties the page to a planner day/event so the hub can file it.
     // captureId (idempotency key) is carried in localId. Recognition is never

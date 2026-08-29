@@ -73,9 +73,21 @@ object HubApi {
         postJson("/api/tasks/$taskId/update", buildJsonObject { put("due", due) }.toString())
     }
 
-    /** Create a task. A lane opts it into the planner; no lane leaves it in the
-     *  inbox, matching the web form's planner_selected semantics. */
-    suspend fun createTask(title: String, lane: String?, due: String?) {
+    /**
+     * Create a task with the same fields the Hub's own new-task form offers. A
+     * lane opts it into the planner; no lane leaves it in the inbox, matching
+     * the web form's planner_selected semantics. Priority/effort/start are
+     * stored by the Hub as the Google-visible notes tags the planner reads.
+     */
+    suspend fun createTask(
+        title: String,
+        lane: String?,
+        due: String?,
+        priority: String? = null,
+        effortMinutes: Int? = null,
+        start: String? = null,
+        notes: String? = null,
+    ) {
         val body = buildJsonObject {
             put("title", title)
             if (lane == "work" || lane == "personal") {
@@ -83,9 +95,24 @@ object HubApi {
                 put("planner_selected", true)
             }
             if (!due.isNullOrBlank()) put("due", due)
+            if (priority in listOf("low", "medium", "high")) put("priority", priority)
+            if (effortMinutes != null && effortMinutes > 0) put("effort_minutes", effortMinutes)
+            if (!start.isNullOrBlank()) put("start", start)
+            if (!notes.isNullOrBlank()) put("notes", notes)
         }
         postJson("/api/tasks", body.toString())
     }
+
+    /**
+     * Planner placement. Both are server-side operations over the live calendar,
+     * so they are online-only — unlike task edits they are not queued offline,
+     * because the result depends on calendar state at the moment they run.
+     * Auto-plan places currently unscheduled tasks; reshuffle only rescues
+     * blocks whose slot has already passed.
+     */
+    suspend fun autoPlan(): String = postJson("/api/planner/auto-plan", "{}")
+
+    suspend fun reshuffle(): String = postJson("/api/planner/reshuffle", "{}")
 
     /**
      * Upload one handwritten page as raw ink to the hub's note door. Idempotent

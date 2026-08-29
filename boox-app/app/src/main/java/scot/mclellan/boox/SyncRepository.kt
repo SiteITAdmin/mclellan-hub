@@ -59,14 +59,30 @@ class SyncRepository(context: Context) {
         else outbox.insert(OutboxOp(type = "update_due", taskId = task.id, due = due, createdAt = now()))
     }
 
-    suspend fun enqueueCreate(title: String, lane: String?, due: String?) {
+    suspend fun enqueueCreate(
+        title: String, lane: String?, due: String?,
+        priority: String? = null, effortMinutes: Int? = null,
+        start: String? = null, noteText: String? = null,
+    ) {
         outbox.insert(
             OutboxOp(
                 type = "create", localId = "local:${UUID.randomUUID()}",
                 title = title, lane = lane, due = due, createdAt = now(),
+                priority = priority, effortMinutes = effortMinutes,
+                start = start, noteText = noteText,
             ),
         )
     }
+
+    /**
+     * Planner placement, straight through to the Hub — deliberately not queued.
+     * Both depend on live calendar state, so a stale replay could place work
+     * against a calendar that has since moved; better to fail loudly offline and
+     * let the user run it again when connected.
+     */
+    suspend fun autoPlan() { HubApi.autoPlan() }
+
+    suspend fun reshuffle() { HubApi.reshuffle() }
 
     /** Queue a handwritten page for upload. captureId is the idempotency key. */
     suspend fun enqueueNote(
@@ -96,7 +112,11 @@ class SyncRepository(context: Context) {
                 when (op.type) {
                     "complete" -> HubApi.completeTask(op.taskId!!)
                     "update_due" -> HubApi.rescheduleTask(op.taskId!!, op.due.orEmpty())
-                    "create" -> HubApi.createTask(op.title.orEmpty(), op.lane, op.due)
+                    "create" -> HubApi.createTask(
+                        title = op.title.orEmpty(), lane = op.lane, due = op.due,
+                        priority = op.priority, effortMinutes = op.effortMinutes,
+                        start = op.start, notes = op.noteText,
+                    )
                     "note" -> HubApi.uploadNote(
                         captureId = op.localId!!, file = File(op.filePath!!),
                         title = op.title, capturedAt = Instant.ofEpochMilli(op.createdAt).toString(),
@@ -136,7 +156,8 @@ class SyncRepository(context: Context) {
                 val t = Task(
                     id = op.localId ?: "local:new", title = op.title.orEmpty(),
                     status = "needsAction", due = op.due, effectiveDue = op.due,
-                    plannerLane = op.lane, effortMinutes = 30,
+                    plannerLane = op.lane, effortMinutes = op.effortMinutes ?: 30,
+                    priority = op.priority, start = op.start,
                 )
                 tasks = tasks + t
                 unsched = unsched + t

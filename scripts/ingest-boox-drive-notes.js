@@ -9,6 +9,12 @@ const { google } = require('googleapis');
 const ROOT = path.join(__dirname, '..');
 const DEFAULT_VAULT = path.join(ROOT, 'data', 'synthadoc', 'mclellan-hub-knowledge');
 const DEFAULT_FOLDER_PATH = 'onyx/NoteMax/Notebooks';
+// The Hub's own nightly planner PDFs live in the folder the tablet syncs, so if
+// the notes ingest is pointed at that same folder it would re-import the Hub's
+// own output as if it were handwriting. Skip anything named with the planner
+// prefix — it is generated, not captured. (Must match BOOX_PLANNER_NAME_PREFIX
+// in lib/boox-planner.js, which names those files.)
+const PLANNER_NAME_PREFIX = String(process.env.BOOX_PLANNER_NAME_PREFIX || 'Hub Planner').trim();
 const DEFAULT_HUB_DB = path.join(ROOT, 'data', 'hub.db');
 const IMPORTED_HUB_DB = path.join(ROOT, 'data', 'dchat-import', 'db', 'hub.db');
 
@@ -187,6 +193,13 @@ function isSupported(file) {
   return SUPPORTED_MIME_PREFIXES.some(prefix => String(file.mimeType || '').startsWith(prefix));
 }
 
+/** True for the Hub's own generated planner PDFs, which are output, not input. */
+function isHubGeneratedPlanner(file) {
+  if (!PLANNER_NAME_PREFIX) return false;
+  return String(file.name || '').trim().toLowerCase()
+    .startsWith(PLANNER_NAME_PREFIX.toLowerCase());
+}
+
 function queuePath(vaultRoot, sourcePath, fileId) {
   const queueDir = path.join(vaultRoot, 'raw_sources', 'ingest-queue');
   fs.mkdirSync(queueDir, { recursive: true });
@@ -220,8 +233,13 @@ async function main() {
   let downloaded = 0;
   let skipped = 0;
   let unsupported = 0;
+  let generated = 0;
 
   for (const file of files) {
+    if (isHubGeneratedPlanner(file)) {
+      generated += 1;
+      continue;
+    }
     if (!isSupported(file)) {
       unsupported += 1;
       continue;
@@ -248,6 +266,10 @@ async function main() {
       mimeType: mimeType || file.mimeType || '',
       sourcePath: path.relative(vaultRoot, target),
       syncedAt: new Date().toISOString(),
+      // Import-only mode holds a page for a human read before it can reach the
+      // knowledge base: weak handwriting and untitled pages must not become
+      // facts on their own. Queueing mode hands it straight to Synthadoc.
+      reviewStatus: queueEnabled ? 'queued' : 'pending',
     };
     if (queueEnabled) queuePath(vaultRoot, target, file.id);
     downloaded += 1;
@@ -259,7 +281,43 @@ async function main() {
   state.folderPath = folderId ? null : folderPath;
   writeState(stateFile, state);
 
-  console.log(`[boox-drive] done: downloaded=${downloaded} skipped=${skipped} unsupported=${unsupported}`);
+  const pending = writeReviewIndex(vaultRoot, rawDir, state);
+  console.log(
+    `[boox-drive] done: downloaded=${downloaded} skipped=${skipped} `
+    + `unsupported=${unsupported} hub-generated-skipped=${generated} awaiting-review=${pending}`,
+  );
+}
+
+/**
+ * Rewrite the review inbox index. It is derived from the sync state every run —
+ * never a second store — so a page that has been reviewed (its entry marked
+ * anything other than `pending`) simply drops off the list. This is the visible
+ * surface for "captured but not yet trusted": without it, import-only mode is a
+ * silent archive.
+ */
+function writeReviewIndex(vaultRoot, rawDir, state) {
+  const pending = Object.entries(state.files || {})
+    .filter(([, meta]) => meta && meta.reviewStatus === 'pending')
+    .sort((a, b) => String(b[1].syncedAt || '').localeCompare(String(a[1].syncedAt || '')));
+
+  const lines = [
+    '# Boox notes awaiting review',
+    '',
+    'Handwritten pages imported from Drive but deliberately NOT yet in the',
+    'knowledge base. Read each one, give it a real title, correct the OCR, then',
+    'queue it for Synthadoc ingest. Regenerated on every ingest run.',
+    '',
+    `Last updated: ${new Date().toISOString()}`,
+    `Awaiting review: ${pending.length}`,
+    '',
+  ];
+  for (const [id, meta] of pending) {
+    lines.push(`- **${meta.name || id}** — imported ${String(meta.syncedAt || '').slice(0, 10)}`);
+    lines.push(`  - file: \`${meta.sourcePath}\``);
+  }
+  if (!pending.length) lines.push('_Nothing awaiting review._');
+  fs.writeFileSync(path.join(rawDir, 'REVIEW-QUEUE.md'), lines.join('\n') + '\n');
+  return pending.length;
 }
 
 main().catch(err => {
