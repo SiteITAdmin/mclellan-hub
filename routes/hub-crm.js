@@ -2095,6 +2095,47 @@ router.get('/crm/questions', requireAuth, (req, res) => {
   });
 });
 
+// The page behind a note-transcription question. Read-only, and confined to the
+// boox-notes inbox: the transcription can only be checked if the handwriting it
+// came from is one click away. Resolved against the notes directory and then
+// re-checked, so a crafted `file` cannot escape it.
+router.get('/crm/notes/page', requireAuth, (req, res) => {
+  const path = require('path');
+  const fs = require('fs');
+  const { vaultRoot, notesDir } = require('../lib/boox-note-ocr');
+  const requested = String(req.query.file || '');
+  if (!requested) return res.status(400).send('file required');
+
+  const root = notesDir();
+  const full = path.resolve(vaultRoot(), requested);
+  if (full !== root && !full.startsWith(root + path.sep)) return res.status(403).send('Forbidden');
+  if (!fs.existsSync(full) || !fs.statSync(full).isFile()) return res.status(404).send('Not found');
+
+  const types = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.tiff': 'image/tiff' };
+  const type = types[path.extname(full).toLowerCase()];
+  if (!type) return res.status(415).send('Unsupported');
+  res.type(type);
+  res.setHeader('Content-Disposition', `inline; filename="${path.basename(full).replace(/"/g, '')}"`);
+  fs.createReadStream(full).pipe(res);
+});
+
+// Douglas's corrected reading of a handwritten page. Saved onto the page rather
+// than composed into a knowledge sentence: a page of notes is not one statement,
+// and the correction has to survive next to the document he checked it against.
+router.post('/crm/notes/transcription', requireAuth, requireSameOrigin, writeLimiter, (req, res) => {
+  const file = String(req.body.file || '').trim();
+  const text = String(req.body.transcription || '').trim();
+  if (!file || !text) return questionsRedirect(res, { error: 'A corrected transcription is required.', key: String(req.body.key || '') });
+  try {
+    const { saveCorrection } = require('../lib/boox-note-ocr');
+    const record = saveCorrection(file, text);
+    questionsRedirect(res, { saved: `Saved your reading of ${record.name}.` });
+  } catch (err) {
+    console.error('[crm notes transcription]', err);
+    questionsRedirect(res, { error: err.message, key: String(req.body.key || '') });
+  }
+});
+
 function questionsRedirect(res, { saved, error, key, restore }) {
   const params = new URLSearchParams();
   if (saved) params.set('saved', saved);

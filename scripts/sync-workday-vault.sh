@@ -110,6 +110,16 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-hub-model://v1}"
       || printf '[%s] Boox Drive ingest failed\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   fi
 
+  # ── 4b. Recognise handwritten Boox pages ─────────────────────────────────
+  # macOS-only (Vision framework), so this is the machine that does it. Bounded
+  # per run: a fat notebook must not hold up the rest of the sync. Nothing here
+  # enters the knowledge base — each reading is surfaced on /crm/questions for
+  # Douglas to check against the original page.
+  if [ "$(uname -s)" = "Darwin" ]; then
+    /usr/bin/env node "$ROOT/scripts/ocr-boox-notes.js" --limit=5 \
+      || printf '[%s] Boox note OCR reported failures\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  fi
+
   # ── 5. Process ingest queue ───────────────────────────────────────────────
   QUEUE_DIR="$VAULT_ROOT/raw_sources/ingest-queue"
 
