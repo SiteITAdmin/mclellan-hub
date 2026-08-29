@@ -384,9 +384,12 @@ These are the tools the system runs on. They are not features — they are the f
 - Tasks created today by source
 - Any completed flights (with actual times)
 - Module health checks — flag any module that shows signs of silent failure
+- Successful-work anomaly checks — per-feature subscription volume, exact prompt concentration, documented job cadence, and Mac queue age. Exact repeated CRM adjudications and runaway nightly synthesis are automatically contained and must appear under SELF-REPAIRS; novel high volume is warning-only.
 - AI spend: COST BY MODEL (grouped by the actual `request_logs.model_id`, canonicalised and joined to `model_config` for list rates), COST BY FEATURE (grouped by `model_key`), and a "WHAT EACH FEATURE DOES" glossary sourced from `lib/feature-descriptions.js` — so the report explains its own spend. Model↔feature is a many-to-one: features name the *task*, models name the *engine*.
 
 **Healthy looks like:** Douglas reads it and can tell from one glance whether the system is working or needs attention.
+
+**Work-loop guard:** `lib/work-loop-guard.js`, job `work_loop_guard` every 15 minutes. `request_logs.prompt_fingerprint` is a SHA-256 identity of the bounded prompt packet, never prompt content. A fourth identical atom-pair review (`crm_atom_duplicate_review`) in six hours is blocked before subscription execution; action/source duplicate reviews are warning-only because blocking their fail-open path could create a task duplicate. More than two `synthesis_run` completions in 24 hours restores one next-night successor and retires duplicate pending chains. Every containment writes a `hub_remediation` receipt for the daily SELF-REPAIRS section.
 
 ---
 
