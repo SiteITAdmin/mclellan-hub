@@ -120,6 +120,23 @@ export OPENAI_BASE_URL="${OPENAI_BASE_URL:-hub-model://v1}"
       || printf '[%s] Boox note OCR reported failures\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   fi
 
+  # ── 4c. Push note transcriptions back to the VPS ─────────────────────────
+  # The vault otherwise flows VPS → Mac only; the wiki is the sole thing pushed
+  # back. Recognition happens here but /crm/questions renders there, so without
+  # this the readings would sit on the Mac and the questions would never appear.
+  # Narrow by design: only the .ocr.json sidecars, never the raw pages.
+  if [ -d "$VAULT_ROOT/raw_sources/boox-notes" ]; then
+    rsync -az \
+      -e "ssh ${SSH_BASE_OPTS}" \
+      --include='*/' --include='*.ocr.json' --exclude='*' \
+      "$VAULT_ROOT/raw_sources/boox-notes/" \
+      "${VPS_USER}@${VPS_HOST}:${REMOTE_VAULT}/raw_sources/boox-notes/" \
+      && ssh ${SSH_BASE_OPTS} "${VPS_USER}@${VPS_HOST}" \
+        "chown -R hub:hub \"$REMOTE_VAULT/raw_sources/boox-notes\" 2>/dev/null || true" \
+      && printf '[%s] note transcription push ok\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      || printf '[%s] note transcription push failed\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  fi
+
   # ── 5. Process ingest queue ───────────────────────────────────────────────
   QUEUE_DIR="$VAULT_ROOT/raw_sources/ingest-queue"
 
