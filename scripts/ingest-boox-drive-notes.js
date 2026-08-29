@@ -281,10 +281,21 @@ async function main() {
   state.folderPath = folderId ? null : folderPath;
   writeState(stateFile, state);
 
+  // Publish the recogniser's vocabulary while we are here: this runs daily on the
+  // VPS, which is the only machine with the real CRM, and the file rides the
+  // existing vault sync down to the Mac that does the reading.
+  let vocabulary = 0;
+  try {
+    vocabulary = require('../lib/note-vocabulary').writeVocabulary(user, vaultRoot).count;
+  } catch (err) {
+    console.error(`[boox-drive] vocabulary build failed: ${err.message}`);
+  }
+
   const pending = writeReviewIndex(vaultRoot, rawDir, state);
   console.log(
     `[boox-drive] done: downloaded=${downloaded} skipped=${skipped} `
-    + `unsupported=${unsupported} hub-generated-skipped=${generated} awaiting-review=${pending}`,
+    + `unsupported=${unsupported} hub-generated-skipped=${generated} `
+    + `awaiting-review=${pending} vocabulary=${vocabulary}`,
   );
 }
 

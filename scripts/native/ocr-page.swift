@@ -11,7 +11,12 @@
 // surfaced for human correction rather than trusted — the per-line confidence
 // below is what tells the review surface how much to doubt it.
 //
-// Usage: ocr-page <image-path>
+// Optionally primed with a vocabulary: Vision matches glyphs against a generic
+// dictionary, so the names and terms Douglas actually writes (from the CRM, and
+// from pages he has already corrected) are the prior it was missing. A hint can
+// only make it prefer a real word over a garbled one.
+//
+// Usage: ocr-page <image-path> [words-json]
 // Output: {"lines":[{"text":"...","confidence":0.93}],"meanConfidence":0.9}
 
 import Foundation
@@ -38,6 +43,14 @@ let request = VNRecognizeTextRequest()
 request.recognitionLevel = .accurate
 request.usesLanguageCorrection = true
 request.recognitionLanguages = ["en-GB", "en-US"]
+
+if CommandLine.arguments.count > 2 {
+    let wordsPath = CommandLine.arguments[2]
+    if let data = FileManager.default.contents(atPath: wordsPath),
+       let words = try? JSONDecoder().decode([String].self, from: data) {
+        request.customWords = words
+    }
+}
 
 do {
     try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request])
