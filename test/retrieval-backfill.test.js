@@ -18,9 +18,9 @@ test.after(() => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
-function evidence(id, { complete = true } = {}) {
+function evidence(id, { complete = true, sourceKind = 'email_summary' } = {}) {
   return {
-    source_kind: 'email_summary',
+    source_kind: sourceKind,
     source_id: id,
     revision_hash: `revision-${id}`,
     complete,
@@ -64,4 +64,27 @@ test('an unavailable embedder respects the attempt limit and leaves retryable wo
   assert.equal(result.processed, 0);
   assert.equal(result.retryableFailures, 1);
   assert.equal(result.remaining, 2);
+});
+
+test('a source-kind-limited backfill preserves only the requested canonical evidence lane', async () => {
+  const requestedKinds = [];
+  const indexed = [];
+  const result = await backfillEmbeddings('backfill-communications-only', {
+    limit: 10,
+    sourceKinds: ['email_summary', 'messaging_message'],
+    compiledSources: [],
+    listSourceEvidenceFn: (_user, kind) => {
+      requestedKinds.push(kind);
+      return [evidence(`${kind}-1`, { sourceKind: kind })];
+    },
+    isIndexedFn: () => false,
+    indexSourceFn: async (_user, kind, id) => {
+      indexed.push(`${kind}:${id}`);
+      return 1;
+    },
+  });
+
+  assert.deepEqual(requestedKinds, ['email_summary', 'messaging_message']);
+  assert.deepEqual(indexed, ['email_summary:email_summary-1', 'messaging_message:messaging_message-1']);
+  assert.equal(result.processed, 2);
 });
