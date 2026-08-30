@@ -80,7 +80,7 @@ class SyncRepository(context: Context) {
      * against a calendar that has since moved; better to fail loudly offline and
      * let the user run it again when connected.
      */
-    suspend fun autoPlan() { HubApi.autoPlan() }
+    suspend fun autoPlan(startDate: String, endDate: String) { HubApi.autoPlan(startDate, endDate) }
 
     suspend fun reshuffle() { HubApi.reshuffle() }
 

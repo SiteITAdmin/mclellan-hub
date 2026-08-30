@@ -227,7 +227,14 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Plan")
             .setItems(labels) { _, which ->
-                if (which == 0) runPlannerAction("Auto-plan") { repo.autoPlan() }
+                if (which == 0) {
+                    val planner = snapshot?.data?.planner
+                    if (planner == null) {
+                        android.widget.Toast.makeText(this, "Sync the planner before auto-planning", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        runPlannerAction("Auto-plan") { repo.autoPlan(planner.startDate, planner.endDate) }
+                    }
+                }
                 else runPlannerAction("Reshuffle") { repo.reshuffle() }
             }
             .setNegativeButton("Cancel", null)

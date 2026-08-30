@@ -110,7 +110,13 @@ object HubApi {
      * Auto-plan places currently unscheduled tasks; reshuffle only rescues
      * blocks whose slot has already passed.
      */
-    suspend fun autoPlan(): String = postJson("/api/planner/auto-plan", "{}")
+    suspend fun autoPlan(startDate: String, endDate: String): String = postJson(
+        "/api/planner/auto-plan",
+        buildJsonObject {
+            put("startDate", startDate)
+            put("endDate", endDate)
+        }.toString(),
+    )
 
     suspend fun reshuffle(): String = postJson("/api/planner/reshuffle", "{}")
 

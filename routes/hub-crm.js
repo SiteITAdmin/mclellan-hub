@@ -2035,10 +2035,15 @@ router.post('/api/planner/tasks/:id/unschedule', requireAuth, requireSameOrigin,
 
 router.post('/api/planner/auto-plan', requireAuth, requireSameOrigin, writeLimiter, async (req, res) => {
   try {
-    const { autoPlanTasks } = require('../lib/task-calendar-planner');
+    const { addIsoDays, autoPlanTasks } = require('../lib/task-calendar-planner');
+    // The first Boox APK sent an empty body for this explicit action. Keep that
+    // installed client useful while bounding the fallback to the normal 31-day
+    // planner horizon; current clients send their synced window explicitly.
+    const startDate = req.body?.startDate || require('../lib/boox-planner').isoToday();
+    const endDate = req.body?.endDate || addIsoDays(startDate, 31);
     const result = await autoPlanTasks(req.hubUser, {
-      startDate: req.body.startDate,
-      endDate: req.body.endDate,
+      startDate,
+      endDate,
     });
     res.json({ ok: true, ...result });
   } catch (error) {
