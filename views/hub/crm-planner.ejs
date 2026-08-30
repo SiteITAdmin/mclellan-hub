@@ -153,7 +153,7 @@
           <% for (const day of snapshot.days) { %>
             <div class="planner-all-day-cell">
               <% for (const event of snapshot.events.filter(item => item.allDay && item.date <= day.date && item.endDate > day.date)) { %>
-                <a class="planner-all-day-event" href="<%= event.htmlLink || '#' %>" <%= event.htmlLink ? 'target="_blank" rel="noopener"' : '' %> title="<%= event.title %>"><%= event.title %></a>
+                <a class="planner-all-day-event<%= event.transparency === 'transparent' ? ' planner-all-day-free' : '' %>" href="<%= event.htmlLink || '#' %>" <%= event.htmlLink ? 'target="_blank" rel="noopener"' : '' %> title="<%= event.transparency === 'transparent' ? 'Free — does not block tasks · ' : '' %><%= event.title %>"><%= event.title %></a>
               <% } %>
             </div>
           <% } %>
@@ -170,7 +170,7 @@
                 <div class="planner-hour-line" style="top:<%= (minute - viewStartMinutes) * minuteScale %>px"></div>
                 <% if (minute < viewEndMinutes) { %><div class="planner-half-line" style="top:<%= (minute - viewStartMinutes + 30) * minuteScale %>px"></div><% } %>
               <% } %>
-              <% for (const event of snapshot.events.filter(item => !item.allDay && item.date === day.date && item.time)) { %>
+              <% for (const event of snapshot.events.filter(item => !item.allDay && item.date === day.date && item.time && item.transparency !== 'transparent')) { %>
                 <% const rawStart = minuteOf(event.time); %>
                 <% const rawEnd = event.endDate === day.date && event.endTime ? minuteOf(event.endTime) : viewEndMinutes; %>
                 <% const top = Math.max(0, rawStart - viewStartMinutes) * minuteScale; %>

@@ -26,3 +26,13 @@ test('daily planner separates appointments from planner task mirrors', () => {
   assert.deepEqual(result.calendarEvents.map(event => event.id), ['meeting']);
   assert.deepEqual(result.tasks.map(event => event.id), ['task']);
 });
+
+test('print today ignores free all-day banners as appointments', () => {
+  const result = splitDayEvents({
+    events: [
+      { id: 'busy', title: 'Standup', date: '2026-08-10', endDate: '2026-08-10', time: '09:00', allDay: false, isTask: false, transparency: 'opaque' },
+      { id: 'free', title: 'Neil On Site', date: '2026-08-10', endDate: '2026-08-11', time: null, allDay: true, isTask: false, transparency: 'transparent' },
+    ],
+  }, '2026-08-10');
+  assert.deepEqual(result.calendarEvents.map(event => event.id), ['busy']);
+});

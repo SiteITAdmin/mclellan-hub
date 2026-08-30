@@ -2599,7 +2599,7 @@ router.get('/crm/tasks/:id', requireAuth, async (req, res) => {
     const today = todayIso();
     const events = await listPlannerCalendarEvents(req.hubUser, { startDate: today, endDate: addIsoDays(today, 14) }, { reconcileCache: false });
     upcomingMeetings = events
-      .filter(event => !event.isTask && !event.allDay && event.time)
+      .filter(event => !event.isTask && !event.allDay && event.time && event.transparency !== 'transparent')
       .map(event => ({ value: `cal:${event.id}`, date: event.date, time: event.time, endTime: event.endTime, title: event.title }));
   } catch (error) {
     console.warn('[tasks] upcoming meetings load failed:', error.message);

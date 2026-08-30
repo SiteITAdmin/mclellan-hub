@@ -10,6 +10,9 @@ const {
   computeConflictReflow,
   computeReshuffle,
   resolveTaskFloor,
+  normaliseCalendarEvent,
+  shouldPromoteToFreeAllDay,
+  isPlannerAppointment,
   taskEffectiveDueDate,
   isTaskEffectivelyOverdue,
   _test,
@@ -421,4 +424,43 @@ test('reshuffle will not rescue a dependent block earlier than its linked meetin
   });
   assert.equal(result.moves.length, 1);
   assert.equal(result.moves[0].startAt, '2026-08-11T15:30');
+});
+
+test('a timed free work-day banner is treated as all-day and does not occupy planner time', () => {
+  const event = normaliseCalendarEvent({
+    id: 'neil',
+    summary: 'Neil On Site',
+    transparency: 'transparent',
+    start: { dateTime: '2026-09-03T08:00:00+01:00' },
+    end: { dateTime: '2026-09-03T17:00:00+01:00' },
+  });
+  assert.equal(event.allDay, true);
+  assert.equal(event.time, null);
+  assert.equal(event.date, '2026-09-03');
+  assert.equal(event.endDate, '2026-09-04');
+  assert.equal(isPlannerAppointment(event), false);
+  assert.deepEqual(_test.eventBusyIntervals([event], '2026-09-03', 8 * 60, 16 * 60), []);
+});
+
+test('shouldPromoteToFreeAllDay only matches long free timed banners', () => {
+  assert.equal(shouldPromoteToFreeAllDay({
+    transparency: 'transparent',
+    start: { dateTime: '2026-09-03T08:00:00+01:00' },
+    end: { dateTime: '2026-09-03T17:00:00+01:00' },
+  }), true);
+  assert.equal(shouldPromoteToFreeAllDay({
+    transparency: 'transparent',
+    start: { date: '2026-09-03' },
+    end: { date: '2026-09-04' },
+  }), false);
+  assert.equal(shouldPromoteToFreeAllDay({
+    transparency: 'transparent',
+    start: { dateTime: '2026-09-03T09:00:00+01:00' },
+    end: { dateTime: '2026-09-03T09:30:00+01:00' },
+  }), false);
+  assert.equal(shouldPromoteToFreeAllDay({
+    transparency: 'opaque',
+    start: { dateTime: '2026-09-03T08:00:00+01:00' },
+    end: { dateTime: '2026-09-03T17:00:00+01:00' },
+  }), false);
 });

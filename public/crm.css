@@ -247,6 +247,7 @@ fieldset { border: 1px solid var(--crm-line); border-radius: 10px; padding: 12px
 .planner-all-day-label { display: flex; justify-content: center; padding-top: 8px; color: var(--crm-muted); font-size: 8px; text-transform: uppercase; }
 .planner-all-day-cell { min-width: 0; padding: 4px; border-right: 1px solid var(--crm-line); display: grid; gap: 3px; align-content: start; }
 .planner-all-day-event { display: block; padding: 3px 5px; border-radius: 4px; background: rgba(90,103,128,.12); color: var(--crm-text); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+.planner-all-day-free { background: transparent; color: var(--crm-muted); border: 1px dashed var(--crm-line); }
 .planner-time-axis { position: relative; height: var(--planner-view-height); }
 .planner-time-axis span { position: absolute; right: 9px; transform: translateY(-50%); color: var(--crm-muted); font-size: 9px; }
 .planner-day-body { position: relative; min-width: 0; border-right: 1px solid var(--crm-line); transition: background .12s; }
