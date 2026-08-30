@@ -164,6 +164,62 @@ test('automatic conflict reflow rolls into the next work day and marks the task 
   assert.equal(result.moved[0].late, true);
 });
 
+test('conflict reflow moves a future block that now sits before its after-dependency floor', () => {
+  const task = {
+    id: 'sharepoint', title: 'Meet Sarah and update Ken', planner_lane: 'work',
+    effort_minutes: 30, due: '2026-08-31', notBefore: '2026-09-03T14:30',
+  };
+  const result = computeConflictReflow({
+    tasks: [task],
+    startDate: '2026-08-31',
+    endDate: '2026-09-05',
+    preferences: { workStart: '08:00', workEnd: '16:00' },
+    now: new Date('2026-08-30T12:00:00Z'), // Sunday afternoon; Monday is still ahead
+    events: [
+      {
+        id: 'sarah-meeting', title: 'Meet Sarah Egan', date: '2026-09-03', endDate: '2026-09-03',
+        time: '14:00', endTime: '14:30', allDay: false, transparency: 'opaque',
+      },
+      {
+        id: 'task', taskId: task.id, isTask: true, task, date: '2026-08-31', endDate: '2026-08-31',
+        time: '11:30', endTime: '12:00', allDay: false, transparency: 'opaque',
+        notBefore: '2026-09-03T14:30',
+      },
+    ],
+  });
+  assert.equal(result.moved.length, 1);
+  assert.equal(result.moved[0].fromAt, '2026-08-31T11:30');
+  assert.equal(result.moved[0].startAt, '2026-09-03T14:30');
+  assert.equal(result.moved[0].reason, 'dependency_floor');
+});
+
+test('conflict reflow honours a start-date floor when placing after an appointment collision', () => {
+  const task = {
+    id: 'later', title: 'Start-deferred', planner_lane: 'work',
+    effort_minutes: 30, due: '2026-09-24', notBefore: '2026-09-24T00:00',
+  };
+  const result = computeConflictReflow({
+    tasks: [task],
+    startDate: '2026-08-28',
+    endDate: '2026-09-25',
+    preferences: { workStart: '08:00', workEnd: '16:00' },
+    now: new Date('2026-08-28T06:00:00Z'),
+    events: [
+      {
+        id: 'appointment', date: '2026-08-28', endDate: '2026-08-28',
+        time: '09:00', endTime: '10:00', allDay: false, transparency: 'opaque',
+      },
+      {
+        id: 'task', taskId: task.id, isTask: true, task, date: '2026-08-28', endDate: '2026-08-28',
+        time: '09:00', endTime: '09:30', allDay: false, transparency: 'opaque',
+        notBefore: '2026-09-24T00:00',
+      },
+    ],
+  });
+  assert.equal(result.moved.length, 1);
+  assert.equal(result.moved[0].startAt, '2026-09-24T08:00');
+});
+
 test('automatic conflict reflow leaves an observable item when no later slot exists', () => {
   const task = { id: 'boxed-in', title: 'Boxed in', planner_lane: 'work', effort_minutes: 60 };
   const result = computeConflictReflow({

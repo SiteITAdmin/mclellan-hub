@@ -2663,6 +2663,17 @@ router.post('/api/tasks/:id/update', requireAuth, requireSameOrigin, writeLimite
       ...(companyId !== undefined && { companyId: companyId || null }),
       ...(projectSlug !== undefined && { projectSlug: projectSlug || null }),
     });
+    // Setting "Only after" / a start date on an already-scheduled task must
+    // move the existing calendar block, not wait for the next 5-minute
+    // reconcile (or worse, leave it sitting before the new floor).
+    if (req.body.after !== undefined || req.body.start !== undefined) {
+      try {
+        const { reflowPlannerConflicts } = require('../lib/task-calendar-planner');
+        await reflowPlannerConflicts(req.hubUser);
+      } catch (err) {
+        console.warn('[tasks] floor reflow after dependency change failed:', err.message);
+      }
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('[tasks] update error', err);
