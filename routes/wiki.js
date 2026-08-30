@@ -12,10 +12,7 @@ const db     = require('../lib/db');
 const { vaultRoot } = require('../lib/obsidian-vault');
 const { startGoogleAuth, finishGoogleAuth } = require('../lib/google-auth');
 const { requireSameOrigin } = require('../lib/security');
-const { TASK_CODES, openRouterHeaders } = require('../lib/openrouter-attribution');
-const { logUsageFromResponse } = require('../lib/openrouter-usage');
-const { getSystemModelId, getSystemPrompt } = require('../lib/settings');
-const { PROMPTS } = require('../lib/prompts');
+const { answerWikiSearch } = require('../lib/wiki-knowledge-search');
 const {
   indexAll,
   buildGraph,
@@ -484,99 +481,28 @@ router.post('/api/ingest/url', requireAuth, requireSameOrigin, express.json(), a
   res.json({ ok: true, queued: filename });
 });
 
-// ── API: Search + synthesise (all vault content) ──────────────────────────────
+// ── API: Search + synthesise ──────────────────────────────────────────────────
 router.get('/api/search', requireAuth, async (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json({ results: [], synthesis: null });
 
-  const matches = searchAll(q, { limit: 8 });
-
-  // Email summaries from DB
-  const hub = db.hub();
-  const emailMatches = hub.prepare(`
-    SELECT subject, from_name, summary, received_at
-    FROM email_summaries WHERE user = ?
-    AND (subject LIKE ? OR summary LIKE ?)
-    ORDER BY received_at DESC LIMIT 4
-  `).all(WIKI_USER, `%${q}%`, `%${q}%`);
-
-  if (!matches.length && !emailMatches.length) return res.json({ results: [], synthesis: null });
-
-  // Build synthesis context — label each source by type
-  const sourceContext = matches.map((p, index) => {
-    const label = `[S${index + 1} | ${p.typeLabel} | ${p.title}]`;
-    return `${label}\n${p.content.slice(0, 600)}`;
-  }).join('\n\n');
-
-  const emailContext = emailMatches.map((e, index) => {
-    const d = new Date(e.received_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    return `[E${index + 1} | Email | ${d} | ${e.from_name} | ${e.subject}]\n${e.summary}`;
-  }).join('\n\n');
-
-  const context = [sourceContext, emailContext].filter(Boolean).join('\n\n---\n\n');
-
-  let synthesis = null;
-  if (context) {
-    try {
-      const sourceDirectory = matches.map((p, index) => (
-        `S${index + 1}: ${p.typeLabel} | ${p.title} | ${p.type === 'wiki' ? p.slug : p.relativePath}`
-      )).concat(emailMatches.map((e, index) => (
-        `E${index + 1}: Email | ${e.subject} | ${e.from_name}`
-      ))).join('\n');
-      const wikiSearchModel = getSystemModelId('wiki_search', 'system', 'deepseek/deepseek-v3.2');
-      const wikiSearchPrompt = getSystemPrompt('wiki_search', 'system', PROMPTS.wiki_search);
-      const resp = await fetch('hub-model://v1/chat/completions', {
-        method: 'POST',
-        headers: openRouterHeaders(TASK_CODES.WIKI, {
-          baseUrl: 'https://wiki.mclellan.scot',
-        }),
-        body: JSON.stringify({
-          model: wikiSearchModel,
-          messages: [
-            {
-              role: 'system',
-              content: wikiSearchPrompt,
-            },
-            {
-              role: 'user',
-              content: `Question: ${q}\n\nSource directory:\n${sourceDirectory}\n\nSource excerpts:\n${context}`,
-            },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.2,
-        }),
-      });
-      const data = await resp.json();
-      logUsageFromResponse({
-        user: req.hubUser || 'system',
-        feature: 'wiki_search',
-        modelKey: 'wiki_search',
-        fallbackModelId: wikiSearchModel,
-        data,
-        taskCode: TASK_CODES.WIKI,
-      });
-      const rawSynthesis = data.choices?.[0]?.message?.content?.trim();
-      if (rawSynthesis) synthesis = JSON.parse(rawSynthesis);
-    } catch (_) {}
-  }
-
-  const resultRows = matches.map((p, index) => ({
-    sourceId:  `S${index + 1}`,
-    slug:      p.type === 'wiki' ? p.slug : null,
-    url:       p.type === 'wiki' ? `/page/${encodeURIComponent(p.slug)}` : `/source/${encodeURIComponent(p.slug)}`,
-    title:     p.title,
-    type:      p.type,
-    typeLabel: p.typeLabel,
-    project:   p.project,
-    filename:  p.filename,
-    tags:      p.tags,
-    excerpt:   p.content.slice(0, 200),
+  const vaultFallback = searchAll(q, { limit: 4 }).map(page => ({
+    ...page,
+    url: page.type === 'wiki'
+      ? `/page/${encodeURIComponent(page.slug)}`
+      : `/source/${encodeURIComponent(page.slug)}`,
   }));
-
+  const result = await answerWikiSearch(req.hubUser || WIKI_USER, q, { vaultFallback });
+  const resultRows = result.evidence.map(({ atom, ...entry }) => entry);
   res.json({
     results: resultRows,
-    emailMatches: emailMatches.map((e, index) => ({ ...e, sourceId: `E${index + 1}` })),
-    synthesis,
+    synthesis: result.synthesis,
+    error: result.error,
+    retrieval: {
+      directContacts: result.directContacts,
+      semanticHits: result.semanticHits,
+      semanticError: result.semanticError,
+    },
   });
 });
 

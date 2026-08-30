@@ -185,6 +185,20 @@ pass a stable task code for receipts.
 
 Full map: `lib/feature-runners.js`. Admin UI is registry-aligned post-migration.
 
+### Wiki knowledge answers
+
+`GET /api/search` in `routes/wiki.js` is a knowledge-first answer path, not a
+vault-string search. `lib/wiki-knowledge-search.js` resolves an explicitly
+named contact through the shared identity store, retrieves active/stale
+`knowledge_atoms` with newest confirmations first, then adds a bounded set of
+semantic hits from canonical source evidence. The `wiki_search` Sonnet slot
+answers only from that packet and must cite the supplied source IDs. A
+hand-written vault note is used only when neither compiled knowledge nor source
+evidence matched; it cannot displace newer compiled claims. The response makes
+model failure visible while retaining the retrieved evidence cards. This
+surface never creates facts or links — ingestion and the CRM knowledge engine
+remain responsible for compiling meaning.
+
 ### Model style profiles
 `lib/model-style-profiles.js` holds per-family prompt style profiles (claude/gpt/gemini/grok/open), distilled monthly by the `style_profile_run` job from production system prompts in github.com/asgeirtj/system_prompts_leaks. Stored as compiled knowledge in `crm_context` with receipts in `knowledge_receipts`. Consumers: the prompt tool's target-model selector and admin "Shape for model". Module contract: MODULES.md → Model Style Profiles.
 

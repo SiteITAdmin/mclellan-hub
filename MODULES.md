@@ -435,9 +435,11 @@ These are the tools the system runs on. They are not features — they are the f
 ---
 
 ## Wiki (Synthadoc)
-**Purpose:** Index project documents and chat outputs for retrieval. Should feed back into the system as context for email classification, briefing enrichment, and regulatory matching.
+**Purpose:** Private knowledge answer and browse surface. Natural-language answers read compiled `knowledge_atoms` first, then bounded semantic source evidence (email, messaging, documents, meetings, tasks and debriefs) with provenance; the Synthadoc/Obsidian vault remains a browseable fallback when the knowledge layer has no relevant evidence.
 
-**Current limitation:** Synthadoc indexes documents but the hub does not yet query it as a retrieval source during email processing or briefings. This is a known gap — the path from wiki → other modules does not yet exist.
+**Healthy looks like:** A question about a known person resolves their canonical name/alias and returns recent, source-backed claims rather than an old vault preamble; a natural-language question does not require every word to appear in one file; raw evidence shown beside a result is bounded and labelled as source evidence; a model failure leaves the retrieved evidence visible rather than inventing an answer.
+
+**Does not own:** Knowledge extraction, identity, or raw storage. It reads the compiled knowledge layer and canonical source evidence; it must not create CRM facts, hand-maintained links, or a second index of relationships. Synthadoc remains a vault/indexing integration and is not yet a retrieval input to email processing or briefings.
 
 ---
 

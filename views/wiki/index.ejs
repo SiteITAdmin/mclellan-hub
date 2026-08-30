@@ -79,28 +79,22 @@ document.getElementById('search-form').addEventListener('submit', async function
   const data = await res.json();
 
   const cards = document.getElementById('page-cards');
-  if (!data.results.length && !(data.emailMatches || []).length) {
+  if (!data.results.length && !data.synthesis) {
     cards.innerHTML = '<p class="wiki-empty">No matches for "' + escapeHtml(q) + '"</p>';
     return;
   }
 
   cards.innerHTML = data.results.map(p => {
-    const provenance = [p.typeLabel, p.project, p.filename].filter(Boolean).join(' · ');
+    const provenance = [p.typeLabel, p.date, p.meta, p.project, p.filename].filter(Boolean).join(' · ');
     const inner = `<div class="result-source-id">${escapeHtml(p.sourceId)}</div><h3>${escapeHtml(p.title)}</h3><p class="result-provenance">${escapeHtml(provenance)}</p><p>${escapeHtml(String(p.excerpt || '').replace(/\[\[([^\]]+)\]\]/g, '$1'))}…</p><div class="wiki-card-tags">${(p.tags||[]).slice(0,4).map(t => '<span class="tag">' + escapeHtml(t) + '</span>').join('')}</div>`;
     return p.url
       ? `<a href="${escapeHtml(p.url)}" class="wiki-card">${inner}</a>`
       : `<div class="wiki-card">${inner}</div>`;
-  }).join('') + (data.emailMatches||[]).map(e => `
-    <div class="wiki-card wiki-card-email">
-      <h3>📧 ${escapeHtml(e.subject)}</h3>
-      <p>${escapeHtml(e.summary)}</p>
-    </div>
-  `).join('');
+  }).join('') + (data.error ? `<p class="wiki-empty">${escapeHtml(data.error)}</p>` : '');
 
   if (data.synthesis) {
     const sourceMap = Object.fromEntries([
       ...data.results.map(p => [p.sourceId, p]),
-      ...(data.emailMatches || []).map(e => [e.sourceId, { ...e, title: e.subject }]),
     ]);
     const sourceLinks = ids => (ids || []).map(id => {
       const source = sourceMap[id];
