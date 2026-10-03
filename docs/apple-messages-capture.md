@@ -31,6 +31,13 @@ store. Contact/project meaning is still synthesized by the Hub.
 - Edits and unsends are retained as provider metadata when visible but do not
   rewrite an already-admitted source. This matches the current WhatsApp
   bubble-capture contract.
+- Douglas can keep named people out of the Hub entirely.
+  `MESSAGES_CAPTURE_PRIVATE_CONTACTS_FILE` (Mac `.env` only) points at a JSON
+  list of `{ slug, name, phones[], emails[] }`. Their 1:1 bubbles are written to
+  `<list dir>/people/<slug>/messages.jsonl` on the Mac and never posted; the
+  heartbeat counts them as `private_kept_local`. If the list is configured but
+  unreadable, the run fails before the cursor moves, so nothing is posted until
+  privacy can be checked. The Hermes WhatsApp bridge reads the same list.
 
 ## Installation
 

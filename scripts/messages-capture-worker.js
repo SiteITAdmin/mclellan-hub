@@ -39,6 +39,58 @@ const STATE_PATH = String(process.env.MESSAGES_CAPTURE_STATE_PATH || path.join(
   os.homedir(), 'Library', 'Application Support', 'McLellan Hub', 'messages-capture-state.json',
 ));
 const MAX_PER_RUN = Math.max(1, Math.min(2000, Number(process.env.MESSAGES_CAPTURE_MAX_PER_RUN) || 500));
+const PRIVATE_CONTACTS_FILE = String(process.env.MESSAGES_CAPTURE_PRIVATE_CONTACTS_FILE || '').trim();
+
+// Contacts on Douglas's private list never reach the Hub: their 1:1 messages
+// are appended to <list dir>/people/<slug>/messages.jsonl on this Mac instead.
+// An unreadable list (e.g. its volume is unmounted) stops the run before the
+// cursor moves, because nothing can be proven not-private.
+function readPrivateContacts(file = PRIVATE_CONTACTS_FILE) {
+  if (!file) return null;
+  let list;
+  try { list = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (error) { throw new Error(`private contacts list unreadable (${file}): ${error.message}`); }
+  return { root: path.dirname(file), contacts: Array.isArray(list?.contacts) ? list.contacts : [] };
+}
+
+function phoneTail(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length >= 9 ? digits.slice(-9) : '';
+}
+
+function matchPrivateContact(privateList, payload) {
+  if (!privateList || !payload || payload.is_group) return null;
+  const handle = String(payload.raw?.chat_identifier || payload.sender_id || '').trim().toLowerCase();
+  if (!handle || handle === 'me') return null;
+  const tail = phoneTail(handle);
+  return privateList.contacts.find(contact => {
+    const phones = Array.isArray(contact.phones) ? contact.phones : [];
+    const emails = Array.isArray(contact.emails) ? contact.emails : [];
+    return (tail && phones.some(phone => phoneTail(phone) === tail))
+      || emails.some(email => String(email).trim().toLowerCase() === handle);
+  }) || null;
+}
+
+function keepPrivate(privateList, contact, payload) {
+  const slug = String(contact.slug || '').replace(/[^a-z0-9-]/gi, '').toLowerCase();
+  if (!slug) throw new Error('private contact without a slug');
+  const directory = path.join(privateList.root, 'people', slug);
+  fs.mkdirSync(directory, { recursive: true });
+  const file = path.join(directory, 'messages.jsonl');
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8').includes(`"message_id":${JSON.stringify(payload.external_message_id)}`)) return;
+  const outbound = payload.raw?.direction === 'outbound';
+  fs.appendFileSync(file, `${JSON.stringify({
+    message_id: payload.external_message_id,
+    ts: payload.received_at,
+    iso: new Date(payload.received_at * 1000).toISOString(),
+    platform: 'imessage',
+    direction: outbound ? 'outbound' : 'inbound',
+    sender: outbound ? 'Douglas' : (contact.name || payload.sender_name),
+    body: payload.body,
+    message_type: payload.raw?.has_attachments ? 'text_with_attachment' : 'text',
+    media: null,
+  })}\n`);
+}
 
 function heartbeatUrl(captureUrl = CAPTURE_URL) {
   const url = new URL(captureUrl);
@@ -98,6 +150,7 @@ async function runOnce({
   statePath = STATE_PATH,
   captureUrl = CAPTURE_URL,
   initializeOnly = process.env.MESSAGES_CAPTURE_INITIALIZE_ONLY === '1',
+  privateContactsFile = PRIVATE_CONTACTS_FILE,
   post = postJson,
 } = {}) {
   if (!captureUrl || !SECRET) throw new Error('HUB_URL/HUB_MESSAGING_CAPTURE_URL and HERMES_WEBHOOK_SECRET are required');
@@ -126,13 +179,18 @@ async function runOnce({
       return { initialized: false, captured: 0, skipped: 0, state };
     }
 
+    const privateList = readPrivateContacts(privateContactsFile);
     const contactNames = readContactNames({ root: addressBookRoot });
     const rows = reader.messagesAfter(state.last_rowid, { limit: MAX_PER_RUN });
     let captured = 0;
     let skipped = 0;
     for (const row of rows) {
       const built = buildMessagesCapturePayload(row, { user: USER, ownerName: OWNER_NAME, contactNames });
-      if (built.payload) {
+      const privateContact = matchPrivateContact(privateList, built.payload);
+      if (privateContact) {
+        keepPrivate(privateList, privateContact, built.payload);
+        increment(state, 'private_kept_local');
+      } else if (built.payload) {
         await post(captureUrl, built.payload);
         captured += 1;
         increment(state, 'captured');

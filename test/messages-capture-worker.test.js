@@ -86,3 +86,53 @@ test('worker starts at now, posts a new bubble once, and advances only its durab
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('private-list contacts stay on the Mac and an unreadable list stops the run before the cursor moves', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'messages-worker-private-'));
+  const databasePath = path.join(directory, 'chat.db');
+  const statePath = path.join(directory, 'state.json');
+  const privateContactsFile = path.join(directory, 'private', 'contacts.json');
+  fs.mkdirSync(path.dirname(privateContactsFile));
+  fs.writeFileSync(privateContactsFile, JSON.stringify({
+    contacts: [{ slug: 'synthetic-person', name: 'Synthetic', phones: ['087 123 4567'] }],
+  }));
+  let database = createMessagesDatabase(databasePath);
+  database.close();
+
+  const captures = [];
+  const captureUrl = 'https://synthetic-hub.invalid/api/messaging/capture';
+  const post = async (url, body) => {
+    if (url.endsWith('/api/messaging/capture')) captures.push(body);
+    return { ok: true, created: true };
+  };
+  const run = (overrides = {}) => runOnce({ databasePath, statePath, captureUrl, addressBookRoot: directory, post, privateContactsFile, ...overrides });
+
+  try {
+    await run();
+    database = new Database(databasePath);
+    database.prepare(`
+      INSERT INTO message (ROWID, guid, text, service, date, is_from_me, handle_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(11, 'private-guid', 'See you Friday?', 'iMessage', 809176812763921280, 0, 1);
+    database.prepare('INSERT INTO chat_message_join VALUES (?, ?)').run(1, 11);
+    database.close();
+
+    const missing = run({ privateContactsFile: path.join(directory, 'unmounted', 'contacts.json') });
+    await assert.rejects(missing, /private contacts list unreadable/);
+    assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).last_rowid, 10, 'cursor holds while the list is unreadable');
+
+    const result = await run();
+    assert.equal(result.captured, 0);
+    assert.equal(captures.length, 0, 'nothing from a private contact is posted to the Hub');
+    assert.equal(result.state.last_rowid, 11);
+    assert.equal(result.state.counters.private_kept_local, 1);
+    const kept = fs.readFileSync(path.join(directory, 'private', 'people', 'synthetic-person', 'messages.jsonl'), 'utf8')
+      .trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(kept.length, 1);
+    assert.equal(kept[0].body, 'See you Friday?');
+    assert.equal(kept[0].platform, 'imessage');
+    assert.equal(kept[0].sender, 'Synthetic');
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
