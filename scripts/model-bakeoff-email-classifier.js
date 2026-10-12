@@ -29,6 +29,9 @@ function arg(name, fallback) {
 }
 
 const LIMIT = Number(arg('limit', 40));
+// "recent" is dominated by newsletters; "people" samples mail from known
+// contacts or filed outside Resources/, where contact and task calls matter.
+const SAMPLE = arg('sample', 'recent');
 const OUT = arg('out', path.join(require('os').tmpdir(), `email-classifier-bakeoff-${Date.now()}.json`));
 const LANES = arg('lanes', 'codex:gpt-5.6-luna:low,codex:gpt-6-luna:low,claude:haiku:low')
   .split(',')
@@ -126,6 +129,7 @@ async function main() {
     WHERE user = ? AND direction = 'received' AND ingestion_status = 'processed'
       AND body_text IS NOT NULL AND length(body_text) > 40
       AND (project_slug IS NULL OR project_slug NOT LIKE '\\_\\_%' ESCAPE '\\')
+      ${SAMPLE === 'people' ? "AND (contact_id IS NOT NULL OR (gmail_label IS NOT NULL AND gmail_label NOT LIKE 'Resources/%'))" : ''}
     ORDER BY received_at DESC
     LIMIT ?
   `).all(user, LIMIT);
