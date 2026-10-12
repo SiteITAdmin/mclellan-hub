@@ -33,7 +33,7 @@ function makeSnapshotDir(flag) {
 test('self-repair uses the local Claude Code CLI Opus model', () => {
   assert.equal(REPAIR_MAX_TURNS, 12);
   assert.equal(resolveRepairModel('claude-opus-4-8'), 'claude-opus-4-8');
-  assert.equal(resolveRepairModel('opus'), 'claude-opus-4-8');
+  assert.equal(resolveRepairModel('opus'), 'opus');
   assert.throws(() => resolveRepairModel('grok-4.5'), /must be an Opus model/);
   assert.throws(() => resolveRepairModel('google/gemini-2.5-pro-preview'), /must be an Opus model/);
 });

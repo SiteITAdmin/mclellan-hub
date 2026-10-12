@@ -178,12 +178,27 @@ pass a stable task code for receipts.
 | Terra | crm_source_triage, crm_duplicate_review, crm_action_projection, digests |
 | Grok | content research, multi-search planning |
 | ChatGPT Go/Codex (`gpt-5.6-luna`) | newsletter_digest_briefing |
-| Grok CLI (grok-4.6) | Opus availability fallback |
+| Grok CLI (grok-4.7) | Opus availability fallback |
 | Sonnet | cross_entity_synthesis, wiki, on-demand newsletter briefing, m365/us-block |
 | Opus | nakai_daily_briefing, exceptional adjudication |
 | Local | embeddings (Ollama qwen3-embedding), STT/TTS when configured |
 
 Full map: `lib/feature-runners.js`. Admin UI is registry-aligned post-migration.
+
+Claude tiers use the CLI's `sonnet` / `opus` / `haiku` aliases so they track
+the current generation (verified 12 Oct 2026: Sonnet 5.5, Opus 5.5, Haiku 5.5);
+never pin a dated Claude ID in the registry. The Opus tier runs at `medium`
+effort — on Opus 5.5 that beats Opus 5 at `high`, and `high` thinks longer
+for no measured gain.
+
+Every Claude CLI call is confined to its own prompt (`commandFor` in
+`lib/subscription-agent.js`): `--setting-sources user`, `--strict-mcp-config`,
+`--disable-slash-commands`, no session persistence. The Mac worker runs from
+the repo checkout, so without this each call loaded the repo CLAUDE.md,
+auto-memory, plugins, skills and MCP connectors (~61K tokens around a ~3K
+prompt) and the developer's personal permission list. Research features get
+exactly `WebSearch,WebFetch`; everything else gets no tools. Do not use
+`--bare` — it skips the keychain where the subscription login lives.
 
 ### Wiki knowledge answers
 

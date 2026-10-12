@@ -5,10 +5,11 @@ const assert = require('node:assert/strict');
 const { RUNNERS, configuredRunner, commandFor, textFromOutput, fallbackConfig } = require('../lib/subscription-agent');
 const { resolveFeatureRunner, MODELS } = require('../lib/feature-runners');
 
-test('Nakai maps to local Claude Opus at high effort', () => {
+test('Nakai maps to local Claude Opus at medium effort', () => {
   const command = commandFor(RUNNERS.nakai_daily_briefing, 'system');
   assert.match(command.command, /(?:^|\/)claude$/);
-  assert.deepEqual(command.args.slice(0, 6), ['--print', '--model', 'opus', '--effort', 'high', '--tools']);
+  assert.deepEqual(command.args.slice(0, 5), ['--print', '--model', 'opus', '--effort', 'medium']);
+  assert.equal(command.args[command.args.indexOf('--tools') + 1], '');
   assert.equal(textFromOutput(RUNNERS.nakai_daily_briefing, JSON.stringify({ result: '# Daily Briefing\nBody' })), '# Daily Briefing\nBody');
 });
 
@@ -17,7 +18,7 @@ test('cross-entity maps to Claude Sonnet (senior synthesis, not Luna atomisation
   assert.equal(RUNNERS.cross_entity_synthesis.model, 'sonnet');
   const command = commandFor(RUNNERS.cross_entity_synthesis, 'system');
   assert.match(command.command, /(?:^|\/)claude$/);
-  assert.deepEqual(command.args.slice(0, 6), ['--print', '--model', 'sonnet', '--effort', 'high', '--tools']);
+  assert.deepEqual(command.args.slice(0, 5), ['--print', '--model', 'sonnet', '--effort', 'high']);
 });
 
 // The invariant is independence, not a particular vendor: the briefing must not
@@ -76,7 +77,7 @@ test('opencode NDJSON output extracts only assistant text', () => {
 });
 
 // Opus availability fallback (21 Aug 2026): when the Opus lane fails — e.g.
-// "model at capacity" on 20 Aug — the job retries once on Grok 4.6 via the
+// "model at capacity" on 20 Aug — the job retries once on the Grok frontier lane via the
 // local Grok CLI. Still subscription-CLI plane; zero OpenRouter.
 test('newsletter digest briefing runs through the ChatGPT Go/Codex CLI', () => {
   const config = resolveFeatureRunner('newsletter_digest_briefing');
@@ -88,12 +89,30 @@ test('newsletter digest briefing runs through the ChatGPT Go/Codex CLI', () => {
   assert.ok(command.args.includes('-'), 'the full digest is passed through stdin, not a command argument');
 });
 
-test('opus tier declares grok-4.6 as its availability fallback', () => {
-  assert.equal(MODELS.grok46.runner, 'grok');
-  assert.equal(MODELS.grok46.model, 'grok-4.6');
+test('opus tier declares the grok-4.7 frontier lane as its availability fallback', () => {
+  assert.equal(MODELS.grok_frontier.runner, 'grok');
+  assert.equal(MODELS.grok_frontier.model, 'grok-4.7');
   for (const feature of ['nakai_daily_briefing', 'repair_agent', 'hub_chat_opus']) {
-    assert.equal(resolveFeatureRunner(feature).fallbackTo, 'grok46', `${feature} falls back to grok46`);
+    assert.equal(resolveFeatureRunner(feature).fallbackTo, 'grok_frontier', `${feature} falls back to grok_frontier`);
   }
+});
+
+test('claude calls are confined to their own prompt, not the developer workspace', () => {
+  const plain = commandFor(RUNNERS.nakai_daily_briefing, 'system').args;
+  for (const flag of ['--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence']) {
+    assert.ok(plain.includes(flag), `${flag} present`);
+  }
+  assert.equal(plain[plain.indexOf('--setting-sources') + 1], 'user');
+  const research = commandFor(resolveFeatureRunner('content_research'), 'system').args;
+  assert.equal(research[research.indexOf('--tools') + 1], 'WebSearch,WebFetch');
+  assert.equal(research[research.indexOf('--allowedTools') + 1], 'WebSearch,WebFetch');
+});
+
+test('grok runner pins the declared model instead of the CLI default', () => {
+  const command = commandFor({ ...MODELS.grok_frontier, allowTools: false }, 'system');
+  const idx = command.args.indexOf('--model');
+  assert.ok(idx > 0, 'grok args carry --model');
+  assert.equal(command.args[idx + 1], 'grok-4.7');
 });
 
 test('non-opus tiers have no availability fallback by default', () => {
@@ -106,8 +125,8 @@ test('fallbackConfig swaps opus config onto the grok CLI lane', () => {
   const fb = fallbackConfig({ ...primary });
   if (!fb) return assert.ok('grok CLI not present on this host — skip');
   assert.equal(fb.runner, 'grok');
-  assert.equal(fb.model, 'grok-4.6');
-  assert.equal(fb.tier, 'grok46');
+  assert.equal(fb.model, 'grok-4.7');
+  assert.equal(fb.tier, 'grok_frontier');
   assert.equal(fb.fallbackTo, null);
   // Non-fallback and self-referential configs resolve to nothing.
   assert.equal(fallbackConfig({ ...primary, fallbackTo: null }), null);
