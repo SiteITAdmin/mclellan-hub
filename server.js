@@ -173,8 +173,16 @@ function nowIn(tz) {
 const BRIEFING_USERS = (process.env.BRIEFING_USERS || 'douglas,nakai').split(',').map(u => u.trim()).filter(Boolean);
 const BACKGROUND_JOBS_ENABLED = process.env.HUB_DISABLE_JOBS !== '1';
 
+// HUB_JOBS_ONLY=type,type keeps every scheduler off except the job queue, and
+// lets the queue run only those job types (e.g. flight tracking while the rest
+// of the Hub is paused for review). Nothing is seeded in this mode.
+const JOBS_ONLY = (process.env.HUB_JOBS_ONLY || '').split(',').map(type => type.trim()).filter(Boolean);
+
 if (!BACKGROUND_JOBS_ENABLED) {
   console.log('[scheduler] background jobs disabled by HUB_DISABLE_JOBS=1');
+} else if (JOBS_ONLY.length) {
+  console.log(`[scheduler] only job types ${JOBS_ONLY.join(', ')} enabled by HUB_JOBS_ONLY`);
+  setInterval(() => processJobs({ types: JOBS_ONLY }).catch(err => console.error('[jobs] tick error:', err)), 60 * 1000);
 } else {
 
 // ── CRM calendar sync (06:45 Europe/Dublin) ──────────────────────────────────
