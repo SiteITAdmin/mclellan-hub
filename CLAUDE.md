@@ -122,7 +122,9 @@ local (embeddings; STT/TTS when configured).
 
 **Do not** bump CRM pipeline versions or re-queue the historical corpus without
 Douglas explicitly accepting the cost. Auto-process window:
-`CRM_KNOWLEDGE_AUTO_PROCESS_AFTER` (new evidence only after the 3 Aug freeze).
+`CRM_KNOWLEDGE_AUTO_PROCESS_AFTER` (new evidence only after the 3 Aug freeze;
+the same-named env var, ISO date or epoch seconds, can only move the freeze line
+later — used on 24 Oct 2026 so resuming after the pause did not catch up).
 
 ### CRM prompt operating system
 
