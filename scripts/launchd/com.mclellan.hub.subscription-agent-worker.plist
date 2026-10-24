@@ -9,8 +9,8 @@
     <key>PATH</key><string>/Users/dm_mini/.local/bin:/opt/homebrew/opt/node@24/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>SUBSCRIPTION_AGENT_IDLE_MS</key><string>30000</string>
   </dict>
-  <key>ProgramArguments</key><array><string>/opt/homebrew/opt/node@24/bin/node</string><string>/Users/dm_mini/Documents/mclellan hub/scripts/subscription-agent-worker.js</string></array>
-  <key>WorkingDirectory</key><string>/Users/dm_mini/Documents/mclellan hub</string>
+  <key>ProgramArguments</key><array><string>/opt/homebrew/opt/node@24/bin/node</string><string>/Users/dm_mini/Projects/mclellan-hub/scripts/subscription-agent-worker.js</string></array>
+  <key>WorkingDirectory</key><string>/Users/dm_mini/Projects/mclellan-hub</string>
   <!-- Continuous pull worker: KeepAlive only — do not also use StartInterval or multiple processes stampede the claim API. -->
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
