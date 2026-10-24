@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../lib/db');
 const { uuid } = require('../lib/id');
-const { scanCvContextCandidates } = require('../lib/cvCandidates');
-const { routeMessage } = require('../lib/router');
+const { routeMessage } = require('../lib/model');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const { createRateLimiter, requireSameOrigin } = require('../lib/security');
 const { capturePortfolioAbout } = require('../lib/knowledge-format');
@@ -101,6 +100,7 @@ async function draftExecutiveSummary({ user, profile, cv, experiences, skills, c
   ];
   let content = '';
   const result = await routeMessage({
+    feature: 'hub_chat',
     model: 'deepseek-v3',
     messages,
     user,
@@ -157,7 +157,6 @@ router.get('/admin', requireAdmin, (req, res) => {
         .run('+353 (0) 896003148');
     }
   }
-  scanCvContextCandidates({ hub: db.hub(), portfolio: pdb, user: req.portfolioUser });
   const experiences = pdb.prepare('SELECT * FROM experiences ORDER BY display_order').all();
   const skills = pdb.prepare('SELECT * FROM skills ORDER BY level, display_order').all();
   const cvRows = pdb.prepare('SELECT * FROM cv_context ORDER BY section').all();
@@ -172,10 +171,9 @@ router.get('/admin', requireAdmin, (req, res) => {
   const skillCandidates = pdb.prepare(
     "SELECT * FROM skill_candidates WHERE user = ? ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'chat_only' THEN 1 WHEN 'promoted_jd' THEN 2 ELSE 3 END, occurrences DESC, last_seen_at DESC"
   ).all(req.portfolioUser);
-  const hubDb = db.hub();
-  const projects = hubDb.prepare(
-    'SELECT * FROM projects WHERE user = ? ORDER BY name'
-  ).all(req.portfolioUser);
+  // Skill candidates were mined from Version Old's Hub project chats; the rows
+  // already found stay reviewable here, but there is no source to rescan.
+  const projects = [];
 
   res.render('admin/index', {
     user: req.portfolioUser,
@@ -268,11 +266,6 @@ router.post('/admin/faqs/:id/delete', requireAdmin, (req, res) => {
 });
 
 // ── Skill candidates ──────────────────────────────────────────────────────────
-router.post('/admin/skill-candidates/rescan', requireAdmin, (req, res) => {
-  scanCvContextCandidates({ hub: db.hub(), portfolio: db.portfolio(req.portfolioUser), user: req.portfolioUser });
-  res.redirect('/admin#skill-candidates');
-});
-
 router.post('/admin/skill-candidates/:id/promote-jd', requireAdmin, (req, res) => {
   const pdb = db.portfolio(req.portfolioUser);
   const candidate = pdb.prepare('SELECT * FROM skill_candidates WHERE id = ? AND user = ?')
@@ -363,7 +356,6 @@ router.post('/admin/cv', requireAdmin, (req, res) => {
 router.post('/admin/cv/summary-draft', requireAdmin, async (req, res) => {
   const pdb = db.portfolio(req.portfolioUser);
   try {
-    scanCvContextCandidates({ hub: db.hub(), portfolio: pdb, user: req.portfolioUser });
     const profile = pdb.prepare('SELECT * FROM profile WHERE id = 1').get() || {};
     const cvRows = pdb.prepare('SELECT * FROM cv_context ORDER BY section').all();
     const cv = rowsToCvObject(cvRows);
@@ -480,17 +472,6 @@ router.post('/admin/skills', requireAdmin, (req, res) => {
 router.post('/admin/skills/:id/delete', requireAdmin, (req, res) => {
   db.portfolio(req.portfolioUser).prepare('DELETE FROM skills WHERE id = ?').run(req.params.id);
   refreshPortfolioKnowledge(req.portfolioUser);
-  res.redirect('/admin');
-});
-
-// ── Toggle project CV context flag ────────────────────────────────────────────
-router.post('/admin/projects/:id/toggle-cv', requireAdmin, (req, res) => {
-  const hubDb = db.hub();
-  const project = hubDb.prepare('SELECT * FROM projects WHERE id = ? AND user = ?')
-                       .get(req.params.id, req.portfolioUser);
-  if (!project) return res.status(404).json({ error: 'Not found' });
-  hubDb.prepare('UPDATE projects SET is_cv_context = ? WHERE id = ?')
-       .run(project.is_cv_context ? 0 : 1, project.id);
   res.redirect('/admin');
 });
 

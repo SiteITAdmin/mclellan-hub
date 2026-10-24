@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../lib/db');
-const { briefingPeriodLabel, briefingProvenanceText } = require('../lib/newsletter-pipeline');
-const { routeMessage } = require('../lib/router');
+const { routeMessage } = require('../lib/model');
 const { uuid } = require('../lib/id');
 const { getSystemModelKey, getSystemPrompt } = require('../lib/settings');
 const { PROMPTS } = require('../lib/prompts');
@@ -464,16 +463,6 @@ router.get('/feed.xml', (req, res) => {
   if (req.portfolioUser !== 'douglas') return res.status(404).end();
   const hub = db.hub();
 
-  const briefings = hub.prepare(`
-    SELECT b.id, b.week_key, b.date_from, b.date_to,
-           COALESCE(b.format_name, f.name) AS format_name,
-           b.text_content, b.topic_count, b.provenance_json, b.created_at, b.published_at
-    FROM nl_briefings b
-    LEFT JOIN nl_formats f ON f.id = b.format_id
-    WHERE b.user = 'douglas' AND b.published_at IS NOT NULL
-    ORDER BY published_at DESC LIMIT 20
-  `).all();
-
   const linkedinPosts = hub.prepare(`
     SELECT id, topic, refined_draft, draft, created_at
     FROM linkedin_posts WHERE user = 'douglas' AND status = 'published'
@@ -487,18 +476,6 @@ router.get('/feed.xml', (req, res) => {
   const toRfc822 = ts => new Date(ts * 1000).toUTCString();
 
   const items = [
-    ...briefings.map(b => ({
-      title: `${b.format_name || 'Intelligence Briefing'} — ${briefingPeriodLabel(b)}`,
-      link: 'https://douglas.mclellan.scot/llms.txt',
-      guid: `urn:mclellan:briefing:${b.id}`,
-      description: [
-        briefingProvenanceText(b),
-        (b.text_content || '').slice(0, 500).replace(/[#*`]/g, '').trim() + '…',
-      ].filter(Boolean).join(' '),
-      pubDate: toRfc822(b.published_at),
-      category: 'Intelligence Briefing',
-      ts: b.published_at,
-    })),
     ...linkedinPosts.map(p => ({
       title: escXml(p.topic),
       link: `https://douglas.mclellan.scot/`,
@@ -515,7 +492,7 @@ router.get('/feed.xml', (req, res) => {
   <channel>
     <title>Douglas McLellan — Intelligence &amp; Analysis</title>
     <link>https://douglas.mclellan.scot</link>
-    <description>Weekly intelligence briefings and analysis on AI, Microsoft 365, healthcare IT, and technology strategy by Douglas McLellan.</description>
+    <description>Analysis on AI, Microsoft 365, healthcare IT, and technology strategy by Douglas McLellan.</description>
     <language>en-GB</language>
     <atom:link href="https://douglas.mclellan.scot/feed.xml" rel="self" type="application/rss+xml"/>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
@@ -561,16 +538,6 @@ router.get('/llms.txt', (req, res) => {
   if (req.portfolioUser !== 'douglas') return res.status(404).end();
   const hub = db.hub();
 
-  const briefings = hub.prepare(`
-    SELECT b.week_key, b.date_from, b.date_to,
-           COALESCE(b.format_name, f.name) AS format_name,
-           b.text_content, b.topic_count, b.provenance_json, b.published_at
-    FROM nl_briefings b
-    LEFT JOIN nl_formats f ON f.id = b.format_id
-    WHERE b.user = 'douglas' AND b.published_at IS NOT NULL
-    ORDER BY published_at DESC LIMIT 10
-  `).all();
-
   const linkedinPosts = hub.prepare(`
     SELECT topic, display_title, refined_draft, draft, created_at, post_url
     FROM linkedin_posts WHERE user = 'douglas' AND status = 'published'
@@ -593,26 +560,9 @@ router.get('/llms.txt', (req, res) => {
     '',
     '- OKF-style bundle index: https://douglas.mclellan.scot/knowledge/douglas/index.md',
     '- About Douglas: https://douglas.mclellan.scot/knowledge/douglas/about/me.md',
-    '- Published LinkedIn analysis and briefings are linked from the bundle index as they are published.',
-    '',
-    '## Intelligence Briefings',
-    '',
-    'Weekly curated analysis of AI, Microsoft 365, healthcare IT, and technology policy.',
+    '- Published LinkedIn analysis is linked from the bundle index as it is published.',
     '',
   ];
-
-  for (const b of briefings) {
-    const date = new Date(b.published_at * 1000).toISOString().slice(0, 10);
-    lines.push(`### ${b.format_name || 'Intelligence Briefing'} — ${briefingPeriodLabel(b)} (${date})`);
-    lines.push('');
-    const provenance = briefingProvenanceText(b);
-    if (provenance) {
-      lines.push(`> ${provenance}`);
-      lines.push('');
-    }
-    lines.push((b.text_content || '').replace(/^#{1,6} /gm, '#### ').trim());
-    lines.push('');
-  }
 
   if (linkedinPosts.length) {
     lines.push('## Published Analysis');
@@ -909,6 +859,7 @@ ${wrapUntrustedBlock('candidate_context', (cvContext || 'No CV context loaded ye
   try {
     let full = '';
     const result = await routeMessage({
+      feature: 'hub_chat',
       model: getSystemModelKey('portfolio_chat', req.portfolioUser, PUBLIC_PORTFOLIO_CHAT_FALLBACK),
       messages,
       user: req.portfolioUser,
@@ -983,6 +934,7 @@ Candidate name: ${jdFullName}. Address the final verdict using ${jdFirstName}'s 
 
   try {
     const result = await routeMessage({
+      feature: 'hub_chat',
       model: getSystemModelKey('jd_analyser', req.portfolioUser, PUBLIC_PORTFOLIO_ANALYSER_FALLBACK),
       messages,
       user: req.portfolioUser,

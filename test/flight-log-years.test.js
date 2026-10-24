@@ -10,7 +10,7 @@ const {
   flightsInYear,
   yearCounts,
   computeFlightStats,
-} = require('../routes/hub-flights')._test;
+} = require('../routes/flights')._test;
 
 test('the flight log is the four requested years', () => {
   assert.deepEqual(FLIGHT_LOG_YEARS, ['2026', '2025', '2024', '2023']);
@@ -42,7 +42,7 @@ test('year counts cover every logged flight in 2023–2026', () => {
 });
 
 test('the flights page lists each year with its total under the title', async () => {
-  const html = await ejs.renderFile(path.join(__dirname, '../views/hub/flights.ejs'), {
+  const html = await ejs.renderFile(path.join(__dirname, '../views/flights.ejs'), {
     user: 'douglas',
     selectedYear: '2026',
     allTotal: 70,

@@ -48,8 +48,8 @@
   <a href="#faq">FAQ (<%= faqs.length %>)</a>
   <a href="#ai">AI Instructions</a>
   <a href="#jd-submissions">Candidate Analysis (<%= jdSubmissions.length %>)</a>
-  <a href="#hub">Hub projects</a>
 </nav>
+<% if (user === 'douglas') { %><p style="margin:8px 0 0"><a href="/flights">Flights &rarr;</a></p><% } %>
 
 <!-- ══════ PROFILE ══════ -->
 <section class="admin-section tab-panel" id="profile">
@@ -340,11 +340,8 @@
   <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
     <div>
       <h2>Detected topics from CV context</h2>
-      <p>Repeated topics found in CV-tagged hub chats and documents. Promote them into the JD Analyzer, keep them for portfolio chat only, or dismiss them.</p>
+      <p>Topics found earlier in CV-tagged chats and documents. Promote them into the JD Analyzer, keep them for portfolio chat only, or dismiss them.</p>
     </div>
-    <form method="POST" action="/admin/skill-candidates/rescan">
-      <button type="submit" class="save-btn">Rescan CV context</button>
-    </form>
   </div>
   <% if (skillCandidates.length === 0) { %>
     <p style="color:var(--text-dim);font-size:14px;">No repeated topics detected yet.</p>
@@ -548,29 +545,6 @@
       </details>
     <% } %>
   <% } %>
-</section>
-
-<!-- ══════ HUB PROJECTS ══════ -->
-<section class="admin-section tab-panel" id="hub">
-  <h2>Hub projects — CV context flag</h2>
-  <p>Toggle which hub projects feed into the public AI chat context.</p>
-  <table class="admin-table">
-    <thead><tr><th>Project</th><th>Slug</th><th>CV context</th><th></th></tr></thead>
-    <tbody>
-    <% for (const p of projects) { %>
-    <tr>
-      <td><%= p.name %></td>
-      <td>/<%= p.slug %></td>
-      <td><%= p.is_cv_context ? '✓ Active' : '–' %></td>
-      <td>
-        <form method="POST" action="/admin/projects/<%= p.id %>/toggle-cv">
-          <button type="submit"><%= p.is_cv_context ? 'Remove' : 'Enable' %></button>
-        </form>
-      </td>
-    </tr>
-    <% } %>
-    </tbody>
-  </table>
 </section>
 
 <script>

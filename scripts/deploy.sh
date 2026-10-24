@@ -101,8 +101,6 @@ echo "==> Enforcing sensitive file permissions..."
   "chown root:hub /app &&
    chmod 750 /app &&
    install -d -o hub -g hub -m 700 /app/data /app/exports &&
-   install -d -o hub -g hub -m 755 /app/data/newsletter-briefings /app/data/m365-briefings /app/data/nakai-briefings /app/data/us-block-briefings &&
-   chown -R hub:hub /app/data/newsletter-briefings &&
    install -d -o hub -g hub -m 750 /app/public/knowledge /app/public/knowledge/douglas /app/public/knowledge/nakai &&
    chown -R hub:hub /app/public/knowledge &&
    find /app/public/knowledge -type d -exec chmod 750 {} + &&
@@ -115,23 +113,6 @@ echo "==> Enforcing sensitive file permissions..."
    test ! -d /app/backups || { chown -R root:root /app/backups && chmod -R go-rwx /app/backups; } &&
    find /app -mindepth 1 \( -path /app/data -o -path /app/config -o -path /app/backups -o -path /app/exports -o -path /app/public/knowledge -o -name '.env*' \) -prune -o -type f ! -perm -o+r -exec chmod a+r {} + &&
    find /app -mindepth 1 \( -path /app/data -o -path /app/config -o -path /app/backups -o -path /app/exports -o -path /app/public/knowledge \) -prune -o -type d ! -perm -o+rx -exec chmod a+rx {} +"
-
-echo "==> Syncing wiki policy and Synthadoc ingest override..."
-rsync -avz --progress -e "$RSYNC_RSH" \
-  "$APP_DIR/data/synthadoc/mclellan-hub-knowledge/AGENTS.md" \
-  "$APP_DIR/data/synthadoc/mclellan-hub-knowledge/wiki/purpose.md" \
-  "$APP_DIR/data/synthadoc/mclellan-hub-knowledge/wiki/mclellan-hub-overview.md" \
-  "$APP_DIR/data/synthadoc/mclellan-hub-knowledge/wiki/personal-knowledge-management-systems.md" \
-  "${VPS_USER}@${VPS_IP}:/app/data/synthadoc/mclellan-hub-knowledge/"
-"${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" \
-  "mv /app/data/synthadoc/mclellan-hub-knowledge/purpose.md /app/data/synthadoc/mclellan-hub-knowledge/wiki/purpose.md &&
-   mv /app/data/synthadoc/mclellan-hub-knowledge/mclellan-hub-overview.md /app/data/synthadoc/mclellan-hub-knowledge/wiki/mclellan-hub-overview.md &&
-   mv /app/data/synthadoc/mclellan-hub-knowledge/personal-knowledge-management-systems.md /app/data/synthadoc/mclellan-hub-knowledge/wiki/personal-knowledge-management-systems.md &&
-   chown -R hub:hub /app/data/synthadoc/mclellan-hub-knowledge/wiki &&
-   cd /app/.tools/synthadoc &&
-   (git apply --reverse --check /app/patches/synthadoc-strict-ingest.patch >/dev/null 2>&1 ||
-    git apply /app/patches/synthadoc-strict-ingest.patch) &&
-   systemctl restart synthadoc"
 
 echo "==> Installing dependencies..."
 "${SSH_CMD[@]}" "${VPS_USER}@${VPS_IP}" "cd /app && npm install --production"

@@ -1,8 +1,0 @@
-{
-  "name": "mclellan-hub-repair-venue",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Grok CLI runner support for the Mac-mini self-repair venue. The authenticated CLI is installed on the Mac; this directory has no production dependencies.",
-  "type": "commonjs",
-  "dependencies": {}
-}
