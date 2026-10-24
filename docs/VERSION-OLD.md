@@ -139,7 +139,23 @@ Status key: **Paused** = stopped since 13 Oct. **Off** = disabled earlier.
 
 **Users:** `douglas`, `nakai`.
 
-## 6. State at retirement
+## 6. Where Version Old is now
+
+Code: git tag `version-old` (GitHub). Data: Google Drive, `My Drive/Hub Version Old archive/`, every file integrity-checked on 24 Oct 2026.
+
+| File | Contents |
+|---|---|
+| `vps-app-data-20261024.tar.gz` (800 MB) | Entire VPS `/app/data`: final 1.4 GB `hub.db`, portfolio DBs, briefing archives, Synthadoc vault, ingested documents |
+| `vps-app-misc-20261024.tar.gz` (212 MB) | VPS `/app/backups`, exports, tmp/output folders, token-burn dashboard |
+| `vps-root-old-snapshots-20261024.tar.gz` (551 MB) | Older DB snapshots from `/root` (incl. 14 Oct pre-flight-repair copy) |
+| `mac-repo-working-tree-20261024.tar.gz` (125 MB) | Mac repo working tree incl. untracked local data |
+| `mac-documents-hub-items-20261024.tar.gz` (21 MB) | The ten iOS companion app projects, Last30Days research, older repo bundle |
+| `mac-hermes-config-20261024.tar.gz` (94 MB) | Hermes WhatsApp bridge config and logs |
+| `repo personal files/` | Beacon handover, resignation letters, flight CSVs that sat in the repo root |
+
+Removed after archiving: VPS daily backups (17 GB), VPS old DB copies, Mac prod snapshots (11 GB), Hermes, Ollama and its models, Hub LaunchAgents, synthadoc/Boox services, prompt/wiki certificates. VPS disk 96% → 18%; Mac free space 28 GB → 49 GB.
+
+## 7. State at retirement
 
 - VPS on `9ec2fe7`, `hub.service` running with `HUB_JOBS_ONLY=flight_refresh,flight_backfill`.
 - 7,296 stale subscription model jobs retired 24 Oct (marked failed, reason recorded).
