@@ -141,19 +141,20 @@ Status key: **Paused** = stopped since 13 Oct. **Off** = disabled earlier.
 
 ## 6. Where Version Old is now
 
-Code: git tag `version-old` (GitHub). Data: Google Drive, `My Drive/Hub Version Old archive/`, every file integrity-checked on 24 Oct 2026.
+Code and design documents: git tag `version-old` on GitHub (`CLAUDE.md` "CRM prompt operating system", `ARCHITECTURE.md`, `MODULES.md`, `docs/hub-input-contract.md`, `lib/`).
+
+Data: on 24 Oct 2026 Douglas chose to **delete** the knowledge layer and its raw sources rather than keep them, because some evidence had not been captured and much of it was stale. Deleted from every copy (VPS, Mac, Google Drive archive and backup folders): knowledge atoms (8,585), embeddings (18,222), decision receipts (39,421), email summaries (4,713), WhatsApp/iMessage messages (4,943), meeting intakes (39), documents (44), contacts (51), CRM facts (309), the Synthadoc/Obsidian wiki, and Hermes config/logs. Gmail and the AgentMail inbox still hold their own original mail.
+
+What remains in Google Drive, `My Drive/Hub Version Old archive/`:
 
 | File | Contents |
 |---|---|
-| `vps-app-data-20261024.tar.gz` (800 MB) | Entire VPS `/app/data`: final 1.4 GB `hub.db`, portfolio DBs, briefing archives, Synthadoc vault, ingested documents |
-| `vps-app-misc-20261024.tar.gz` (212 MB) | VPS `/app/backups`, exports, tmp/output folders, token-burn dashboard |
-| `vps-root-old-snapshots-20261024.tar.gz` (551 MB) | Older DB snapshots from `/root` (incl. 14 Oct pre-flight-repair copy) |
-| `mac-repo-working-tree-20261024.tar.gz` (125 MB) | Mac repo working tree incl. untracked local data |
+| `vps-app-data-briefings-portfolio-20261024.tar.gz` (105 MB) | Nakai, M365, newsletter and US Block briefing archives; portfolio DBs and their old backups |
+| `mac-repo-code-only-20261024.tar.gz` (73 MB) | Mac repo working tree, without data or secrets |
 | `mac-documents-hub-items-20261024.tar.gz` (21 MB) | The ten iOS companion app projects, Last30Days research, older repo bundle |
-| `mac-hermes-config-20261024.tar.gz` (94 MB) | Hermes WhatsApp bridge config and logs |
 | `repo personal files/` | Beacon handover, resignation letters, flight CSVs that sat in the repo root |
 
-Removed after archiving: VPS daily backups (17 GB), VPS old DB copies, Mac prod snapshots (11 GB), Hermes, Ollama and its models, Hub LaunchAgents, synthadoc/Boox services, prompt/wiki certificates. VPS disk 96% → 18%; Mac free space 28 GB → 49 GB.
+Also removed: VPS daily backups (17 GB), VPS old DB copies, Mac prod snapshots (11 GB), Hermes, Ollama and its models, Obsidian app, Hub LaunchAgents, synthadoc/Boox services, prompt/wiki certificates. VPS disk 96% → 18%; Mac free space 28 GB → 60 GB.
 
 ## 7. State at retirement
 
