@@ -236,13 +236,34 @@ test('the queue keeps one CRM job in flight and steps aside for other work', asy
   assert.strictEqual(crm().prepare('SELECT atomise_status FROM sources WHERE id = ?').get(queuedId).atomise_status, 'done');
 
   const next = queue[queue.length - 1];
-  next.status = 'failed'; next.error = 'claude: usage limit';
+  next.status = 'failed'; next.error = "Couldn't use the model's reply: no JSON";
   await atoms.runAtomiseTick({ jobs: fakeJobs });
   const failed = crm().prepare("SELECT * FROM sources WHERE atomise_status = 'failed'").get();
   assert.strictEqual(failed.id, older.id);
-  assert.strictEqual(failed.atomise_error, 'claude: usage limit', 'failures are recorded, not dropped');
+  assert.strictEqual(failed.atomise_error, "Couldn't use the model's reply: no JSON", 'failures are recorded, not dropped');
   assert.ok(views.health('work').some(h => /couldn't be read/.test(h.text)), 'and shown on Today');
   assert.strictEqual(atoms.retrySource(failed.id), 1);
+});
+
+test('a busy model lane puts the source back in the queue instead of failing it', async () => {
+  const queue = [];
+  const fakeJobs = {
+    queueStats() { return { pending: queue.filter(j => j.status === 'pending').length }; },
+    enqueue({ feature, dedupeKey, payload }) { const j = { id: `job-${queue.length}`, feature, dedupeKey, payload, status: 'pending' }; queue.push(j); return { jobId: j.id }; },
+    getJob(id) { return queue.find(j => j.id === id) || null; },
+  };
+  const src = sources.addNote({ space: 'personal', text: 'The boiler was serviced on Tuesday.' });
+  await atoms.runAtomiseTick({ jobs: fakeJobs });
+  const job = queue[queue.length - 1];
+  assert.strictEqual(job.payload.meta.sourceId, src.id);
+  job.status = 'failed';
+  job.error = 'local subscription runner exited 1: "api_error_status":429,"api_error":"usage_limit_reached"';
+  await atoms.runAtomiseTick({ jobs: fakeJobs });
+  const row = crm().prepare('SELECT * FROM sources WHERE id = ?').get(src.id);
+  assert.strictEqual(row.atomise_status, 'pending', 'left queued, not needing a click');
+  assert.strictEqual(row.atomise_attempts, 1);
+  assert.match(row.atomise_error, /Waiting to try again/);
+  assert.ok(views.health('personal').some(h => /waiting for the model lane/.test(h.text)), 'and said plainly on Today');
 });
 
 // ── Gmail ───────────────────────────────────────────────────────────────────
