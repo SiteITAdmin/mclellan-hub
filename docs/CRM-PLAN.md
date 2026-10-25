@@ -4,6 +4,28 @@
 There is no design and no code yet. The visual approach comes after the features
 are agreed, and it will be entirely new.
 
+## Decisions so far (25 Oct 2026)
+
+- **Lives at** douglas.mclellan.scot/crm, behind the site admin's Google
+  sign-in. For Douglas only.
+- **Spaces:** every person belongs to exactly one space. Review is the only
+  screen that shows both.
+- **Mail:** Outlook is Work and Gmail (douglas@mclellan.scot) is Personal.
+  Outlook comes through Douglas's Drive flow, which he is fixing himself.
+  Beacon has said it's fine.
+- **First people:** from the last 3 months of sent mail, anyone emailed at
+  least twice. Each person is approved one by one.
+- **Tasks:** new "Work" and "Personal" lists in Google Tasks. Promises the
+  model is confident about become tasks automatically; the rest are proposed.
+- **Notes:** typed in the CRM for now. Boox notebooks come in through Drive
+  and Claude reads them. Hermes and the Boox app come later.
+- **Reminders:**
+  - Hub home-screen app notifications, with Work allowed at any time
+  - morning emails for each space at 07:30
+  - keep-in-touch cadences suggested by the Hub and confirmed by me
+- **Keep text forever.** Summaries and indexes can always be rebuilt from it.
+- **Design:** the editorial-greeting mockups in `design/crm/`, as approved.
+
 ## Purpose
 
 1. **An outside memory for ADHD forgetfulness.** It remembers who, what, and
@@ -47,9 +69,8 @@ These follow the standing Hub rules (`CLAUDE.md`, `docs/VERSION-OLD.md`):
   4. I choose in review.
   
   Nothing gets a space by guesswork. If none of these apply, it waits in review.
-- **Someone in both spaces**, such as a colleague who is also a friend, is one
-  identity with two separate faces. The Work face shows only work items and the
-  Personal face only personal items. *(To confirm, Q3.)*
+- **Every person belongs to exactly one space.** No one is in both (decided
+  25 Oct).
 - **Projects** exist in both spaces. Examples are "M365 Project" in Work, and
   "Dad", "House" or "Health" in Personal. A personal project can be about a
   person: the "Dad" project links to Dad as a person.
@@ -71,12 +92,13 @@ These follow the standing Hub rules (`CLAUDE.md`, `docs/VERSION-OLD.md`):
 
 | Input | What comes in | When |
 |---|---|---|
-| Gmail, sent | Mail I send to known people, and new recipients proposed for review | Every 15 min. A one-off look back over 12 months proposes people |
+| Gmail, sent | Mail I send to known people, and new recipients proposed for review | Every 15 min. A one-off look back over 3 months proposes everyone I emailed at least twice |
 | Gmail, received | Mail **from known people only**. Newsletters and unknown senders are not stored. Version Old stored 4,700 email summaries, mostly noise | Every 15 min, 7-day window |
 | Forward-to inbox (AgentMail) | Anything I deliberately hand over, e.g. a report, a thread or an attachment. One address per space | Every 15 min |
 | Upload | Reports and documents (PDF, Word, etc.), converted to text with a readability verdict | When I upload |
 | Quick note | A one-line box that works on a phone, e.g. "Met Aoife at the Cork thing, she's moving to Stripe" | When I type |
-| Google Calendar | Events and attendees, which link meetings to people | Every 30 min |
+| Google Calendar | Events and attendees, which link meetings to people. Work appointments get copied from Outlook into Google by me; they should go into a separate Google calendar called "Work", so that their space is fixed and never guessed | Every 30 min |
+| Boox notebooks | PDFs synced to Drive `onyx/NoteMax/Notebooks`. Claude reads each new page through the Mac worker; unclear words and names go to review. Each notebook is labelled by its creation date, and its space and kind (meetings, to-dos, journal) are set once on first sight. Journal pages never create promises or tasks. Pages that existed before go in as history only. The Boox app gets rebuilt after the CRM | Every 15 min |
 | Meeting transcripts | Pasted or uploaded transcripts and voice debriefs | When I add them |
 | Google Contacts | Names, emails, phones and birthdays, used to strengthen identity | Daily |
 | LinkedIn | The connections export file (CSV) | When I upload |
@@ -159,7 +181,7 @@ For each proposed person:
 
 The number of items waiting for review shows on each Today screen. Review is
 the one screen that shows items from both spaces, because its job is to give
-items a space. *(To confirm, Q4.)*
+items a space (decided 25 Oct).
 
 ## 5. What it works out (model layer, on the Mac worker)
 
@@ -182,11 +204,11 @@ items a space. *(To confirm, Q4.)*
   - the number waiting for review
 - **Google Tasks** (§7). Tasks with due dates set off phone notifications from
   the Tasks app.
-- **A morning email for each space.** Work goes on weekdays only, Personal
-  every day. Each email is short and links to its Today screen. *(To confirm,
-  Q6.)*
-- **Push notifications** for meeting prep 30 minutes before, and for
-  same-day promises. *(Method to confirm, Q7.)*
+- **A morning email for each space** at 07:30 Dublin. Work goes on weekdays
+  only, Personal every day. Each email is short and links to its Today screen.
+- **Push notifications** from the Hub's own home-screen app (web push on the
+  iPhone): meeting prep 30 minutes before, and same-day promises. Work can
+  notify at any time. In Phase 6, WhatsApp through Hermes adds a second route.
 - **No changes to calendar events.** Editing the description of an event I
   organise would show the change to the other attendees, so prep goes to Today,
   the email and push instead.
@@ -278,7 +300,7 @@ before the next one starts.
 |---|---|---|
 | **1. Foundations** | 1 People and identity · 2 Getting people in (sent-mail proposals, approve each) · 3 Timeline per person · 4 Quick note | Spaces, organisations, projects, review screen, Gmail capture, Outlook mail through Drive |
 | **2. Remembering for me** | 5 Keep-in-touch · 6 Birthdays and key dates · Google Tasks two-way sync · Today screens · morning emails | The ADHD layer |
-| **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search | Forward-to inbox, report upload, fact extraction |
+| **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search | Forward-to inbox, report upload, fact extraction, Boox notebooks read by Claude |
 | **4. Meetings** | 9 Meeting prep | Calendar capture, transcripts, push notifications |
 | **5. Wider identity** | 12 Google Contacts sync · 11 LinkedIn import · 14 Connections between people | Needs the Contacts permission |
 | **6. Messages** | 10 WhatsApp through Hermes (§8) and iMessage | Needs Mac programs |
@@ -309,7 +331,8 @@ backup already copies every `data/*.db`. Tables:
 | `crm_tasks_sync` | 15 min |
 | `crm_synthesis` | on a new source, through the Mac worker |
 | `crm_daily_scan` (keep-in-touch, dates) | 06:30 Dublin |
-| `crm_morning_digest` | 07:00 Dublin |
+| `crm_morning_digest` | 07:30 Dublin |
+| `crm_boox_capture` (new notebook pages) | 15 min |
 | `crm_meeting_prep` | morning, plus 30 min before each meeting |
 | `crm_contacts_sync` | daily |
 | `crm_connections` | weekly |
@@ -344,23 +367,12 @@ backup already copies every `data/*.db`. Tables:
 
 ## 12. Open questions
 
-**Phase 1 can't be built until these are answered:**
+All of the earlier questions were answered on 25 Oct (see "Decisions so far").
+Still open:
 
-1. ~~Where does work email live?~~ Outlook 365, saved into Drive by my flow
-   (§3). Five fixes are needed before the Hub reads it.
-2. ~~Which Google account?~~ douglas@mclellan.scot. The Hub's token is for
-   that account, so the Tasks lists go there.
-3. **Someone in both spaces:** one identity with separate Work and Personal
-   faces. OK?
-4. **The review screen** as the single place both spaces appear. OK?
-5. **Is this for Douglas only,** or will Nakai use it too? This changes the
-   database layout.
-
-**Needed before later phases:**
-
-6. Morning emails: one per space, Work on weekdays only? *(Phase 2)*
-7. Push notifications before Phase 6: are Google Tasks notifications enough,
-   or should there be a dedicated push app such as ntfy? *(Phase 2)*
-8. ~~What does Hermes manage?~~ Hermes is the means of reading WhatsApp. It
-   captures, takes notes from my own chat, and reminds me. It doesn't reply to
-   other people. Phase 6.
+1. **Starting projects:** which projects exist in Work and in Personal on day
+   one? *(Phase 1)*
+2. **Work calendar:** do work appointments go into their own Google calendar
+   called "Work"? *(Phase 4)*
+3. **Outlook flow:** tell me when the five fixes are in, so the Hub reads the
+   new format. *(Phase 1)*
