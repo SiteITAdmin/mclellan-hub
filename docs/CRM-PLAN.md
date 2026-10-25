@@ -1,6 +1,6 @@
 # Personal CRM: feature plan
 
-**Status:** draft for Douglas to review, 25 Oct 2026. WhatsApp through Hermes added 25 Oct (§8). This covers features only.
+**Status:** draft for Douglas to review, 25 Oct 2026. WhatsApp through Hermes added 25 Oct (§8). Work email through Drive added 25 Oct (§3). This covers features only.
 There is no design and no code yet. The visual approach comes after the features
 are agreed, and it will be entirely new.
 
@@ -82,11 +82,37 @@ These follow the standing Hub rules (`CLAUDE.md`, `docs/VERSION-OLD.md`):
 | LinkedIn | The connections export file (CSV) | When I upload |
 | WhatsApp (Hermes) | Approved chats with known people, plus notes and questions I send to myself (§8) | Live, 7-day window |
 | iMessage | Messages with known people, read on the Mac | Live, 7-day window |
-| Work email | Depends on where work mail lives *(Q1)* | — |
+| Work email (Outlook 365) | Douglas's own flow saves each Outlook email into Drive (`Work` folder, douglas@mclellan.scot) as an HTML file with a FROM / TO / SUBJECT / RECEIVED header. The Hub reads that folder with the Drive access it already has (checked 25 Oct: 87 emails, 20–24 Oct). Everything from it is Work | Every 15 min, 7-day window |
 
 Every source records where it came from, its space, whether it was readable, the
 people it matched, and whether any of those matches is still waiting for review.
 A source with pending matches is still stored, so capture never blocks.
+
+**Work email: changes needed before the Hub reads it** (checked 25 Oct)
+
+1. **It includes other people's mail.** Some files are addressed only to
+   colleagues, not to me (for example, mail to Alan Garland, Serhiy Pylypaka
+   and David Mulqueen). The flow is probably watching a shared mailbox or a
+   group as well as my inbox. Either the flow is fixed, or the Hub admits only
+   mail where I am a sender or recipient. The second is weaker, because the
+   header has no CC line.
+2. **It has no sent mail.** Only received mail arrives, but most "I owe"
+   promises are in what I send. The flow needs a second branch on Sent Items.
+3. **Four lines to add to the header:**
+   - `CC:`
+   - `MESSAGE-ID:`, so the same email is never counted twice and can link
+     back to Outlook on the web
+   - `CONVERSATION-ID:`, so replies thread together
+   - `FOLDER: Inbox` or `FOLDER: Sent`
+   
+   The body can stay as it is. The Hub strips Outlook's quoted history so the
+   same thread isn't read over and over.
+4. **Mail needs its own folder.** `Work` also holds other documents, including
+   an MFA codes document. The Hub should read a dedicated subfolder (e.g.
+   `Work/Outlook mail`) and nothing else.
+5. **Policy check.** This is hospital mail, including a subject-access-request
+   thread, going into a personal Google Drive and then to a model on the Mac.
+   Check that this fits Beacon's policy before turning it on.
 
 ## 4. Identity: who is who
 
@@ -185,7 +211,8 @@ items a space. *(To confirm, Q4.)*
 
 ## 8. WhatsApp through Hermes
 
-Hermes comes back as the WhatsApp channel. It runs on the Mac as a linked
+Hermes comes back as the WhatsApp channel, near the end of the build
+(Phase 6). It runs on the Mac as a linked
 WhatsApp device and passes messages to the Hub. What went wrong with it in
 Version Old shapes the rules below.
 
@@ -203,14 +230,14 @@ Version Old shapes the rules below.
   
   Hermes replies in the same chat to confirm.
 - **Reminds me.** Due promises, meeting prep and people I've drifted from can
-  arrive as WhatsApp messages to myself. That makes WhatsApp the push channel
-  (Q7).
+  arrive as WhatsApp messages to myself. Until Phase 6, reminders come through
+  the other routes in §6.
 - **Reads chats the way people actually write.** It waits 5 minutes before
   reading a message, so a quick follow-up arrives with it. It reads the rest of
   the same chat for context. A later reply ("sent it") can close an earlier
   promise. Version Old did this, and it worked.
-- **Drafts replies to other people for me to approve** *(scope to confirm,
-  Q8)*.
+- It does not reply to other people. Hermes is here because it can read
+  personal WhatsApp at all, where no official route exists.
 
 **Rules**
 
@@ -219,8 +246,8 @@ Version Old shapes the rules below.
   same mistake as Alec and Alan.
 - **In group chats,** each sender is matched by phone number. A sender who
   isn't in the CRM goes to review.
-- **Hermes messages only me,** unless I approve a specific message to someone
-  else. Every message it sends goes in the effects log with the reason.
+- **Hermes messages only me.** Every message it sends goes in the effects log
+  with the reason.
 - **There is a stop switch.** When the CRM is paused, the Hub refuses
   messages from Hermes and Hermes keeps no backlog to replay later. In Version
   Old, Hermes posted 724 messages during the pause.
@@ -236,10 +263,9 @@ Version Old shapes the rules below.
 - Hermes reinstalled on the Mac, with its WhatsApp bridge (Node) and a
   LaunchAgent, and WhatsApp re-linked by QR code.
 - A capture address on the Hub with its own secret.
-- **Still to check:** replies to my own chat and drafted replies need a model.
-  They must go through the Mac's subscription CLIs, because the Hub has no
-  API-key path. If Hermes can only call API models, it can still capture, but
-  the reply and drafting parts can't work.
+- **Still to check:** replying in my own chat needs a model, which must go
+  through the Mac's subscription CLIs, because the Hub has no API-key path. If
+  Hermes can only call API models, it can still capture, but it can't reply.
 - The disk space Hermes and its bridge take, checked before installing.
   Ollama is not needed.
 
@@ -250,12 +276,12 @@ before the next one starts.
 
 | Phase | Features | Notes |
 |---|---|---|
-| **1. Foundations** | 1 People and identity · 2 Getting people in (sent-mail proposals, approve each) · 3 Timeline per person · 4 Quick note | Spaces, organisations, projects, review screen, Gmail capture |
-| **2. Remembering for me** | 5 Keep-in-touch · 6 Birthdays and key dates · Google Tasks two-way sync · Today screens · morning emails · Hermes notes and reminders through my own WhatsApp chat | The ADHD layer. WhatsApp becomes the push channel *(proposed, Q9)* |
-| **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search · 10a WhatsApp chat capture (Hermes) | Forward-to inbox, report upload, fact extraction |
+| **1. Foundations** | 1 People and identity · 2 Getting people in (sent-mail proposals, approve each) · 3 Timeline per person · 4 Quick note | Spaces, organisations, projects, review screen, Gmail capture, Outlook mail through Drive |
+| **2. Remembering for me** | 5 Keep-in-touch · 6 Birthdays and key dates · Google Tasks two-way sync · Today screens · morning emails | The ADHD layer |
+| **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search | Forward-to inbox, report upload, fact extraction |
 | **4. Meetings** | 9 Meeting prep | Calendar capture, transcripts, push notifications |
 | **5. Wider identity** | 12 Google Contacts sync · 11 LinkedIn import · 14 Connections between people | Needs the Contacts permission |
-| **6. Messages** | 10b iMessage | Needs a Mac program |
+| **6. Messages** | 10 WhatsApp through Hermes (§8) and iMessage | Needs Mac programs |
 
 ## 10. What it needs
 
@@ -277,6 +303,7 @@ backup already copies every `data/*.db`. Tables:
 |---|---|
 | `crm_gmail_capture` | 15 min |
 | `crm_gmail_bootstrap` | once |
+| `crm_outlook_drive_capture` (reads the Drive mail folder) | 15 min |
 | `crm_agentmail_capture` | 15 min |
 | `crm_calendar_capture` | 30 min |
 | `crm_tasks_sync` | 15 min |
@@ -291,15 +318,16 @@ backup already copies every `data/*.db`. Tables:
 **Mac programs:**
 
 - The existing subscription worker handles model jobs.
-- Phase 2 brings back Hermes and its WhatsApp bridge (§8).
-- Phase 6 adds an iMessage reader, which needs Full Disk Access.
+- Phase 6 brings back Hermes and its WhatsApp bridge (§8), and adds an iMessage
+  reader, which needs Full Disk Access.
 
 **Permissions:**
 
 - Google Contacts read access is new and needs a one-time re-consent.
 - Gmail, Calendar and Tasks are already granted.
 - AgentMail is already set up.
-- Work email depends on Q1.
+- Work email: no new permission. The Hub's existing Drive read access
+  (douglas@mclellan.scot) already lists the folder.
 
 ## 11. Risks (one line each)
 
@@ -308,8 +336,9 @@ backup already copies every `data/*.db`. Tables:
   being banned.
 - Hermes can see every WhatsApp chat. Approving chats and messaging only me
   are the only limits, so both must be enforced in code, not just in prompts.
-- If work mail is in Microsoft 365, the employer's tenant may block third-party
-  access.
+- The Outlook-to-Drive flow runs inside the employer's tenant. A policy change
+  could stop it without warning, so the Hub flags when no work email has arrived
+  for a whole weekday (Rule 5).
 - The Hub's Google token belongs to one account, so Tasks lists, Gmail capture
   and Calendar all come from that account.
 
@@ -317,10 +346,10 @@ backup already copies every `data/*.db`. Tables:
 
 **Phase 1 can't be built until these are answered:**
 
-1. **Where does work email live?** In Gmail or Google Workspace, or in Microsoft
-   365 / Outlook?
-2. **Which Google account is the Workspace one,** and is it the account the
-   Hub's token is for? That decides where the Tasks lists and links go.
+1. ~~Where does work email live?~~ Outlook 365, saved into Drive by my flow
+   (§3). Five fixes are needed before the Hub reads it.
+2. ~~Which Google account?~~ douglas@mclellan.scot. The Hub's token is for
+   that account, so the Tasks lists go there.
 3. **Someone in both spaces:** one identity with separate Work and Personal
    faces. OK?
 4. **The review screen** as the single place both spaces appear. OK?
@@ -330,10 +359,8 @@ backup already copies every `data/*.db`. Tables:
 **Needed before later phases:**
 
 6. Morning emails: one per space, Work on weekdays only? *(Phase 2)*
-7. Push notifications: is WhatsApp through Hermes the push channel, alongside
-   Google Tasks? *(Phase 2)*
-8. What should Hermes "manage" on WhatsApp? Capture and notes and reminders
-   to myself are planned. Should it also draft replies to other people for
-   approval, or send some messages to others without asking? *(Phase 2)*
-9. Should Hermes move up as proposed: my own chat in Phase 2, capture of other
-   chats in Phase 3? *(Phase 2)*
+7. Push notifications before Phase 6: are Google Tasks notifications enough,
+   or should there be a dedicated push app such as ntfy? *(Phase 2)*
+8. ~~What does Hermes manage?~~ Hermes is the means of reading WhatsApp. It
+   captures, takes notes from my own chat, and reminds me. It doesn't reply to
+   other people. Phase 6.
