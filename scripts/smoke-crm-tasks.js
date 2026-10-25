@@ -22,7 +22,12 @@ const lists = [];
 async function effect(operation, request, fn) {
   const id = uuid();
   crm().prepare("INSERT INTO effects (id, module, entity_id, operation, request, status) VALUES (?, 'crm_tasks_smoke', 'smoke', ?, ?, 'started')").run(id, operation, JSON.stringify(request));
-  const r = await fn();
+  let r;
+  try { r = await fn(); }
+  catch (err) {
+    crm().prepare("UPDATE effects SET status = 'failed', result = ?, finished_at = ? WHERE id = ?").run(String(err.message), now(), id);
+    throw err;
+  }
   crm().prepare("UPDATE effects SET status = 'done', result = ?, finished_at = ? WHERE id = ?").run(JSON.stringify(r.data || {}), now(), id);
   return r.data;
 }
@@ -48,6 +53,9 @@ async function effect(operation, request, fn) {
     tasks.edit(t.id, { title: 'Edited in the Hub', due: '' }); await run();
     remote = (await real.tasks.get(params, opt)).data; assert.equal(remote.title, 'Edited in the Hub'); assert.ok(!remote.due);
     await effect('task.patch', params, () => real.tasks.patch({ ...params, requestBody: { title: 'Edited in Google', status: 'completed' } }, opt));
+    await assert.rejects(() => effect('task.patch.stale-check', params, () => real.tasks.patch({ ...params,
+      requestBody: { title: 'This stale write must be rejected' } }, { ...opt, headers: { 'If-Match': remote.etag } })),
+      err => Number(err.response?.status || err.code) === 412);
     await run(); assert.equal(tasks.get(t.id).title, 'Edited in Google'); assert.equal(tasks.get(t.id).status, 'completed');
     tasks.edit(t.id, { status: 'needsAction' }); await run();
     assert.equal((await real.tasks.get(params, opt)).data.status, 'needsAction');
@@ -57,7 +65,7 @@ async function effect(operation, request, fn) {
     assert.equal((await real.tasks.get(params, opt)).data.deleted, true);
     await effect('task.delete', { tasklist: lists[1].id, task: imported.id }, () => real.tasks.delete({ tasklist: lists[1].id, task: imported.id }, opt));
     await run(); assert.equal(crm().prepare('SELECT status FROM tasks WHERE google_id = ?').get(imported.id).status, 'deleted');
-    console.log('PASS: real Google create, import, edit, due-date clear, complete, reopen and delete round trips; Work/Personal isolated.');
+    console.log('PASS: real Google create, import, edit, due-date clear, complete, reopen and delete round trips; stale ETag rejected; Work/Personal isolated.');
   } finally {
     for (const list of lists) {
       await effect('list.delete', { tasklist: list.id }, () => real.tasklists.delete({ tasklist: list.id }, opt));

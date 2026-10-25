@@ -518,3 +518,9 @@ Still open:
   This uses two temporary Google lists, deletes them afterwards, and retains
   receipts in the temporary database without adding synthetic facts to the
   production CRM.
+
+Live verification on 25 October: existing Google OAuth access confirmed;
+Work and Personal lists created and their first production sync succeeded.
+The isolated Google smoke passed create/import/edit/date-clear/complete/reopen/
+delete in both directions and removed both temporary lists afterwards.
+Desktop (1440px) and mobile (390px) task list/form inspected; full suite 47/47.
