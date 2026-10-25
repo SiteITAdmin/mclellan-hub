@@ -269,9 +269,11 @@ test('Gmail keeps sent mail and known senders, and skips strangers', async () =>
     { id: 'm2', from: 'Deals <offers@shop.example>', to: 'douglas@mclellan.scot', subject: '50% off', body: 'Buy now', at: hours(2) },
     { id: 'm3', from: 'Ruairí Kelly <ruairi.kelly@gmail.com>', to: 'douglas@mclellan.scot', subject: 'Re: Saturday', body: 'Grand, I will bring the tickets.', at: hours(1) },
     { id: 'm4', from: 'Jane Whelan <jane.whelan@gmail.com>', to: 'douglas@mclellan.scot', subject: 'Purview', body: 'Work thing', at: hours(1) },
+    { id: 'm5', sent: true, from: 'douglas@mclellan.scot', to: 'douglas@mclellan.scot', subject: '✓ Hub Backup', body: 'Backup ok', at: hours(1) },
   ]);
   const counts = await gmail.runGmailCapture({ gmail: g });
-  assert.deepStrictEqual(counts, { seen: 4, admitted: 2, duplicate: 0, skipped: 2 });
+  assert.deepStrictEqual(counts, { seen: 5, admitted: 2, duplicate: 0, skipped: 3 });
+  assert.strictEqual(crm().prepare("SELECT 1 FROM sources WHERE external_id = 'm5'").get(), undefined, 'mail to himself only (the Hub reports) is skipped');
   assert.ok(reviewItem('addr:email:ruairi.kelly@gmail.com'), 'a new recipient is proposed');
   const reply = crm().prepare("SELECT * FROM sources WHERE origin = 'gmail' AND external_id = 'm3'").get();
   assert.strictEqual(reply.space, 'personal');
