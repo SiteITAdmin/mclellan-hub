@@ -7,6 +7,10 @@
   <div class="actions"><a class="btn" href="/crm/<%= space %>/note"><%- icon.note %> Add a note</a></div>
 </div>
 
+<section class="grid first"><div class="panel s12">
+  <div class="panel-head"><h2>Tasks</h2><a class="end" href="/crm/<%= space %>/tasks/new?personId=<%= p.id %>">Add a task</a></div>
+  <%- include('_tasks', { taskList: p.tasks, taskBack: '' }) %>
+</div></section>
 <section class="grid first">
   <div class="s8" style="display:flex;flex-direction:column;gap:var(--gap)">
     <div class="panel">

@@ -12,6 +12,7 @@ const identity = require('../lib/crm/identity');
 const sources = require('../lib/crm/sources');
 const atoms = require('../lib/crm/atoms');
 const orgs = require('../lib/crm/orgs');
+const tasks = require('../lib/crm/tasks');
 const { crm } = require('../lib/crm/db');
 
 const router = express.Router();
@@ -283,6 +284,69 @@ router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
 router.post('/crm/:space/sources/:id/retry', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   flash(req, atoms.retrySource(req.params.id) ? 'Queued to read again' : 'Nothing to retry');
   back(req, res, `/crm/${req.params.space}/captured`);
+});
+
+function taskForm(req, res, t, error = null) {
+  res.render('crm/task', { page: 'tasks', t, error, choices: tasks.choices(req.params.space), title: t.id ? t.title : 'Add a task' });
+}
+
+router.get('/crm/:space/tasks', spaceParam, (req, res) => {
+  const status = ['completed', 'deleted'].includes(req.query.status) ? req.query.status : 'needsAction';
+  res.render('crm/tasks', { page: 'tasks', list: tasks.list(req.params.space, { status }), status,
+    sync: require('../lib/crm/runs').all().tasks_sync, title: 'Tasks' });
+});
+
+router.get('/crm/:space/tasks/new', spaceParam, (req, res) => {
+  taskForm(req, res, { title: '', notes: '', due: '', status: 'needsAction', context: {
+    personId: req.query.personId || '', orgId: req.query.orgId || '', projectId: req.query.projectId || '', sourceId: req.query.sourceId || '' } });
+});
+
+router.post('/crm/:space/tasks', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const t = tasks.create(req.params.space, req.body);
+    flash(req, 'Task saved. Google Tasks sync runs every 15 minutes.');
+    res.redirect(`/crm/${req.params.space}/tasks/${t.id}`);
+  } catch (err) {
+    res.status(400);
+    taskForm(req, res, { ...req.body, context: req.body }, err.message);
+  }
+});
+
+router.post('/crm/:space/tasks/sync', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const jobs = require('../lib/jobs');
+  const hub = require('../lib/db').hub();
+  if (jobs.hasPending('crm_tasks_sync')) hub.prepare("UPDATE system_jobs SET run_at = unixepoch() WHERE type = 'crm_tasks_sync' AND status = 'pending'").run();
+  else jobs.scheduleJob('crm_tasks_sync', {}, null, 'crm_tasks_ui');
+  flash(req, 'Sync queued. It will run on the next minute tick.');
+  res.redirect(`/crm/${req.params.space}/tasks`);
+});
+
+router.get('/crm/:space/tasks/:id', spaceParam, (req, res) => {
+  const t = tasks.detail(tasks.get(req.params.id));
+  if (!t || t.space !== req.params.space) return res.status(404).send('Not found');
+  taskForm(req, res, t);
+});
+
+router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const t = tasks.get(req.params.id);
+  if (!t || t.space !== req.params.space) return res.status(404).send('Not found');
+  try {
+    if (req.params.action === 'edit') tasks.edit(t.id, { ...req.body, context: req.body });
+    else if (req.params.action === 'complete') tasks.edit(t.id, { status: 'completed', revision: req.body.revision });
+    else if (req.params.action === 'reopen') tasks.edit(t.id, { status: 'needsAction', revision: req.body.revision });
+    else if (req.params.action === 'resolve') crm().prepare("UPDATE tasks SET conflict = '' WHERE id = ?").run(t.id);
+    else if (req.params.action === 'delete') tasks.edit(t.id, { status: 'deleted', revision: req.body.revision });
+    else return res.status(404).send('Not found');
+    flash(req, 'Saved. Google Tasks will sync automatically.');
+  } catch (err) {
+    if (req.params.action === 'edit') {
+      res.status(400);
+      return taskForm(req, res, { ...tasks.detail(t), ...req.body, context: req.body }, err.message);
+    }
+    flash(req, err.message, 'bad');
+  }
+  const next = String(req.body.back || '');
+  res.redirect(next.startsWith(`/crm/${t.space}/`) && !next.includes('\\') ? next : `/crm/${t.space}/tasks/${t.id}`);
 });
 
 router.get('/crm/:space/projects', spaceParam, (req, res) => {

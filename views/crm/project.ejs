@@ -1,6 +1,10 @@
 <%- include('_top') %>
 <div class="crumbs"><a href="/crm/<%= space %>/projects">Projects</a> / <%= p.name %></div>
 <div class="title-row"><div><h1><%= p.name %></h1><p class="subline"><%= p.atoms.length %> <%= p.atoms.length === 1 ? 'fact' : 'facts' %>, newest first.</p></div></div>
+<section class="grid first"><div class="panel s12">
+  <div class="panel-head"><h2>Tasks</h2><a class="end" href="/crm/<%= space %>/tasks/new?projectId=<%= p.id %>">Add a task</a></div>
+  <%- include('_tasks', { taskList: p.tasks, taskBack: '' }) %>
+</div></section>
 <section class="grid first">
   <div class="panel s8">
     <% if (!p.atoms.length) { %><div class="empty">No facts in this project yet.</div><% } %>

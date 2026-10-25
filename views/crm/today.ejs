@@ -20,6 +20,11 @@
   <div class="tile s3"><span class="label">People</span><span class="value"><%= d.peopleCount %></span><span class="caption">In <%= label %></span></div>
 </section>
 
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Tasks</h2><span class="chip"><%= d.tasks.length %> open</span><a class="end" href="/crm/<%= space %>/tasks">View all</a></div>
+  <%- include('_tasks', { taskList: d.tasks.slice(0, 8), taskBack: `/crm/${space}` }) %>
+</div></section>
+
 <section class="grid">
   <div class="panel s8 feed">
     <div class="panel-head"><h2>Captured</h2><span class="chip"><%= d.reading ? `${d.reading} still to read` : 'all read' %></span><a class="end" href="/crm/<%= space %>/captured">View all</a></div>

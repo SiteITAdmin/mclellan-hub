@@ -310,7 +310,7 @@ differently:
   confident about. Less certain ones are proposed on Today with one-click
   **Create task** / **Not a task**.
 - **Tasks I create myself** in Google Tasks are read in and shown on Today
-  (sorted into spaces by list). They are never changed by the Hub.
+  (sorted into spaces by list). They stay unchanged until I explicitly edit, complete or delete them in the Hub (two-way task sync added 25 Oct).
 
 ## 8. WhatsApp through Hermes
 
@@ -480,3 +480,41 @@ Still open:
   promises on Today, morning emails, notifications, summaries, meeting prep,
   forwarding inbox, report upload, Boox, Contacts, LinkedIn, Hermes, iMessage,
   and the weekly topic tidy.
+
+
+## Tasks as built (25 October 2026)
+
+- `/crm/work/tasks` and `/crm/personal/tasks`: create, edit, due date,
+  complete, reopen and delete. Open tasks appear on Today and on the related
+  person, organisation, department/team and project pages.
+- Work and Personal Google Tasks lists only. Existing exact-name lists are
+  reused; duplicate names or a missing previously-connected list stop sync
+  visibly. Other lists, including those from Version Old, are untouched.
+- `crm_tasks_sync` runs every 15 minutes, with Sync now to bring the next run
+  forward. It reconciles current state, not a backlog of historical mutations.
+  Google-created tasks are imported, including cleared completed tasks. They
+  are written back only following an explicit Hub edit.
+- Raw task input and sync checkpoints live in `tasks`; outbound Google
+  operations have attributed `effects` receipts. A changed task is also an
+  immutable `sources` snapshot, read through the existing Mac atomisation
+  lane. People and projects derive from verified, current task-source atoms;
+  organisations/departments derive through those people. Explicit context
+  chosen by Douglas is retained as raw task input and shown as "Chosen by you".
+  Project membership alone never associates unrelated tasks.
+- Google stores a date only; scheduled times and recurring-task rules are not
+  exposed by this integration. Hub/source/Gmail links go in task notes. Existing
+  Google notes too long for an appended link are preserved without truncation.
+- Field-level three-way merge retains independent edits. When both sides edit
+  the same field, Google wins and the Hub value remains visible for review.
+  Conditional writes reject Google changes arriving during a sync. Deletion is
+  terminal, so a stale edit cannot recreate a deleted task.
+- Persisted create receipts and a task marker recover lost responses. If a
+  create outcome remains unknown, sync pauses that task visibly rather than
+  risk a duplicate. A database lease prevents overlapping runs. Failures and
+  stale syncs appear on Today and the Tasks screen.
+- Automatic creation of tasks from promises remains a later phase.
+- Tests: `HUB_DISABLE_JOBS=1 npm test`. Real-service smoke test (VPS only):
+  `CRM_DB_PATH=/tmp/crm-tasks-smoke-<unique>.db node scripts/smoke-crm-tasks.js`.
+  This uses two temporary Google lists, deletes them afterwards, and retains
+  receipts in the temporary database without adding synthetic facts to the
+  production CRM.

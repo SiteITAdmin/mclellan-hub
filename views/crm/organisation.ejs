@@ -10,6 +10,10 @@
   <div><h1><%= o.unit ? o.unit.name : o.name %></h1>
     <p><% if (o.unit) { %><%= o.unit.kind === 'team' ? `Team in ${o.parent.name}, ${o.name}` : `Department of ${o.name}` %>. <% } %><%= o.members.length %> <%= o.members.length === 1 ? 'person' : 'people' %><%= !o.unit && o.domains.length ? `, ${o.domains.join(', ')}` : '' %>.</p></div>
 </div>
+<section class="grid first"><div class="panel s12">
+  <div class="panel-head"><h2>Tasks</h2><a class="end" href="/crm/<%= space %>/tasks/new?orgId=<%= o.id %>">Add a task</a></div>
+  <%- include('_tasks', { taskList: o.tasks, taskBack: '' }) %>
+</div></section>
 <section class="grid first">
   <div class="s8" style="display:flex;flex-direction:column;gap:var(--gap)">
     <div class="panel">

@@ -1,0 +1,38 @@
+<%- include('_top') %>
+<div class="crumbs"><a href="/crm/<%= space %>/tasks">Tasks</a> / <%= t.id ? t.title : 'Add a task' %></div>
+<div class="title-row"><div><h1><%= t.id ? t.title : 'Add a task' %></h1><p class="subline"><%= space === 'work' ? 'Work' : 'Personal' %><%= t.id ? ` · ${t.status === 'needsAction' ? 'Open' : t.status === 'completed' ? 'Completed' : 'Deleted'}` : '' %></p></div></div>
+<% if (error) { %><div class="flash bad" role="alert"><%= error %></div><% } %>
+<% if (t.sync_error) { %><div class="flash bad"><%= t.sync_error %></div><% } %>
+<% if (t.conflict) { %><div class="flash bad"><p>Both copies changed. Google’s version was kept; your previous Hub values are saved below. Edit and save to resolve.</p><dl><% for (const [field, values] of Object.entries(JSON.parse(t.conflict))) { %><dt><%= field %></dt><dd>Hub: <%= values.hub ?? '(empty)' %><br>Google: <%= values.google ?? '(empty)' %></dd><% } %></dl><form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/resolve"><button class="btn small">Keep current version</button></form></div><% } %>
+<section class="grid first">
+  <div class="panel s8">
+  <% if (t.status !== 'deleted') { %>
+    <form method="post" action="/crm/<%= space %>/tasks<%= t.id ? `/${t.id}/edit` : '' %>" class="list">
+      <% if (t.id) { %><input type="hidden" name="revision" value="<%= t.revision %>"><% } %>
+      <input type="hidden" name="sourceId" value="<%= t.context.sourceId || '' %>">
+      <div class="field"><label for="task-title">Task</label><input class="input" id="task-title" name="title" value="<%= t.title %>" maxlength="1024" required></div>
+      <div class="field"><label for="task-notes">Context and notes</label><textarea class="textarea" id="task-notes" name="notes" rows="5" maxlength="<%= t.google_id ? 8192 : 7000 %>"><%= t.notes %></textarea></div>
+      <div class="form-row"><div class="field"><label for="task-due">Due date</label><input class="input" id="task-due" type="date" name="due" value="<%= t.due || '' %>"></div>
+        <div class="field"><label for="task-status">Status</label><select class="select" name="status" id="task-status"><option value="needsAction" <%= t.status === 'needsAction' ? 'selected' : '' %>>Open</option><option value="completed" <%= t.status === 'completed' ? 'selected' : '' %>>Completed</option></select></div></div>
+      <% for (const [key, label] of [['personId','Person'],['orgId','Organisation'],['projectId','Project']]) { %>
+      <div class="field"><label for="task-<%= key %>"><%= label %></label><select class="select" id="task-<%= key %>" name="<%= key %>"><option value=""><%= key === 'orgId' ? 'From linked people' : 'Let the Hub read the context' %></option><% for (const choice of choices[key]) { %><option value="<%= choice.id %>" <%= t.context[key] === choice.id ? 'selected' : '' %>><%= choice.name %></option><% } %></select></div>
+      <% } %>
+      <p class="subline">Choose context now, or describe it in the notes. The Hub reads task text and connects recognised people and projects after the Mac has processed it.</p>
+      <div><button class="btn primary" type="submit"><%= t.id ? 'Save task' : 'Add task' %></button></div>
+    </form>
+  <% } else { %><p>This task was deleted. It will stay deleted in both places.</p><p><%= t.notes %></p><% } %>
+  </div>
+  <div class="s4 side-stack">
+  <% if (t.id) { %>
+    <div class="panel"><div class="panel-head"><h2>Connected to</h2></div>
+      <% for (const [group, route] of [['people','people'],['organisations','organisations'],['projects','projects']]) { %><% for (const link of t[group] || []) { %><p><a href="/crm/<%= space %>/<%= route %>/<%= link.id %>"><%= link.name %></a><small class="task-via"><%= link.via %></small></p><% } %><% } %>
+      <% if (t.evidence) { %><p><a href="/crm/<%= space %>/sources/<%= t.evidence.id %>"><%= t.evidence.title %></a></p><% } %>
+      <p class="subline"><%= t.reading === 'done' ? 'Task text has been read.' : 'Task text is waiting to be read.' %></p>
+      <a href="/crm/<%= space %>/sources/<%= t.source_id %>">View captured task</a>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Google Tasks</h2></div><p><%= t.pending ? 'Changes are waiting to sync.' : 'Synced.' %></p><p class="subline">Last synced <%= t.synced_at ? ago(t.synced_at) : 'not yet' %>.</p></div>
+    <% if (t.status !== 'deleted') { %><details class="panel"><summary>Delete task</summary><p>This also deletes the task in Google at the next sync.</p><form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/delete"><input type="hidden" name="revision" value="<%= t.revision %>"><button class="btn" type="submit">Delete from both places</button></form></details><% } %>
+  <% } else { %><div class="panel"><div class="panel-head"><h2>One task, both places</h2></div><p>It will appear in your <%= space === 'work' ? 'Work' : 'Personal' %> Google Tasks list. Edit it or tick it off here or there.</p></div><% } %>
+  </div>
+</section>
+<%- include('_bottom') %>

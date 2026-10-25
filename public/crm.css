@@ -371,3 +371,18 @@ a.tag:hover { color: var(--text); border-color: var(--control); }
 .tree-dept { display: flex; flex-direction: column; gap: 4px; }
 .tree-team { margin-left: 18px; }
 .topic-row.current { background: var(--active); border-color: var(--active); font-weight: 500; }
+
+.task-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
+.task-row .what { overflow-wrap: anywhere; }
+.task-check { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--row-edge); border-radius: 50%; background: var(--panel); color: var(--accent); font-size: 22px; cursor: pointer; }
+.task-toolbar, .task-tabs { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.task-toolbar { justify-content: space-between; margin: 24px 0 12px; }
+.task-tabs a { padding: 6px 0; }
+.task-tabs a[aria-current] { border-bottom: 2px solid var(--accent); color: var(--text); }
+.task-warning { color: var(--negative); font-size: 13px; overflow-wrap: anywhere; }
+.task-via { display: block; color: var(--muted); font-size: 12px; }
+@media (max-width: 600px) {
+  .task-row { grid-template-columns: 32px minmax(0, 1fr); }
+  .task-row .end { grid-column: 2; text-align: left; }
+  .task-row .end .when, .task-row .end small { display: inline; margin-right: 10px; }
+}

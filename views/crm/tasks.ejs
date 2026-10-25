@@ -1,0 +1,10 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Tasks</h1><p class="subline"><%= space === 'work' ? 'Work' : 'Personal' %> tasks, synced with Google every 15 minutes.</p></div><a class="btn primary" href="/crm/<%= space %>/tasks/new"><%- icon.plus %> Add a task</a></div>
+<div class="task-toolbar">
+  <nav class="task-tabs" aria-label="Task status"><% for (const [key, label] of [['needsAction','Open'],['completed','Completed'],['deleted','Deleted']]) { %><a href="/crm/<%= space %>/tasks?status=<%= key %>" <%- status === key ? 'aria-current="page"' : '' %>><%= label %></a><% } %></nav>
+  <form method="post" action="/crm/<%= space %>/tasks/sync"><button class="btn small">Sync now</button></form>
+</div>
+<% if (sync?.last_error) { %><p class="flash bad" role="status"><%= sync.last_error %></p><% } %>
+<p class="subline">Last successful sync: <%= sync?.last_ok ? ago(sync.last_ok) : 'not yet' %>. Changes made in either place are carried across. If both edit the same field, Google’s version is kept and your Hub edit is saved for review.</p>
+<section class="grid first"><div class="panel s12"><%- include('_tasks', { taskList: list, taskBack: `/crm/${space}/tasks?status=${status}` }) %></div></section>
+<%- include('_bottom') %>

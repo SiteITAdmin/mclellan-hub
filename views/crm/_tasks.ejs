@@ -1,0 +1,17 @@
+<% const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Dublin' }); %>
+<% if (!taskList.length) { %><div class="empty">No tasks here yet.</div><% } %>
+<div class="rows">
+<% for (const task of taskList) { %>
+  <div class="rowcard task-row">
+    <% if (task.status !== 'deleted') { %><form method="post" action="/crm/<%= space %>/tasks/<%= task.id %>/<%= task.status === 'completed' ? 'reopen' : 'complete' %>">
+      <input type="hidden" name="revision" value="<%= task.revision %>"><input type="hidden" name="back" value="<%= taskBack %>">
+      <button class="task-check" aria-label="<%= task.status === 'completed' ? 'Reopen' : 'Complete' %> <%= task.title %>"><%= task.status === 'completed' ? '✓' : '○' %></button>
+    </form><% } else { %><span aria-hidden="true">—</span><% } %>
+    <div class="main"><a class="what" href="/crm/<%= space %>/tasks/<%= task.id %>"><%= task.title %></a>
+      <div class="meta"><%= [...task.people, ...task.organisations, ...task.projects].map(x => x.name).join(' · ') || 'No context yet' %></div>
+      <% if (task.sync_error || task.conflict) { %><div class="task-warning"><%= task.sync_error || 'Both copies changed — review the saved versions' %></div><% } %>
+    </div>
+    <div class="end"><span class="when <%= task.status === 'needsAction' && task.due && task.due < todayDate ? 'late' : '' %>"><%= task.due || 'No due date' %></span><small><%= task.pending ? 'Waiting to sync' : 'Synced' %></small></div>
+  </div>
+<% } %>
+</div>
