@@ -3,7 +3,7 @@
 <div class="crumbs"><a href="/crm/<%= space %>"><%= space === 'work' ? 'Work' : 'Personal' %></a> / <a href="/crm/<%= space %>/people">People</a> / <%= p.name %></div>
 <div class="person-head">
   <span class="avatar lg" style="<%= hueStyle(p) %>" aria-hidden="true"><%= initials %></span>
-  <div><h1><%= p.name %></h1><p><%= p.role ? `${p.role}, ` : '' %><% if (p.org_id) { %><a class="who-link" href="/crm/<%= space %>/organisations/<%= p.org_id %>"><%= p.org %></a><% } else { %>No organisation yet<% } %>. Last contact <%= p.last ? fmt(p.last) : 'not seen yet' %>.</p></div>
+  <div><h1><%= p.name %></h1><p><%= p.role ? `${p.role}, ` : '' %><% if (p.team) { %><a href="/crm/<%= space %>/organisations/<%= p.org_id %>/units/<%= p.unit_id %>"><%= p.team %></a>, <% } %><% if (p.dept && !p.team) { %><a href="/crm/<%= space %>/organisations/<%= p.org_id %>/units/<%= p.unit_id %>"><%= p.dept %></a>, <% } else if (p.dept) { %><%= p.dept %>, <% } %><% if (p.org_id) { %><a class="who-link" href="/crm/<%= space %>/organisations/<%= p.org_id %>"><%= p.org %></a><% } else { %>No organisation yet<% } %>. Last contact <%= p.last ? fmt(p.last) : 'not seen yet' %>.</p></div>
   <div class="actions"><a class="btn" href="/crm/<%= space %>/note"><%- icon.note %> Add a note</a></div>
 </div>
 
@@ -70,6 +70,8 @@
       <form method="post" action="/crm/<%= space %>/people/<%= p.id %>/edit" class="list">
         <div class="field"><label for="ename">Name</label><input class="input" id="ename" name="name" value="<%= p.name %>" required></div>
         <div class="field"><label for="erole">Role</label><input class="input" id="erole" name="role" value="<%= p.role %>"></div>
+        <% if (unitChoices.length) { %><div class="field"><label for="eunit">Department or team in <%= p.org %></label>
+          <select class="select" id="eunit" name="unitId"><option value="none" <%= p.unit_id ? '' : 'selected' %>>None</option><% for (const c of unitChoices) { %><option value="<%= c.id %>" <%= c.id === p.unit_id ? 'selected' : '' %>><%= c.label %></option><% } %></select></div><% } %>
         <%- include('_orgpick', { idp: 'edit', groups: [{ label: space === 'work' ? 'Work' : 'Personal', list: orgList }], selectedId: p.org_id, allowNone: true, keepLabel: p.org_id ? 'Keep as it is' : 'None' }) %>
         <div><button class="btn" type="submit">Save</button></div>
       </form>

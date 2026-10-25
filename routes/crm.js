@@ -165,7 +165,7 @@ router.get('/crm/:space/people/:id', spaceParam, (req, res) => {
   const p = views.person(req.params.id);
   if (!p) return res.status(404).send('Not found');
   if (p.space !== req.params.space) return res.redirect(`/crm/${p.space}/people/${p.id}`);
-  res.render('crm/person', { page: 'people', p, orgList: orgs.list(p.space), title: p.name });
+  res.render('crm/person', { page: 'people', p, orgList: orgs.list(p.space), unitChoices: p.org_id ? orgs.unitChoices(p.org_id) : [], title: p.name });
 });
 
 router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -187,6 +187,8 @@ router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, wri
         .run(name, String(req.body.role || '').trim(), id);
       const org = orgs.resolveChoice(space, { orgId: req.body.orgId, orgName: req.body.orgName });
       if (org !== undefined) orgs.setPersonOrg(id, org);
+      const unitId = String(req.body.unitId || '');
+      if (unitId && org === undefined) orgs.setPersonUnit(id, unitId === 'none' ? null : unitId);
       identity.log('edit_person', id, { name });
       atoms.reresolveMentions(space);
       flash(req, 'Saved');
@@ -216,13 +218,18 @@ router.post('/crm/:space/organisations', spaceParam, requireSameOrigin, writeLim
   res.redirect(`/crm/${space}/organisations`);
 });
 
-router.get('/crm/:space/organisations/:id', spaceParam, (req, res) => {
-  const o = views.organisation(req.params.id);
+function renderOrg(req, res, unitId) {
+  const o = views.organisation(req.params.id, unitId);
   if (!o) return res.status(404).send('Not found');
   if (o.space !== req.params.space) return res.redirect(`/crm/${o.space}/organisations/${o.id}`);
-  const others = crm().prepare('SELECT id, name, org FROM people_v WHERE space = ? AND (org_id IS NULL OR org_id != ?) ORDER BY name COLLATE NOCASE').all(o.space, o.id);
-  res.render('crm/organisation', { page: 'organisations', o, others, title: o.name });
-});
+  const others = unitId
+    ? crm().prepare("SELECT id, name, org, dept, team FROM people_v WHERE org_id = ? AND COALESCE(unit_id, '') != ? ORDER BY name COLLATE NOCASE").all(o.id, unitId)
+    : crm().prepare('SELECT id, name, org FROM people_v WHERE space = ? AND (org_id IS NULL OR org_id != ?) ORDER BY name COLLATE NOCASE').all(o.space, o.id);
+  res.render('crm/organisation', { page: 'organisations', o, others, unitChoices: orgs.unitChoices(o.id), title: o.unit ? o.unit.name : o.name });
+}
+
+router.get('/crm/:space/organisations/:id', spaceParam, (req, res) => renderOrg(req, res, null));
+router.get('/crm/:space/organisations/:id/units/:unitId', spaceParam, (req, res) => renderOrg(req, res, req.params.unitId));
 
 router.post('/crm/:space/organisations/:id/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   const { id, action, space } = req.params;
@@ -232,11 +239,34 @@ router.post('/crm/:space/organisations/:id/:action', spaceParam, requireSameOrig
     if (action === 'rename') { orgs.rename(id, req.body.name); flash(req, 'Saved'); }
     else if (action === 'domain') { const d = orgs.addDomain(id, req.body.domain); flash(req, `${d} added. New people from it will be suggested for ${org.name}.`); }
     else if (action === 'undomain') { orgs.removeDomain(id, req.body.domain); flash(req, 'Domain removed'); }
-    else if (action === 'member') { orgs.setPersonOrg(String(req.body.personId || ''), org); flash(req, 'Linked'); }
+    else if (action === 'member') {
+      const pid = String(req.body.personId || '');
+      const current = crm().prepare('SELECT org_id FROM people WHERE id = ?').get(pid);
+      if (!current || current.org_id !== org.id) orgs.setPersonOrg(pid, org);
+      if (req.body.unitId) orgs.setPersonUnit(pid, String(req.body.unitId));
+      flash(req, 'Linked');
+    }
     else if (action === 'unmember') { orgs.setPersonOrg(String(req.body.personId || ''), null); flash(req, 'Unlinked'); }
+    else if (action === 'person-unit') {
+      orgs.setPersonUnit(String(req.body.personId || ''), req.body.unitId === 'none' ? null : String(req.body.unitId || ''));
+      flash(req, 'Moved');
+    }
+    else if (action === 'unit') {
+      const u = orgs.addUnit(id, { name: req.body.name, parentId: req.body.parentId || null });
+      flash(req, `${u.kind === 'team' ? 'Team' : 'Department'} ${u.name} added`);
+    }
+    else if (action === 'unit-rename') { orgs.renameUnit(String(req.body.unitId || ''), req.body.name); flash(req, 'Saved'); }
+    else if (action === 'unit-remove') {
+      const u = orgs.getUnit(String(req.body.unitId || ''));
+      if (!u || u.org_id !== id) throw new Error('No such department or team');
+      const moved = orgs.removeUnit(u.id);
+      flash(req, `${u.name} removed${moved ? `; ${moved} ${moved === 1 ? 'person' : 'people'} moved up a level` : ''}`);
+      return res.redirect(`/crm/${space}/organisations/${id}`);
+    }
     else return res.status(404).send('Not found');
   } catch (err) { flash(req, err.message, 'bad'); }
-  res.redirect(`/crm/${space}/organisations/${id}`);
+  const back = String(req.body.back || '');
+  res.redirect(back.startsWith(`/crm/${space}/organisations/${id}`) ? back : `/crm/${space}/organisations/${id}`);
 });
 
 router.get('/crm/:space/captured', spaceParam, (req, res) => {

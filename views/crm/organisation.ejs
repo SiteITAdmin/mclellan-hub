@@ -1,39 +1,59 @@
 <%- include('_top') %>
-<% const ini = n => String(n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(); %>
-<div class="crumbs"><a href="/crm/<%= space %>/organisations">Organisations</a> / <%= o.name %></div>
+<% const ini = n => String(n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+   const orgUrl = `/crm/${space}/organisations/${o.id}`;
+   const unitUrl = u => `${orgUrl}/units/${u.id}`;
+   const here = o.unit ? unitUrl(o.unit) : orgUrl;
+   const placeOf = p => [p.dept, p.team].filter(Boolean).join(' › '); %>
+<div class="crumbs"><a href="/crm/<%= space %>/organisations">Organisations</a> / <% if (o.unit) { %><a href="<%= orgUrl %>"><%= o.name %></a> / <% if (o.parent) { %><a href="<%= unitUrl(o.parent) %>"><%= o.parent.name %></a> / <% } %><%= o.unit.name %><% } else { %><%= o.name %><% } %></div>
 <div class="person-head">
   <span class="avatar lg none" aria-hidden="true"><%- icon.org %></span>
-  <div><h1><%= o.name %></h1><p><%= o.members.length %> <%= o.members.length === 1 ? 'person' : 'people' %><%= o.domains.length ? `, ${o.domains.join(', ')}` : '' %>.</p></div>
+  <div><h1><%= o.unit ? o.unit.name : o.name %></h1>
+    <p><% if (o.unit) { %><%= o.unit.kind === 'team' ? `Team in ${o.parent.name}, ${o.name}` : `Department of ${o.name}` %>. <% } %><%= o.members.length %> <%= o.members.length === 1 ? 'person' : 'people' %><%= !o.unit && o.domains.length ? `, ${o.domains.join(', ')}` : '' %>.</p></div>
 </div>
 <section class="grid first">
   <div class="s8" style="display:flex;flex-direction:column;gap:var(--gap)">
     <div class="panel">
       <div class="panel-head"><h2>People</h2></div>
-      <% if (!o.members.length) { %><div class="empty">Nobody linked yet.</div><% } %>
+      <% if (!o.members.length) { %><div class="empty">Nobody in <%= o.unit ? o.unit.name : o.name %> yet.</div><% } %>
       <div class="list">
       <% for (const p of o.members) { %>
         <div class="rowcard two">
           <span class="avatar" style="<%= hueStyle(p) %>" aria-hidden="true"><%= ini(p.name) %></span>
-          <div class="main"><div class="what"><a href="/crm/<%= space %>/people/<%= p.id %>"><%= p.name %></a></div><div class="meta"><%= p.role || '' %><%= p.role ? '. ' : '' %><%= p.facts %> <%= p.facts === 1 ? 'fact' : 'facts' %>, last contact <%= p.last ? fmt(p.last, 'date') : 'not seen yet' %></div></div>
-          <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/unmember"><input type="hidden" name="personId" value="<%= p.id %>"><button class="link-btn" type="submit">Not here</button></form>
+          <div class="main"><div class="what"><a href="/crm/<%= space %>/people/<%= p.id %>"><%= p.name %></a></div>
+            <div class="meta"><%= [p.role, placeOf(p)].filter(Boolean).join(', ') %><%= p.role || placeOf(p) ? '. ' : '' %><%= p.facts %> <%= p.facts === 1 ? 'fact' : 'facts' %>, last contact <%= p.last ? fmt(p.last, 'date') : 'not seen yet' %></div></div>
+          <div class="end">
+            <% if (unitChoices.length) { %>
+            <form method="post" action="<%= orgUrl %>/person-unit" class="form-row" style="justify-content:flex-end">
+              <input type="hidden" name="personId" value="<%= p.id %>"><input type="hidden" name="back" value="<%= here %>">
+              <label class="sr-only" for="mv-<%= p.id %>">Department or team for <%= p.name %></label>
+              <select class="select" id="mv-<%= p.id %>" name="unitId" style="height:30px;font-size:13px">
+                <option value="none" <%= p.unit_id ? '' : 'selected' %>>No department</option>
+                <% for (const c of unitChoices) { %><option value="<%= c.id %>" <%= c.id === p.unit_id ? 'selected' : '' %>><%= c.label %></option><% } %>
+              </select><button class="btn small" type="submit">Move</button>
+            </form><% } %>
+            <% if (!o.unit) { %><form method="post" action="<%= orgUrl %>/unmember"><input type="hidden" name="personId" value="<%= p.id %>"><button class="link-btn" type="submit">Not here</button></form><% } %>
+          </div>
         </div>
       <% } %>
       </div>
       <% if (others.length) { %>
-      <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/member" class="form-row" style="margin-top:12px">
-        <div class="field" style="flex:1"><label for="addp">Add someone</label>
-          <select class="select" id="addp" name="personId" required><option value="">Choose a person</option><% for (const x of others) { %><option value="<%= x.id %>"><%= x.name %><%= x.org ? ` (now ${x.org})` : '' %></option><% } %></select></div>
+      <form method="post" action="<%= orgUrl %>/member" class="form-row" style="margin-top:12px">
+        <input type="hidden" name="back" value="<%= here %>">
+        <div class="field" style="flex:1"><label for="addp">Add someone<%= o.unit ? ` to ${o.unit.name}` : '' %></label>
+          <select class="select" id="addp" name="personId" required><option value="">Choose a person</option><% for (const x of others) { %><option value="<%= x.id %>"><%= x.name %><%= o.unit ? (placeOf(x) ? ` (now ${placeOf(x)})` : '') : (x.org ? ` (now ${x.org})` : '') %></option><% } %></select></div>
+        <% if (o.unit) { %><input type="hidden" name="unitId" value="<%= o.unit.id %>"><% } else if (unitChoices.length) { %>
+        <div class="field"><label for="addu">Department or team</label><select class="select" id="addu" name="unitId"><option value="">None</option><% for (const c of unitChoices) { %><option value="<%= c.id %>"><%= c.label %></option><% } %></select></div><% } %>
         <button class="btn" type="submit">Link</button>
       </form><% } %>
     </div>
     <div class="panel">
       <div class="panel-head"><h2>What the Hub knows</h2><span class="chip"><%= o.atoms.length %></span></div>
-      <% if (!o.atoms.length) { %><div class="empty">No facts yet about <%= o.name %> or its people.</div><% } %>
+      <% if (!o.atoms.length) { %><div class="empty">No facts yet about <%= o.unit ? `the people in ${o.unit.name}` : `${o.name} or its people` %>.</div><% } %>
       <% for (const a of o.atoms) { %><%- include('_atom', { a }) %><% } %>
     </div>
     <div class="panel">
       <div class="panel-head"><h2>Timeline</h2></div>
-      <% if (!o.timeline.length) { %><div class="empty">No mail with <%= o.name %> captured yet.</div><% } %>
+      <% if (!o.timeline.length) { %><div class="empty">No mail captured yet.</div><% } %>
       <div class="timeline">
       <% for (const s of o.timeline) { %>
         <div class="tl-item"><div class="tl-date"><%= fmt(s.occurred_at, 'date') %><small><%= fmt(s.occurred_at, 'time') %></small></div>
@@ -45,20 +65,57 @@
   </div>
   <div class="s4 side-stack">
     <div class="panel">
+      <div class="panel-head"><h2>Departments and teams</h2></div>
+      <% if (!o.units.length) { %><div class="empty">None yet. Add a department, then teams inside it.</div><% } %>
+      <div class="tree">
+      <% for (const d of o.units) { %>
+        <div class="tree-dept">
+          <a class="topic-row <%= o.unit && o.unit.id === d.id ? 'current' : '' %>" href="<%= unitUrl(d) %>"><span><%= d.name %></span><span class="n"><%= d.people %></span></a>
+          <% for (const t of d.teams) { %><a class="topic-row tree-team <%= o.unit && o.unit.id === t.id ? 'current' : '' %>" href="<%= unitUrl(t) %>"><span><%= t.name %></span><span class="n"><%= t.direct %></span></a><% } %>
+          <% if (!o.unit || o.unit.id === d.id) { %>
+          <form method="post" action="<%= orgUrl %>/unit" class="form-row tree-team" style="margin-top:4px">
+            <input type="hidden" name="parentId" value="<%= d.id %>"><input type="hidden" name="back" value="<%= here %>">
+            <label class="sr-only" for="t-<%= d.id %>">New team in <%= d.name %></label>
+            <input class="input" id="t-<%= d.id %>" name="name" placeholder="New team in <%= d.name %>" required style="height:32px"><button class="btn small" type="submit">Add</button>
+          </form><% } %>
+        </div>
+      <% } %>
+      </div>
+      <% if (!o.unit) { %>
+      <form method="post" action="<%= orgUrl %>/unit" class="form-row" style="margin-top:12px">
+        <label class="sr-only" for="newdept">New department</label>
+        <input class="input" id="newdept" name="name" placeholder="New department, e.g. IT" required><button class="btn small" type="submit">Add</button>
+      </form><% } %>
+    </div>
+    <% if (o.unit) { %>
+    <div class="panel">
+      <div class="panel-head"><h2>This <%= o.unit.kind %></h2></div>
+      <form method="post" action="<%= orgUrl %>/unit-rename" class="form-row">
+        <input type="hidden" name="unitId" value="<%= o.unit.id %>"><input type="hidden" name="back" value="<%= here %>">
+        <label class="sr-only" for="urn">Name</label><input class="input" id="urn" name="name" value="<%= o.unit.name %>" required><button class="btn small" type="submit">Save</button>
+      </form>
+      <details style="margin-top:12px"><summary class="link-btn" style="display:inline">Remove <%= o.unit.name %></summary>
+        <p class="subline" style="font-size:13px"><%= o.unit.kind === 'team' ? `Its people move up to ${o.parent.name}.` : 'Its teams are removed and all its people move up to the organisation.' %> Nobody is deleted.</p>
+        <form method="post" action="<%= orgUrl %>/unit-remove"><input type="hidden" name="unitId" value="<%= o.unit.id %>"><button class="btn small" type="submit" style="color:var(--negative);border-color:var(--negative)">Yes, remove <%= o.unit.name %></button></form>
+      </details>
+    </div>
+    <% } else { %>
+    <div class="panel">
       <div class="panel-head"><h2>Email domains</h2></div>
       <p class="subline" style="margin-top:0;font-size:13px">New people with an address here are suggested for <%= o.name %>. You still confirm each one.</p>
       <% for (const d of o.domains) { %><div class="topic-row" style="margin-bottom:6px"><span><%= d %></span>
-        <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/undomain"><input type="hidden" name="domain" value="<%= d %>"><button class="link-btn" type="submit">Remove</button></form></div><% } %>
-      <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/domain" class="form-row" style="margin-top:8px">
+        <form method="post" action="<%= orgUrl %>/undomain"><input type="hidden" name="domain" value="<%= d %>"><button class="link-btn" type="submit">Remove</button></form></div><% } %>
+      <form method="post" action="<%= orgUrl %>/domain" class="form-row" style="margin-top:8px">
         <label class="sr-only" for="dom">Add a domain</label><input class="input" id="dom" name="domain" placeholder="e.g. beaconhospital.ie" required><button class="btn small" type="submit">Add</button>
       </form>
     </div>
     <div class="panel">
       <div class="panel-head"><h2>Name</h2></div>
-      <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/rename" class="form-row">
+      <form method="post" action="<%= orgUrl %>/rename" class="form-row">
         <label class="sr-only" for="rn">Name</label><input class="input" id="rn" name="name" value="<%= o.name %>" required><button class="btn small" type="submit">Save</button>
       </form>
     </div>
+    <% } %>
   </div>
 </section>
 <%- include('_bottom') %>

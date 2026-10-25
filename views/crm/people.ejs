@@ -16,7 +16,7 @@
       <% for (const p of list) { %>
         <tr>
           <td><a class="name-cell" href="/crm/<%= space %>/people/<%= p.id %>"><span class="avatar" style="<%= hueStyle(p) %>" aria-hidden="true"><%= p.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() %></span><%= p.name %></a></td>
-          <td><% if (p.org_id) { %><a href="/crm/<%= space %>/organisations/<%= p.org_id %>"><%= p.org %></a><% } else { %>—<% } %></td>
+          <td><% if (p.org_id) { %><a href="/crm/<%= space %>/organisations/<%= p.org_id %>"><%= p.org %></a><% if (p.dept) { %><br><small style="color:var(--muted)"><%= [p.dept, p.team].filter(Boolean).join(' › ') %></small><% } %><% } else { %>—<% } %></td>
           <td class="num"><%= p.facts %></td>
           <td class="num"><%= p.last ? fmt(p.last, 'date') : '—' %></td>
         </tr>

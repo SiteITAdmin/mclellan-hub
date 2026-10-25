@@ -357,6 +357,56 @@ test('organisations: one space each, domains suggest, people link', () => {
   assert.strictEqual(crm().prepare('SELECT org_id FROM people WHERE id = ?').get(r.personId).org_id, beacon.id);
 });
 
+test('departments hold teams; people sit in either; moving up keeps them', () => {
+  const beacon = crm().prepare("SELECT * FROM organisations WHERE name = 'Beacon Hospital'").get();
+  const it = orgs.addUnit(beacon.id, { name: 'IT' });
+  assert.strictEqual(it.kind, 'department');
+  const help = orgs.addUnit(beacon.id, { name: 'Help Desk', parentId: it.id });
+  assert.strictEqual(help.kind, 'team');
+  assert.throws(() => orgs.addUnit(beacon.id, { name: 'Tier 2', parentId: help.id }), /team goes under a department/);
+  assert.throws(() => orgs.addUnit(beacon.id, { name: 'it' }), /already exists/);
+  const northwall = crm().prepare("SELECT * FROM organisations WHERE name = 'Northwall Group'").get();
+  assert.throws(() => orgs.addUnit(northwall.id, { name: 'Ops', parentId: it.id }), /another organisation/);
+  assert.ok(orgs.addUnit(northwall.id, { name: 'IT' }), 'two organisations can each have IT');
+
+  const jane = crm().prepare("SELECT id FROM people WHERE name = 'Jane Whelan'").get().id;
+  const kealan = crm().prepare("SELECT id FROM people WHERE name = 'Kealan Walters'").get().id;
+  orgs.setPersonUnit(kealan, help.id);
+  orgs.setPersonUnit(jane, it.id);
+  const k = crm().prepare('SELECT dept, team FROM people_v WHERE id = ?').get(kealan);
+  assert.deepStrictEqual({ ...k }, { dept: 'IT', team: 'Help Desk' });
+  assert.deepStrictEqual(orgs.unitChoices(beacon.id).map(c => c.label), ['IT', 'IT › Help Desk']);
+  assert.strictEqual(orgs.units(beacon.id)[0].people, 2, 'a department counts its teams');
+
+  const deptView = views.organisation(beacon.id, it.id);
+  assert.deepStrictEqual(deptView.members.map(m => m.name).sort(), ['Jane Whelan', 'Kealan Walters']);
+  const teamView = views.organisation(beacon.id, help.id);
+  assert.deepStrictEqual(teamView.members.map(m => m.name), ['Kealan Walters']);
+  assert.strictEqual(teamView.parent.id, it.id);
+  assert.strictEqual(views.organisation(northwall.id, help.id), null, "a team opened under the wrong organisation isn't found");
+
+  const alec = crm().prepare("SELECT id FROM people WHERE name = 'Alec Byrne'").get().id;
+  assert.throws(() => orgs.setPersonUnit(alec, help.id), /isn't in this person's organisation/);
+
+  orgs.renameUnit(help.id, 'Service Desk');
+  assert.strictEqual(crm().prepare('SELECT team FROM people_v WHERE id = ?').get(kealan).team, 'Service Desk');
+  assert.strictEqual(orgs.removeUnit(help.id), 1);
+  assert.strictEqual(crm().prepare('SELECT dept, team FROM people_v WHERE id = ?').get(kealan).dept, 'IT', 'a removed team moves its people up to the department');
+
+  const ops = orgs.addUnit(beacon.id, { name: 'Ops', parentId: it.id });
+  orgs.setPersonUnit(kealan, ops.id);
+  orgs.removeUnit(it.id);
+  assert.strictEqual(crm().prepare('SELECT COUNT(*) AS n FROM people WHERE unit_id IS NOT NULL AND org_id = ?').get(beacon.id).n, 0, 'a removed department moves everyone up to the organisation');
+  assert.strictEqual(crm().prepare('SELECT COUNT(*) AS n FROM org_units WHERE org_id = ?').get(beacon.id).n, 0, 'and its teams go with it');
+
+  const fin = orgs.addUnit(beacon.id, { name: 'Finance' });
+  orgs.setPersonUnit(jane, fin.id);
+  orgs.setPersonOrg(jane, northwall);
+  assert.strictEqual(crm().prepare('SELECT unit_id FROM people WHERE id = ?').get(jane).unit_id, null, 'changing organisation clears the department');
+  orgs.setPersonOrg(jane, beacon);
+  orgs.setPersonUnit(jane, fin.id);
+});
+
 test('old free-text organisations become linked organisations', () => {
   const Database = require('better-sqlite3');
   const file = path.join(tmp, 'legacy.db');
@@ -398,6 +448,7 @@ test('every CRM screen renders for the signed-in owner', async () => {
     const beacon = crm().prepare("SELECT id FROM organisations WHERE name = 'Beacon Hospital'").get().id;
     const pages = ['/crm/work', '/crm/personal', '/crm/work/people', `/crm/work/people/${jane}`, '/crm/review',
       '/crm/work/organisations', `/crm/work/organisations/${beacon}`, '/crm/work/search?q=beacon',
+      `/crm/work/organisations/${beacon}/units/${crm().prepare("SELECT id FROM org_units WHERE name = 'Finance'").get().id}`,
       '/crm/work/captured', '/crm/work/captured?filter=attention', `/crm/work/sources/${src}`, '/crm/work/projects',
       `/crm/work/projects/${project}`, `/crm/work/topics/${topic}`, '/crm/work/search?q=purview', '/crm/personal/note'];
     for (const kind of ['person', 'mention', 'project']) {

@@ -367,3 +367,7 @@ a.tag:hover { color: var(--text); border-color: var(--control); }
   .sheet:target { display: block; position: fixed; inset: 0; z-index: 10; background: var(--ground); padding: 16px; overflow: auto; }
   .sheet .nav a { height: 44px; }
 }
+.tree { display: flex; flex-direction: column; gap: 10px; }
+.tree-dept { display: flex; flex-direction: column; gap: 4px; }
+.tree-team { margin-left: 18px; }
+.topic-row.current { background: var(--active); border-color: var(--active); font-weight: 500; }
