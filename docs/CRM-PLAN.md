@@ -1,6 +1,6 @@
 # Personal CRM: feature plan
 
-**Status:** draft for Douglas to review, 25 Oct 2026. This covers features only.
+**Status:** draft for Douglas to review, 25 Oct 2026. WhatsApp through Hermes added 25 Oct (§8). This covers features only.
 There is no design and no code yet. The visual approach comes after the features
 are agreed, and it will be entirely new.
 
@@ -80,7 +80,8 @@ These follow the standing Hub rules (`CLAUDE.md`, `docs/VERSION-OLD.md`):
 | Meeting transcripts | Pasted or uploaded transcripts and voice debriefs | When I add them |
 | Google Contacts | Names, emails, phones and birthdays, used to strengthen identity | Daily |
 | LinkedIn | The connections export file (CSV) | When I upload |
-| WhatsApp, iMessage | Messages with known people, read on the Mac | Live, 7-day window |
+| WhatsApp (Hermes) | Approved chats with known people, plus notes and questions I send to myself (§8) | Live, 7-day window |
+| iMessage | Messages with known people, read on the Mac | Live, 7-day window |
 | Work email | Depends on where work mail lives *(Q1)* | — |
 
 Every source records where it came from, its space, whether it was readable, the
@@ -182,7 +183,67 @@ items a space. *(To confirm, Q4.)*
 - **Tasks I create myself** in Google Tasks are read in and shown on Today
   (sorted into spaces by list). They are never changed by the Hub.
 
-## 8. The 14 features, in build order
+## 8. WhatsApp through Hermes
+
+Hermes comes back as the WhatsApp channel. It runs on the Mac as a linked
+WhatsApp device and passes messages to the Hub. What went wrong with it in
+Version Old shapes the rules below.
+
+**What it does**
+
+- **Captures approved chats.** Messages in a chat I've approved become CRM
+  sources, in both directions. I approve each chat once on the review screen
+  and give it a space, e.g. "Dad Information Group" → Personal, Dad project.
+  New chats wait in review and are not stored until I decide.
+- **Takes notes from my own chat.** Anything I send myself on WhatsApp is a
+  quick note or a question. For example:
+  - "Met Aoife, she's moving to Stripe"
+  - "Remind me Thursday to ring the GP"
+  - "What do I owe Dad?"
+  
+  Hermes replies in the same chat to confirm.
+- **Reminds me.** Due promises, meeting prep and people I've drifted from can
+  arrive as WhatsApp messages to myself. That makes WhatsApp the push channel
+  (Q7).
+- **Reads chats the way people actually write.** It waits 5 minutes before
+  reading a message, so a quick follow-up arrives with it. It reads the rest of
+  the same chat for context. A later reply ("sent it") can close an earlier
+  promise. Version Old did this, and it worked.
+- **Drafts replies to other people for me to approve** *(scope to confirm,
+  Q8)*.
+
+**Rules**
+
+- **People are identified by phone number** (the WhatsApp ID), never by
+  display name. Version Old matched family-chat senders by name, which is the
+  same mistake as Alec and Alan.
+- **In group chats,** each sender is matched by phone number. A sender who
+  isn't in the CRM goes to review.
+- **Hermes messages only me,** unless I approve a specific message to someone
+  else. Every message it sends goes in the effects log with the reason.
+- **There is a stop switch.** When the CRM is paused, the Hub refuses
+  messages from Hermes and Hermes keeps no backlog to replay later. In Version
+  Old, Hermes posted 724 messages during the pause.
+- **Old messages can't create work.** A message that arrives more than 7 days
+  after it was sent is stored as history only and never creates a promise or a
+  task. The same goes for chat exports I import by hand, so an old "I'll do
+  it" doesn't become a current promise.
+- **No silent failure.** If Hermes hasn't checked in for 30 minutes, both
+  Today screens say so.
+
+**What it needs**
+
+- Hermes reinstalled on the Mac, with its WhatsApp bridge (Node) and a
+  LaunchAgent, and WhatsApp re-linked by QR code.
+- A capture address on the Hub with its own secret.
+- **Still to check:** replies to my own chat and drafted replies need a model.
+  They must go through the Mac's subscription CLIs, because the Hub has no
+  API-key path. If Hermes can only call API models, it can still capture, but
+  the reply and drafting parts can't work.
+- The disk space Hermes and its bridge take, checked before installing.
+  Ollama is not needed.
+
+## 9. The 14 features, in build order
 
 Each phase is built, tested with fake data, then checked against real data
 before the next one starts.
@@ -190,13 +251,13 @@ before the next one starts.
 | Phase | Features | Notes |
 |---|---|---|
 | **1. Foundations** | 1 People and identity · 2 Getting people in (sent-mail proposals, approve each) · 3 Timeline per person · 4 Quick note | Spaces, organisations, projects, review screen, Gmail capture |
-| **2. Remembering for me** | 5 Keep-in-touch · 6 Birthdays and key dates · Google Tasks two-way sync · Today screens · morning emails | The ADHD layer |
-| **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search | Forward-to inbox, report upload, fact extraction |
+| **2. Remembering for me** | 5 Keep-in-touch · 6 Birthdays and key dates · Google Tasks two-way sync · Today screens · morning emails · Hermes notes and reminders through my own WhatsApp chat | The ADHD layer. WhatsApp becomes the push channel *(proposed, Q9)* |
+| **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search · 10a WhatsApp chat capture (Hermes) | Forward-to inbox, report upload, fact extraction |
 | **4. Meetings** | 9 Meeting prep | Calendar capture, transcripts, push notifications |
 | **5. Wider identity** | 12 Google Contacts sync · 11 LinkedIn import · 14 Connections between people | Needs the Contacts permission |
-| **6. Messages** | 10 WhatsApp and iMessage | Needs Mac programs |
+| **6. Messages** | 10b iMessage | Needs a Mac program |
 
-## 9. What it needs
+## 10. What it needs
 
 **Database:** a separate `data/crm.db`. It keeps `hub.db` small, and the nightly
 backup already copies every `data/*.db`. Tables:
@@ -225,12 +286,13 @@ backup already copies every `data/*.db`. Tables:
 | `crm_meeting_prep` | morning, plus 30 min before each meeting |
 | `crm_contacts_sync` | daily |
 | `crm_connections` | weekly |
+| `crm_hermes_check` (Hermes has checked in) | 5 min |
 
 **Mac programs:**
 
 - The existing subscription worker handles model jobs.
+- Phase 2 brings back Hermes and its WhatsApp bridge (§8).
 - Phase 6 adds an iMessage reader, which needs Full Disk Access.
-- Phase 6 also adds a WhatsApp bridge.
 
 **Permissions:**
 
@@ -239,16 +301,19 @@ backup already copies every `data/*.db`. Tables:
 - AgentMail is already set up.
 - Work email depends on Q1.
 
-## 10. Risks (one line each)
+## 11. Risks (one line each)
 
-- WhatsApp has no official way to read personal chats. The unofficial bridge
-  (Baileys, which Hermes used) carries a real risk of the number being banned.
+- WhatsApp has no official way to read personal chats. Hermes links through
+  an unofficial bridge (Baileys), which carries a real risk of the number
+  being banned.
+- Hermes can see every WhatsApp chat. Approving chats and messaging only me
+  are the only limits, so both must be enforced in code, not just in prompts.
 - If work mail is in Microsoft 365, the employer's tenant may block third-party
   access.
 - The Hub's Google token belongs to one account, so Tasks lists, Gmail capture
   and Calendar all come from that account.
 
-## 11. Open questions
+## 12. Open questions
 
 **Phase 1 can't be built until these are answered:**
 
@@ -265,5 +330,10 @@ backup already copies every `data/*.db`. Tables:
 **Needed before later phases:**
 
 6. Morning emails: one per space, Work on weekdays only? *(Phase 2)*
-7. Push notifications: are Google Tasks and Calendar notifications enough, or
-   should there be a dedicated push app such as ntfy? *(Phase 4)*
+7. Push notifications: is WhatsApp through Hermes the push channel, alongside
+   Google Tasks? *(Phase 2)*
+8. What should Hermes "manage" on WhatsApp? Capture and notes and reminders
+   to myself are planned. Should it also draft replies to other people for
+   approval, or send some messages to others without asking? *(Phase 2)*
+9. Should Hermes move up as proposed: my own chat in Phase 2, capture of other
+   chats in Phase 3? *(Phase 2)*
