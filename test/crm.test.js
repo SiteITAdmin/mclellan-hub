@@ -19,6 +19,7 @@ const atoms = require('../lib/crm/atoms');
 const review = require('../lib/crm/review');
 const gmail = require('../lib/crm/gmail');
 const views = require('../lib/crm/views');
+const orgs = require('../lib/crm/orgs');
 
 const ME = 'douglas.mclellan@beaconhospital.ie';
 const hours = h => Math.floor(Date.now() / 1000) - h * 3600;
@@ -93,7 +94,7 @@ test('mail not addressed to Douglas is skipped; unknown senders are held and pro
 
 // ── identity ────────────────────────────────────────────────────────────────
 test('Alec and Alan never match each other; a name shared by two people is ambiguous', () => {
-  const alec = identity.createPerson({ space: 'work', name: 'Alec Byrne', org: 'Northwall Group' });
+  const alec = identity.createPerson({ space: 'work', name: 'Alec Byrne', orgId: orgs.createOrg('work', 'Northwall Group').id });
   const alan = identity.createPerson({ space: 'work', name: 'Alan Garland' });
   identity.linkIdentifier(alec.id, 'email', 'alec.byrne@northwall.ie');
   assert.deepStrictEqual(identity.resolveName('work', 'Alec'), { status: 'resolved', personId: alec.id, how: 'name' });
@@ -323,6 +324,62 @@ test('the bootstrap proposes people emailed twice or more and stores their mail 
 });
 
 // ── screens ─────────────────────────────────────────────────────────────────
+// ── organisations ───────────────────────────────────────────────────────────
+test('organisations: one space each, domains suggest, people link', () => {
+  const beacon = orgs.createOrg('work', 'Beacon Hospital');
+  assert.strictEqual(orgs.createOrg('work', 'beacon hospital').id, beacon.id, 'same name is the same organisation');
+  assert.strictEqual(orgs.addDomain(beacon.id, 'Jane.Whelan@BeaconHospital.ie'), 'beaconhospital.ie');
+  assert.throws(() => orgs.addDomain(beacon.id, 'gmail.com'), /public email service/);
+  const other = orgs.createOrg('work', 'Northwall Group');
+  assert.throws(() => orgs.addDomain(other.id, 'beaconhospital.ie'), /already belongs to Beacon Hospital/);
+  assert.strictEqual(orgs.orgForEmail('work', 'kealan.walters@beaconhospital.ie').id, beacon.id);
+  assert.strictEqual(orgs.orgForEmail('personal', 'kealan.walters@beaconhospital.ie'), null, 'spaces never cross');
+
+  const jane = crm().prepare("SELECT id FROM people WHERE name = 'Jane Whelan'").get().id;
+  orgs.setPersonOrg(jane, beacon);
+  assert.strictEqual(crm().prepare('SELECT org FROM people_v WHERE id = ?').get(jane).org, 'Beacon Hospital');
+  const club = orgs.createOrg('personal', 'Munster Cricket');
+  assert.throws(() => orgs.setPersonOrg(jane, club), /same space/);
+  assert.throws(() => orgs.resolveChoice('work', { orgId: club.id }), /other space/);
+
+  const n = sources.addNote({ space: 'work', text: 'Jane Whelan is leading the records retention review at Beacon Hospital.' });
+  atoms.applyAtoms(n.id, [{ statement: 'Jane Whelan is leading the records retention review.', quote: 'Jane Whelan is leading the records retention review', people: ['Jane Whelan'], kind: 'fact' }], []);
+  const o = views.organisation(beacon.id);
+  assert.deepStrictEqual(o.members.map(m => m.name), ['Jane Whelan']);
+  assert.deepStrictEqual(o.domains, ['beaconhospital.ie']);
+  assert.ok(o.timeline.length >= 1, 'mail from the domain and its people appears on the timeline');
+  assert.ok(o.atoms.some(a => /records retention/.test(a.statement)), "its people's facts are the organisation's facts");
+
+  const f = outlook.parseOutlookFile(outlookFile({ from: 'Kealan Walters <Kealan.Walters@beaconhospital.ie>', to: ME, subject: 'Accounts', received: new Date(hours(1) * 1000).toISOString(), body: 'Second account is ready.', messageId: 'kw1' }));
+  outlook.admitOutlookEmail(f, { fileId: 'f-kw1' });
+  const item = reviewItem('addr:email:kealan.walters@beaconhospital.ie');
+  const r = review.decide(item.id, { action: 'new', name: 'Kealan Walters', space: 'work', orgId: beacon.id });
+  assert.strictEqual(crm().prepare('SELECT org_id FROM people WHERE id = ?').get(r.personId).org_id, beacon.id);
+});
+
+test('old free-text organisations become linked organisations', () => {
+  const Database = require('better-sqlite3');
+  const file = path.join(tmp, 'legacy.db');
+  const old = new Database(file);
+  old.exec(`CREATE TABLE people (id TEXT PRIMARY KEY, space TEXT NOT NULL, name TEXT NOT NULL, org TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT '', hue INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch()));
+    INSERT INTO people (id, space, name, org) VALUES ('p1', 'work', 'Ann', 'Beacon Hospital'), ('p2', 'work', 'Bo', 'beacon hospital '), ('p3', 'personal', 'Cy', 'Beacon Hospital'), ('p4', 'work', 'Di', '');`);
+  old.close();
+  const db = require('../lib/crm/db');
+  const keep = process.env.CRM_DB_PATH;
+  db._reset(); process.env.CRM_DB_PATH = file;
+  try {
+    const rows = db.crm().prepare('SELECT id, space, org_id, org FROM people_v ORDER BY id').all();
+    assert.strictEqual(rows[0].org_id, rows[1].org_id, 'the same name in one space is one organisation');
+    assert.notStrictEqual(rows[2].org_id, rows[0].org_id, 'each space gets its own');
+    assert.deepStrictEqual(rows.map(r => r.org), ['Beacon Hospital', 'Beacon Hospital', 'Beacon Hospital', '']);
+    assert.ok(db.crm().prepare('PRAGMA table_info(people)').all().some(c => c.name === 'org_legacy'));
+    db._reset();
+    assert.strictEqual(db.crm().prepare('SELECT COUNT(*) AS n FROM organisations').get().n, 2, 'running again changes nothing');
+  } finally {
+    db._reset(); process.env.CRM_DB_PATH = keep;
+  }
+});
+
 test('every CRM screen renders for the signed-in owner', async () => {
   const express = require('express');
   const app = express();
@@ -338,7 +395,9 @@ test('every CRM screen renders for the signed-in owner', async () => {
     const project = crm().prepare("SELECT id FROM projects WHERE name = 'M365 Rollout'").get().id;
     const topic = crm().prepare("SELECT id FROM topics WHERE space = 'work' LIMIT 1").get().id;
     const src = crm().prepare("SELECT id FROM sources WHERE raw_ref = 'f-jane-1'").get().id;
+    const beacon = crm().prepare("SELECT id FROM organisations WHERE name = 'Beacon Hospital'").get().id;
     const pages = ['/crm/work', '/crm/personal', '/crm/work/people', `/crm/work/people/${jane}`, '/crm/review',
+      '/crm/work/organisations', `/crm/work/organisations/${beacon}`, '/crm/work/search?q=beacon',
       '/crm/work/captured', '/crm/work/captured?filter=attention', `/crm/work/sources/${src}`, '/crm/work/projects',
       `/crm/work/projects/${project}`, `/crm/work/topics/${topic}`, '/crm/work/search?q=purview', '/crm/personal/note'];
     for (const kind of ['person', 'mention', 'project']) {

@@ -16,7 +16,7 @@
       <% for (const p of list) { %>
         <tr>
           <td><a class="name-cell" href="/crm/<%= space %>/people/<%= p.id %>"><span class="avatar" style="<%= hueStyle(p) %>" aria-hidden="true"><%= p.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() %></span><%= p.name %></a></td>
-          <td><%= p.org || '—' %></td>
+          <td><% if (p.org_id) { %><a href="/crm/<%= space %>/organisations/<%= p.org_id %>"><%= p.org %></a><% } else { %>—<% } %></td>
           <td class="num"><%= p.facts %></td>
           <td class="num"><%= p.last ? fmt(p.last, 'date') : '—' %></td>
         </tr>
@@ -30,7 +30,7 @@
     <form method="post" action="/crm/<%= space %>/people" class="list">
       <div class="field"><label for="name">Name</label><input class="input" id="name" name="name" required></div>
       <div class="field"><label for="email">Email (optional)</label><input class="input" id="email" name="email" type="email"></div>
-      <div class="field"><label for="org">Organisation (optional)</label><input class="input" id="org" name="org"></div>
+      <%- include('_orgpick', { idp: 'add', groups: [{ label: space === 'work' ? 'Work' : 'Personal', list: orgList }], selectedId: null, allowNone: false, keepLabel: 'None, or work it out from the email' }) %>
       <div><button class="btn primary" type="submit"><%- icon.plus %> Add to <%= space === 'work' ? 'Work' : 'Personal' %></button></div>
     </form>
   </div>

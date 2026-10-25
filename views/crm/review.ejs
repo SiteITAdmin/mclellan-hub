@@ -56,7 +56,7 @@
         <% for (const l of detail.lookalikes) { %><input type="hidden" name="shownIds" value="<%= l.id %>"><% } %>
         <div class="form-row">
           <div class="field" style="flex:2"><label for="n">Name</label><input class="input" id="n" name="name" value="<%= p.name %>" required></div>
-          <div class="field" style="flex:1"><label for="o">Organisation</label><input class="input" id="o" name="org"></div>
+          <%- include('_orgpick', { idp: 'rv', groups: [{ label: 'Work', list: orgsBySpace.work }, { label: 'Personal', list: orgsBySpace.personal }], selectedId: detail.suggestedOrg ? detail.suggestedOrg.id : null, allowNone: false, keepLabel: 'None' }) %>
           <div class="field"><label for="sp">Space</label><select class="select" id="sp" name="space"><option value="work" <%= it.space === 'work' ? 'selected' : '' %>>Work</option><option value="personal" <%= it.space === 'personal' ? 'selected' : '' %>>Personal</option></select></div>
         </div>
         <div class="decide"><button class="btn primary" type="submit"><%- icon.plus %> Add as a new person</button></div>

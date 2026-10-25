@@ -11,6 +11,7 @@ const review = require('../lib/crm/review');
 const identity = require('../lib/crm/identity');
 const sources = require('../lib/crm/sources');
 const atoms = require('../lib/crm/atoms');
+const orgs = require('../lib/crm/orgs');
 const { crm } = require('../lib/crm/db');
 
 const router = express.Router();
@@ -55,9 +56,9 @@ function fmt(ts, style = 'short') {
   const key = d.toLocaleDateString('en-GB', tz);
   const time = d.toLocaleTimeString('en-GB', { ...tz, hour: '2-digit', minute: '2-digit' });
   if (style === 'time') return time;
-  if (key === todayKey) return `Today ${time}`;
+  if (key === todayKey) return style === 'date' ? 'Today' : `Today ${time}`;
   const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-GB', tz);
-  if (key === yesterday) return `Yesterday ${time}`;
+  if (key === yesterday) return style === 'date' ? 'Yesterday' : `Yesterday ${time}`;
   if (style === 'date') return d.toLocaleDateString('en-IE', { ...tz, weekday: 'short', day: 'numeric', month: 'short' });
   return `${d.toLocaleDateString('en-IE', { ...tz, weekday: 'short', day: 'numeric', month: 'short' })} ${time}`;
 }
@@ -82,12 +83,13 @@ router.get('/crm/review', (req, res) => {
     detail = { item: selected, evidence: review.evidenceFor(selected), count: review.evidenceCount(selected) };
     if (selected.kind === 'person') {
       detail.lookalikes = identity.lookalikes(selected.payload.name, selected.payload.value);
+      detail.suggestedOrg = orgs.orgForEmail(selected.space, selected.payload.value);
       detail.lookEmails = Object.fromEntries(detail.lookalikes.map(l => [l.id,
         crm().prepare("SELECT value FROM identifiers WHERE person_id = ? AND kind = 'email'").all(l.id).map(r => r.value)]));
     }
     if (selected.kind === 'mention') {
       const db = crm();
-      detail.candidates = selected.payload.candidateIds.map(id => db.prepare('SELECT * FROM people WHERE id = ?').get(id)).filter(Boolean)
+      detail.candidates = selected.payload.candidateIds.map(id => db.prepare('SELECT * FROM people_v WHERE id = ?').get(id)).filter(Boolean)
         .map(p => ({ ...p, emails: db.prepare("SELECT value FROM identifiers WHERE person_id = ? AND kind = 'email'").all(p.id).map(r => r.value) }));
       detail.atom = views.source(db.prepare('SELECT source_id FROM atom_sources WHERE atom_id = ?').get(selected.payload.atomId)?.source_id || '')
         ?.atoms.find(a => a.id === selected.payload.atomId) || null;
@@ -97,15 +99,17 @@ router.get('/crm/review', (req, res) => {
       detail.atoms = selected.payload.atomIds.slice(0, 5).map(id => db.prepare('SELECT * FROM atoms WHERE id = ?').get(id)).filter(Boolean);
     }
   }
-  const peopleBySpace = Object.fromEntries(SPACES.map(s => [s, crm().prepare('SELECT id, name, org FROM people WHERE space = ? ORDER BY name COLLATE NOCASE').all(s)]));
-  res.render('crm/review', { page: 'review', space: null, items, selected, detail, peopleBySpace, title: 'Who is this?' });
+  const peopleBySpace = Object.fromEntries(SPACES.map(s => [s, crm().prepare('SELECT id, name, org FROM people_v WHERE space = ? ORDER BY name COLLATE NOCASE').all(s)]));
+  const orgsBySpace = Object.fromEntries(SPACES.map(s => [s, orgs.list(s)]));
+  res.render('crm/review', { page: 'review', space: null, items, selected, detail, peopleBySpace, orgsBySpace, title: 'Who is this?' });
 });
 
 router.post('/crm/review/:id', requireSameOrigin, writeLimiter, (req, res) => {
   try {
     const body = {
       action: String(req.body.action || ''),
-      name: req.body.name, space: req.body.space, org: req.body.org,
+      name: req.body.name, space: req.body.space,
+      orgId: req.body[`orgId_${req.body.space}`] || req.body.orgId, orgName: req.body.orgName,
       personId: req.body.personId,
       shownIds: [].concat(req.body.shownIds || []).map(String),
     };
@@ -131,7 +135,7 @@ router.get('/crm/:space', spaceParam, (req, res) => {
 });
 
 router.get('/crm/:space/people', spaceParam, (req, res) => {
-  res.render('crm/people', { page: 'people', list: views.people(req.params.space, req.query.q), q: req.query.q || '', title: 'People' });
+  res.render('crm/people', { page: 'people', list: views.people(req.params.space, req.query.q), orgList: orgs.list(req.params.space), q: req.query.q || '', title: 'People' });
 });
 
 router.post('/crm/:space/people', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -139,7 +143,9 @@ router.post('/crm/:space/people', spaceParam, requireSameOrigin, writeLimiter, (
   try {
     const email = String(req.body.email || '').trim();
     if (email && identity.identifierRow('email', email)?.person_id) throw new Error(`${email} already belongs to someone`);
-    const p = identity.createPerson({ space, name: req.body.name, org: req.body.org });
+    const org = orgs.resolveChoice(space, { orgId: req.body.orgId, orgName: req.body.orgName })
+      || (email ? orgs.orgForEmail(space, email) : null);
+    const p = identity.createPerson({ space, name: req.body.name, orgId: org ? org.id : null });
     if (email) {
       identity.linkIdentifier(p.id, 'email', email);
       sources.releaseHeld(email, 'linked');
@@ -159,7 +165,7 @@ router.get('/crm/:space/people/:id', spaceParam, (req, res) => {
   const p = views.person(req.params.id);
   if (!p) return res.status(404).send('Not found');
   if (p.space !== req.params.space) return res.redirect(`/crm/${p.space}/people/${p.id}`);
-  res.render('crm/person', { page: 'people', p, title: p.name });
+  res.render('crm/person', { page: 'people', p, orgList: orgs.list(p.space), title: p.name });
 });
 
 router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -177,8 +183,10 @@ router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, wri
     } else if (action === 'edit') {
       const name = String(req.body.name || '').trim();
       if (!name) throw new Error('A person needs a name');
-      crm().prepare('UPDATE people SET name = ?, org = ?, role = ?, updated_at = unixepoch() WHERE id = ?')
-        .run(name, String(req.body.org || '').trim(), String(req.body.role || '').trim(), id);
+      crm().prepare('UPDATE people SET name = ?, role = ?, updated_at = unixepoch() WHERE id = ?')
+        .run(name, String(req.body.role || '').trim(), id);
+      const org = orgs.resolveChoice(space, { orgId: req.body.orgId, orgName: req.body.orgName });
+      if (org !== undefined) orgs.setPersonOrg(id, org);
       identity.log('edit_person', id, { name });
       atoms.reresolveMentions(space);
       flash(req, 'Saved');
@@ -190,6 +198,45 @@ router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, wri
     } else return res.status(404).send('Not found');
   } catch (err) { flash(req, err.message, 'bad'); }
   res.redirect(to);
+});
+
+// ── Organisations ──────────────────────────────────────────────────────────
+router.get('/crm/:space/organisations', spaceParam, (req, res) => {
+  res.render('crm/organisations', { page: 'organisations', list: orgs.list(req.params.space), title: 'Organisations' });
+});
+
+router.post('/crm/:space/organisations', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const space = req.params.space;
+  try {
+    const org = orgs.createOrg(space, req.body.name);
+    if (String(req.body.domain || '').trim()) orgs.addDomain(org.id, req.body.domain);
+    flash(req, `Added ${org.name}`);
+    return res.redirect(`/crm/${space}/organisations/${org.id}`);
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(`/crm/${space}/organisations`);
+});
+
+router.get('/crm/:space/organisations/:id', spaceParam, (req, res) => {
+  const o = views.organisation(req.params.id);
+  if (!o) return res.status(404).send('Not found');
+  if (o.space !== req.params.space) return res.redirect(`/crm/${o.space}/organisations/${o.id}`);
+  const others = crm().prepare('SELECT id, name, org FROM people_v WHERE space = ? AND (org_id IS NULL OR org_id != ?) ORDER BY name COLLATE NOCASE').all(o.space, o.id);
+  res.render('crm/organisation', { page: 'organisations', o, others, title: o.name });
+});
+
+router.post('/crm/:space/organisations/:id/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { id, action, space } = req.params;
+  try {
+    const org = orgs.get(id);
+    if (!org || org.space !== space) return res.status(404).send('Not found');
+    if (action === 'rename') { orgs.rename(id, req.body.name); flash(req, 'Saved'); }
+    else if (action === 'domain') { const d = orgs.addDomain(id, req.body.domain); flash(req, `${d} added. New people from it will be suggested for ${org.name}.`); }
+    else if (action === 'undomain') { orgs.removeDomain(id, req.body.domain); flash(req, 'Domain removed'); }
+    else if (action === 'member') { orgs.setPersonOrg(String(req.body.personId || ''), org); flash(req, 'Linked'); }
+    else if (action === 'unmember') { orgs.setPersonOrg(String(req.body.personId || ''), null); flash(req, 'Unlinked'); }
+    else return res.status(404).send('Not found');
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(`/crm/${space}/organisations/${id}`);
 });
 
 router.get('/crm/:space/captured', spaceParam, (req, res) => {

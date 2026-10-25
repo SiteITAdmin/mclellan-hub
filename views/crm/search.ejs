@@ -17,6 +17,9 @@
       <% if (!results.people.length) { %><div class="empty">Nobody by that name.</div><% } %>
       <div class="topics-list"><% for (const x of results.people) { %><a class="topic-row" href="/crm/<%= space %>/people/<%= x.id %>"><span><%= x.name %></span><span class="n"><%= x.org %></span></a><% } %></div>
     </div>
+    <% if (results.orgs.length) { %><div class="panel"><div class="panel-head"><h2>Organisations</h2></div>
+      <div class="topics-list"><% for (const o of results.orgs) { %><a class="topic-row" href="/crm/<%= space %>/organisations/<%= o.id %>"><span><%= o.name %></span></a><% } %></div>
+    </div><% } %>
     <div class="panel"><div class="panel-head"><h2>In the text</h2></div>
       <% if (!results.sources.length) { %><div class="empty">No matches.</div><% } %>
       <div class="list"><% for (const s of results.sources) { %><a class="rowcard" style="grid-template-columns:1fr" href="/crm/<%= space %>/sources/<%= s.id %>"><div class="main"><div class="what"><%= s.title %></div><div class="meta" style="white-space:normal"><%= fmt(s.occurred_at, 'date') %>. <%= s.snip %></div></div></a><% } %></div>

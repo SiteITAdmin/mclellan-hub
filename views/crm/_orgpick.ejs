@@ -1,0 +1,8 @@
+<%# Organisation picker: choose one in this space, none, or type a new name. %>
+<div class="field" style="flex:1"><label for="<%= idp %>-org">Organisation</label>
+  <select class="select" id="<%= idp %>-org" name="orgId">
+    <option value="">— <%= keepLabel || 'None' %> —</option>
+    <% if (allowNone) { %><option value="none">No organisation</option><% } %>
+    <% for (const g of groups) { %><optgroup label="<%= g.label %>"><% for (const o of g.list) { %><option value="<%= o.id %>" <%= o.id === selectedId ? 'selected' : '' %>><%= o.name %></option><% } %></optgroup><% } %>
+  </select></div>
+<div class="field" style="flex:1"><label for="<%= idp %>-orgnew">Or a new organisation</label><input class="input" id="<%= idp %>-orgnew" name="orgName" placeholder="Name"></div>

@@ -1,0 +1,64 @@
+<%- include('_top') %>
+<% const ini = n => String(n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(); %>
+<div class="crumbs"><a href="/crm/<%= space %>/organisations">Organisations</a> / <%= o.name %></div>
+<div class="person-head">
+  <span class="avatar lg none" aria-hidden="true"><%- icon.org %></span>
+  <div><h1><%= o.name %></h1><p><%= o.members.length %> <%= o.members.length === 1 ? 'person' : 'people' %><%= o.domains.length ? `, ${o.domains.join(', ')}` : '' %>.</p></div>
+</div>
+<section class="grid first">
+  <div class="s8" style="display:flex;flex-direction:column;gap:var(--gap)">
+    <div class="panel">
+      <div class="panel-head"><h2>People</h2></div>
+      <% if (!o.members.length) { %><div class="empty">Nobody linked yet.</div><% } %>
+      <div class="list">
+      <% for (const p of o.members) { %>
+        <div class="rowcard two">
+          <span class="avatar" style="<%= hueStyle(p) %>" aria-hidden="true"><%= ini(p.name) %></span>
+          <div class="main"><div class="what"><a href="/crm/<%= space %>/people/<%= p.id %>"><%= p.name %></a></div><div class="meta"><%= p.role || '' %><%= p.role ? '. ' : '' %><%= p.facts %> <%= p.facts === 1 ? 'fact' : 'facts' %>, last contact <%= p.last ? fmt(p.last, 'date') : 'not seen yet' %></div></div>
+          <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/unmember"><input type="hidden" name="personId" value="<%= p.id %>"><button class="link-btn" type="submit">Not here</button></form>
+        </div>
+      <% } %>
+      </div>
+      <% if (others.length) { %>
+      <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/member" class="form-row" style="margin-top:12px">
+        <div class="field" style="flex:1"><label for="addp">Add someone</label>
+          <select class="select" id="addp" name="personId" required><option value="">Choose a person</option><% for (const x of others) { %><option value="<%= x.id %>"><%= x.name %><%= x.org ? ` (now ${x.org})` : '' %></option><% } %></select></div>
+        <button class="btn" type="submit">Link</button>
+      </form><% } %>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>What the Hub knows</h2><span class="chip"><%= o.atoms.length %></span></div>
+      <% if (!o.atoms.length) { %><div class="empty">No facts yet about <%= o.name %> or its people.</div><% } %>
+      <% for (const a of o.atoms) { %><%- include('_atom', { a }) %><% } %>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Timeline</h2></div>
+      <% if (!o.timeline.length) { %><div class="empty">No mail with <%= o.name %> captured yet.</div><% } %>
+      <div class="timeline">
+      <% for (const s of o.timeline) { %>
+        <div class="tl-item"><div class="tl-date"><%= fmt(s.occurred_at, 'date') %><small><%= fmt(s.occurred_at, 'time') %></small></div>
+          <span class="kind-icon" aria-hidden="true"><%- s.kind === 'note' ? icon.note : icon.email %></span>
+          <div><div class="tl-title"><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a></div><div class="tl-text"><%= (s.text_fresh || '').slice(0, 200) %></div></div></div>
+      <% } %>
+      </div>
+    </div>
+  </div>
+  <div class="s4 side-stack">
+    <div class="panel">
+      <div class="panel-head"><h2>Email domains</h2></div>
+      <p class="subline" style="margin-top:0;font-size:13px">New people with an address here are suggested for <%= o.name %>. You still confirm each one.</p>
+      <% for (const d of o.domains) { %><div class="topic-row" style="margin-bottom:6px"><span><%= d %></span>
+        <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/undomain"><input type="hidden" name="domain" value="<%= d %>"><button class="link-btn" type="submit">Remove</button></form></div><% } %>
+      <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/domain" class="form-row" style="margin-top:8px">
+        <label class="sr-only" for="dom">Add a domain</label><input class="input" id="dom" name="domain" placeholder="e.g. beaconhospital.ie" required><button class="btn small" type="submit">Add</button>
+      </form>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Name</h2></div>
+      <form method="post" action="/crm/<%= space %>/organisations/<%= o.id %>/rename" class="form-row">
+        <label class="sr-only" for="rn">Name</label><input class="input" id="rn" name="name" value="<%= o.name %>" required><button class="btn small" type="submit">Save</button>
+      </form>
+    </div>
+  </div>
+</section>
+<%- include('_bottom') %>

@@ -1,0 +1,22 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Organisations</h1><p class="subline"><%= list.length %> in <%= space === 'work' ? 'Work' : 'Personal' %>. Give one an email domain and new people from it are suggested for it in Who is this?</p></div></div>
+<section class="grid first">
+  <div class="panel s8">
+    <% if (!list.length) { %><div class="empty">No organisations yet.</div><% } else { %>
+    <table class="table">
+      <thead><tr><th>Name</th><th>Domains</th><th class="num">People</th></tr></thead>
+      <tbody><% for (const o of list) { %>
+        <tr><td><a class="name-cell" href="/crm/<%= space %>/organisations/<%= o.id %>"><span class="avatar none" aria-hidden="true"><%- icon.org %></span><%= o.name %></a></td><td><%= o.domains || '—' %></td><td class="num"><%= o.people %></td></tr>
+      <% } %></tbody>
+    </table><% } %>
+  </div>
+  <div class="panel s4">
+    <div class="panel-head"><h2>Add an organisation</h2></div>
+    <form method="post" action="/crm/<%= space %>/organisations" class="list">
+      <div class="field"><label for="oname">Name</label><input class="input" id="oname" name="name" required></div>
+      <div class="field"><label for="odom">Email domain (optional)</label><input class="input" id="odom" name="domain" placeholder="e.g. beaconhospital.ie"></div>
+      <div><button class="btn primary" type="submit"><%- icon.plus %> Add</button></div>
+    </form>
+  </div>
+</section>
+<%- include('_bottom') %>
