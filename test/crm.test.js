@@ -264,6 +264,10 @@ test('a busy model lane puts the source back in the queue instead of failing it'
   assert.strictEqual(row.atomise_attempts, 1);
   assert.match(row.atomise_error, /Waiting to try again/);
   assert.ok(views.health('personal').some(h => /waiting for the model lane/.test(h.text)), 'and said plainly on Today');
+
+  const fresh = sources.addNote({ space: 'personal', text: 'The car needs its NCT in November.' });
+  await atoms.runAtomiseTick({ jobs: fakeJobs });
+  assert.strictEqual(queue[queue.length - 1].payload.meta.sourceId, fresh.id, 'a fresh source goes ahead of one the lane refused');
 });
 
 // ── Gmail ───────────────────────────────────────────────────────────────────
