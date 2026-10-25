@@ -83,7 +83,7 @@ These follow the standing Hub rules (`CLAUDE.md`, `docs/VERSION-OLD.md`):
 | **Organisations** | Companies and bodies, used for "who do I know at X" |
 | **Projects** | Work projects and personal areas, each with its members |
 | **Sources** | Everything captured: emails, notes, reports, transcripts, messages. Stored as text with a link back to the original |
-| **Facts** | Statements taken from sources, e.g. "Aoife moves to Stripe in January". Each fact cites its source and links to people and projects |
+| **Atoms** | Single statements taken from sources (§5), e.g. "Aoife moves to Stripe in January". Each one cites its source and links to people, projects and topics. Promises, decisions and dates are kinds of atom, so the other lists in this table are views over atoms |
 | **Open loops** | Promises and actions. *I owe* (I said I'd send the deck) or *they owe* (Alec is sending the figures). Each can have a due date |
 | **Key dates** | Birthdays, anniversaries, renewals, deadlines |
 | **Keep-in-touch** | An optional cadence per person, e.g. every 6 weeks |
@@ -183,16 +183,97 @@ The number of items waiting for review shows on each Today screen. Review is
 the one screen that shows items from both spaces, because its job is to give
 items a space (decided 25 Oct).
 
-## 5. What it works out (model layer, on the Mac worker)
+## 5. Atoms: every source broken into facts from day one
+
+Every source is atomised as it arrives, from Phase 1. That covers each email,
+note, report, notebook page and transcript. The aim is for a fact from one
+place to turn up wherever it becomes relevant later. For example, something
+said in an M365 Rollout email in October should appear in the prep for a
+"Data protection processes" meeting in January.
+
+**What an atom is**
+
+One statement that makes sense on its own, with its evidence:
+
+| Part | Example |
+|---|---|
+| Statement, written to stand alone (no "he", "it" or "they") | "Beacon is evaluating Purview Premium for data loss prevention" |
+| Kind | fact · decision · promise · risk · question · date |
+| Space | Work |
+| Source and the exact words it came from | Email from Laura Ellard, 23 Oct, quoted line |
+| When it was said, and when it's true (if stated) | said 23 Oct; true from Q1 |
+| People | Laura Ellard, Jane Whelan, resolved by the identity rules in §4. The model gives the names it saw; the matcher decides who they are |
+| Projects | M365 Rollout. The model picks from the project list; a new project is proposed in review, never created silently |
+| Topics | Purview, data protection, licensing |
+| Confidence | high / medium / low |
+
+**How the knowledge stays clean**
+
+- **One atom for one fact.** If the same thing is said in five emails, it's one
+  atom with five sources. A model compares meaning, not exact wording, to spot
+  duplicates.
+- **Old facts are kept, not overwritten.** When a newer statement contradicts
+  an older one ("licences now cover 500"), the old atom is marked superseded
+  and kept, so the history stays readable.
+- **Topics organise themselves.** The model reuses an existing topic where one
+  fits and can add new ones. A weekly tidy proposes merging near-duplicates
+  ("DP" and "data protection"); merges are logged and can be undone. I never
+  tag anything by hand.
+- **A person on a project isn't proof a fact is about that project.** Each
+  atom gets its project from what it says.
+- **Spaces stay separate.** An atom never links across Work and Personal.
+
+**Linking a past fact to a future meeting**
+
+Links are worked out when they are needed, not entered by hand and not stored
+as permanent truth, so new evidence can change them.
+
+1. **October:** an email in the Purview Premium thread produces atoms tagged
+   M365 Rollout, Purview and data protection.
+2. **January:** a meeting called "Data protection processes", with Jane
+   Whelan, appears in the calendar.
+3. **Meeting prep that morning:** the Hub builds a search from the meeting's
+   title, description and attendees. It finds atoms three ways:
+   - by attendee: everything involving Jane
+   - by topic: data protection
+   - by text search over atoms and sources
+   
+   Claude then reads those candidates and keeps the ones that matter for this
+   meeting.
+4. **The prep shows** "From M365 Rollout: Beacon is evaluating Purview Premium
+   for data loss prevention (Laura Ellard, email 23 Oct)", linked to the
+   email. The chosen links are cached on the meeting.
+
+The same approach answers "Who do I know at X?", feeds "Where things stand",
+and lets a project page show facts from sources that never mentioned the
+project by name but share its topics and people.
+
+**Search index:** a SQLite full-text index over atoms and sources, from day
+one. Embeddings (vector search) are a disposable extra that can be rebuilt
+from the text at any time. They would need a small local embedding model on
+the Mac; Ollama was removed to free disk space. That gets added only if
+keyword and topic search turn out to miss things.
+
+**Nothing stale, nothing lost.** Knowledge and actions are treated
+differently:
+
+- **Every source is always atomised.** If the worker falls behind, it does the
+  newest first and the rest when it's idle.
+- **Only fresh sources create actions.** A source more than 7 days old when
+  it's atomised never creates a promise, a task or a notification.
+- **The 3-month first look and old Boox pages** are atomised as history only:
+  knowledge, no actions.
+
+### What else the model works out (on the Mac worker)
 
 | Output | When it runs | Notion of stale |
 |---|---|---|
-| **Facts** taken from each new source | When a source arrives | Sources older than 14 days are not processed if the worker is behind |
-| **Where things stand**, a short summary per person and per project | Only when new sources arrive, at most once a day per person | People with nothing new are skipped |
-| **Open loops** (I owe / they owe) | When a source arrives | As for facts |
-| **Meeting prep:** who, where things stand, open loops, last contact | On the morning of a meeting with known people | Only for meetings today |
-| **Connections between people**, e.g. "Alec and Nakai worked together at X", with the source cited | Weekly | Uses only new sources |
-| **Search: "who do I know at X?"** Plain text search first, then a model answer that cites sources | When I ask | — |
+| **Atoms** from each new source | When a source arrives (Phase 1) | Always done, newest first; old sources create no actions |
+| **Where things stand**, a short summary per person and per project, built from atoms | Only when new atoms arrive, at most once a day per person | People with nothing new are skipped |
+| **Open loops:** the promise atoms that are still open (I owe / they owe) | Built from atoms | Promises from sources over 7 days old aren't surfaced as new |
+| **Meeting prep:** who, where things stand, open loops, and related atoms found as above | On the morning of a meeting with known people | Only for meetings today |
+| **Connections between people**, from atoms that mention both | Weekly | Uses only new atoms |
+| **Search: "who do I know at X?"** Text search first, then a model answer that cites atoms | When I ask | — |
 
 ## 6. Surfacing: so I don't have to remember to look
 
@@ -298,7 +379,7 @@ before the next one starts.
 
 | Phase | Features | Notes |
 |---|---|---|
-| **1. Foundations** | 1 People and identity · 2 Getting people in (sent-mail proposals, approve each) · 3 Timeline per person · 4 Quick note | Spaces, organisations, projects, review screen, Gmail capture, Outlook mail through Drive |
+| **1. Foundations** | 1 People and identity · 2 Getting people in (sent-mail proposals, approve each) · 3 Timeline per person · 4 Quick note · **atoms from every source, plus the search index** | Spaces, organisations, projects, review screen, Gmail capture, Outlook mail through Drive. Model work starts here, on the existing Mac worker |
 | **2. Remembering for me** | 5 Keep-in-touch · 6 Birthdays and key dates · Google Tasks two-way sync · Today screens · morning emails | The ADHD layer |
 | **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search | Forward-to inbox, report upload, fact extraction, Boox notebooks read by Claude |
 | **4. Meetings** | 9 Meeting prep | Calendar capture, transcripts, push notifications |
@@ -313,7 +394,7 @@ backup already copies every `data/*.db`. Tables:
 - people, person identifiers, aliases
 - organisations, projects, project members
 - sources, source links
-- facts, open loops, key dates
+- atoms, atom sources, topics, key dates (open loops are a view over promise atoms)
 - review items, merge log
 - effects log
 - summaries
@@ -329,7 +410,9 @@ backup already copies every `data/*.db`. Tables:
 | `crm_agentmail_capture` | 15 min |
 | `crm_calendar_capture` | 30 min |
 | `crm_tasks_sync` | 15 min |
-| `crm_synthesis` | on a new source, through the Mac worker |
+| `crm_atomise` | on each new source, through the Mac worker, newest first |
+| `crm_synthesis` (summaries, duplicates, supersession) | on new atoms |
+| `crm_topic_tidy` | weekly |
 | `crm_daily_scan` (keep-in-touch, dates) | 06:30 Dublin |
 | `crm_morning_digest` | 07:30 Dublin |
 | `crm_boox_capture` (new notebook pages) | 15 min |
