@@ -381,7 +381,7 @@ before the next one starts.
 |---|---|---|
 | **1. Foundations** | 1 People and identity · 2 Getting people in (sent-mail proposals, approve each) · 3 Timeline per person · 4 Quick note · **atoms from every source, plus the search index** | Spaces, organisations, projects, review screen, Gmail capture, Outlook mail through Drive. Model work starts here, on the existing Mac worker |
 | **2. Remembering for me** | 5 Keep-in-touch · 6 Birthdays and key dates · Google Tasks two-way sync · Today screens · morning emails | The ADHD layer |
-| **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search | Forward-to inbox, report upload, fact extraction, Boox notebooks read by Claude |
+| **3. Knowledge** | 7 Where things stand · 8 Promises and open loops · 13 "Who do I know at X?" search | Forward-to inbox, report upload, Boox notebooks read by Claude (all atomised as in Phase 1) |
 | **4. Meetings** | 9 Meeting prep | Calendar capture, transcripts, push notifications |
 | **5. Wider identity** | 12 Google Contacts sync · 11 LinkedIn import · 14 Connections between people | Needs the Contacts permission |
 | **6. Messages** | 10 WhatsApp through Hermes (§8) and iMessage | Needs Mac programs |
