@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en-IE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title><%= title %> – Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/crm.css">
+</head>
+<body>
+<% const base = space || 'work'; %>
+<% const nav = (href, ic, label, key, extra) => `<a href="${href}" ${page === key ? 'aria-current="page"' : ''}>${icon[ic]}<span>${label}</span>${extra || ''}</a>`; %>
+<% const navHtml = `
+  <nav class="switch" aria-label="Space">
+    <a href="/crm/work" aria-current="${space === 'work'}">Work</a>
+    <a href="/crm/personal" aria-current="${space === 'personal'}">Personal</a>
+  </nav>
+  <nav class="nav">
+    ${nav(`/crm/${base}`, 'today', 'Today', 'today')}
+    ${nav(`/crm/${base}/people`, 'people', 'People', 'people')}
+    ${nav(`/crm/${base}/projects`, 'projects', 'Projects', 'projects')}
+    ${nav(`/crm/${base}/captured`, 'captured', 'Captured', 'captured')}
+    ${nav(`/crm/${base}/search`, 'search', 'Search', 'search')}
+    <div class="nav-group">Both spaces</div>
+    ${nav('/crm/review', 'review', 'Who is this?', 'review', reviewAll ? `<span class="count">${reviewAll}<span class="sr-only"> waiting</span></span>` : '')}
+  </nav>`; %>
+<div class="shell" data-space="<%= space || 'shared' %>">
+  <aside class="sidebar" aria-label="Main">
+    <div class="brand"><%- icon.mark %><span>Hub</span></div>
+    <%- navHtml %>
+    <div class="sidebar-foot">
+      <a class="btn primary" href="/crm/<%= base %>/note"><%- icon.plus %> Add a note</a>
+      <div class="user"><span class="avatar" style="background:var(--active);color:var(--text)" aria-hidden="true">DM</span><div>Douglas McLellan<small><a href="/flights">Flights</a></small></div></div>
+    </div>
+  </aside>
+  <header class="topbar">
+    <a class="menu-btn" href="#menu" aria-label="Open menu"><%- icon.menu %></a>
+    <span class="brand" style="padding:0"><%- icon.mark %></span>
+    <span class="t"><%= title %></span>
+    <nav class="switch" aria-label="Space">
+      <a href="/crm/work" aria-current="<%= space === 'work' %>">Work</a>
+      <a href="/crm/personal" aria-current="<%= space === 'personal' %>">Personal</a>
+    </nav>
+  </header>
+  <div class="sheet" id="menu" data-space="<%= space || 'shared' %>">
+    <p><a class="menu-btn" href="#" aria-label="Close menu"><%- icon.close %></a></p>
+    <%- navHtml %>
+    <p><a class="btn primary" href="/crm/<%= base %>/note"><%- icon.plus %> Add a note</a></p>
+  </div>
+  <main class="canvas"><div class="column">
+  <% if (flash) { %><div class="flash <%= flash.level === 'bad' ? 'bad' : '' %>" role="status"><%= flash.text %></div><% } %>

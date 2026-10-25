@@ -1,0 +1,79 @@
+<%- include('_top') %>
+<% const initials = p.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(); const first = p.name.split(/\s+/)[0]; %>
+<div class="crumbs"><a href="/crm/<%= space %>"><%= space === 'work' ? 'Work' : 'Personal' %></a> / <a href="/crm/<%= space %>/people">People</a> / <%= p.name %></div>
+<div class="person-head">
+  <span class="avatar lg" style="<%= hueStyle(p) %>" aria-hidden="true"><%= initials %></span>
+  <div><h1><%= p.name %></h1><p><%= [p.role, p.org].filter(Boolean).join(', ') || 'No organisation yet' %>. Last contact <%= p.last ? fmt(p.last) : 'not seen yet' %>.</p></div>
+  <div class="actions"><a class="btn" href="/crm/<%= space %>/note"><%- icon.note %> Add a note</a></div>
+</div>
+
+<section class="grid first">
+  <div class="s8" style="display:flex;flex-direction:column;gap:var(--gap)">
+    <div class="panel">
+      <div class="panel-head"><h2>What the Hub knows</h2><span class="chip"><%= p.atoms.length %> <%= p.atoms.length === 1 ? 'fact' : 'facts' %></span></div>
+      <% if (!p.atoms.length) { %><div class="empty">No facts about <%= first %> yet. They appear as mail and notes mentioning <%= first %> are read.</div><% } %>
+      <% for (const a of p.atoms) { %><%- include('_atom', { a }) %><% } %>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Timeline</h2><span class="chip"><%= p.timeline.length %> of <%= p.sourceCount %></span></div>
+      <% if (!p.timeline.length) { %><div class="empty">Nothing captured with <%= first %> yet.</div><% } %>
+      <div class="timeline">
+      <% for (const s of p.timeline) { %>
+        <div class="tl-item">
+          <div class="tl-date"><%= fmt(s.occurred_at, 'date') %><small><%= fmt(s.occurred_at, 'time') %></small></div>
+          <span class="kind-icon" aria-hidden="true"><%- s.kind === 'note' ? icon.note : icon.email %></span>
+          <div><div class="tl-title"><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a><% if (s.direction) { %><span class="pill neutral"><%= s.direction === 'out' ? 'From you' : `From ${first}` %></span><% } %></div>
+          <div class="tl-text"><%= (s.text_fresh || '').slice(0, 220) %><%= (s.text_fresh || '').length > 220 ? '…' : '' %></div></div>
+        </div>
+      <% } %>
+      </div>
+    </div>
+  </div>
+  <div class="s4 side-stack">
+    <% if (p.projects.length) { %>
+    <div class="panel">
+      <div class="panel-head"><h2>Projects</h2></div>
+      <div class="topics-list"><% for (const pr of p.projects) { %><a class="topic-row" href="/crm/<%= space %>/projects/<%= pr.id %>"><span><%= pr.name %></span><span class="n"><%= pr.n %></span></a><% } %></div>
+    </div>
+    <% } %>
+    <div class="panel">
+      <div class="panel-head"><h2>Who <%= first %> is</h2></div>
+      <dl class="kv" style="margin:0">
+        <% for (const i of p.identifiers) { %>
+          <div class="kv-row"><dt><%= i.kind === 'email' ? 'Email' : 'Phone' %></dt><dd><%= i.value %><small><%= i.sources %> <%= i.sources === 1 ? 'source' : 'sources' %> ·
+            <form class="inline-form" method="post" action="/crm/<%= space %>/people/<%= p.id %>/detach"><input type="hidden" name="kind" value="<%= i.kind %>"><input type="hidden" name="value" value="<%= i.value %>"><button class="link-btn" type="submit">Not <%= first %>'s</button></form></small></dd></div>
+        <% } %>
+        <div class="kv-row"><dt>Also called</dt><dd><%= p.aliases.map(a => a.alias).join(', ') || '—' %></dd></div>
+      </dl>
+      <form class="form-row" method="post" action="/crm/<%= space %>/people/<%= p.id %>/alias" style="margin-top:12px">
+        <label class="sr-only" for="alias">Add another name</label>
+        <input class="input" id="alias" name="alias" placeholder="Another name, e.g. a nickname">
+        <button class="btn small" type="submit">Add</button>
+      </form>
+      <form class="form-row" method="post" action="/crm/<%= space %>/people/<%= p.id %>/email" style="margin-top:8px">
+        <label class="sr-only" for="email">Add an email</label>
+        <input class="input" id="email" name="email" type="email" placeholder="Another email address">
+        <button class="btn small" type="submit">Add</button>
+      </form>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Not the same as</h2></div>
+      <% if (!p.distinct.length) { %><div class="empty">Nobody with a similar name has come up yet.</div><% } %>
+      <div class="not-them">
+      <% for (const o of p.distinct) { %>
+        <a class="rowcard" href="/crm/<%= o.space %>/people/<%= o.id %>"><span class="avatar" style="<%= hueStyle(o) %>" aria-hidden="true"><%= o.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() %></span><div class="main"><div class="what"><%= o.name %></div><div class="meta"><%= o.space === 'work' ? 'Work' : 'Personal' %>, confirmed different</div></div></a>
+      <% } %>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Edit</h2></div>
+      <form method="post" action="/crm/<%= space %>/people/<%= p.id %>/edit" class="list">
+        <div class="field"><label for="ename">Name</label><input class="input" id="ename" name="name" value="<%= p.name %>" required></div>
+        <div class="field"><label for="erole">Role</label><input class="input" id="erole" name="role" value="<%= p.role %>"></div>
+        <div class="field"><label for="eorg">Organisation</label><input class="input" id="eorg" name="org" value="<%= p.org %>"></div>
+        <div><button class="btn" type="submit">Save</button></div>
+      </form>
+    </div>
+  </div>
+</section>
+<%- include('_bottom') %>

@@ -15,8 +15,9 @@ What runs now is deliberately small:
 | Flight tracker | `lib/flights.js`, `routes/flights.js`, `views/flights.ejs` — https://douglas.mclellan.scot/flights behind the site admin's Google sign-in |
 | Public sites | `routes/portfolio.js`, `routes/admin.js` — douglas.mclellan.scot, nakai.mclellan.scot |
 | Site chat + JD analyser | `lib/model.js` → `lib/subscription-agent-jobs.js` → Mac worker (`scripts/subscription-agent-worker.js`) |
-| Job queue | `lib/jobs.js` — `ryanair_import` (30 min), `flight_refresh` (live, around departure), `flight_backfill` (23:00 Dublin) |
-| Data | `data/hub.db` (flights, jobs, settings/tokens, published posts, sessions), `data/douglas.db`, `data/nakai.db` (portfolio content) |
+| Personal CRM (Phase 1) | `lib/crm/*`, `routes/crm.js`, `views/crm/` — https://douglas.mclellan.scot/crm behind the same sign-in. Plan: `docs/CRM-PLAN.md`; design mockup: `design/crm/` |
+| Job queue | `lib/jobs.js` — `ryanair_import` (30 min), `flight_refresh` (live, around departure), `flight_backfill` (23:00 Dublin), `crm_gmail_capture` + `crm_outlook_capture` (15 min, 7-day window), `crm_atomise_tick` (1 min, one Mac job at a time), `crm_gmail_bootstrap` (once) |
+| Data | `data/hub.db` (flights, jobs, settings/tokens, published posts, sessions), `data/crm.db` (CRM sources, people, atoms), `data/douglas.db`, `data/nakai.db` (portfolio content) |
 
 rholdsworthconsulting.com is static, served by nginx from `/var/www/rholdsworth`.
 

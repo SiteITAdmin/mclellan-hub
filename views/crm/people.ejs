@@ -1,0 +1,38 @@
+<%- include('_top') %>
+<div class="title-row">
+  <div><h1>People</h1><p class="subline"><%= list.length %> in <%= space === 'work' ? 'Work' : 'Personal' %>. New people come through Who is this?, or add someone here.</p></div>
+  <form class="form-row" method="get" action="/crm/<%= space %>/people" role="search">
+    <label class="sr-only" for="q">Find a person</label>
+    <input class="input" id="q" name="q" value="<%= q %>" placeholder="Find by name or organisation">
+    <button class="btn" type="submit">Find</button>
+  </form>
+</div>
+<section class="grid first">
+  <div class="panel s8">
+    <% if (!list.length) { %><div class="empty"><%= q ? 'Nobody matches that.' : 'No people yet. Approve them in Who is this? as mail arrives.' %></div><% } else { %>
+    <table class="table">
+      <thead><tr><th>Name</th><th>Organisation</th><th class="num">Facts</th><th class="num">Last contact</th></tr></thead>
+      <tbody>
+      <% for (const p of list) { %>
+        <tr>
+          <td><a class="name-cell" href="/crm/<%= space %>/people/<%= p.id %>"><span class="avatar" style="<%= hueStyle(p) %>" aria-hidden="true"><%= p.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() %></span><%= p.name %></a></td>
+          <td><%= p.org || '—' %></td>
+          <td class="num"><%= p.facts %></td>
+          <td class="num"><%= p.last ? fmt(p.last, 'date') : '—' %></td>
+        </tr>
+      <% } %>
+      </tbody>
+    </table>
+    <% } %>
+  </div>
+  <div class="panel s4">
+    <div class="panel-head"><h2>Add someone</h2></div>
+    <form method="post" action="/crm/<%= space %>/people" class="list">
+      <div class="field"><label for="name">Name</label><input class="input" id="name" name="name" required></div>
+      <div class="field"><label for="email">Email (optional)</label><input class="input" id="email" name="email" type="email"></div>
+      <div class="field"><label for="org">Organisation (optional)</label><input class="input" id="org" name="org"></div>
+      <div><button class="btn primary" type="submit"><%- icon.plus %> Add to <%= space === 'work' ? 'Work' : 'Personal' %></button></div>
+    </form>
+  </div>
+</section>
+<%- include('_bottom') %>

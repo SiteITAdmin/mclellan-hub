@@ -1,6 +1,6 @@
 # Personal CRM: feature plan
 
-**Status:** draft for Douglas to review, 25 Oct 2026. WhatsApp through Hermes added 25 Oct (§8). Work email through Drive added 25 Oct (§3). This covers features only.
+**Status:** Phase 1 built and deployed 25 Oct 2026 (see "Phase 1 as built" at the end). Plan first drafted 25 Oct 2026. WhatsApp through Hermes added 25 Oct (§8). Work email through Drive added 25 Oct (§3). This covers features only.
 There is no design and no code yet. The visual approach comes after the features
 are agreed, and it will be entirely new.
 
@@ -459,3 +459,24 @@ Still open:
    called "Work"? *(Phase 4)*
 3. **Outlook flow:** tell me when the five fixes are in, so the Hub reads the
    new format. *(Phase 1)*
+
+## Phase 1 as built (25 Oct 2026)
+
+- **Code:** `lib/crm/` (db, text, identity, sources, gmail, outlook, atoms,
+  review, views, runs, jobs), `routes/crm.js`, `views/crm/`, `public/crm.css`.
+  Tests: `test/crm.test.js`.
+- **Data:** `data/crm.db`. People links, last contact and project membership
+  are worked out from `source_addresses` joined to `identifiers`; no person or
+  project row is stored against a source.
+- **Atoms:** feature `crm_atomise` (Claude Sonnet, medium effort) on the Mac
+  worker. Only one CRM job is in the queue at a time, and only when nothing
+  else is waiting, so site chat is never stuck behind a backlog. Quotes are
+  checked against the source; a quote that isn't found lowers confidence to
+  low.
+- **Held mail:** mail from an address still waiting in "Who is this?" is
+  stored but not read until Douglas decides. "Not a person" sets it aside for
+  good.
+- **Not built yet (later phases):** keep-in-touch, key dates, Google Tasks,
+  promises on Today, morning emails, notifications, summaries, meeting prep,
+  forwarding inbox, report upload, Boox, Contacts, LinkedIn, Hermes, iMessage,
+  and the weekly topic tidy.

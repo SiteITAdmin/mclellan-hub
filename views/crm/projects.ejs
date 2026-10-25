@@ -1,0 +1,19 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Projects</h1><p class="subline">Facts join a project when Claude reads that they belong to it. New projects it suggests wait in Who is this?</p></div></div>
+<section class="grid first">
+  <div class="panel s8">
+    <% if (!list.length) { %><div class="empty">No projects in <%= space === 'work' ? 'Work' : 'Personal' %> yet.</div><% } %>
+    <div class="topics-list">
+    <% for (const p of list) { %><a class="topic-row" href="/crm/<%= space %>/projects/<%= p.id %>"><span><%= p.name %></span><span class="n"><%= p.facts %> <%= p.facts === 1 ? 'fact' : 'facts' %><%= p.last ? `, latest ${fmt(p.last, 'date')}` : '' %></span></a><% } %>
+    </div>
+  </div>
+  <div class="panel s4">
+    <div class="panel-head"><h2>Add a project</h2></div>
+    <form method="post" action="/crm/<%= space %>/projects" class="form-row">
+      <label class="sr-only" for="pname">Project name</label>
+      <input class="input" id="pname" name="name" required placeholder="Project name">
+      <button class="btn" type="submit">Add</button>
+    </form>
+  </div>
+</section>
+<%- include('_bottom') %>

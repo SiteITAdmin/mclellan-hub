@@ -1,0 +1,7 @@
+<% if (!s.readable) { %><span class="pill neg">Couldn't read</span> <%= s.unreadable_reason %>
+<% } else if (s.atomise_status === 'held') { %><span class="pill warn">Waiting for Who is this?</span>
+<% } else if (s.atomise_status === 'failed') { %><span class="pill neg">Reading failed</span> <%= s.atomise_error %>
+<% } else if (s.atomise_status === 'pending' || s.atomise_status === 'queued') { %><span class="pill neutral"><%= s.atomise_status === 'queued' ? 'Reading now' : 'To read' %></span>
+<% } else if (s.atomise_status === 'ignored') { %>Not a person: not read
+<% } else if (s.atomise_status === 'done') { %><%= s.atom_count %> <%= s.atom_count === 1 ? 'fact' : 'facts' %><%= s.is_history ? ', history' : '' %>
+<% } %>

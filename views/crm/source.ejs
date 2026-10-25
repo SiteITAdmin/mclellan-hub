@@ -1,0 +1,34 @@
+<%- include('_top') %>
+<% const quoted = s.text.length > (s.text_fresh || '').length ? s.text.slice((s.text_fresh || '').length).trim() : ''; %>
+<div class="crumbs"><a href="/crm/<%= space %>/captured">Captured</a> / <%= s.kind === 'note' ? 'Note' : 'Email' %></div>
+<div class="title-row"><div><h1><%= s.title %></h1>
+  <p class="subline"><%= fmt(s.occurred_at) %><%= s.origin === 'outlook' ? ', Outlook' : s.origin === 'gmail' ? ', Gmail' : '' %><%= s.direction === 'out' ? ', sent by you' : s.direction === 'in' ? ', received' : '' %>. <%- include('_state', { s }) %></p></div>
+  <% if (s.atomise_status === 'failed' || !s.readable) { %><form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/retry"><button class="btn" type="submit">Read again</button></form><% } %>
+</div>
+<section class="grid first">
+  <div class="s8" style="display:flex;flex-direction:column;gap:var(--gap)">
+    <div class="panel">
+      <div class="panel-head"><h2>Facts from this</h2><span class="chip"><%= s.atoms.length %></span></div>
+      <% if (!s.atoms.length) { %><div class="empty"><%= s.atomise_status === 'done' ? 'Nothing in this worth remembering, according to Claude.' : 'Not read yet.' %></div><% } %>
+      <% for (const a of s.atoms) { %><%- include('_atom', { a }) %><% } %>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Text</h2></div>
+      <div class="source-text"><%= s.text_fresh || s.text %></div>
+      <% if (quoted) { %><details style="margin-top:14px"><summary>Earlier in the thread</summary><div class="source-text quoted" style="margin-top:8px"><%= quoted.slice(0, 20000) %></div></details><% } %>
+    </div>
+  </div>
+  <div class="s4 side-stack">
+    <div class="panel">
+      <div class="panel-head"><h2>People</h2></div>
+      <% if (!s.addresses.length) { %><div class="empty">Your own note.</div><% } %>
+      <dl class="kv" style="margin:0">
+      <% for (const a of s.addresses) { %>
+        <div class="kv-row"><dt><%= a.role === 'from' ? 'From' : a.role === 'to' ? 'To' : 'Copy' %></dt>
+          <dd><% if (a.person_id && a.person_space === space) { %><a class="who-link" href="/crm/<%= space %>/people/<%= a.person_id %>"><%= a.person_name %></a><% } else { %><%= a.name || a.value %><% } %><small><%= a.value %><%= a.id_status === 'ignored' ? ', not a person' : (!a.person_id ? ', not decided' : '') %></small></dd></div>
+      <% } %>
+      </dl>
+    </div>
+  </div>
+</section>
+<%- include('_bottom') %>

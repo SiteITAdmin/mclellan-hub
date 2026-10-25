@@ -1,0 +1,20 @@
+<%- include('_top') %>
+<div class="crumbs"><a href="/crm/<%= space %>/projects">Projects</a> / <%= p.name %></div>
+<div class="title-row"><div><h1><%= p.name %></h1><p class="subline"><%= p.atoms.length %> <%= p.atoms.length === 1 ? 'fact' : 'facts' %>, newest first.</p></div></div>
+<section class="grid first">
+  <div class="panel s8">
+    <% if (!p.atoms.length) { %><div class="empty">No facts in this project yet.</div><% } %>
+    <% for (const a of p.atoms) { %><%- include('_atom', { a }) %><% } %>
+  </div>
+  <div class="s4 side-stack">
+    <div class="panel"><div class="panel-head"><h2>People</h2></div>
+      <% if (!p.people.length) { %><div class="empty">Nobody linked yet.</div><% } %>
+      <div class="topics-list"><% for (const x of p.people) { %><a class="topic-row" href="/crm/<%= space %>/people/<%= x.id %>"><span><%= x.name %></span><span class="n"><%= x.n %></span></a><% } %></div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Topics</h2></div>
+      <% if (!p.topics.length) { %><div class="empty">None yet.</div><% } %>
+      <div class="topics-list"><% for (const t of p.topics) { %><a class="topic-row" href="/crm/<%= space %>/topics/<%= t.id %>"><span><%= t.name %></span><span class="n"><%= t.n %></span></a><% } %></div>
+    </div>
+  </div>
+</section>
+<%- include('_bottom') %>

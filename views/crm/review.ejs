@@ -1,0 +1,120 @@
+<%- include('_top') %>
+<% const spaceName = s => s === 'work' ? 'Work' : 'Personal'; const ini = n => String(n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(); %>
+<div class="review-title">
+  <h1>Who is this?</h1>
+  <p class="subline"><%= items.length %> waiting from both spaces. Nothing is linked to a person, and no new project is made, until you decide here.</p>
+</div>
+<section class="grid first">
+  <div class="s4">
+    <% if (!items.length) { %><div class="empty">All decided. New people show up here as mail arrives.</div><% } %>
+    <div class="queue">
+    <% for (const it of items) { const p = it.payload; %>
+      <a href="/crm/review?item=<%= it.id %>" aria-current="<%= selected && it.id === selected.id %>">
+        <span class="q-title"><%= it.kind === 'person' ? (p.name || p.value) : it.kind === 'mention' ? `"${p.name}" in a fact` : p.name %></span>
+        <span class="q-when"><%= fmt(it.created_at, 'date') %></span>
+        <span class="q-sub" style="grid-column:1/-1"><%= it.kind === 'person' ? p.value : it.kind === 'mention' ? 'More than one person has this name' : 'Suggested new project' %></span>
+        <span class="q-tags">
+          <span class="pill neutral"><%= it.kind === 'person' ? (p.automated ? 'Looks automated' : p.reason) : it.kind === 'mention' ? `Which ${p.name}?` : 'New project?' %></span>
+          <% if (it.space) { %><span class="pill space-<%= it.space %>"><%= spaceName(it.space) %></span><% } %>
+        </span>
+      </a>
+    <% } %>
+    </div>
+  </div>
+
+  <% if (detail) { const it = detail.item; const p = it.payload; %>
+  <div class="s8" style="display:flex;flex-direction:column;gap:var(--gap)">
+  <% if (it.kind === 'person') { const look = detail.lookalikes[0]; %>
+    <div class="panel">
+      <div class="panel-head"><h2><%= look ? 'Someone you know?' : 'New to you' %></h2><span class="chip"><%= detail.count %> <%= detail.count === 1 ? 'source' : 'sources' %> so far</span></div>
+      <div class="compare-head">
+        <span></span>
+        <div class="who"><span class="avatar none" aria-hidden="true">?</span><div><%= p.name || p.value %><small><%= p.reason %></small></div></div>
+        <% if (look) { %><div class="who"><span class="avatar" style="<%= hueStyle(look) %>" aria-hidden="true"><%= ini(look.name) %></span><div><a href="/crm/<%= look.space %>/people/<%= look.id %>"><%= look.name %></a><small>Closest name in your people</small></div></div><% } else { %><div class="who"><div><small>Nobody in your people has a similar name or the same domain.</small></div></div><% } %>
+      </div>
+      <% if (look) {
+        const lookEmails = detail.lookEmails[look.id] || [];
+        const rows = [
+          ['Name', p.name || '—', look.name, (p.name || '').toLowerCase() !== look.name.toLowerCase()],
+          ['Email', p.value, lookEmails.join(', ') || '—', !lookEmails.includes(p.value)],
+          ['Organisation', '—', look.org || '—', false],
+          ['Space', `${spaceName(it.space)} (suggested)`, spaceName(look.space), it.space !== look.space],
+        ]; %>
+      <table class="compare"><caption class="sr-only">Compared with <%= look.name %></caption>
+        <tbody><% for (const [f, a, b, diff] of rows) { %><tr class="<%= diff ? 'differs' : '' %>"><td><%= f %></td><td class="v"><%= a %></td><td class="v"><%= b %></td></tr><% } %></tbody>
+      </table>
+      <div class="verdict"><%= lookEmails.includes(p.value) ? 'Same email address.' : 'No shared email address. The Hub will not link these unless you say so.' %><% if (detail.lookalikes.length > 1) { %> Also similar: <%= detail.lookalikes.slice(1).map(x => x.name).join(', ') %>.<% } %></div>
+      <% } %>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Decide</h2><span class="actions">
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit">Not a person</button></form>
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="later"><button class="btn text small" type="submit">Decide later</button></form>
+      </span></div>
+      <form method="post" action="/crm/review/<%= it.id %>" class="list">
+        <input type="hidden" name="action" value="new">
+        <% for (const l of detail.lookalikes) { %><input type="hidden" name="shownIds" value="<%= l.id %>"><% } %>
+        <div class="form-row">
+          <div class="field" style="flex:2"><label for="n">Name</label><input class="input" id="n" name="name" value="<%= p.name %>" required></div>
+          <div class="field" style="flex:1"><label for="o">Organisation</label><input class="input" id="o" name="org"></div>
+          <div class="field"><label for="sp">Space</label><select class="select" id="sp" name="space"><option value="work" <%= it.space === 'work' ? 'selected' : '' %>>Work</option><option value="personal" <%= it.space === 'personal' ? 'selected' : '' %>>Personal</option></select></div>
+        </div>
+        <div class="decide"><button class="btn primary" type="submit"><%- icon.plus %> Add as a new person</button></div>
+      </form>
+      <form method="post" action="/crm/review/<%= it.id %>" class="form-row" style="margin-top:14px">
+        <input type="hidden" name="action" value="same">
+        <div class="field" style="flex:1"><label for="pid">Or the same person as</label>
+          <select class="select" id="pid" name="personId" required>
+            <option value="">Choose someone</option>
+            <% for (const s of ['work', 'personal']) { %><optgroup label="<%= spaceName(s) %>"><% for (const x of peopleBySpace[s]) { %><option value="<%= x.id %>"><%= x.name %><%= x.org ? `, ${x.org}` : '' %></option><% } %></optgroup><% } %>
+          </select></div>
+        <button class="btn" type="submit">Link</button>
+      </form>
+      <% if (p.automated) { %><p class="subline" style="font-size:13px;margin-top:12px">This address looks automated (a notification or no-reply sender). "Not a person" stops its mail being read.</p><% } %>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Where they appeared</h2></div>
+      <% if (!detail.evidence.length) { %><div class="empty">Not seen in any captured mail yet.</div><% } %>
+      <div class="evidence">
+      <% for (const e of detail.evidence) { %>
+        <a class="rowcard" href="/crm/<%= e.space %>/sources/<%= e.id %>"><span class="kind-icon" aria-hidden="true"><%- icon.email %></span>
+          <div class="main"><div class="what"><%= e.title %></div><div class="meta"><%= fmt(e.occurred_at, 'date') %>, <%= e.role === 'from' ? 'from them' : 'to them' %>. <%= (e.snippet || '').slice(0, 200) %></div></div></a>
+      <% } %>
+      </div>
+    </div>
+  <% } else if (it.kind === 'mention') { %>
+    <div class="panel">
+      <div class="panel-head"><h2>Which <%= p.name %>?</h2></div>
+      <% if (detail.atom) { %><%- include('_atom', { a: detail.atom }) %><% } %>
+      <form method="post" action="/crm/review/<%= it.id %>" class="list" style="margin-top:12px">
+        <input type="hidden" name="action" value="choose">
+        <% for (const c of detail.candidates) { %>
+          <label class="rowcard" style="cursor:pointer"><input type="radio" name="personId" value="<%= c.id %>" required style="margin:0 8px 0 0"><div class="main"><div class="what"><%= c.name %></div><div class="meta"><%= [c.org, c.emails.join(', ')].filter(Boolean).join(' · ') || 'No details yet' %></div></div></label>
+        <% } %>
+        <div class="decide"><button class="btn primary" type="submit">This one</button></div>
+      </form>
+      <div class="decide" style="margin-top:8px">
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="none"><button class="btn text small" type="submit">None of them</button></form>
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="later"><button class="btn text small" type="submit">Decide later</button></form>
+      </div>
+    </div>
+  <% } else if (it.kind === 'project') { %>
+    <div class="panel">
+      <div class="panel-head"><h2>New project?</h2><span class="chip"><%= spaceName(it.space) %></span></div>
+      <p class="subline" style="margin-top:0">Claude thinks these facts belong to a project that isn't on your list yet.</p>
+      <% for (const a of detail.atoms) { %><div class="atom"><div class="st"><%= a.statement %></div></div><% } %>
+      <form method="post" action="/crm/review/<%= it.id %>" class="form-row" style="margin-top:12px">
+        <input type="hidden" name="action" value="add">
+        <div class="field" style="flex:1"><label for="pn">Project name</label><input class="input" id="pn" name="name" value="<%= p.name %>" required></div>
+        <button class="btn primary" type="submit">Add project</button>
+      </form>
+      <div class="decide" style="margin-top:8px">
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit">Not a project</button></form>
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="later"><button class="btn text small" type="submit">Decide later</button></form>
+      </div>
+    </div>
+  <% } %>
+  </div>
+  <% } %>
+</section>
+<%- include('_bottom') %>

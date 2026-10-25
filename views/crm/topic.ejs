@@ -1,0 +1,8 @@
+<%- include('_top') %>
+<div class="crumbs"><a href="/crm/<%= space %>">Today</a> / Topic</div>
+<div class="title-row"><div><h1><%= t.name %></h1><p class="subline"><%= t.atoms.length %> <%= t.atoms.length === 1 ? 'fact' : 'facts' %> across every project and source in <%= space === 'work' ? 'Work' : 'Personal' %>.</p></div></div>
+<section class="grid first"><div class="panel s12">
+  <% if (!t.atoms.length) { %><div class="empty">No facts on this topic.</div><% } %>
+  <% for (const a of t.atoms) { %><%- include('_atom', { a }) %><% } %>
+</div></section>
+<%- include('_bottom') %>

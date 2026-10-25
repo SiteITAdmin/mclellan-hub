@@ -10,6 +10,7 @@ const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
 const flightsRouter = require('./routes/flights');
 const workerRouter = require('./routes/worker');
+const crmRouter = require('./routes/crm');
 const { processJobs, seedJobs } = require('./lib/jobs');
 
 const app = express();
@@ -70,14 +71,15 @@ app.use(session({
 }));
 
 // ── Hostname router ───────────────────────────────────────────────────────────
-// douglas.mclellan.scot: portfolio, its admin, the flight tracker, and the Mac
-// worker API. nakai.mclellan.scot: portfolio and its admin.
+// douglas.mclellan.scot: portfolio, its admin, the flight tracker, the personal
+// CRM, and the Mac worker API. nakai.mclellan.scot: portfolio and its admin.
 // rholdsworthconsulting.com is static and served by nginx directly.
 function portfolioHost(req, res, next, user) {
   req.portfolioUser = user;
   if (user === 'douglas') {
     if (req.path.startsWith('/api/subscription-agent/')) return workerRouter(req, res, next);
     if (req.path === '/flights' || req.path.startsWith('/api/flights')) return flightsRouter(req, res, next);
+    if (req.path === '/crm' || req.path.startsWith('/crm/')) return crmRouter(req, res, next);
   }
   if (req.path.startsWith('/admin')) return adminRouter(req, res, next);
   return portfolioRouter(req, res, next);

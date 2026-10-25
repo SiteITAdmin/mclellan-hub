@@ -1,0 +1,24 @@
+<%- include('_top') %>
+<div class="title-row">
+  <div><h1>Captured</h1><p class="subline">Everything that came into <%= space === 'work' ? 'Work' : 'Personal' %>, newest first, and whether it has been read into facts.</p></div>
+  <nav class="form-row" aria-label="Filter">
+    <a class="btn small" href="/crm/<%= space %>/captured" <%= filter ? '' : 'aria-current="page"' %>>All</a>
+    <a class="btn small" href="/crm/<%= space %>/captured?filter=attention" <%= filter ? 'aria-current="page"' : '' %>>Needs attention</a>
+  </nav>
+</div>
+<section class="grid first">
+  <div class="panel s12 feed">
+    <% if (!list.length) { %><div class="empty"><%= filter ? 'Nothing needs attention.' : 'Nothing captured yet.' %></div><% } %>
+    <div class="rows">
+    <% for (const s of list) { %>
+      <div class="rowcard">
+        <span class="kind-icon" aria-hidden="true"><%- s.kind === 'note' ? icon.note : icon.email %></span>
+        <div class="main"><div class="what"><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a></div><div class="meta"><%- include('_state', { s }) %></div></div>
+        <div class="end"><span class="when"><%= fmt(s.occurred_at) %></span>
+          <% if (s.atomise_status === 'failed') { %><form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/retry"><button class="link-btn" type="submit">Try again</button></form><% } %></div>
+      </div>
+    <% } %>
+    </div>
+  </div>
+</section>
+<%- include('_bottom') %>

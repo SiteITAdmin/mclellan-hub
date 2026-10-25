@@ -1,0 +1,27 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Search</h1><p class="subline">Facts, people and the text of everything captured in <%= space === 'work' ? 'Work' : 'Personal' %>.</p></div></div>
+<form class="form-row" method="get" action="/crm/<%= space %>/search" role="search" style="margin-top:20px">
+  <label class="sr-only" for="sq">Search</label>
+  <input class="input" id="sq" name="q" value="<%= q %>" placeholder="e.g. Purview, data protection, a name" autofocus>
+  <button class="btn primary" type="submit"><%- icon.search %> Search</button>
+</form>
+<% if (q) { %>
+<section class="grid first">
+  <div class="panel s8">
+    <div class="panel-head"><h2>Facts</h2><span class="chip"><%= results.atoms.length %></span></div>
+    <% if (!results.atoms.length) { %><div class="empty">No facts match.</div><% } %>
+    <% for (const a of results.atoms) { %><%- include('_atom', { a }) %><% } %>
+  </div>
+  <div class="s4 side-stack">
+    <div class="panel"><div class="panel-head"><h2>People</h2></div>
+      <% if (!results.people.length) { %><div class="empty">Nobody by that name.</div><% } %>
+      <div class="topics-list"><% for (const x of results.people) { %><a class="topic-row" href="/crm/<%= space %>/people/<%= x.id %>"><span><%= x.name %></span><span class="n"><%= x.org %></span></a><% } %></div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>In the text</h2></div>
+      <% if (!results.sources.length) { %><div class="empty">No matches.</div><% } %>
+      <div class="list"><% for (const s of results.sources) { %><a class="rowcard" style="grid-template-columns:1fr" href="/crm/<%= space %>/sources/<%= s.id %>"><div class="main"><div class="what"><%= s.title %></div><div class="meta" style="white-space:normal"><%= fmt(s.occurred_at, 'date') %>. <%= s.snip %></div></div></a><% } %></div>
+    </div>
+  </div>
+</section>
+<% } %>
+<%- include('_bottom') %>

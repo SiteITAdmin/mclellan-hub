@@ -1,0 +1,10 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Add a note</h1><p class="subline">Saved to <%= space === 'work' ? 'Work' : 'Personal' %>. Write names in full the first time so the Hub can tell people apart.</p></div></div>
+<section class="grid first"><div class="panel s8">
+  <form method="post" action="/crm/<%= space %>/note" class="list">
+    <label class="sr-only" for="text">Note</label>
+    <textarea class="textarea" id="text" name="text" required autofocus placeholder="e.g. Met Aoife Brennan at the conference. She's moving to Stripe in January."></textarea>
+    <div class="decide"><button class="btn primary" type="submit">Save note</button><a class="btn text" href="/crm/<%= space %>">Cancel</a></div>
+  </form>
+</div></section>
+<%- include('_bottom') %>

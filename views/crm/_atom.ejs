@@ -1,0 +1,14 @@
+<% const sp = a.space; %>
+<div class="atom">
+  <div class="st"><%= a.statement %></div>
+  <div class="meta">
+    <span class="kind"><%= a.kind %></span>
+    <% for (const m of a.mentions) { %>
+      <% if (m.person_id) { %><a class="who-link" href="/crm/<%= sp %>/people/<%= m.person_id %>"><%= m.person_name %></a><% } else if (m.status === 'ambiguous') { %><a class="unsure" href="/crm/review" title="More than one person has this name">Which <%= m.name %>?</a><% } %>
+    <% } %>
+    <% for (const pr of a.projects) { %><a class="tag" href="/crm/<%= sp %>/projects/<%= pr.id %>"><%= pr.name %></a><% } %>
+    <% for (const t of a.topics) { %><a class="tag" href="/crm/<%= sp %>/topics/<%= t.id %>"><%= t.name %></a><% } %>
+    <% const src = a.sources[0]; if (src) { %><a href="/crm/<%= sp %>/sources/<%= src.id %>" title="<%= src.quote %>"><%= src.kind === 'note' ? 'Note' : 'Email' %>, <%= fmt(src.occurred_at, 'date') %><%= a.sources.length > 1 ? ` (+${a.sources.length - 1} more)` : '' %></a><% if (!src.quote_verified) { %><span class="unsure" title="The quoted words weren't found in the source">quote not found</span><% } %><% } %>
+    <% if (a.confidence === 'low') { %><span class="unsure">low confidence</span><% } %>
+  </div>
+</div>
