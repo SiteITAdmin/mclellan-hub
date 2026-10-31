@@ -386,3 +386,14 @@ a.tag:hover { color: var(--text); border-color: var(--control); }
   .task-row .end { grid-column: 2; text-align: left; }
   .task-row .end .when, .task-row .end small { display: inline; margin-right: 10px; }
 }
+
+/* Promises ledger */
+.promise-list { display: grid; gap: 2px; }
+.promise { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line, rgba(0,0,0,.08)); }
+.promise:first-child { border-top: 0; padding-top: 0; }
+.promise .what { font-weight: 500; }
+.promise .meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.promise .quote { color: var(--muted); font-size: 13px; }
+.promise .late { color: var(--negative); font-weight: 500; }
+.promise .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.promise .acts form { margin: 0; }

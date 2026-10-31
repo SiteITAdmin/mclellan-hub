@@ -1,0 +1,22 @@
+<%- include('_top') %>
+<div class="greeting"><div><h1>Promises</h1><p class="subline">Who owes what, from your mail and notes. Mail over 7 days old is kept as a fact and never starts a task.</p></div></div>
+<section class="grid first">
+  <div class="panel s6"><div class="panel-head"><h2>You owe</h2><span class="chip"><%= ledger.mine.length %> open</span></div>
+    <%- include('_promises', { list: ledger.mine, back: `/crm/${space}/promises`, none: 'Nothing you have promised is open.' }) %></div>
+  <div class="panel s6"><div class="panel-head"><h2>Owed to you</h2><span class="chip"><%= ledger.owed.length %> open</span></div>
+    <%- include('_promises', { list: ledger.owed, back: `/crm/${space}/promises`, none: 'Nobody owes you anything right now.' }) %></div>
+</section>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Closed</h2><span class="chip">Newest first</span></div>
+  <% if (!closed.length) { %><div class="empty">Nothing closed yet.</div><% } %>
+  <div class="promise-list">
+  <% for (const p of closed) { %>
+    <div class="promise">
+      <div class="what"><%= p.direction === 'owed_to_me' && p.who ? `${p.who} will ` : '' %><%= p.action %></div>
+      <div class="meta"><span><%= p.why %>, <%= fmt(p.closed_at || p.said_at, 'date') %></span><% if (p.source_id) { %><a href="/crm/<%= space %>/sources/<%= p.source_id %>"><%= p.source_title %></a><% } %><% if (p.closing_source_id) { %><a href="/crm/<%= space %>/sources/<%= p.closing_source_id %>">What closed it</a><% } %></div>
+      <% if (p.reopenable) { %><div class="acts"><form method="post" action="/crm/<%= space %>/promises/<%= p.atom_id %>/reopen"><input type="hidden" name="back" value="/crm/<%= space %>/promises"><button class="btn small">Put back on the list</button></form></div><% } %>
+    </div>
+  <% } %>
+  </div>
+</div></section>
+<%- include('_bottom') %>

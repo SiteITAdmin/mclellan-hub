@@ -524,3 +524,15 @@ Work and Personal lists created and their first production sync succeeded.
 The isolated Google smoke passed create/import/edit/date-clear/complete/reopen/
 delete in both directions and removed both temporary lists afterwards.
 Desktop (1440px) and mobile (390px) task list/form inspected; full suite 47/47.
+
+## Promises as built (31 Oct 2026)
+
+Table `promises`, one row per promise atom: direction (mine / owed_to_me / other), who, action, due, certainty, state, task_id. Whether a promise is open also reads its task, so ticking, reopening or deleting in Google carries through.
+
+- **Becomes a task on its own:** direction mine, certainty clear, source under 7 days old. The Hub only accepts "clear" when the model's confidence is high and the quote is in the new part of the email, in mail Douglas sent or a note of his. Anything else waits on Today with Create task / Not a task.
+- **Asked of Douglas:** treated as mine and unsure, so it waits on Today.
+- **Owed to Douglas:** shown on Today. A clear one gets one chase task 7 days after it was said, or the day after its stated date if that is later.
+- **Retires:** with no task, 7 days after its chase date (normally 14 days after it was said). No catch-up after an outage.
+- **Closed by mail:** the model is shown up to 30 open promises per source. A later email closes one only with an id it was shown and words found in that email. Closed items and the reason show at `/crm/:space/promises`, with a way to put them back.
+- **One task per promise, ever.** A superseding promise inherits the task and its new date. The exact same statement in a thread merges into one atom.
+- **Removed:** the old Hub's reports to nakai@mclellan.scot (Daily Briefing, US Block Special Edition), once, and blocked from capture. Result is in setting `nakai_reports_removed`.

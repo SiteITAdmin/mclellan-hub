@@ -1,0 +1,23 @@
+<% if (!list.length) { %><div class="empty"><%= none %></div><% } %>
+<div class="promise-list">
+<% for (const p of list) { const owedToMe = p.direction === 'owed_to_me'; %>
+  <div class="promise">
+    <div class="what"><% if (owedToMe && p.who) { %><%= p.person_id ? '' : p.who %><% if (p.person_id) { %><a href="/crm/<%= space %>/people/<%= p.person_id %>"><%= p.person_name %></a><% } %> will <% } %><%= owedToMe ? p.action : p.action.charAt(0).toUpperCase() + p.action.slice(1) %></div>
+    <% if (p.quote) { %><div class="quote">“<%= p.quote %>”</div><% } %>
+    <div class="meta">
+      <% if (!owedToMe && p.who) { %><span>To <% if (p.person_id) { %><a href="/crm/<%= space %>/people/<%= p.person_id %>"><%= p.person_name %></a><% } else { %><%= p.who %><% } %></span><% } %>
+      <span class="<%= p.overdue ? 'late' : '' %>"><%= p.due ? `Due ${p.due_label}` : owedToMe ? (p.days === 0 ? 'Since today' : `Waiting ${p.days} ${p.days === 1 ? 'day' : 'days'}`) : (p.days === 0 ? 'Said today' : `Said ${p.days} ${p.days === 1 ? 'day' : 'days'} ago`) %></span>
+      <% if (p.source_id) { %><a href="/crm/<%= space %>/sources/<%= p.source_id %>" title="<%= p.source_title %>"><%= p.source_kind === 'note' ? 'The note' : 'The email' %></a><% } %>
+      <% if (p.task_id) { %><a href="/crm/<%= space %>/tasks/<%= p.task_id %>"><%= owedToMe ? 'Chase task' : 'Task' %></a><% } %>
+      <% if (owedToMe && !p.task_id && p.certainty === 'clear') { %><span>Chase task on <%= p.chase_on %></span><% } %>
+      <% if (p.certainty === 'unsure') { %><span>Not definite</span><% } %>
+    </div>
+    <div class="acts">
+      <% const act = (name, label, primary) => `<form method="post" action="/crm/${space}/promises/${p.atom_id}/${name}"><input type="hidden" name="back" value="${back}"><button class="btn small ${primary ? 'primary' : ''}">${label}</button></form>`; %>
+      <% if (!owedToMe && !p.task_id) { %><%- act('task', 'Create task', true) %><% } %>
+      <%- act('kept', owedToMe ? 'They did it' : 'Done', false) %>
+      <%- act('dismiss', p.task_id ? 'Not a promise' : (owedToMe ? 'Not a promise' : 'Not a task'), false) %>
+    </div>
+  </div>
+<% } %>
+</div>

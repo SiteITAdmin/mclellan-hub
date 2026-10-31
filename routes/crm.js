@@ -13,6 +13,7 @@ const sources = require('../lib/crm/sources');
 const atoms = require('../lib/crm/atoms');
 const orgs = require('../lib/crm/orgs');
 const tasks = require('../lib/crm/tasks');
+const promises = require('../lib/crm/promises');
 const { crm } = require('../lib/crm/db');
 
 const router = express.Router();
@@ -284,6 +285,25 @@ router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
 router.post('/crm/:space/sources/:id/retry', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   flash(req, atoms.retrySource(req.params.id) ? 'Queued to read again' : 'Nothing to retry');
   back(req, res, `/crm/${req.params.space}/captured`);
+});
+
+router.get('/crm/:space/promises', spaceParam, (req, res) => {
+  res.render('crm/promises', { page: 'today', ledger: promises.ledger(req.params.space), closed: promises.closed(req.params.space), title: 'Promises' });
+});
+
+router.post('/crm/:space/promises/:atomId/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { space, atomId, action } = req.params;
+  try {
+    const p = promises.get(atomId);
+    if (!p || p.space !== space) return res.status(404).send('Not found');
+    if (action === 'task') { promises.makeTask(atomId); flash(req, 'Task created. It reaches Google at the next sync.'); }
+    else if (action === 'kept') { promises.close(atomId, 'kept', 'douglas'); flash(req, 'Marked as done'); }
+    else if (action === 'dismiss') { promises.close(atomId, 'dismissed', 'douglas'); flash(req, 'Taken off the list'); }
+    else if (action === 'reopen') { promises.reopen(atomId); flash(req, 'Back on the list'); }
+    else return res.status(404).send('Not found');
+  } catch (err) { flash(req, err.message, 'bad'); }
+  const next = String(req.body.back || '');
+  res.redirect(next.startsWith(`/crm/${space}`) && !next.includes('\\') ? next : `/crm/${space}`);
 });
 
 function taskForm(req, res, t, error = null) {

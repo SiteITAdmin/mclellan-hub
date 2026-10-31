@@ -1,8 +1,9 @@
 <%- include('_top') %>
 <% const d = data; const label = space === 'work' ? 'Work' : 'Personal'; %>
 <% const dateLine = new Date().toLocaleDateString('en-IE', { timeZone: 'Europe/Dublin', weekday: 'long', day: 'numeric', month: 'long' }); %>
-<% let finding;
-   if (d.waitingReview) finding = `${d.waitingReview} ${d.waitingReview === 1 ? 'person is' : 'people are'} waiting in <a class="who" href="/crm/review">Who is this?</a>`;
+<% const owe = d.ledger.mine.length, owed = d.ledger.owed.length; let finding;
+   if (owe || owed) finding = [owe ? `You owe <a class="who" href="#promises">${owe} ${owe === 1 ? 'thing' : 'things'}</a>` : '', owed ? `${owe ? 'and ' : ''}<a class="who" href="#promises">${owed} ${owed === 1 ? 'is' : 'are'}</a> owed to you` : ''].filter(Boolean).join(', ') + '.';
+   else if (d.waitingReview) finding = `${d.waitingReview} ${d.waitingReview === 1 ? 'person is' : 'people are'} waiting in <a class="who" href="/crm/review">Who is this?</a>`;
    else if (d.factsToday) finding = `<span class="who">${d.factsToday}</span> new ${d.factsToday === 1 ? 'fact' : 'facts'} since midnight.`;
    else if (d.reading) finding = `The Mac is reading <span class="who">${d.reading}</span> ${d.reading === 1 ? 'source' : 'sources'}.`;
    else finding = 'Nothing new yet today.'; %>
@@ -13,7 +14,18 @@
   </div>
 </div>
 
-<section class="grid first" aria-label="Counts">
+<section class="grid first" id="promises" aria-label="Promises">
+  <div class="panel s6">
+    <div class="panel-head"><h2>You owe</h2><span class="chip"><%= owe %> open</span><a class="end" href="/crm/<%= space %>/promises">All promises</a></div>
+    <%- include('_promises', { list: d.ledger.mine, back: `/crm/${space}`, none: 'Nothing you have promised is open.' }) %>
+  </div>
+  <div class="panel s6">
+    <div class="panel-head"><h2>Owed to you</h2><span class="chip"><%= owed %> open</span></div>
+    <%- include('_promises', { list: d.ledger.owed, back: `/crm/${space}`, none: 'Nobody owes you anything right now.' }) %>
+  </div>
+</section>
+
+<section class="grid" aria-label="Counts">
   <div class="tile s3"><span class="label">Captured today</span><span class="value"><%= d.capturedToday %></span><span class="caption"><%= space === 'work' ? 'Outlook mail and notes' : 'Gmail and notes' %></span></div>
   <div class="tile s3"><span class="label">Facts learned today</span><span class="value"><%= d.factsToday %></span><span class="caption"><%= d.totalFacts %> in <%= label %> so far</span></div>
   <div class="tile s3"><span class="label">Waiting for you</span><span class="value"><%= d.waitingReview %></span><span class="caption"><% if (d.held) { %><%= d.held %> <%= d.held === 1 ? 'email' : 'emails' %> held until you decide<% } else { %>In Who is this?<% } %></span></div>
@@ -21,7 +33,7 @@
 </section>
 
 <section class="grid"><div class="panel s12">
-  <div class="panel-head"><h2>Tasks</h2><span class="chip"><%= d.tasks.length %> open</span><a class="end" href="/crm/<%= space %>/tasks">View all</a></div>
+  <div class="panel-head"><h2>Other tasks</h2><span class="chip"><%= d.tasks.length %> open</span><a class="end" href="/crm/<%= space %>/tasks">View all</a></div>
   <%- include('_tasks', { taskList: d.tasks.slice(0, 8), taskBack: `/crm/${space}` }) %>
 </div></section>
 
