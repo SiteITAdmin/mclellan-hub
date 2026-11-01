@@ -299,6 +299,8 @@ router.post('/crm/:space/promises/:atomId/:action', spaceParam, requireSameOrigi
     if (action === 'task') { promises.makeTask(atomId); flash(req, 'Task created. It reaches Google at the next sync.'); }
     else if (action === 'kept') { promises.close(atomId, 'kept', 'douglas'); flash(req, 'Marked as done'); }
     else if (action === 'dismiss') { promises.close(atomId, 'dismissed', 'douglas'); flash(req, 'Taken off the list'); }
+    else if (action === 'notdone') { promises.notDone(atomId); flash(req, "Kept open. That email won't be raised again."); }
+    else if (action === 'confirm') { promises.close(atomId, 'kept', p.looks_done_source_id ? `source:${p.looks_done_source_id}` : 'douglas'); flash(req, 'Marked as done'); }
     else if (action === 'reopen') { promises.reopen(atomId); flash(req, 'Back on the list'); }
     else return res.status(404).send('Not found');
   } catch (err) { flash(req, err.message, 'bad'); }

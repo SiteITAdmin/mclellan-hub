@@ -434,9 +434,9 @@ test('old free-text organisations become linked organisations', () => {
 });
 
 // ── Promises ────────────────────────────────────────────────────────────────
-function promiseSource(space, { direction = 'out', text, ageDays = 0, isHistory = null, title = 'Promise test' }) {
+function promiseSource(space, { direction = 'out', text, ageDays = 0, isHistory = null, title = `Promise test ${Math.random()}`, participants = [] }) {
   return sources.admitSource({
-    space, kind: 'email', origin: 'test', externalId: `p-${Math.random()}`, title, direction, text,
+    space, kind: 'email', origin: 'test', externalId: `p-${Math.random()}`, title, direction, text, participants,
     occurredAt: Math.floor(Date.now() / 1000) - ageDays * 86400, isHistory,
   }).source;
 }
@@ -454,6 +454,9 @@ test('a clear promise of Douglas\'s in fresh sent mail becomes one task, once, l
   assert.strictEqual(promises.get(a.id).certainty, 'clear');
   assert.strictEqual(promises.ledger('work').mine.some(p => p.atom_id === a.id), true);
 
+  await promises.run();
+  assert.strictEqual(promises.get(a.id).task_id, null, "Jane's mail is checked first, in case it's already done");
+  crm().prepare('UPDATE promises SET looked_back_at = unixepoch() WHERE atom_id = ?').run(a.id);
   await promises.run();
   await promises.run();
   const p = promises.get(a.id);
@@ -559,18 +562,112 @@ test('a later email can show a promise was kept, but only with its own words and
 
   atoms.applyAtoms(reply.id, [], [a.id], [{ id: a.id, quote: 'words not in this email' }]);
   assert.strictEqual(promises.get(a.id).state, 'open');
-  atoms.applyAtoms(reply.id, [], [], [{ id: a.id, quote: 'Purview quote attached as promised' }]);
+  atoms.applyAtoms(reply.id, [], [], [{ id: a.id, quote: 'Purview quote attached as promised', certainty: 'clear' }]);
   assert.strictEqual(promises.get(a.id).state, 'open', 'an id the model was not given is refused');
-  atoms.applyAtoms(reply.id, [], [a.id], [{ id: a.id, quote: 'Purview quote attached as promised' }]);
+  atoms.applyAtoms(reply.id, [], [a.id], [{ id: a.id, quote: 'Purview quote attached as promised', certainty: 'likely' }]);
+  assert.strictEqual(promises.get(a.id).state, 'open', 'a likely match only asks');
+  assert.strictEqual(promises.get(a.id).looks_done_source_id, reply.id);
+  atoms.applyAtoms(reply.id, [], [a.id], [{ id: a.id, quote: 'Purview quote attached as promised', certainty: 'clear' }]);
   assert.strictEqual(promises.get(a.id).state, 'kept');
+  assert.strictEqual(promises.get(a.id).looks_done_source_id, null);
   assert.strictEqual(promises.closed('work').find(x => x.atom_id === a.id).closing_source_id, reply.id);
 
   const mine = promiseAtom(promiseSource('work', { text: 'I will book the room.' }), 'Douglas will book the room.', 'I will book the room', { ...MINE, action: 'book the room', who: null, due: null });
   await promises.run();
   const taskId = promises.get(mine.id).task_id;
   const sent = promiseSource('work', { text: 'Room is booked.' });
-  atoms.applyAtoms(sent.id, [], [mine.id], [{ id: mine.id, quote: 'Room is booked' }]);
+  atoms.applyAtoms(sent.id, [], [mine.id], [{ id: mine.id, quote: 'Room is booked', certainty: 'clear' }]);
   assert.strictEqual(tasks.get(taskId).status, 'completed', 'its open task closes too');
+});
+
+const checksDoneSoFar = () => crm().prepare('UPDATE promises SET looked_back_at = unixepoch(), final_checked_at = unixepoch()').run();
+
+test('existing mail is checked when a promise is recorded and again before a chase', async () => {
+  checksDoneSoFar();
+  const john = [{ role: 'from', email: 'john.check@example.com', name: 'John Check' }, { role: 'to', email: 'douglas@mclellan.scot' }];
+  const owed = { direction: 'owed_to_me', who: 'John Check', action: 'confirm the new session date', certainty: 'clear' };
+  const earlier = promiseSource('personal', { direction: 'in', participants: john, ageDays: 1, title: 'Rescheduled session', text: "I've moved it to next Tuesday at 5pm." });
+  const unrelated = promiseSource('personal', { direction: 'in', participants: [{ role: 'from', email: 'someone.else@example.com' }], ageDays: 1, title: 'Other', text: 'Nothing to do with it.' });
+  const old = promiseSource('personal', { direction: 'in', participants: john, ageDays: 6, title: 'Way back', text: 'Too early to matter.' });
+  const a = promiseAtom(promiseSource('personal', { direction: 'in', participants: john, text: 'I will contact you to confirm the date.' }), 'John Check will confirm the new session date.', 'I will contact you to confirm the date', owed);
+
+  const shown = promises.checkEmails(promises.get(a.id)).map(s => s.id);
+  assert.ok(shown.includes(earlier.id), 'mail from that person just before the promise is shown');
+  assert.ok(!shown.includes(unrelated.id), 'mail from others is not');
+  assert.ok(!shown.includes(old.id), 'nor is mail from well before it');
+
+  let job = { status: 'pending' };
+  const enqueued = [];
+  const jobs = { enqueue: e => { enqueued.push(e); return { jobId: 'c1' }; }, getJob: () => job };
+  const parse = JSON.parse;
+  assert.strictEqual(promises.enqueueCheck(jobs), true);
+  assert.match(enqueued[0].payload.userPrompt, /moved it to next Tuesday/);
+  assert.strictEqual(promises.checking(), true);
+  assert.strictEqual(promises.collectCheck(jobs, parse), null, 'still waiting');
+
+  job = { status: 'completed', result: { output: JSON.stringify({ verdict: 'done', source_id: earlier.id, quote: 'words that are not there' }) } };
+  assert.strictEqual(promises.collectCheck(jobs, parse).verdict, 'done');
+  assert.strictEqual(promises.get(a.id).state, 'open', 'a claim without its words closes nothing');
+  assert.ok(promises.get(a.id).looked_back_at, 'but the look back is finished');
+  assert.strictEqual(promises.enqueueCheck(jobs), false, 'and is not repeated');
+
+  crm().prepare('UPDATE promises SET said_at = said_at - ? WHERE atom_id = ?').run(7 * 86400 - 3600, a.id);
+  assert.strictEqual(promises.enqueueCheck(jobs), true, 'six hours before the chase the mail is read again');
+  job = { status: 'completed', result: { output: JSON.stringify({ verdict: 'done', source_id: earlier.id, quote: "I've moved it to next Tuesday" }) } };
+  promises.collectCheck(jobs, parse);
+  assert.strictEqual(promises.get(a.id).state, 'kept', 'the real words close it, as with the rescheduled session');
+  assert.strictEqual(promises.closed('personal').find(x => x.atom_id === a.id).closing_source_id, earlier.id);
+});
+
+test('a final check stops a chase, a likely match asks first, and a failing check still chases', async () => {
+  checksDoneSoFar();
+  const from = email => [{ role: 'from', email }, { role: 'to', email: 'douglas@mclellan.scot' }];
+  const owed = { direction: 'owed_to_me', who: 'Ann Final', action: 'send the slides', certainty: 'clear' };
+  const setup = (email, later) => {
+    const a = promiseAtom(promiseSource('personal', { direction: 'in', participants: from(email), text: `I will send the slides ${email}.` }), `Ann will send the slides ${email}.`, `I will send the slides ${email}`, owed);
+    const reply = promiseSource('personal', { direction: 'in', participants: from(email), text: later });
+    crm().prepare('UPDATE promises SET looked_back_at = unixepoch(), said_at = said_at - ? WHERE atom_id = ?').run(7 * 86400 + 60, a.id);
+    crm().prepare('UPDATE sources SET occurred_at = ? WHERE id = ?').run(promises.get(a.id).said_at + 3600, reply.id);
+    return { a, reply };
+  };
+  const answer = (verdict, sourceId, quote) => {
+    const jobs = { enqueue: () => ({ jobId: 'f' }), getJob: () => ({ status: 'completed', result: { output: JSON.stringify({ verdict, source_id: sourceId, quote }) } }) };
+    assert.strictEqual(promises.enqueueCheck(jobs), true);
+    promises.collectCheck(jobs, JSON.parse);
+  };
+
+  const done = setup('ann1@example.com', 'Slides attached here.');
+  await promises.run();
+  assert.strictEqual(promises.get(done.a.id).task_id, null, 'no chase before the final check');
+  answer('done', done.reply.id, 'Slides attached here');
+  assert.strictEqual(promises.get(done.a.id).state, 'kept');
+  await promises.run();
+  assert.strictEqual(promises.get(done.a.id).task_id, null, 'and none after it closed');
+  promises.reopen(done.a.id);
+  assert.ok(!promises.checkEmails(promises.get(done.a.id)).some(s => s.id === done.reply.id), 'putting it back rules that email out');
+  promises.close(done.a.id, 'dismissed', 'douglas');
+
+  const likely = setup('ann2@example.com', 'That should be sorted now.');
+  answer('looks_done', likely.reply.id, 'should be sorted now');
+  assert.strictEqual(promises.get(likely.a.id).looks_done_source_id, likely.reply.id);
+  await promises.run();
+  assert.strictEqual(promises.get(likely.a.id).task_id, null, 'no chase while it waits for Douglas');
+  assert.ok(promises.ledger('personal').owed.some(p => p.atom_id === likely.a.id), 'it stays on Today');
+  promises.notDone(likely.a.id);
+  assert.strictEqual(promises.get(likely.a.id).looks_done_source_id, null);
+  await promises.run();
+  assert.ok(promises.get(likely.a.id).task_id, 'told not done, the chase goes out');
+  assert.ok(!promises.checkEmails(promises.get(likely.a.id)).some(s => s.id === likely.reply.id));
+  promises.close(likely.a.id, 'dismissed', 'douglas');
+
+  const broken = setup('ann3@example.com', 'Something about slides.');
+  const jobs = { enqueue: () => ({ jobId: 'b' }), getJob: () => ({ status: 'failed', error: 'worker crashed' }) };
+  for (let i = 0; i < 3; i++) { assert.strictEqual(promises.enqueueCheck(jobs), true); promises.collectCheck(jobs, JSON.parse); }
+  assert.strictEqual(promises.checkFailed('personal'), 1);
+  assert.ok(views.health('personal').some(h => /couldn't be checked/.test(h.text)), 'the failure shows on Today');
+  await promises.run();
+  assert.ok(promises.get(broken.a.id).task_id, 'and the chase still goes out');
+  promises.close(broken.a.id, 'dismissed', 'douglas');
 });
 
 test('the same promise twice is one task; a changed promise keeps its task on the new date', async () => {

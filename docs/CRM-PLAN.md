@@ -536,3 +536,13 @@ Table `promises`, one row per promise atom: direction (mine / owed_to_me / other
 - **Closed by mail:** the model is shown up to 30 open promises per source. A later email closes one only with an id it was shown and words found in that email. Closed items and the reason show at `/crm/:space/promises`, with a way to put them back.
 - **One task per promise, ever.** A superseding promise inherits the task and its new date. The exact same statement in a thread merges into one atom.
 - **Removed:** the old Hub's reports to nakai@mclellan.scot (Daily Briefing, US Block Special Edition), once, and blocked from capture. Result is in setting `nakai_reports_removed`.
+
+### Checking whether a promise was already kept (1 Nov 2026)
+
+Three checks through the existing Mac queue, one job at a time. No new table, job or Mac program; new columns on `promises`.
+
+- **Look back:** once per open promise, against up to 12 emails since 3 days before it, from the same people or thread. Held mail stays unread. No related mail means no model call.
+- **Final check:** starts 6 hours before a chase. A chase needs it finished, unless it is a day late, when the chase goes anyway.
+- **Looks done:** clear evidence closes; suggestive evidence shows on Today with the quote, Yes it's done / Not done yet, and no task or chase until answered. An email Douglas rejects is never raised again for that promise.
+
+A reply only counts if its quote is found in an email the model was shown. Checks that keep failing are marked and shown on Today.
