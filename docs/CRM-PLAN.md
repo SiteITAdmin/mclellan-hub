@@ -546,3 +546,7 @@ Three checks through the existing Mac queue, one job at a time. No new table, jo
 - **Looks done:** clear evidence closes; suggestive evidence shows on Today with the quote, Yes it's done / Not done yet, and no task or chase until answered. An email Douglas rejects is never raised again for that promise.
 
 A reply only counts if its quote is found in an email the model was shown. Checks that keep failing are marked and shown on Today.
+
+## Where things stand as built (1 Nov 2026)
+
+Table `standings`: a disposable written summary per person, project and organisation with at least 3 facts. Up to 5 lines, newest 80 facts as input. A line that doesn't cite a fact it was given is dropped; if none remain, nothing is saved. Rewritten when the set of facts changes, at most once a day, after all sources are read and one at a time. The page shows when it was written, how many facts have arrived since, and flags a line whose fact has since changed. Department and team pages have no summary of their own.

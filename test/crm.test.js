@@ -23,6 +23,7 @@ const orgs = require('../lib/crm/orgs');
 const promises = require('../lib/crm/promises');
 const tasks = require('../lib/crm/tasks');
 const cleanup = require('../lib/crm/cleanup');
+const standings = require('../lib/crm/standings');
 
 const ME = 'douglas.mclellan@beaconhospital.ie';
 const hours = h => Math.floor(Date.now() / 1000) - h * 3600;
@@ -766,6 +767,76 @@ test('Nakai\'s automated reports are removed once and never captured again', () 
   assert.strictEqual(gmail.classify(meta).why, 'nakai_report');
   meta.payload.headers[1].value = 'nakai@mclellan.scot, reillyjb@gmail.com';
   assert.strictEqual(gmail.classify(meta).keep, true, 'mail with a real recipient is kept');
+});
+
+test('where things stand: written from cited facts, only when they change, and failures show', () => {
+  const clear = () => {
+    crm().prepare("UPDATE standings SET tried_at = unixepoch()").run();
+    for (let due = standings.nextDue(); due; due = standings.nextDue()) {
+      crm().prepare(`INSERT INTO standings (entity_type, entity_id, space, fingerprint, tried_at) VALUES (?, ?, 'work', '', unixepoch())
+        ON CONFLICT(entity_type, entity_id) DO UPDATE SET tried_at = unixepoch()`).run(due.type, due.id);
+    }
+  };
+  clear();
+  const project = review.createProject('work', 'Standing Test');
+  const source = promiseSource('work', { direction: 'in', text: 'Budget is 10k. Launch is in May. Vendor is Acme. Launch moved to June.' });
+  const fact = (statement, quote) => ({ statement, kind: 'fact', quote, projects: ['Standing Test'], confidence: 'high' });
+  assert.strictEqual(standings.forEntity('project', project.id).tooFew, true);
+  atoms.applyAtoms(source.id, [fact('Standing Test budget is 10k.', 'Budget is 10k'), fact('Standing Test launch is in May.', 'Launch is in May')]);
+  assert.strictEqual(standings.nextDue(), null, 'two facts are not worth a summary');
+  atoms.applyAtoms(source.id, [fact('Standing Test vendor is Acme.', 'Vendor is Acme')]);
+  const facts = standings.factsFor('project', project.id);
+  assert.strictEqual(standings.nextDue().id, project.id);
+  assert.strictEqual(standings.forEntity('project', project.id).waiting, true);
+
+  let job = { status: 'pending' };
+  const enqueued = [];
+  const jobs = { enqueue: e => { enqueued.push(e); return { jobId: 's1' }; }, getJob: () => job };
+  const write = reply => {
+    assert.strictEqual(standings.enqueueNext(jobs), true);
+    job = { status: 'completed', result: { output: JSON.stringify(reply) } };
+    return standings.collect(jobs, JSON.parse);
+  };
+  assert.strictEqual(standings.enqueueNext(jobs), true);
+  assert.match(enqueued[0].payload.userPrompt, /Project: Standing Test/);
+  assert.match(enqueued[0].payload.userPrompt, /vendor is Acme/);
+  assert.strictEqual(standings.enqueueNext(jobs), false, 'one at a time');
+  assert.strictEqual(standings.collect(jobs, JSON.parse), null, 'still waiting');
+  crm().prepare("DELETE FROM settings WHERE key = 'standing_job'").run();
+
+  assert.match(write({ lines: [{ text: 'Invented.', facts: ['not-a-fact'] }] }).error, /cited a fact/, 'a line with no real fact is refused');
+  assert.strictEqual(standings.forEntity('project', project.id).lines.length, 0);
+  const saved = write({ lines: [
+    { text: 'Launch is in May and the vendor is Acme.', facts: [facts[0].id, facts[1].id] },
+    { text: 'This one has no support.', facts: [] },
+    { text: 'Budget is 10k.', facts: [facts[2].id, 'also-not-a-fact'] },
+  ] });
+  assert.strictEqual(saved.lines, 2);
+  const view = standings.forEntity('project', project.id);
+  assert.strictEqual(view.lines.length, 2);
+  assert.strictEqual(view.lines[0].sources[0].id, source.id);
+  assert.strictEqual(views.project(project.id).standing.lines.length, 2);
+  assert.strictEqual(standings.nextDue(), null, 'nothing changed, nothing to write');
+
+  atoms.applyAtoms(source.id, [{ ...fact('Standing Test launch moved to June.', 'Launch moved to June') }]);
+  assert.strictEqual(standings.nextDue(), null, 'at most once a day');
+  assert.strictEqual(standings.forEntity('project', project.id).behind, 1, 'the page says a fact has arrived since');
+  const may = facts.find(f => /May/.test(f.statement));
+  crm().prepare("UPDATE atoms SET status = 'superseded' WHERE id = ?").run(may.id);
+  assert.strictEqual(standings.forEntity('project', project.id).lines.find(l => /May/.test(l.text)).changed, true, 'a line on a changed fact is flagged');
+  crm().prepare("UPDATE standings SET tried_at = 0 WHERE entity_id = ?").run(project.id);
+  assert.strictEqual(standings.nextDue().id, project.id, 'the next day it rewrites');
+
+  for (let i = 0; i < 3; i++) {
+    assert.strictEqual(standings.enqueueNext(jobs), true);
+    job = { status: 'failed', error: 'worker crashed' };
+    standings.collect(jobs, JSON.parse);
+  }
+  assert.strictEqual(standings.nextDue(), null, 'failures rest for a day instead of looping');
+  assert.strictEqual(standings.forEntity('project', project.id).lines.length, 2, 'the old version stays');
+  assert.ok(views.health('work').some(h => /Where things stand/.test(h.text)));
+  assert.strictEqual(standings.enqueueNext({ ...jobs }), false);
+  crm().prepare("UPDATE standings SET error = ''").run();
 });
 
 test('every CRM screen renders for the signed-in owner', async () => {
