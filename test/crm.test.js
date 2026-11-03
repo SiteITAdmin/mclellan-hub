@@ -24,6 +24,7 @@ const promises = require('../lib/crm/promises');
 const tasks = require('../lib/crm/tasks');
 const cleanup = require('../lib/crm/cleanup');
 const standings = require('../lib/crm/standings');
+const wispr = require('../lib/crm/wispr');
 
 const ME = 'douglas.mclellan@beaconhospital.ie';
 const hours = h => Math.floor(Date.now() / 1000) - h * 3600;
@@ -839,6 +840,65 @@ test('where things stand: written from cited facts, only when they change, and f
   crm().prepare("UPDATE standings SET error = ''").run();
 });
 
+test('wispr: the device sign-in connects one space, records the tools, and refreshes its token', async () => {
+  const calls = [];
+  let tokenReplies = [{ error: 'authorization_pending' }, { access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 }];
+  const reply = (status, body, headers = {}) => ({
+    status, ok: status < 400,
+    headers: { get: h => ({ 'content-type': 'application/json', ...headers })[h.toLowerCase()] || null },
+    json: async () => body, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+  });
+  wispr._setHttp(async (url, opts) => {
+    const body = opts.headers['Content-Type'] === 'application/json' ? JSON.parse(opts.body) : Object.fromEntries(new URLSearchParams(opts.body));
+    calls.push({ url, body, auth: opts.headers.Authorization, session: opts.headers['Mcp-Session-Id'] });
+    if (url.endsWith('/register')) return reply(201, { client_id: 'client_test' });
+    if (url.endsWith('/device_authorization')) return reply(200, { device_code: 'dev-1', user_code: 'ABCD-EFGH', verification_uri_complete: 'https://mcp-auth.wisprflow.com/device?user_code=ABCD-EFGH', expires_in: 300, interval: 5 });
+    if (url.endsWith('/token')) {
+      if (body.grant_type === 'refresh_token') return reply(200, { access_token: 'at-2', expires_in: 3600 });
+      return reply(tokenReplies[0].error ? 400 : 200, tokenReplies.shift());
+    }
+    if (body.method === 'initialize') return reply(200, { jsonrpc: '2.0', id: body.id, result: { protocolVersion: '2025-06-18' } }, { 'mcp-session-id': 'sess-1' });
+    if (body.method === 'notifications/initialized') return reply(202, '');
+    if (body.method === 'tools/list') return reply(200, `event: message\ndata: ${JSON.stringify({ jsonrpc: '2.0', id: body.id, result: { tools: [{ name: 'search_meetings', inputSchema: { type: 'object' } }, { name: 'get_account_info', inputSchema: {} }] } })}\n\n`, { 'content-type': 'text/event-stream' });
+    if (body.method === 'tools/call') return reply(200, { jsonrpc: '2.0', id: body.id, result: { content: [{ type: 'text', text: JSON.stringify({ email: 'douglas.mclellan@beaconhospital.ie', name: 'Douglas McLellan' }) }] } });
+    throw new Error(`unexpected ${url} ${body.method}`);
+  });
+  try {
+    assert.strictEqual(wispr.status('work').connected, false);
+    await wispr.startConnect('work');
+    const st = wispr.status('work');
+    assert.strictEqual(st.device.user_code, 'ABCD-EFGH');
+    assert.strictEqual(calls.find(c => c.url.endsWith('/device_authorization')).body.resource, wispr.MCP_URL, 'the token is asked for the MCP server');
+    assert.strictEqual(await wispr.pollConnect('work'), 'waiting', 'does not poll before the interval');
+    const dev = JSON.parse(setting('wispr_work_device'));
+    const { setSetting } = require('../lib/crm/db');
+    setSetting('wispr_work_device', JSON.stringify({ ...dev, next_poll_at: 0 }));
+    assert.strictEqual(await wispr.pollConnect('work'), 'waiting', 'pending sign-in keeps waiting');
+    setSetting('wispr_work_device', JSON.stringify({ ...JSON.parse(setting('wispr_work_device')), next_poll_at: 0 }));
+    assert.strictEqual(await wispr.pollConnect('work'), 'connected');
+    const after = wispr.status('work');
+    assert.ok(after.connected && !after.device);
+    assert.deepStrictEqual(after.tools.map(t => t.name), ['search_meetings', 'get_account_info']);
+    assert.strictEqual(after.account.email, 'douglas.mclellan@beaconhospital.ie');
+    assert.ok(calls.filter(c => c.body.method === 'tools/list').every(c => c.session === 'sess-1' && c.auth === 'Bearer at-1'), 'session and token are sent');
+    assert.strictEqual(wispr.status('personal').connected, false, 'personal stays unconnected');
+    await assert.rejects(wispr.open('personal'), /not connected in personal/);
+
+    const auth = JSON.parse(setting('wispr_work_auth'));
+    setSetting('wispr_work_auth', JSON.stringify({ ...auth, expires_at: 0 }));
+    assert.strictEqual(await wispr.accessToken('work'), 'at-2');
+    assert.strictEqual(JSON.parse(setting('wispr_work_auth')).refresh_token, 'rt-1', 'an unrotated refresh token is kept');
+
+    wispr._setHttp(async () => reply(400, { error: 'invalid_grant' }));
+    setSetting('wispr_work_auth', JSON.stringify({ ...JSON.parse(setting('wispr_work_auth')), expires_at: 0 }));
+    await assert.rejects(wispr.accessToken('work'), /expired/);
+    assert.ok(views.health('work').some(h => /Wispr Flow meetings/.test(h.text)), 'a lost sign-in shows on Today');
+    setSetting('wispr_work_error', '');
+  } finally {
+    wispr._setHttp((url, opts) => fetch(url, opts));
+  }
+});
+
 test('every CRM screen renders for the signed-in owner', async () => {
   const express = require('express');
   const app = express();
@@ -859,7 +919,7 @@ test('every CRM screen renders for the signed-in owner', async () => {
       '/crm/work/organisations', `/crm/work/organisations/${beacon}`, '/crm/work/search?q=beacon',
       `/crm/work/organisations/${beacon}/units/${crm().prepare("SELECT id FROM org_units WHERE name = 'Finance'").get().id}`,
       '/crm/work/captured', '/crm/work/captured?filter=attention', `/crm/work/sources/${src}`, '/crm/work/projects',
-      `/crm/work/projects/${project}`, `/crm/work/promises`, '/crm/personal/promises', `/crm/work/topics/${topic}`, '/crm/work/search?q=purview', '/crm/personal/note'];
+      `/crm/work/projects/${project}`, `/crm/work/promises`, '/crm/personal/promises', `/crm/work/topics/${topic}`, '/crm/work/search?q=purview', '/crm/personal/note', '/crm/work/meetings', '/crm/personal/meetings'];
     for (const kind of ['person', 'mention', 'project']) {
       const it = crm().prepare("SELECT id FROM review_items WHERE kind = ? AND status = 'open' LIMIT 1").get(kind);
       if (it) pages.push(`/crm/review?item=${it.id}`);

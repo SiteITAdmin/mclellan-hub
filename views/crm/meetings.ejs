@@ -1,0 +1,27 @@
+<%- include('_top') %>
+<% const where = space === 'work' ? 'Work' : 'Personal'; %>
+<% if (w.device) { %><meta http-equiv="refresh" content="5"><% } %>
+<div class="title-row"><div><h1>Meetings</h1><p class="subline">Meetings recorded by Wispr Flow Notetaker. Connect the Wispr account you use for <%= where.toLowerCase() %> meetings; its meetings go into <%= where %> only.</p></div></div>
+<section class="grid first">
+  <div class="panel s8">
+    <div class="panel-head"><h2>Wispr Flow</h2>
+      <% if (w.connected) { %><span class="chip">Connected</span><% } else if (w.device) { %><span class="chip">Waiting for you</span><% } %></div>
+    <% if (w.error) { %><p><span class="pill neg">Problem</span> <%= w.error %></p><% } %>
+    <% if (w.device) { %>
+      <p>Open <a href="<%= w.device.url %>" target="_blank" rel="noopener">Wispr's sign-in page</a>, sign in with the account for <%= where.toLowerCase() %> meetings, and check it shows this code:</p>
+      <p class="user-code"><%= w.device.user_code %></p>
+      <p class="subline">This page checks every few seconds. The code stops working at <%= fmt(w.device.expires_at, 'time') %>.</p>
+    <% } else if (w.connected) { %>
+      <p>Connected <%= fmt(w.connectedAt) %><% if (w.account && (w.account.email || w.account.name)) { %> as <%= w.account.name || '' %> <%= w.account.email ? `(${w.account.email})` : '' %><% } %>.</p>
+      <p class="subline">Meetings are not read into the CRM yet: that is the next step, built against what Wispr returns (<%= w.tools.length %> tools offered).</p>
+      <div class="decide">
+        <form method="post" action="/crm/<%= space %>/meetings/check"><button class="btn small" type="submit">Check the connection</button></form>
+        <form method="post" action="/crm/<%= space %>/meetings/disconnect"><button class="btn text" type="submit">Disconnect</button></form>
+      </div>
+    <% } else { %>
+      <p>Not connected in <%= where %>.</p>
+      <form method="post" action="/crm/<%= space %>/meetings/connect"><button class="btn primary" type="submit">Connect Wispr Flow</button></form>
+    <% } %>
+  </div>
+</section>
+<%- include('_bottom') %>

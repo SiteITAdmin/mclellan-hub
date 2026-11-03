@@ -405,3 +405,4 @@ a.tag:hover { color: var(--text); border-color: var(--control); }
 .standing-lines li { font-size: 16px; line-height: 24px; }
 .standing-lines .cites { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; line-height: 18px; color: var(--muted); }
 .standing-lines .cites a:hover { color: var(--text); }
+.user-code { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: .08em; font-variant-numeric: tabular-nums; margin: 8px 0; }
