@@ -1089,6 +1089,48 @@ test('whatsapp: the stop switch refuses everything and Hermes trouble shows on T
   assert.ok(!views.health('personal').some(h => /Hermes/.test(h.text)), 'nothing to say when it is working');
 });
 
+test('channels: the WDS mailbox and the WDS Board 2026 chat feed one project, and the reader is told', () => {
+  const channels = require('../lib/crm/channels');
+  const wds = channels.seedOnce();
+  assert.strictEqual(wds.name, 'Wicklow Dementia Support');
+  assert.strictEqual(wds.space, 'personal');
+  assert.strictEqual(channels.seedOnce(), null, 'only once, so a later change stands');
+  const mail = crm().prepare("SELECT * FROM sources WHERE origin = 'gmail:douglas@wicklowdementiasupport.ie' LIMIT 1").get();
+  assert.ok(mail, 'a WDS mailbox source from the earlier test');
+  assert.match(atoms.buildPacket(mail).userPrompt, /Channel project: Douglas files everything from this mailbox under "Wicklow Dementia Support"/);
+  const main = crm().prepare("SELECT * FROM sources WHERE origin = 'gmail' LIMIT 1").get();
+  assert.doesNotMatch(atoms.buildPacket(main).userPrompt, /Channel project/, 'the main mailbox has no project');
+
+  const board = '120363999@g.us';
+  whatsapp.receive({ chat_id: board, chat_name: 'WDS Board 2026', is_group: true, message_id: 'b-1', body: 'Agenda for Tuesday attached', sender_phone: '353870000077', sender_name: 'Mary', sent_at: SECONDS(50) });
+  const c = whatsapp.chat(board);
+  assert.strictEqual(c.status, 'approved', 'approved the moment it first appears, as Douglas asked');
+  assert.strictEqual(c.space, 'personal');
+  assert.strictEqual(channels.projectForChannel(`whatsapp:${board}`).id, wds.id);
+  assert.strictEqual(crm().prepare('SELECT COUNT(*) AS n FROM whatsapp_messages WHERE chat_id = ?').get(board).n, 1, 'its first message is kept');
+  age(board, whatsapp.SETTLE_SECONDS + 1);
+  whatsapp.settle();
+  const chatSource = crm().prepare('SELECT * FROM sources WHERE external_id = ?').get(`${board}:b-1`);
+  assert.match(atoms.buildPacket(chatSource).userPrompt, /Channel project: Douglas files everything from this chat under "Wicklow Dementia Support"/);
+  assert.ok(whatsapp.list().approved.find(x => x.chat_id === board).project_name === 'Wicklow Dementia Support');
+
+  const dmSame = '353870000078@s.whatsapp.net';
+  whatsapp.receive({ chat_id: dmSame, chat_name: 'WDS Board 2026', is_group: false, message_id: 'd-1', body: 'hi', sender_phone: '353870000078' });
+  assert.strictEqual(whatsapp.chat(dmSame).status, 'waiting', 'a person who names themselves like the group is not approved');
+  const ignored = '120363998@g.us';
+  whatsapp.receive({ chat_id: ignored, chat_name: 'Old group', is_group: true, message_id: 'o-1', body: 'x' });
+  whatsapp.decide(ignored, { action: 'ignore' });
+  whatsapp.receive({ chat_id: ignored, chat_name: 'WDS Board 2026', is_group: true, message_id: 'o-2', body: 'x' });
+  assert.strictEqual(whatsapp.chat(ignored).status, 'ignored', "Douglas's own decision stands");
+
+  const dad = crm().prepare("SELECT id FROM projects WHERE space = 'personal' AND name = 'Dad'").get() || require('../lib/crm/review').createProject('personal', 'Dad');
+  const m365 = crm().prepare("SELECT id FROM projects WHERE space = 'work' AND name = 'M365 Rollout'").get();
+  const dm = '353870000001@s.whatsapp.net';
+  assert.throws(() => whatsapp.setChatProject(dm, m365.id), /same space/);
+  assert.strictEqual(whatsapp.setChatProject(dm, dad.id).name, 'Dad');
+  assert.strictEqual(whatsapp.setChatProject(dm, null), null);
+});
+
 test('whatsapp: the capture endpoints check the secret and honour the switch', async () => {
   const express = require('express');
   const app = express();

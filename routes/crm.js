@@ -138,13 +138,23 @@ router.get('/crm/whatsapp', (req, res) => {
   res.render('crm/whatsapp', {
     page: 'whatsapp', space: null, title: 'WhatsApp',
     chats: whatsapp.list(), hb: whatsapp.lastHeartbeat(), paused: whatsapp.isPaused(),
+    projectsBySpace: Object.fromEntries(SPACES.map(sp => [sp, crm().prepare('SELECT id, name FROM projects WHERE space = ? ORDER BY name COLLATE NOCASE').all(sp)])),
     lastMessage: Number(setting('whatsapp_last_message_at')) || null,
   });
 });
 
 router.post('/crm/whatsapp/chats/:id', requireSameOrigin, writeLimiter, (req, res) => {
   try {
-    const c = require('../lib/crm/whatsapp').decide(req.params.id, { action: String(req.body.action || ''), space: req.body.space });
+    const whatsapp = require('../lib/crm/whatsapp');
+    const action = String(req.body.action || '');
+    // One select per space; the chosen space's select carries the project.
+    const projectId = req.body[`project_${req.body.space}`] || req.body.project || null;
+    if (action === 'project') {
+      const p = whatsapp.setChatProject(req.params.id, projectId);
+      flash(req, p ? `New messages from this chat are filed under ${p.name}.` : 'This chat no longer has a project.');
+      return res.redirect('/crm/whatsapp');
+    }
+    const c = whatsapp.decide(req.params.id, { action, space: req.body.space, projectId });
     const name = c.is_self ? 'Your own chat' : (c.name || c.peer_phone || 'The chat');
     flash(req, { approve: `${name} is approved for ${c.space === 'work' ? 'Work' : 'Personal'}. New messages are stored from now on.`, ignore: `${name} is ignored.`, waiting: `${name} is back in the waiting list.` }[req.body.action] || 'Done');
   } catch (err) { flash(req, err.message, 'bad'); }

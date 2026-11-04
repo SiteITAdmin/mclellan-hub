@@ -16,6 +16,13 @@
             <input type="hidden" name="action" value="approve">
             <label class="sr-only" for="sp-<%= c.chat_id %>">Space</label>
             <select class="select" id="sp-<%= c.chat_id %>" name="space"><option value="personal">Personal</option><option value="work">Work</option></select>
+            <% for (const sp of ['personal', 'work']) { %>
+              <label class="sr-only" for="pr-<%= sp %>-<%= c.chat_id %>">Project if <%= sp %></label>
+              <select class="select" id="pr-<%= sp %>-<%= c.chat_id %>" name="project_<%= sp %>" title="Project, if the space is <%= sp === 'work' ? 'Work' : 'Personal' %>">
+                <option value="">No project (<%= sp === 'work' ? 'Work' : 'Personal' %>)</option>
+                <% for (const p of projectsBySpace[sp]) { %><option value="<%= p.id %>"><%= p.name %> (<%= sp === 'work' ? 'Work' : 'Personal' %>)</option><% } %>
+              </select>
+            <% } %>
             <button class="btn small primary" type="submit">Approve</button>
           </form>
           <form class="inline-form" method="post" action="/crm/whatsapp/chats/<%= encodeURIComponent(c.chat_id) %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit">Ignore</button></form>
@@ -45,8 +52,17 @@
       <div class="rowcard">
         <div class="main">
           <div class="what"><%= c.is_self ? 'You (notes to yourself)' : (c.name || c.peer_phone) %></div>
-          <div class="meta"><%= c.space === 'work' ? 'Work' : 'Personal' %> · <%= c.stored %> stored · last active <%= fmt(c.last_seen) %></div>
+          <div class="meta"><%= c.space === 'work' ? 'Work' : 'Personal' %><%= c.project_name ? ` · ${c.project_name}` : '' %> · <%= c.stored %> stored · last active <%= fmt(c.last_seen) %></div>
         </div>
+        <form class="inline-form" method="post" action="/crm/whatsapp/chats/<%= encodeURIComponent(c.chat_id) %>">
+          <input type="hidden" name="action" value="project">
+          <label class="sr-only" for="cp-<%= c.chat_id %>">Project</label>
+          <select class="select" id="cp-<%= c.chat_id %>" name="project">
+            <option value="">No project</option>
+            <% for (const p of projectsBySpace[c.space] || []) { %><option value="<%= p.id %>" <%= p.id === c.project_id ? 'selected' : '' %>><%= p.name %></option><% } %>
+          </select>
+          <button class="btn small" type="submit">Set</button>
+        </form>
         <form class="inline-form" method="post" action="/crm/whatsapp/chats/<%= encodeURIComponent(c.chat_id) %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit">Stop capturing</button></form>
       </div>
     <% } %>
