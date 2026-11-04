@@ -347,6 +347,47 @@ test('a second mailbox waits to be connected, and only its own account can conne
   assert.deepStrictEqual(gmail.bootstrapPending().map(a => a.email), ['douglas@wicklowdementiasupport.ie'], 'its 3-month look-back is due; the main one is done');
 });
 
+test('a mailbox in another Workspace signs in through that Workspace\'s own Google app', () => {
+  const wds = gmail.accountFor('douglas@wicklowdementiasupport.ie');
+  const before = { ...process.env };
+  const saved = setting('google_token:douglas@wicklowdementiasupport.ie');
+  try {
+    process.env.GOOGLE_OAUTH_CLIENT_ID = 'hub-app.apps.googleusercontent.com';
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'hub-secret';
+    process.env.GMAIL_OAUTH_WICKLOWDEMENTIASUPPORT_IE_CLIENT_ID = 'wds-app.apps.googleusercontent.com';
+    assert.throws(() => gmail.oauthCreds(wds), /must both be set/, 'half a configuration is refused, not mixed with the Hub app');
+    process.env.GMAIL_OAUTH_WICKLOWDEMENTIASUPPORT_IE_CLIENT_SECRET = 'wds-secret';
+    assert.deepStrictEqual(gmail.oauthCreds(wds), { clientId: 'wds-app.apps.googleusercontent.com', clientSecret: 'wds-secret', own: true });
+
+    const session = {};
+    let redirect = '';
+    const req = { protocol: 'https', get: () => 'douglas.mclellan.scot', session: Object.assign(session, { save: cb => cb() }) };
+    require('../lib/crm/gmail-connect').start(req, { redirect: u => { redirect = u; } }, wds.email);
+    const url = new URL(redirect);
+    assert.strictEqual(url.searchParams.get('client_id'), 'wds-app.apps.googleusercontent.com', 'Google is asked through the WDS app');
+    assert.strictEqual(url.searchParams.get('redirect_uri'), 'https://douglas.mclellan.scot/admin/auth/google/callback');
+    assert.strictEqual(url.searchParams.get('hd'), 'wicklowdementiasupport.ie');
+    assert.match(url.searchParams.get('scope'), /gmail\.readonly/);
+    assert.doesNotMatch(url.searchParams.get('scope'), /gmail\.(modify|send|compose)|mail\.google\.com/, 'read-only');
+
+    gmail.saveToken(wds, { profileEmail: wds.email, tokens: { refresh_token: 'rt-wds-app', scope: 'gmail.readonly' } });
+    assert.strictEqual(JSON.parse(setting('google_token:douglas@wicklowdementiasupport.ie')).client_id, 'wds-app.apps.googleusercontent.com');
+    assert.strictEqual(gmail.isConnected(wds), true);
+    const client = gmail.clientFor(wds);
+    assert.strictEqual(client.context._options.auth._clientId, 'wds-app.apps.googleusercontent.com', 'its token is refreshed through the app that issued it');
+
+    delete process.env.GMAIL_OAUTH_WICKLOWDEMENTIASUPPORT_IE_CLIENT_ID;
+    delete process.env.GMAIL_OAUTH_WICKLOWDEMENTIASUPPORT_IE_CLIENT_SECRET;
+    assert.strictEqual(gmail.isConnected(wds), false, 'a token from another app counts as not connected');
+    assert.throws(() => gmail.clientFor(wds), /not connected to its current Google app/);
+    assert.ok(views.health('personal').some(h => /wicklowdementiasupport\.ie isn't connected/.test(h.text)), 'and Today asks to connect again');
+  } finally {
+    for (const k of Object.keys(process.env)) if (!(k in before)) delete process.env[k];
+    Object.assign(process.env, before);
+    require('../lib/crm/db').setSetting('google_token:douglas@wicklowdementiasupport.ie', saved);
+  }
+});
+
 test('the second mailbox is captured apart from the main one', async () => {
   const wds = gmail.accountFor('douglas@wicklowdementiasupport.ie');
   const g = fakeGmail([
