@@ -399,6 +399,10 @@ router.get('/crm/:space/search', spaceParam, (req, res) => {
   res.render('crm/search', { page: 'search', q, results: views.search(req.params.space, q), title: 'Search' });
 });
 
+router.get('/crm/personal/mailboxes/connect', (req, res) => {
+  require('../lib/crm/gmail-connect').start(req, res, req.query.account);
+});
+
 router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
   const space = req.params.space;
   if (wispr.status(space).device) {

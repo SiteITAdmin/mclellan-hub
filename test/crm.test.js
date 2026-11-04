@@ -11,6 +11,7 @@ process.env.HUB_DB_PATH = path.join(tmp, 'hub.db');
 process.env.CRM_DB_PATH = path.join(tmp, 'crm.db');
 
 const { crm, setting } = require('../lib/crm/db');
+const hubDb = require('../lib/db');
 const text = require('../lib/crm/text');
 const identity = require('../lib/crm/identity');
 const sources = require('../lib/crm/sources');
@@ -326,6 +327,63 @@ test('the bootstrap proposes people emailed twice or more and stores their mail 
   assert.strictEqual(crm().prepare("SELECT is_history FROM sources WHERE external_id = 'b1'").get().is_history, 1);
   assert.ok(setting('gmail_bootstrap_done'));
   assert.deepStrictEqual(await gmail.runGmailBootstrap({ gmail: g }), { skipped: 'already done' });
+});
+
+test('a second mailbox waits to be connected, and only its own account can connect it', () => {
+  const wds = gmail.accountFor('douglas@wicklowdementiasupport.ie');
+  assert.ok(wds && wds.extra, 'the Wicklow Dementia Support mailbox is configured');
+  assert.strictEqual(gmail.isConnected(wds), false);
+  const nudge = views.health('personal').find(h => /wicklowdementiasupport\.ie isn't connected/.test(h.text));
+  assert.ok(nudge, 'Personal Today says it needs connecting');
+  assert.strictEqual(nudge.href, '/crm/personal/mailboxes/connect?account=douglas%40wicklowdementiasupport.ie');
+  assert.ok(!views.health('work').some(h => /wicklowdementia/.test(h.text)), 'not shown in Work');
+  assert.throws(() => gmail.saveToken(wds, { profileEmail: 'douglas@mclellan.scot', tokens: { refresh_token: 'x' } }), /not douglas@wicklowdementiasupport\.ie/);
+  assert.throws(() => gmail.saveToken(wds, { profileEmail: 'douglas@wicklowdementiasupport.ie', tokens: {} }), /lasting token/);
+  assert.strictEqual(gmail.isConnected(wds), false, 'nothing saved on a refusal');
+  gmail.saveToken(wds, { profileEmail: 'Douglas@WicklowDementiaSupport.ie', tokens: { refresh_token: 'rt-wds', scope: 'gmail.readonly' } });
+  assert.strictEqual(gmail.isConnected(wds), true);
+  assert.strictEqual(JSON.parse(setting('google_token:douglas@wicklowdementiasupport.ie')).refresh_token, 'rt-wds');
+  assert.strictEqual(hubDb.hub().prepare("SELECT 1 FROM crm_context WHERE key LIKE '_google_refresh_token%'").get(), undefined, 'the main Google token is untouched');
+  assert.deepStrictEqual(gmail.bootstrapPending().map(a => a.email), ['douglas@wicklowdementiasupport.ie'], 'its 3-month look-back is due; the main one is done');
+});
+
+test('the second mailbox is captured apart from the main one', async () => {
+  const wds = gmail.accountFor('douglas@wicklowdementiasupport.ie');
+  const g = fakeGmail([
+    // Same Gmail id as a main-mailbox message: ids are only unique per mailbox.
+    { id: 'm1', sent: true, from: 'Douglas <douglas@wicklowdementiasupport.ie>', to: 'Orla Byrne <orla@carers.example.ie>', subject: 'Thursday cafe', body: 'I will bring the rota on Thursday.', at: hours(2) },
+    { id: 'w2', sent: true, from: 'douglas@wicklowdementiasupport.ie', to: 'douglas@mclellan.scot', subject: 'fwd to self', body: 'Note to self', at: hours(1) },
+    { id: 'w3', from: 'Ruairí Kelly <ruairi.kelly@gmail.com>', to: 'douglas@wicklowdementiasupport.ie', subject: 'Volunteering', body: 'Can I help on Saturday?', at: hours(1) },
+  ]);
+  const counts = await gmail.runGmailCapture({ gmail: g, account: wds });
+  assert.deepStrictEqual(counts, { seen: 3, admitted: 2, duplicate: 0, skipped: 1 }, 'mail between his own two addresses is skipped');
+  const sent = crm().prepare("SELECT * FROM sources WHERE origin = 'gmail:douglas@wicklowdementiasupport.ie' AND external_id = 'm1'").get();
+  assert.ok(sent, 'stored under its own origin');
+  assert.strictEqual(sent.space, 'personal');
+  assert.match(sent.title, /Thursday cafe/);
+  assert.notStrictEqual(sent.id, crm().prepare("SELECT id FROM sources WHERE origin = 'gmail' AND external_id = 'm1'").get().id, 'not mistaken for the main m1');
+  assert.ok(reviewItem('addr:email:orla@carers.example.ie'), 'a new recipient is proposed');
+  assert.strictEqual(reviewItem('addr:email:douglas@wicklowdementiasupport.ie'), undefined, 'his own address is never proposed as a person');
+  assert.strictEqual(crm().prepare("SELECT atomise_status FROM sources WHERE external_id = 'w3'").get().atomise_status, 'held', 'unknown sender held, same as the main mailbox');
+  assert.ok(setting('gmail_cursor:douglas@wicklowdementiasupport.ie'), 'its own cursor');
+  assert.ok(views.health('personal').every(h => !/wicklowdementiasupport/.test(h.text)), 'no warning once it works');
+  assert.strictEqual(gmail.mailLink(sent), 'https://mail.google.com/mail/u/?authuser=douglas%40wicklowdementiasupport.ie#all/m1');
+  assert.strictEqual(gmail.mailLink({ origin: 'gmail', external_id: 'm1' }), 'https://mail.google.com/mail/u/0/#all/m1');
+});
+
+test('a failing second mailbox shows on Today and does not stop the main one', async () => {
+  const wds = gmail.accountFor('douglas@wicklowdementiasupport.ie');
+  const broken = { users: { messages: { list: async () => { throw new Error('invalid_grant'); } } } };
+  await assert.rejects(gmail.runGmailCapture({ gmail: broken, account: wds }), /invalid_grant/);
+  const h = views.health('personal').find(x => /Gmail \(douglas@wicklowdementiasupport\.ie\) capture failed: invalid_grant/.test(x.text));
+  assert.ok(h, 'the failure is visible');
+  assert.match(h.href, /mailboxes\/connect/, 'with a link to reconnect');
+  const b = await gmail.runGmailBootstrap({ gmail: fakeGmail([
+    { id: 'wb1', sent: true, from: 'douglas@wicklowdementiasupport.ie', to: 'Orla Byrne <orla@carers.example.ie>', subject: 'Rota', body: 'Rota attached', at: hours(24 * 30) },
+  ]), account: wds });
+  assert.deepStrictEqual(b, { sent: 1, proposed: 0, stored: 1 });
+  assert.ok(setting('gmail_bootstrap_done:douglas@wicklowdementiasupport.ie'));
+  assert.deepStrictEqual(gmail.bootstrapPending(), []);
 });
 
 // ── screens ─────────────────────────────────────────────────────────────────

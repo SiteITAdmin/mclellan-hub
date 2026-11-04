@@ -2,7 +2,7 @@
 <% const quoted = s.text.length > (s.text_fresh || '').length ? s.text.slice((s.text_fresh || '').length).trim() : ''; %>
 <div class="crumbs"><a href="/crm/<%= space %>/captured">Captured</a> / <%= s.kind === 'note' ? 'Note' : 'Email' %></div>
 <div class="title-row"><div><h1><%= s.title %></h1>
-  <p class="subline"><%= fmt(s.occurred_at) %><%= s.origin === 'outlook' ? ', Outlook' : s.origin === 'gmail' ? ', Gmail' : '' %><%= s.direction === 'out' ? ', sent by you' : s.direction === 'in' ? ', received' : '' %>. <%- include('_state', { s }) %></p></div>
+  <p class="subline"><%= fmt(s.occurred_at) %><%= s.origin === 'outlook' ? ', Outlook' : s.origin === 'gmail' ? ', Gmail' : String(s.origin).startsWith('gmail:') ? `, ${s.origin.slice(6)}` : '' %><%= s.direction === 'out' ? ', sent by you' : s.direction === 'in' ? ', received' : '' %>. <%- include('_state', { s }) %></p></div>
   <% if (s.atomise_status === 'failed' || !s.readable) { %><form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/retry"><button class="btn" type="submit">Read again</button></form><% } %>
 </div>
 <section class="grid first">
