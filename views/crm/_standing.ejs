@@ -5,7 +5,7 @@
   <ul class="standing-lines">
     <% for (const l of standing.lines) { %>
     <li><%= l.text %>
-      <span class="cites"><% for (const s of l.sources) { %><a href="/crm/<%= space %>/sources/<%= s.id %>" title="<%= s.quote %>"><%= s.kind === 'note' ? 'Note' : 'Email' %>, <%= fmt(s.occurred_at, 'date') %></a><% } %><% if (l.changed) { %><span class="unsure">A fact behind this has changed</span><% } %></span>
+      <span class="cites"><% for (const s of l.sources) { %><a href="/crm/<%= space %>/sources/<%= s.id %>" title="<%= s.quote %>"><%= s.kind === 'note' ? 'Note' : s.kind === 'whatsapp' ? 'WhatsApp' : 'Email' %>, <%= fmt(s.occurred_at, 'date') %></a><% } %><% if (l.changed) { %><span class="unsure">A fact behind this has changed</span><% } %></span>
     </li>
     <% } %>
   </ul>

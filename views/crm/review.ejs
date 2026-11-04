@@ -36,14 +36,14 @@
         const lookEmails = detail.lookEmails[look.id] || [];
         const rows = [
           ['Name', p.name || '—', look.name, (p.name || '').toLowerCase() !== look.name.toLowerCase()],
-          ['Email', p.value, lookEmails.join(', ') || '—', !lookEmails.includes(p.value)],
+          [p.kind === 'phone' ? 'Phone' : 'Email', p.value, lookEmails.join(', ') || '—', !lookEmails.includes(p.value)],
           ['Organisation', '—', look.org || '—', false],
           ['Space', `${spaceName(it.space)} (suggested)`, spaceName(look.space), it.space !== look.space],
         ]; %>
       <table class="compare"><caption class="sr-only">Compared with <%= look.name %></caption>
         <tbody><% for (const [f, a, b, diff] of rows) { %><tr class="<%= diff ? 'differs' : '' %>"><td><%= f %></td><td class="v"><%= a %></td><td class="v"><%= b %></td></tr><% } %></tbody>
       </table>
-      <div class="verdict"><%= lookEmails.includes(p.value) ? 'Same email address.' : 'No shared email address. The Hub will not link these unless you say so.' %><% if (detail.lookalikes.length > 1) { %> Also similar: <%= detail.lookalikes.slice(1).map(x => x.name).join(', ') %>.<% } %></div>
+      <div class="verdict"><% const what = p.kind === 'phone' ? 'phone number' : 'email address'; %><%= lookEmails.includes(p.value) ? `Same ${what}.` : `No shared ${what}. The Hub will not link these unless you say so.` %><% if (detail.lookalikes.length > 1) { %> Also similar: <%= detail.lookalikes.slice(1).map(x => x.name).join(', ') %>.<% } %></div>
       <% } %>
     </div>
     <div class="panel">

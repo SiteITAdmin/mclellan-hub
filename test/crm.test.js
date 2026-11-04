@@ -957,6 +957,166 @@ test('wispr: the device sign-in connects one space, records the tools, and refre
   }
 });
 
+// ── WhatsApp (Hermes) ───────────────────────────────────────────────────────
+const whatsapp = require('../lib/crm/whatsapp');
+const SECONDS = s => Math.floor(Date.now() / 1000) - s;
+
+function waMsg(over = {}) {
+  return { chat_id: '353870000001@s.whatsapp.net', chat_name: 'Orla Byrne', is_group: false, peer_phone: '353870000001',
+    message_id: `id-${Math.random().toString(36).slice(2)}`, from_me: false, sender_phone: '353870000001', sender_name: 'Orla Byrne',
+    body: 'Hello', sent_at: SECONDS(60), ...over };
+}
+
+// The settle step reads received_at; move a chat's messages back in time.
+function age(chatId, seconds) {
+  crm().prepare('UPDATE whatsapp_messages SET received_at = received_at - ? WHERE chat_id = ? AND source_id IS NULL').run(seconds, chatId);
+}
+
+test('whatsapp: the tap needs the shared secret', () => {
+  const before = process.env.HERMES_WEBHOOK_SECRET;
+  process.env.HERMES_WEBHOOK_SECRET = 's3cret-value';
+  assert.strictEqual(whatsapp.secretOk('Bearer s3cret-value'), true);
+  assert.strictEqual(whatsapp.secretOk('Bearer s3cret-valuX'), false);
+  assert.strictEqual(whatsapp.secretOk(''), false);
+  delete process.env.HERMES_WEBHOOK_SECRET;
+  assert.strictEqual(whatsapp.secretOk('Bearer '), false, 'no secret on the Hub means nobody gets in');
+  if (before !== undefined) process.env.HERMES_WEBHOOK_SECRET = before;
+});
+
+test('whatsapp: a new chat waits for approval and nothing it says is stored', () => {
+  assert.ok(whatsapp.health().some(h => /Hermes hasn't checked in yet/.test(h.text)), 'silence before the first check-in is visible');
+  const r = whatsapp.receive(waMsg({ body: 'Can you send me the rota?' }));
+  assert.deepStrictEqual(r, { stored: false, reason: 'chat_waiting' });
+  const c = whatsapp.chat('353870000001@s.whatsapp.net');
+  assert.strictEqual(c.status, 'waiting');
+  assert.strictEqual(c.peer_phone, '+353870000001');
+  assert.strictEqual(crm().prepare('SELECT COUNT(*) AS n FROM whatsapp_messages').get().n, 0);
+  whatsapp.receive(waMsg({ from_me: true, chat_name: 'Douglas McLellan', sender_name: 'Douglas McLellan', body: 'Sure' }));
+  assert.strictEqual(whatsapp.chat('353870000001@s.whatsapp.net').name, 'Orla Byrne', "Douglas's own reply doesn't rename a DM");
+  assert.ok(whatsapp.health().some(h => /1 WhatsApp chat waiting/.test(h.text)));
+  assert.deepStrictEqual(whatsapp.heartbeat({ whatsapp: 'connected' }).approved, [], 'the tap is told no chat is approved');
+});
+
+test('whatsapp: an approved chat is stored, read after 5 quiet minutes, and its sender proposed by number', () => {
+  const id = '353870000001@s.whatsapp.net';
+  whatsapp.decide(id, { action: 'approve', space: 'personal' });
+  assert.deepStrictEqual(whatsapp.heartbeat({ whatsapp: 'connected' }).approved, [id]);
+  const m1 = waMsg({ message_id: 'wa-1', body: 'Are you still on for the Thursday cafe?', sent_at: SECONDS(120) });
+  assert.deepStrictEqual(whatsapp.receive(m1), { stored: true, reason: 'stored' });
+  assert.deepStrictEqual(whatsapp.receive(m1), { stored: false, reason: 'duplicate' });
+  whatsapp.receive(waMsg({ message_id: 'wa-2', from_me: true, sender_phone: '', sender_name: '', body: "Yes, I'll bring the rota on Thursday", sent_at: SECONDS(60) }));
+  assert.deepStrictEqual(whatsapp.settle(), { chats: 1, sources: 0 }, 'not read while the chat may still be going');
+  age(id, whatsapp.SETTLE_SECONDS + 1);
+  assert.deepStrictEqual(whatsapp.settle(), { chats: 1, sources: 1 });
+  const src = crm().prepare("SELECT * FROM sources WHERE origin = 'whatsapp' AND external_id = ?").get(`${id}:wa-1`);
+  assert.strictEqual(src.kind, 'whatsapp');
+  assert.strictEqual(src.space, 'personal');
+  assert.strictEqual(src.direction, null, 'both sides spoke');
+  assert.strictEqual(src.is_history, 0);
+  assert.match(src.text_fresh, /Orla Byrne \(\+353870000001\): Are you still on/);
+  assert.match(src.text_fresh, /Douglas: Yes, I'll bring the rota/);
+  const addr = crm().prepare('SELECT kind, value, role FROM source_addresses WHERE source_id = ?').all(src.id);
+  assert.deepStrictEqual(addr, [{ kind: 'phone', value: '+353870000001', role: 'from' }]);
+  const item = reviewItem('addr:phone:+353870000001');
+  assert.ok(item, 'the unknown number is proposed for review');
+  assert.match(JSON.parse(item.payload).reason, /Messaged on WhatsApp/);
+  assert.strictEqual(crm().prepare('SELECT COUNT(*) AS n FROM whatsapp_messages WHERE source_id IS NULL').get().n, 0);
+
+  whatsapp.receive(waMsg({ message_id: 'wa-3', body: 'Brilliant, see you then', sent_at: SECONDS(30) }));
+  age(id, whatsapp.SETTLE_SECONDS + 1);
+  whatsapp.settle();
+  const next = crm().prepare("SELECT * FROM sources WHERE external_id = ?").get(`${id}:wa-3`);
+  assert.doesNotMatch(next.text_fresh, /Thursday cafe/, 'only the new message is read as new');
+  assert.match(next.text, /--- Earlier in this chat ---[\s\S]*Thursday cafe/, 'the earlier chat comes along as context');
+  assert.strictEqual(next.direction, 'in');
+});
+
+test('whatsapp: group senders are matched by phone, never by name', () => {
+  const iain = identity.createPerson({ space: 'personal', name: 'Iain Clark' });
+  identity.linkIdentifier(iain.id, 'phone', '+447700900111');
+  const g = '120363000000000001@g.us';
+  whatsapp.receive({ chat_id: g, chat_name: 'Dad Information Group', is_group: true, message_id: 'g-0', body: 'x', sender_phone: '447700900111', sender_name: 'Iain' });
+  whatsapp.decide(g, { action: 'approve', space: 'personal' });
+  whatsapp.receive({ chat_id: g, chat_name: 'Dad Information Group', is_group: true, message_id: 'g-1', body: 'Dad has the GP at 10 on Monday', sender_phone: '447700900111', sender_name: 'Iain', sent_at: SECONDS(100) });
+  whatsapp.receive({ chat_id: g, chat_name: 'Dad Information Group', is_group: true, message_id: 'g-2', body: 'I can drive him', sender_phone: '447700900222', sender_name: 'Iain', sent_at: SECONDS(90) });
+  age(g, whatsapp.SETTLE_SECONDS + 1);
+  whatsapp.settle();
+  const src = crm().prepare('SELECT * FROM sources WHERE external_id = ?').get(`${g}:g-1`);
+  assert.strictEqual(src.title, 'Dad Information Group');
+  const people = sources.sourcePeople(src.id).map(p => p.name);
+  assert.deepStrictEqual(people, ['Iain Clark'], 'the known number is Iain Clark; a second "Iain" with another number is not');
+  assert.ok(reviewItem('addr:phone:+447700900222'), 'the other number goes to review');
+  assert.match(JSON.parse(reviewItem('addr:phone:+447700900222').payload).reason, /in Dad Information Group on WhatsApp/);
+  assert.strictEqual(crm().prepare("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE chat_id = ? AND message_id = 'g-0'").get(g).n, 0, 'nothing from before approval');
+});
+
+test('whatsapp: messages arriving over 7 days late are history only; own chat becomes notes', () => {
+  const id = '353870000001@s.whatsapp.net';
+  whatsapp.receive(waMsg({ message_id: 'late-1', body: "I'll send you the forms tomorrow", sent_at: SECONDS(9 * 86400) }));
+  whatsapp.receive(waMsg({ message_id: 'now-1', body: 'Got your voicemail', sent_at: SECONDS(20) }));
+  age(id, whatsapp.SETTLE_SECONDS + 1);
+  assert.deepStrictEqual(whatsapp.settle(), { chats: 1, sources: 2 });
+  assert.strictEqual(crm().prepare('SELECT is_history FROM sources WHERE external_id = ?').get(`${id}:late-1`).is_history, 1, 'an old promise can never become current work');
+  assert.strictEqual(crm().prepare('SELECT is_history FROM sources WHERE external_id = ?').get(`${id}:now-1`).is_history, 0);
+
+  const self = '353870009999@s.whatsapp.net';
+  whatsapp.receive({ chat_id: self, chat_name: 'Douglas', is_self: true, from_me: true, message_id: 's-0', body: 'test' });
+  whatsapp.decide(self, { action: 'approve', space: 'personal' });
+  whatsapp.receive({ chat_id: self, chat_name: 'Douglas', is_self: true, from_me: true, message_id: 's-1', body: 'Met Aoife, she is moving to Stripe', sent_at: SECONDS(30) });
+  age(self, whatsapp.SETTLE_SECONDS + 1);
+  whatsapp.settle();
+  const note = crm().prepare('SELECT * FROM sources WHERE external_id = ?').get(`${self}:s-1`);
+  assert.strictEqual(note.kind, 'note');
+  assert.strictEqual(note.title, 'Met Aoife, she is moving to Stripe');
+  assert.strictEqual(note.direction, 'out');
+  assert.strictEqual(crm().prepare('SELECT COUNT(*) AS n FROM source_addresses WHERE source_id = ?').get(note.id).n, 0);
+});
+
+test('whatsapp: the stop switch refuses everything and Hermes trouble shows on Today', () => {
+  whatsapp.setPaused(true);
+  assert.throws(() => whatsapp.receive(waMsg({ message_id: 'p-1' })), err => err.status === 503);
+  assert.deepStrictEqual(whatsapp.heartbeat({ whatsapp: 'connected' }), { paused: true, approved: [] });
+  assert.strictEqual(crm().prepare("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE message_id = 'p-1'").get().n, 0);
+  assert.ok(views.health('work').some(h => h.text === 'WhatsApp capture is paused'), 'shown on both Today screens');
+  whatsapp.setPaused(false);
+  whatsapp.heartbeat({ whatsapp: 'close' });
+  assert.ok(views.health('personal').some(h => /WhatsApp is close/.test(h.text)));
+  whatsapp.heartbeat({ whatsapp: 'connected', blocked_private: true });
+  assert.ok(views.health('personal').some(h => /private-contacts list couldn't be read/.test(h.text)));
+  crm().prepare('UPDATE settings SET value = ? WHERE key = ?').run(JSON.stringify({ at: SECONDS(31 * 60), whatsapp: 'connected' }), 'hermes_heartbeat');
+  assert.ok(views.health('personal').some(h => /Hermes hasn't checked in since 31 min ago/.test(h.text) && h.level === 'bad'));
+  whatsapp.heartbeat({ whatsapp: 'connected' });
+  assert.ok(!views.health('personal').some(h => /Hermes/.test(h.text)), 'nothing to say when it is working');
+});
+
+test('whatsapp: the capture endpoints check the secret and honour the switch', async () => {
+  const express = require('express');
+  const app = express();
+  app.use(express.json());
+  app.use(require('../routes/whatsapp-capture'));
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (p, body, secret) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(secret ? { Authorization: `Bearer ${secret}` } : {}) }, body: JSON.stringify(body) });
+  const before = process.env.HERMES_WEBHOOK_SECRET;
+  try {
+    delete process.env.HERMES_WEBHOOK_SECRET;
+    assert.strictEqual((await post('/api/crm/whatsapp/heartbeat', {}, 'x')).status, 503);
+    process.env.HERMES_WEBHOOK_SECRET = 'tap-secret';
+    assert.strictEqual((await post('/api/crm/whatsapp/heartbeat', {}, 'wrong')).status, 401);
+    const hb = await post('/api/crm/whatsapp/heartbeat', { whatsapp: 'connected', sent: 3 }, 'tap-secret');
+    assert.strictEqual(hb.status, 200);
+    assert.ok((await hb.json()).approved.includes('353870000001@s.whatsapp.net'));
+    const ok = await post('/api/crm/whatsapp/message', waMsg({ message_id: 'http-1', body: 'Via HTTP' }), 'tap-secret');
+    assert.deepStrictEqual(await ok.json(), { stored: true, reason: 'stored' });
+    whatsapp.setPaused(true);
+    assert.strictEqual((await post('/api/crm/whatsapp/message', waMsg({ message_id: 'http-2' }), 'tap-secret')).status, 503);
+    whatsapp.setPaused(false);
+  } finally {
+    server.close();
+    if (before === undefined) delete process.env.HERMES_WEBHOOK_SECRET; else process.env.HERMES_WEBHOOK_SECRET = before;
+  }
+});
+
 test('every CRM screen renders for the signed-in owner', async () => {
   const express = require('express');
   const app = express();
@@ -977,7 +1137,11 @@ test('every CRM screen renders for the signed-in owner', async () => {
       '/crm/work/organisations', `/crm/work/organisations/${beacon}`, '/crm/work/search?q=beacon',
       `/crm/work/organisations/${beacon}/units/${crm().prepare("SELECT id FROM org_units WHERE name = 'Finance'").get().id}`,
       '/crm/work/captured', '/crm/work/captured?filter=attention', `/crm/work/sources/${src}`, '/crm/work/projects',
-      `/crm/work/projects/${project}`, `/crm/work/promises`, '/crm/personal/promises', `/crm/work/topics/${topic}`, '/crm/work/search?q=purview', '/crm/personal/note', '/crm/work/meetings', '/crm/personal/meetings'];
+      `/crm/work/projects/${project}`, `/crm/work/promises`, '/crm/personal/promises', `/crm/work/topics/${topic}`, '/crm/work/search?q=purview', '/crm/personal/note', '/crm/work/meetings', '/crm/personal/meetings', '/crm/whatsapp'];
+    const waSource = crm().prepare("SELECT id, space FROM sources WHERE origin = 'whatsapp' AND kind = 'whatsapp' LIMIT 1").get();
+    pages.push(`/crm/${waSource.space}/sources/${waSource.id}`);
+    const phoneItem = crm().prepare("SELECT id FROM review_items WHERE item_key LIKE 'addr:phone:%' AND status = 'open' LIMIT 1").get();
+    pages.push(`/crm/review?item=${phoneItem.id}`);
     for (const kind of ['person', 'mention', 'project']) {
       const it = crm().prepare("SELECT id FROM review_items WHERE kind = ? AND status = 'open' LIMIT 1").get(kind);
       if (it) pages.push(`/crm/review?item=${it.id}`);

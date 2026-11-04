@@ -36,6 +36,7 @@ router.use('/crm', requireAuth, (req, res, next) => {
   res.locals.flash = req.session.crmFlash || null;
   delete req.session.crmFlash;
   res.locals.reviewAll = review.openCount();
+  res.locals.whatsappWaiting = require('../lib/crm/whatsapp').waitingCount();
   res.locals.ago = views.ago;
   res.locals.fmt = fmt;
   res.locals.hueStyle = hueStyle;
@@ -88,7 +89,7 @@ router.get('/crm/review', (req, res) => {
       detail.lookalikes = identity.lookalikes(selected.payload.name, selected.payload.value);
       detail.suggestedOrg = orgs.orgForEmail(selected.space, selected.payload.value);
       detail.lookEmails = Object.fromEntries(detail.lookalikes.map(l => [l.id,
-        crm().prepare("SELECT value FROM identifiers WHERE person_id = ? AND kind = 'email'").all(l.id).map(r => r.value)]));
+        crm().prepare('SELECT value FROM identifiers WHERE person_id = ? AND kind = ?').all(l.id, selected.payload.kind || 'email').map(r => r.value)]));
     }
     if (selected.kind === 'mention') {
       const db = crm();
@@ -128,6 +129,32 @@ router.post('/crm/review/:id', requireSameOrigin, writeLimiter, (req, res) => {
     return res.redirect(`/crm/review?item=${encodeURIComponent(req.params.id)}`);
   }
   res.redirect('/crm/review');
+});
+
+// ── WhatsApp (Hermes) ──────────────────────────────────────────────────────
+router.get('/crm/whatsapp', (req, res) => {
+  const whatsapp = require('../lib/crm/whatsapp');
+  const { setting } = require('../lib/crm/db');
+  res.render('crm/whatsapp', {
+    page: 'whatsapp', space: null, title: 'WhatsApp',
+    chats: whatsapp.list(), hb: whatsapp.lastHeartbeat(), paused: whatsapp.isPaused(),
+    lastMessage: Number(setting('whatsapp_last_message_at')) || null,
+  });
+});
+
+router.post('/crm/whatsapp/chats/:id', requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const c = require('../lib/crm/whatsapp').decide(req.params.id, { action: String(req.body.action || ''), space: req.body.space });
+    const name = c.is_self ? 'Your own chat' : (c.name || c.peer_phone || 'The chat');
+    flash(req, { approve: `${name} is approved for ${c.space === 'work' ? 'Work' : 'Personal'}. New messages are stored from now on.`, ignore: `${name} is ignored.`, waiting: `${name} is back in the waiting list.` }[req.body.action] || 'Done');
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect('/crm/whatsapp');
+});
+
+router.post('/crm/whatsapp/:action(pause|resume)', requireSameOrigin, writeLimiter, (req, res) => {
+  require('../lib/crm/whatsapp').setPaused(req.params.action === 'pause');
+  flash(req, req.params.action === 'pause' ? 'WhatsApp capture is paused. The Hub refuses everything from Hermes until you resume.' : 'WhatsApp capture resumed.');
+  res.redirect('/crm/whatsapp');
 });
 
 // ── Space screens ──────────────────────────────────────────────────────────

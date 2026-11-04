@@ -28,6 +28,7 @@
     ${nav(`/crm/${base}/search`, 'search', 'Search', 'search')}
     <div class="nav-group">Both spaces</div>
     ${nav('/crm/review', 'review', 'Who is this?', 'review', reviewAll ? `<span class="count">${reviewAll}<span class="sr-only"> waiting</span></span>` : '')}
+    ${nav('/crm/whatsapp', 'whatsapp', 'WhatsApp', 'whatsapp', whatsappWaiting ? `<span class="count">${whatsappWaiting}<span class="sr-only"> waiting</span></span>` : '')}
   </nav>`; %>
 <div class="shell" data-space="<%= space || 'shared' %>">
   <aside class="sidebar" aria-label="Main">

@@ -1,0 +1,64 @@
+<%- include('_top') %>
+<% const hbAge = hb ? ago(hb.at) : null; %>
+<div class="title-row"><div><h1>WhatsApp</h1><p class="subline">Captured through Hermes on the Mac. A chat is stored only after you approve it and choose its space. Until then the Hub keeps its name and when it was last active, nothing it says.</p></div></div>
+<section class="grid first">
+  <div class="panel s8">
+    <div class="panel-head"><h2>Waiting for you</h2><span class="chip"><%= chats.waiting.length %></span></div>
+    <% if (!chats.waiting.length) { %><div class="empty">No new chats. A chat appears here the first time a message arrives in it.</div><% } %>
+    <% for (const c of chats.waiting) { %>
+      <div class="rowcard">
+        <div class="main">
+          <div class="what"><%= c.is_self ? 'You (notes to yourself)' : (c.name || c.peer_phone || 'Unnamed chat') %></div>
+          <div class="meta"><%= c.is_self ? 'Your own chat: messages become notes' : c.is_group ? 'Group' : (c.peer_phone || 'Direct message') %> · last active <%= fmt(c.last_seen) %> · <%= c.seen_count %> message<%= c.seen_count === 1 ? '' : 's' %> seen, none stored</div>
+        </div>
+        <div class="decide">
+          <form class="inline-form" method="post" action="/crm/whatsapp/chats/<%= encodeURIComponent(c.chat_id) %>">
+            <input type="hidden" name="action" value="approve">
+            <label class="sr-only" for="sp-<%= c.chat_id %>">Space</label>
+            <select class="select" id="sp-<%= c.chat_id %>" name="space"><option value="personal">Personal</option><option value="work">Work</option></select>
+            <button class="btn small primary" type="submit">Approve</button>
+          </form>
+          <form class="inline-form" method="post" action="/crm/whatsapp/chats/<%= encodeURIComponent(c.chat_id) %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit">Ignore</button></form>
+        </div>
+      </div>
+    <% } %>
+  </div>
+  <div class="panel s4">
+    <div class="panel-head"><h2>Hermes</h2></div>
+    <% if (!hb) { %><p><span class="pill neg">Not yet</span> Hermes hasn't checked in.</p>
+    <% } else { %>
+      <p>Last check-in <%= hbAge %>. WhatsApp <%= hb.whatsapp %>.</p>
+      <p class="subline"><%= hb.sent %> sent to the Hub, <%= hb.failed %> failed since Hermes last started.<% if (hb.last_error) { %> Last problem: <%= hb.last_error %>.<% } %></p>
+    <% } %>
+    <% if (lastMessage) { %><p class="subline">Last message stored <%= ago(lastMessage) %>.</p><% } %>
+    <form method="post" action="/crm/whatsapp/<%= paused ? 'resume' : 'pause' %>">
+      <% if (paused) { %><p><span class="pill neg">Paused</span> The Hub is refusing everything from Hermes. Nothing is queued to replay later.</p><% } %>
+      <button class="btn small <%= paused ? 'primary' : '' %>" type="submit"><%= paused ? 'Resume capture' : 'Pause capture' %></button>
+    </form>
+  </div>
+</section>
+<section class="grid">
+  <div class="panel s8">
+    <div class="panel-head"><h2>Approved</h2><span class="chip"><%= chats.approved.length %></span></div>
+    <% if (!chats.approved.length) { %><div class="empty">None yet.</div><% } %>
+    <% for (const c of chats.approved) { %>
+      <div class="rowcard">
+        <div class="main">
+          <div class="what"><%= c.is_self ? 'You (notes to yourself)' : (c.name || c.peer_phone) %></div>
+          <div class="meta"><%= c.space === 'work' ? 'Work' : 'Personal' %> · <%= c.stored %> stored · last active <%= fmt(c.last_seen) %></div>
+        </div>
+        <form class="inline-form" method="post" action="/crm/whatsapp/chats/<%= encodeURIComponent(c.chat_id) %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit">Stop capturing</button></form>
+      </div>
+    <% } %>
+  </div>
+  <div class="panel s4">
+    <div class="panel-head"><h2>Ignored</h2><span class="chip"><%= chats.ignored.length %></span></div>
+    <% if (!chats.ignored.length) { %><div class="empty">None.</div><% } %>
+    <% for (const c of chats.ignored) { %>
+      <div class="rowcard"><div class="main"><div class="what"><%= c.is_self ? 'You (notes to yourself)' : (c.name || c.peer_phone) %></div></div>
+        <form class="inline-form" method="post" action="/crm/whatsapp/chats/<%= encodeURIComponent(c.chat_id) %>"><input type="hidden" name="action" value="waiting"><button class="btn text small" type="submit">Reconsider</button></form>
+      </div>
+    <% } %>
+  </div>
+</section>
+<%- include('_bottom') %>

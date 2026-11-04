@@ -12,7 +12,7 @@
     <div class="rows">
     <% for (const s of list) { %>
       <div class="rowcard">
-        <span class="kind-icon" aria-hidden="true"><%- s.kind === 'note' ? icon.note : icon.email %></span>
+        <span class="kind-icon" aria-hidden="true"><%- icon[s.kind] || icon.email %></span>
         <div class="main"><div class="what"><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a></div><div class="meta"><%- include('_state', { s }) %></div></div>
         <div class="end"><span class="when"><%= fmt(s.occurred_at) %></span>
           <% if (s.atomise_status === 'failed') { %><form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/retry"><button class="link-btn" type="submit">Try again</button></form><% } %></div>

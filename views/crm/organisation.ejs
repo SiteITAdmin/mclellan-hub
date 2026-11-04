@@ -62,7 +62,7 @@
       <div class="timeline">
       <% for (const s of o.timeline) { %>
         <div class="tl-item"><div class="tl-date"><%= fmt(s.occurred_at, 'date') %><small><%= fmt(s.occurred_at, 'time') %></small></div>
-          <span class="kind-icon" aria-hidden="true"><%- s.kind === 'note' ? icon.note : icon.email %></span>
+          <span class="kind-icon" aria-hidden="true"><%- icon[s.kind] || icon.email %></span>
           <div><div class="tl-title"><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a></div><div class="tl-text"><%= (s.text_fresh || '').slice(0, 200) %></div></div></div>
       <% } %>
       </div>
