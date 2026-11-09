@@ -2,11 +2,25 @@
 <div class="title-row"><div><h1>Search</h1><p class="subline">Facts, people and the text of everything captured in <%= space === 'work' ? 'Work' : 'Personal' %>.</p></div></div>
 <form class="form-row" method="get" action="/crm/<%= space %>/search" role="search" style="margin-top:20px">
   <label class="sr-only" for="sq">Search</label>
-  <input class="input" id="sq" name="q" value="<%= q %>" placeholder="e.g. Purview, data protection, a name" autofocus>
+  <input class="input" id="sq" name="q" value="<%= q %>" placeholder="e.g. Purview, or a question: Who do I know at Stripe?" autofocus>
   <button class="btn primary" type="submit"><%- icon.search %> Search</button>
 </form>
+<% if (question) { %>
+<% if (question.status === 'waiting') { %><meta http-equiv="refresh" content="6;url=/crm/<%= space %>/search?ask=<%= question.id %>"><% } %>
+<section class="grid first"><div class="panel s12 summary" aria-live="polite">
+  <div class="panel-head"><h2><%= question.question %></h2></div>
+  <% if (question.status === 'waiting') { %><p><%= question.slow ? "The Mac hasn't picked this up yet. Check com.mclellan.hub.subscription-agent-worker." : 'The Mac is working out an answer. This page refreshes by itself.' %></p>
+  <% } else if (question.status === 'failed') { %><p>No answer: <%= question.error %></p>
+  <% } else if (!question.lines.length) { %><p>Nothing the Hub has captured answers that.</p>
+  <% } else { %>
+    <% for (const l of question.lines) { %><p><%= l.text %>
+      <span class="stamp" style="display:block;margin-top:2px"><% for (const x of l.people) { %><a href="/crm/<%= space %>/people/<%= x.id %>"><%= x.name %></a> <% } %><% for (const s of l.sources) { %><a href="/crm/<%= space %>/sources/<%= s.id %>" title="<%= s.title %>"><%= s.kind === 'note' ? 'Note' : s.kind === 'report' ? 'Report' : 'Email' %>, <%= fmt(s.occurred_at, 'date') %></a> <% } %></span></p><% } %>
+    <p class="stamp">Answered <%= ago(question.answered_at) %> from the facts and people below. Every line links to where it came from.</p>
+  <% } %>
+</div></section>
+<% } %>
 <% if (q) { %>
-<section class="grid first">
+<section class="grid<%= question ? '' : ' first' %>">
   <div class="panel s8">
     <div class="panel-head"><h2>Facts</h2><span class="chip"><%= results.atoms.length %></span></div>
     <% if (!results.atoms.length) { %><div class="empty">No facts match.</div><% } %>

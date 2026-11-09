@@ -56,3 +56,6 @@ scripts/repair/node_modules/
 
 # Taste Skill working files (design direction sheets, inspector screenshots)
 .taste-skill/
+
+# macOS metadata on the external workspace drive
+._*

@@ -6,5 +6,15 @@
     <textarea class="textarea" id="text" name="text" required autofocus placeholder="e.g. Met Aoife Brennan at the conference. She's moving to Stripe in January."></textarea>
     <div class="decide"><button class="btn primary" type="submit">Save note</button><a class="btn text" href="/crm/<%= space %>">Cancel</a></div>
   </form>
+</div>
+<div class="panel s4">
+  <div class="panel-head"><h2>Add a report or document</h2></div>
+  <form method="post" action="/crm/<%= space %>/upload" enctype="multipart/form-data" class="list">
+    <label class="sr-only" for="files">Files</label>
+    <input id="files" type="file" name="files" multiple required accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.html,.htm,.vtt,.srt">
+    <p class="subline" style="margin-top:0">PDF, Word, Excel or text, up to 20 MB each. Only the text is kept. A meeting transcript can go in here too.</p>
+    <div><button class="btn" type="submit">Upload to <%= space === 'work' ? 'Work' : 'Personal' %></button></div>
+  </form>
+  <p class="subline">Or forward an email to <strong>mclellanhub@agentmail.to</strong>. It is checked every 15 minutes.</p>
 </div></section>
 <%- include('_bottom') %>

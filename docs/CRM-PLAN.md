@@ -573,3 +573,13 @@ On 9 Nov Douglas asked for every remaining part of this plan to be built. This i
 - **Morning email** (`lib/crm/digest.js`, job `crm_morning_digest`, 07:30 Dublin): one per space, Work on weekdays only, both sent to douglas@mclellan.scot through the Gmail API on the Hub's Google connection (the VPS cannot reach Gmail's SMTP port 465, checked 9 Nov). Sent once a day; a run that starts after 10:00 sends nothing; a failed send is not repeated that day and shows on Today. Receipts in `effects` (module `crm_morning_digest`).
 - Tests: `test/crm-remember.test.js`.
 
+
+## Knowledge intake and questions (9 November 2026)
+
+Phase 3 additions: `/crm/:space/note` accepts PDF, DOCX, spreadsheet and text uploads (five files, 20 MB each). Text is preserved in paragraph-sized source parts and read through the existing Mac queue. Unreadable files have a visible reason. Identical file uploads deduplicate within their space.
+
+`crm_agentmail_capture` reads the existing `mclellanhub@agentmail.to` inbox every 15 minutes, within seven days only. Douglas's participating account selects the space; unknown senders wait in identity review. Attachments download through AgentMail's signed URLs and retry after failures or sender approval. No changes or sends to AgentMail. The live inbox was checked: reachable, with no mail inside the current capture window.
+
+Search recognises questions, retrieves same-space people and active facts, and asks the existing Mac subscription worker for a short cited answer. The `questions` table is a disposable answer cache; uncited lines are discarded. Answers refresh on screen while waiting, with visible errors.
+
+Validation: synthetic PDF and long-text ingestion, cross-space deduplication, signed attachment downloads without API credentials, attachment retries, sender approval, cited answers, and authenticated HTTP upload/search routes. Boox capture remains the next Phase 3 item.

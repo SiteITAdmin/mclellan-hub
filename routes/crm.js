@@ -474,7 +474,15 @@ router.get('/crm/:space/topics/:id', spaceParam, (req, res) => {
 
 router.get('/crm/:space/search', spaceParam, (req, res) => {
   const q = String(req.query.q || '');
-  res.render('crm/search', { page: 'search', q, results: views.search(req.params.space, q), title: 'Search' });
+  const ask = require('../lib/crm/ask');
+  let question = null;
+  try {
+    if (req.query.ask) question = ask.get(String(req.query.ask));
+    else if (ask.looksLikeQuestion(q)) question = ask.ask(req.params.space, q);
+    if (question && question.space !== req.params.space) question = null;
+    question = ask.shown(ask.collect(question));
+  } catch (err) { res.locals.flash = { text: err.message, level: 'bad' }; }
+  res.render('crm/search', { page: 'search', q: q || question?.question || '', results: views.search(req.params.space, q || question?.question || ''), question, asked: ask.recent(req.params.space), title: 'Search' });
 });
 
 router.get('/crm/personal/mailboxes/connect', (req, res) => {
@@ -502,6 +510,30 @@ router.post('/crm/:space/meetings/:action', spaceParam, requireSameOrigin, write
     flash(req, err.message, 'bad');
   }
   res.redirect(`/crm/${space}/meetings`);
+});
+
+const upload = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 5 } });
+router.post('/crm/:space/upload', spaceParam, requireSameOrigin, writeLimiter, (req, res, next) => upload.array('files', 5)(req, res, err => {
+  if (!err) return next();
+  flash(req, err.code === 'LIMIT_FILE_SIZE' ? 'Each file must be under 20 MB.' : 'Upload failed: choose at most five files.', 'bad');
+  res.redirect(`/crm/${req.params.space}/note`);
+}), async (req, res) => {
+  const { space } = req.params;
+  try {
+    if (!req.files?.length) throw new Error('Choose a file to upload');
+    const notes = [];
+    let first = null;
+    for (const f of req.files) {
+      const name = Buffer.from(f.originalname, 'latin1').toString('utf8');
+      const r = await require('../lib/crm/documents').admitFile({ space, buffer: f.buffer, name });
+      first = first || r.sources[0];
+      if (!r.readable) notes.push(`${name}: ${r.reason}`);
+      else if (!r.created) notes.push(`${name} was already here`);
+      else notes.push(`${name} saved${r.sources.length > 1 ? ` in ${r.sources.length} parts` : ''}${r.unread ? `; the last ${r.unread.toLocaleString()} characters were too many to read` : ''}`);
+    }
+    flash(req, `${notes.join('. ')}. Readable files go to the Mac for reading.`, notes.some(n => /can't|Couldn't|No text|Almost/.test(n)) ? 'bad' : 'ok');
+    res.redirect(req.files.length === 1 && first ? `/crm/${space}/sources/${first.id}` : `/crm/${space}/captured`);
+  } catch (err) { flash(req, err.message, 'bad'); res.redirect(`/crm/${space}/note`); }
 });
 
 router.get('/crm/:space/note', spaceParam, (req, res) => {

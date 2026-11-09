@@ -72,6 +72,7 @@ echo "    GitHub up to date: ${REVISION:0:7}"
 echo "==> Syncing code to VPS..."
 rsync -avz --no-perms --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r --progress -e "$RSYNC_RSH" \
   --exclude .git \
+  --exclude '._*' \
   --exclude .claude \
   --exclude .tools \
   --exclude .repair-worktrees \
