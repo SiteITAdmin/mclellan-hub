@@ -32,6 +32,32 @@
   <div class="tile s3"><span class="label">People</span><span class="value"><%= d.peopleCount %></span><span class="caption">In <%= label %></span></div>
 </section>
 
+<% if (d.drift.length || d.cadenceSuggestions.length || d.dates.length) { const weeks = n => `${Math.max(1, Math.round(n / 7))} ${Math.round(n / 7) <= 1 ? 'week' : 'weeks'}`; %>
+<section class="grid">
+  <div class="panel s8">
+    <div class="panel-head"><h2>Drifting</h2><span class="chip"><%= d.drift.length %> past their keep-in-touch</span></div>
+    <% if (!d.drift.length) { %><div class="empty">Nobody has drifted past their keep-in-touch.</div><% } %>
+    <div class="rows">
+    <% for (const x of d.drift.slice(0, 6)) { %>
+      <a class="rowcard" href="/crm/<%= space %>/people/<%= x.person.id %>"><span class="avatar" style="<%= hueStyle(x.person) %>" aria-hidden="true"><%= x.person.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() %></span>
+        <div class="main"><div class="what"><%= x.person.name %></div><div class="meta">Last in touch <%= fmt(x.last, 'date') %>, every <%= weeks(x.every) %></div></div>
+        <div class="end"><span class="when late"><%= weeks(x.overDays) %> over</span></div></a>
+    <% } %>
+    </div>
+    <% for (const s of d.cadenceSuggestions) { %>
+      <form class="suggest" method="post" action="/crm/<%= space %>/people/<%= s.person.id %>/cadence"><input type="hidden" name="back" value="/crm/<%= space %>">
+        <span>You and <a href="/crm/<%= space %>/people/<%= s.person.id %>"><%= s.person.name %></a> are usually in touch every <%= weeks(s.usual) %>. Nudge you after <%= weeks(s.days) %> of silence?</span>
+        <span class="acts"><button class="btn small primary" name="days" value="<%= s.days %>">Yes</button><button class="btn small" name="days" value="0">No</button></span></form>
+    <% } %>
+  </div>
+  <div class="panel s4">
+    <div class="panel-head"><h2>Dates in the next 7 days</h2></div>
+    <% if (!d.dates.length) { %><div class="empty">No birthdays, deadlines or renewals this week.</div><% } %>
+    <% for (const x of d.dates) { %><p class="date-row"><strong><%= x.inDays === 0 ? 'Today' : x.inDays === 1 ? 'Tomorrow' : fmt(Math.floor(Date.parse(`${x.on}T12:00:00Z`) / 1000), 'date') %></strong> <% if (x.source_id) { %><a href="/crm/<%= space %>/sources/<%= x.source_id %>"><%= x.statement %></a><% } else { %><%= x.statement %><% } %></p><% } %>
+  </div>
+</section>
+<% } %>
+
 <section class="grid"><div class="panel s12">
   <div class="panel-head"><h2>Your day</h2><span class="chip"><%= d.day.items.filter(i => i.type === 'task').length %> planned</span><a class="end" href="/crm/<%= space %>/calendar">Calendar</a></div>
   <%- include('_day', { day: d.day, none: 'Nothing in the diary or planned for today.' }) %>

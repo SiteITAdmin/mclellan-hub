@@ -234,6 +234,9 @@ router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, wri
       identity.log('edit_person', id, { name });
       atoms.reresolveMentions(space);
       flash(req, 'Saved');
+    } else if (action === 'cadence') {
+      require('../lib/crm/keepintouch').setCadence(id, req.body.days);
+      flash(req, Number(req.body.days) ? 'Keep-in-touch saved' : 'No keep-in-touch for this person');
     } else if (action === 'email') {
       const email = String(req.body.email || '').trim();
       identity.linkIdentifier(id, 'email', email);
@@ -241,7 +244,7 @@ router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, wri
       flash(req, 'Email added');
     } else return res.status(404).send('Not found');
   } catch (err) { flash(req, err.message, 'bad'); }
-  res.redirect(to);
+  res.redirect(String(req.body.back || '') === `/crm/${space}` ? `/crm/${space}` : to);
 });
 
 // ── Organisations ──────────────────────────────────────────────────────────

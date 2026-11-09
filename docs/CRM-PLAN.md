@@ -563,3 +563,13 @@ Asked for on 9 Nov: a calendar in the CRM that plans tasks into free time and mo
 - **Shown:** `/crm/:space/calendar` (7 days on a time grid, a list on a phone), "Your day" on Today, "Planned for" on each task. The Calendar screen shows both spaces' appointments and task blocks in full, each in its space's colour (Douglas's choice, 9 Nov; the one exception to "no screen mixes them" besides Who is this?). On Today the other space's appointments still appear only as "Busy". Today warns when the run fails or falls 30 minutes behind, when a task won't fit before its due date, and when one finds no time at all.
 - **Not built:** the Work diary (Outlook), the Boox view, priorities, recurring tasks, travel time, and reading calendar events into facts and meeting prep (Phase 4).
 - Tests: `test/crm-calendar.test.js`.
+
+## Remembering for me as built (9 Nov 2026)
+
+On 9 Nov Douglas asked for every remaining part of this plan to be built. This is Phase 2.
+
+- **Keep-in-touch** (`lib/crm/keepintouch.js`): `people.cadence_days` is Douglas's own choice (empty: not decided; 0: none wanted). The Hub suggests one only for someone seen on at least 4 days in the last year whose usual gap is 10 days or more, at about 1.25 times that gap. Suggestions show on Today (Yes / No) and on the person page. "Drifting" on Today is worked out from sources each time.
+- **Key dates** (`lib/crm/dates.js`): a view over date atoms in the next 7 days. The reader now marks a date that comes round every year (`atoms.yearly`), so a birthday shows each year.
+- **Morning email** (`lib/crm/digest.js`, job `crm_morning_digest`, 07:30 Dublin): one per space, Work on weekdays only, both sent to douglas@mclellan.scot through the Hub's existing Gmail sender. Sent once a day; a run that starts after 10:00 sends nothing; a failed send is not repeated that day and shows on Today. Receipts in `effects` (module `crm_morning_digest`).
+- Tests: `test/crm-remember.test.js`.
+

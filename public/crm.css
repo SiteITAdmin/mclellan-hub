@@ -475,3 +475,10 @@ details.panel > summary { cursor: pointer; font-weight: 600; }
   .day-row { grid-template-columns: 1fr; gap: 2px; }
   .day-row .tags { justify-content: flex-start; }
 }
+
+/* keep-in-touch and key dates on Today */
+.suggest { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--row-edge); border-radius: var(--radius-row); }
+.suggest a { font-weight: 500; }
+.suggest .acts { display: flex; gap: 6px; }
+.date-row { margin: 0 0 10px; }
+.date-row strong { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }

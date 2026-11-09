@@ -42,6 +42,19 @@
     </div>
     <% } %>
     <div class="panel">
+      <div class="panel-head"><h2>Keep in touch</h2></div>
+      <% const sug = p.cadence.suggestion; %>
+      <% if (sug) { %><p>You are usually in touch about every <%= p.cadence.weeks(sug.usual) %>. The Hub suggests a nudge after <%= p.cadence.weeks(sug.days) %> of silence.</p><% }
+         else if (p.cadence_days > 0) { %><p>You'll be told when it has been more than <%= p.cadence.weeks(p.cadence_days) %> since you were last in touch.</p><% }
+         else if (p.cadence_days === 0) { %><p class="subline" style="margin-top:0">No keep-in-touch for <%= first %>.</p><% }
+         else { %><p class="subline" style="margin-top:0">Not set. The Hub suggests one once it has seen how often you are in touch.</p><% } %>
+      <form class="form-row" method="post" action="/crm/<%= space %>/people/<%= p.id %>/cadence">
+        <label class="sr-only" for="cadence">Nudge me after</label>
+        <select class="select" id="cadence" name="days"><option value="0" <%= p.cadence_days === 0 ? 'selected' : '' %>>No keep-in-touch</option><% for (const d of [14, 28, 42, 56, 84, 126, 182, 364]) { %><option value="<%= d %>" <%= (p.cadence_days || (sug && sug.days)) === d ? 'selected' : '' %>>Every <%= p.cadence.weeks(d) %></option><% } %></select>
+        <button class="btn small" type="submit"><%= sug ? 'Confirm' : 'Save' %></button>
+      </form>
+    </div>
+    <div class="panel">
       <div class="panel-head"><h2>Who <%= first %> is</h2></div>
       <dl class="kv" style="margin:0">
         <% for (const i of p.identifiers) { %>
