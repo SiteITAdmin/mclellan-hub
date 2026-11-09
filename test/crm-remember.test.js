@@ -96,6 +96,9 @@ test('the morning email goes once, only in the morning, and never for Work at th
   assert.deepEqual(await digest.send('work', { t: planner.epoch('2026-11-14', 450), mail: mailer }), { skipped: 'weekend' });
   assert.equal(sent.length, 1);
   assert.deepEqual(db.crm().prepare("SELECT operation, status FROM effects WHERE module = 'crm_morning_digest'").all(), [{ operation: 'email.send', status: 'done' }]);
+  const raw = digest.mime({ from: '"Hub" <me@example.com>', to: 'me@example.com', subject: 'Personal: café', text: 'Plain é', html: '<p>Rich</p>' });
+  assert.match(raw, /^From: "Hub" <me@example\.com>\r\nTo: me@example\.com\r\nSubject: =\?UTF-8\?B\?UGVyc29uYWw6IGNhZsOp\?=\r\nMIME-Version: 1\.0\r\nContent-Type: multipart\/alternative/);
+  assert.equal(Buffer.from(raw.split('\r\n\r\n')[2].split('\r\n--')[0], 'base64').toString(), 'Plain é');
   // A failed send is recorded and not repeated the same day.
   const broken = { user: 'me@example.com', mailer: { sendMail: async () => { throw new Error('Invalid login'); } } };
   await assert.rejects(digest.send('work', { t: NOW, mail: broken }), /Work morning email: Invalid login/);
