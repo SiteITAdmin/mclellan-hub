@@ -1,0 +1,11 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>iMessage</h1><p class="subline">Messages with known people, read on the Mac. Groups are captured only when every member is known and belongs to the same space.</p></div></div>
+<section class="grid first"><div class="panel s12">
+<p><%= imessage.paused ? 'Capture is paused. Messages received while paused will not be replayed.' : 'Capture is enabled. New messages settle for five minutes before the Hub reads them.' %></p>
+<% if(imessage.heartbeat) { %><p>Reader checked in <%= ago(imessage.heartbeat.at) %>. <%= imessage.heartbeat.sent %> captured, <%= imessage.heartbeat.skipped %> left out.</p><% if(imessage.heartbeat.error) { %><p class="flash bad"><%= imessage.heartbeat.error %></p><% } %>
+<% } else { %><p class="flash bad">The Mac reader has not connected yet.</p><% } %>
+<p class="subline">Private contacts stay on the Mac and are excluded before capture. Attachments without text appear as unreadable sources. Messages older than seven days are left out.</p>
+<form method="post" action="/crm/messages/pause"><input type="hidden" name="paused" value="<%= imessage.paused ? '0' : '1' %>"><button class="btn" type="submit"><%= imessage.paused ? 'Resume capture' : 'Pause capture' %></button></form>
+<p><a href="/crm/whatsapp">WhatsApp capture and self-chat</a></p>
+</div></section>
+<%- include('_bottom') %>

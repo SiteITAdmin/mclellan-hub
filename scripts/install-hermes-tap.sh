@@ -27,10 +27,16 @@ const fs = require('fs');
 const file = process.argv[2];
 let s = fs.readFileSync(file, 'utf8');
 const MARK = '// mclellan-hub-tap';
-if (s.includes(MARK)) { console.log('bridge.js already has the tap'); process.exit(0); }
+if (s.includes(MARK)) {
+  // Upgrade an earlier tap so reminders can be sent through the same socket.
+  const old = 'hubTap.start(() => connectionState);';
+  if (s.includes(old)) { s = s.replace(old, 'hubTap.start(() => connectionState, () => sock);'); fs.writeFileSync(file, s); console.log('bridge.js tap upgraded'); }
+  else console.log('bridge.js already has the tap');
+  process.exit(0);
+}
 const anchors = [
   ["let connectionState = 'disconnected';",
-   `let connectionState = 'disconnected';\nconst hubTap = createHubTap(); ${MARK}\nhubTap.start(() => connectionState); ${MARK}`],
+   `let connectionState = 'disconnected';\nconst hubTap = createHubTap(); ${MARK}\nhubTap.start(() => connectionState, () => sock); ${MARK}`],
   ["const senderNumber = resolvedSenderId.replace(/@.*/, '');",
    `const senderNumber = resolvedSenderId.replace(/@.*/, '');\n      hubTap.onMessage(msg, { sock, senderId: resolvedSenderId, isGroup, lidToPhone }); ${MARK}`],
 ];

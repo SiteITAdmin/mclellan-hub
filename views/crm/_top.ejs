@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/crm.css">
+  <link rel="manifest" href="/crm.webmanifest">
+  <meta name="theme-color" content="#f5f2ec">
 </head>
 <body>
 <% const base = space || 'work'; %>
@@ -29,6 +31,10 @@
     ${nav(`/crm/${base}/search`, 'search', 'Search', 'search')}
     <div class="nav-group">Both spaces</div>
     ${nav('/crm/review', 'review', 'Who is this?', 'review', reviewAll ? `<span class="count">${reviewAll}<span class="sr-only"> waiting</span></span>` : '')}
+    ${nav('/crm/messages', 'note', 'iMessage', 'messages')}
+    ${nav('/crm/notifications', 'today', 'Notifications', 'notifications')}
+    ${nav('/crm/imports', 'people', 'Contacts & LinkedIn', 'imports')}
+    ${nav('/crm/notebooks', 'captured', 'Boox notebooks', 'notebooks')}
     ${nav('/crm/whatsapp', 'whatsapp', 'WhatsApp', 'whatsapp', whatsappWaiting ? `<span class="count">${whatsappWaiting}<span class="sr-only"> waiting</span></span>` : '')}
   </nav>`; %>
 <div class="shell" data-space="<%= space || 'shared' %>">

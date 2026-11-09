@@ -1,0 +1,11 @@
+<% if (meetings.length) { %><section class="grid"><div class="panel s12">
+<div class="panel-head"><h2>Meeting prep</h2></div>
+<% for (const m of meetings) { %><article style="margin:16px 0">
+<h3><%= fmt(m.start_at, 'time') %> · <%= m.title %></h3>
+<p class="stamp"><% for(const p of m.people) { %><a href="/crm/<%= space %>/people/<%= p.id %>"><%= p.name %></a> <% } %></p>
+<% if(m.status==='failed') { %><p class="flash bad"><%= m.error %></p>
+<% } else if(!m.people.length) { %><p class="subline">No known attendees to prepare for.</p>
+<% } else if(m.status!=='done') { %><p class="subline">Preparing from the Hub’s knowledge.</p>
+<% } else if(!m.lines.length) { %><p class="subline">No relevant facts found for this meeting.</p><% } %>
+<% for(const l of m.lines) { %><p><%= l.text %><span class="stamp" style="display:block"><% for(const s of l.sources) { %><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a> <% } %></span></p><% } %>
+</article><% } %></div></section><% } %>

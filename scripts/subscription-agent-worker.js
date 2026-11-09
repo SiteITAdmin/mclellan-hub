@@ -72,6 +72,7 @@ async function processJob(job) {
     feature: job.feature,
     systemPrompt: p.systemPrompt || p.prompt || '',
     userPrompt: p.userPrompt || p.input || '',
+    documents: job.feature === 'crm_boox_read' ? p.documents : null,
     timeoutMs: config.timeoutMs || 300000,
     force: true,
     config,

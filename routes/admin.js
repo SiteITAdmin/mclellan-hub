@@ -5,6 +5,7 @@ const { uuid } = require('../lib/id');
 const { routeMessage } = require('../lib/model');
 const { finishGoogleAuth, startGoogleAuth } = require('../lib/google-auth');
 const gmailConnect = require('../lib/crm/gmail-connect');
+const contactsConnect = require('../lib/crm/contacts-connect');
 const { createRateLimiter, requireSameOrigin } = require('../lib/security');
 const { capturePortfolioAbout } = require('../lib/knowledge-format');
 
@@ -124,7 +125,7 @@ router.get('/admin/auth/google', (req, res, next) =>
 );
 
 router.get('/admin/auth/google/callback', (req, res, next) =>
-  gmailConnect.isMine(req) ? gmailConnect.finish(req, res) : finishGoogleAuth({ purpose: 'portfolio-admin', user: req.portfolioUser, callbackPath: '/admin/auth/google/callback', sessionKey: 'adminUser', returnTo: '/admin' })(req, res, next)
+  contactsConnect.isMine(req) ? contactsConnect.finish(req, res) : gmailConnect.isMine(req) ? gmailConnect.finish(req, res) : finishGoogleAuth({ purpose: 'portfolio-admin', user: req.portfolioUser, callbackPath: '/admin/auth/google/callback', sessionKey: 'adminUser', returnTo: '/admin' })(req, res, next)
 );
 
 router.post('/admin/logout', requireSameOrigin, (req, res) => {

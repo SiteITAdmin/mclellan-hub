@@ -8,6 +8,10 @@
 </div>
 
 <%- include('_standing', { standing: p.standing }) %>
+<% if (p.connections.length) { %><section class="grid"><div class="panel s12"><h2>Connections</h2>
+<% for (const c of p.connections) { %><p><a href="/crm/<%= space %>/people/<%= c.other.id %>"><%= c.other.name %></a> · <%= c.statement %>
+<span class="stamp" style="display:block"><% for (const s of c.sources) { %><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a> <% } %></span></p><% } %>
+</div></section><% } %>
 <section class="grid first"><div class="panel s12">
   <div class="panel-head"><h2>Tasks</h2><a class="end" href="/crm/<%= space %>/tasks/new?personId=<%= p.id %>">Add a task</a></div>
   <%- include('_tasks', { taskList: p.tasks, taskBack: '' }) %>

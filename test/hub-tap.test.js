@@ -14,13 +14,15 @@ fs.writeFileSync(configFile, JSON.stringify({ url: 'https://hub.example/', secre
 
 const ME = { id: '353861111111:7@s.whatsapp.net', lid: '99887766:7@lid' };
 
-function fakeHub({ approved = [], paused = false, fail = false } = {}) {
+function fakeHub({ approved = [], selfChats = [], paused = false, fail = false, outbox = [] } = {}) {
   const calls = [];
   const fetchImpl = async (url, opts) => {
     const body = JSON.parse(opts.body);
     calls.push({ route: url.replace('https://hub.example', ''), body, auth: opts.headers.Authorization });
     if (fail) return { ok: false, status: 503, json: async () => ({ error: 'WhatsApp capture is paused' }) };
-    if (url.endsWith('/heartbeat')) return { ok: true, status: 200, json: async () => ({ approved, paused }) };
+    if (url.endsWith('/heartbeat')) return { ok: true, status: 200, json: async () => ({ approved, self_chat_ids: selfChats, paused }) };
+    if (url.endsWith('/outbox/claim')) return { ok: true, status: 200, json: async () => ({ messages: outbox.splice(0) }) };
+    if (url.endsWith('/outbox/complete')) return { ok: true, status: 200, json: async () => ({ ok: true }) };
     return { ok: true, status: 200, json: async () => ({ stored: true }) };
   };
   return { calls, fetchImpl };
@@ -124,12 +126,30 @@ test('tap: works out self-chat, LID senders and group names', async () => {
   assert.equal(await tap.onMessage(dm('353870000005', '', { message: { audioMessage: {} } }), quiet), 'no_text', 'a voice note in an approved chat has no words to store');
 });
 
+test('tap: reminders are claimed once and sent only to the approved self chat', async () => {
+  const hub = fakeHub({ approved: ['353861111111@s.whatsapp.net'], selfChats: ['353861111111@s.whatsapp.net'],
+    outbox: [{ id: 'o1', chat_id: '353861111111@s.whatsapp.net', body: '[Hub] Meeting in 30 minutes: Purview' }] });
+  const tap = await tapWith(hub);
+  const sent = [];
+  const sock = { ...quiet.sock, sendMessage: async (chatId, payload) => { sent.push({ chatId, payload }); } };
+  await tap.heartbeat(() => 'connected');
+  assert.equal(await tap.deliverOutbox(() => sock), 1);
+  assert.deepEqual(sent, [{ chatId: '353861111111@s.whatsapp.net', payload: { text: '[Hub] Meeting in 30 minutes: Purview' } }]);
+  assert.ok(hub.calls.some(c => c.route === '/api/crm/whatsapp/outbox/claim'));
+  const done = hub.calls.find(c => c.route === '/api/crm/whatsapp/outbox/complete');
+  assert.deepEqual(done.body, { id: 'o1', ok: true });
+  assert.equal(await tap.deliverOutbox(() => sock), 0, 'a claimed reminder is not sent twice');
+  tap.state.paused = true;
+  assert.equal(await tap.deliverOutbox(() => sock), 0, 'a paused Hub sends nothing');
+});
+
 test('tap installer patches the bridge once, stops if it has changed, and sets capture-only mode', () => {
   const dir = path.join(tmp, 'bridge');
   fs.mkdirSync(dir);
   const bridge = [
     '#!/usr/bin/env node',
     "import express from 'express';",
+    'let sock = null;',
     "let connectionState = 'disconnected';",
     'sock.ev.on("messages.upsert", async ({ messages }) => { for (const msg of messages) {',
     "      const senderNumber = resolvedSenderId.replace(/@.*/, '');",
@@ -143,7 +163,7 @@ test('tap installer patches the bridge once, stops if it has changed, and sets c
   execFileSync(script, { env, stdio: 'pipe' });
   const patched = fs.readFileSync(path.join(dir, 'bridge.js'), 'utf8');
   assert.match(patched, /^#!\/usr\/bin\/env node\nimport \{ createHubTap \} from '\.\/hub-tap\.mjs';/);
-  assert.match(patched, /hubTap\.start\(\(\) => connectionState\)/);
+  assert.match(patched, /hubTap\.start\(\(\) => connectionState, \(\) => sock\)/);
   assert.match(patched, /hubTap\.onMessage\(msg, \{ sock, senderId: resolvedSenderId, isGroup, lidToPhone \}\)/);
   assert.ok(fs.existsSync(path.join(dir, 'hub-tap.mjs')));
   execFileSync(script, { env, stdio: 'pipe' });

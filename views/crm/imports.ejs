@@ -1,0 +1,22 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Contacts and LinkedIn</h1><p class="subline">Exact email addresses and phone numbers strengthen known identities. New people and conflicting details wait for you.</p></div></div>
+<section class="grid first"><div class="panel s6"><h2>Google Contacts</h2>
+<p><%= connected ? 'Connected. Checked daily.' : 'Connect the main Google account to read names, email addresses, phones and birthdays.' %></p>
+<% if(run?.last_error) { %><p class="flash bad"><%= run.last_error %></p><% } %>
+<% if(run?.last_ok && connected) { %><p class="stamp">Last checked <%= ago(run.last_ok) %></p><% } %>
+<a class="btn" href="/crm/imports/contacts/connect"><%= connected ? 'Reconnect Google Contacts' : 'Connect Google Contacts' %></a>
+</div><div class="panel s6"><h2>LinkedIn connections</h2>
+<form method="post" action="/crm/imports/linkedin" enctype="multipart/form-data"><label for="connections">Connections.csv from your LinkedIn data export</label><input id="connections" type="file" name="file" accept=".csv" required><p><button class="btn" type="submit">Import connections</button></p></form>
+</div></section>
+<% if(!imports.length) { %><section class="grid"><div class="panel s12"><p>No imported contacts waiting.</p></div></section><% } %>
+<% for(const r of imports) { %><section class="grid"><div class="panel s12">
+<h2><%= r.data.name || 'Unnamed contact' %></h2><p><%= [r.data.position,r.data.company,...(r.data.emails||[]),...(r.data.phones||[])].filter(Boolean).join(' · ') %></p>
+<p class="stamp"><%= r.provider === 'contacts' ? 'Google Contacts' : 'LinkedIn' %></p><% if(r.error) { %><p class="flash bad"><%= r.error %></p><% } %>
+<form method="post" action="/crm/imports/<%= r.id %>/decide" class="form-row">
+<label>Name <input class="input" name="name" value="<%= r.data.name %>"></label>
+<label>New person's space <select class="select" name="space"><option value="">Choose…</option><option value="work">Work</option><option value="personal">Personal</option></select></label>
+<button class="btn" name="action" value="add">Add as new person</button>
+<label>Existing person <select class="select" name="personId"><option value="">Choose…</option><% for(const p of people) { %><option value="<%= p.id %>"><%= p.name %> · <%= p.space %></option><% } %></select></label>
+<button class="btn" name="action" value="link">Same person</button><button class="btn text" name="action" value="ignore">Ignore</button>
+</form></div></section><% } %>
+<%- include('_bottom') %>

@@ -1,0 +1,24 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Boox notebooks</h1><p class="subline">Pages from onyx / NoteMax / Notebooks in Drive. Choose the space and kind once for each notebook.</p></div></div>
+<section class="grid first"><div class="panel s12">
+<p>Existing pages are history only. New pages are read automatically. Journals never create promises or tasks. Unclear handwriting waits here for you to check.</p>
+<p class="stamp"><%= run?.last_ok ? `Drive checked ${ago(run.last_ok)}` : 'Waiting for the first Drive check' %><% if (run?.last_error) { %> · <%= run.last_error %><% } %></p>
+<% if (!notebooks.length) { %><p>No notebooks found yet. Sync a PDF from your Boox to the Drive folder.</p><% } %>
+<div class="list"><% for (const n of notebooks) { %><div class="row" style="display:block;padding:16px 0">
+<h2><a href="https://drive.google.com/file/d/<%= encodeURIComponent(n.id) %>/view" target="_blank" rel="noopener"><%= n.name %></a></h2>
+<p class="stamp">Created <%= fmt(n.created_at, 'date') %> · Last synced <%= fmt(n.modified_at, 'date') %></p>
+<% if (!n.space) { %><form method="post" action="/crm/notebooks/<%= n.id %>/configure" class="form-row">
+<label>Space <select class="input" name="space" required><option value="">Choose…</option><option value="work">Work</option><option value="personal">Personal</option></select></label>
+<label>Kind <select class="input" name="kind" required><option value="">Choose…</option><option value="meetings">Meetings</option><option value="todos">To-dos</option><option value="journal">Journal</option></select></label>
+<button class="btn" type="submit">Use this notebook</button></form>
+<% } else { %><p><span class="chip"><%= n.space === 'work' ? 'Work' : 'Personal' %></span> <%= n.kind %> · <%= n.page_count %> pages · <%= n.waiting %> waiting to read · <%= n.reviewing %> to check<% if(n.failed) { %> · <%= n.failed %> failed<% } %></p><% } %>
+<% if(n.error) { %><p class="flash bad"><%= n.error %></p><% } %>
+</div><% } %></div></div></section>
+<% for (const p of pages) { %><section class="grid"><div class="panel s12">
+<h2><%= p.name %> · page <%= p.page_no %></h2><p><%= p.uncertainty || p.error %> · <a href="/crm/notebook-pages/<%= p.id %>/pdf" target="_blank">Open original page</a></p>
+<% if(p.status === 'review') { %><form method="post" action="/crm/notebook-pages/<%= p.id %>/confirm">
+<label for="p-<%= p.id %>">Check the words and names</label><textarea class="textarea" name="text" id="p-<%= p.id %>" maxlength="30000"><%= p.text %></textarea>
+<button class="btn primary" type="submit">Save checked text</button></form>
+<% } else { %><form method="post" action="/crm/notebook-pages/<%= p.id %>/retry"><button class="btn" type="submit">Try reading again</button></form><% } %>
+</div></section><% } %>
+<%- include('_bottom') %>

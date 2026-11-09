@@ -26,4 +26,8 @@ router.post('/api/crm/whatsapp/message', tapLimiter, requireTapAuth, (req, res) 
   try { res.json(whatsapp.receive(req.body || {})); } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
+router.post('/api/crm/whatsapp/outbox/claim', tapLimiter, requireTapAuth, (req,res) => res.json({messages:require('../lib/crm/self-chat').claim(req.body.self_chat_ids)}));
+router.post('/api/crm/whatsapp/outbox/complete', tapLimiter, requireTapAuth, (req,res) => {
+  require('../lib/crm/self-chat').complete(req.body.id,req.body);res.json({ok:true});
+});
 module.exports = router;

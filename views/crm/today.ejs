@@ -63,6 +63,8 @@
   <%- include('_day', { day: d.day, none: 'Nothing in the diary or planned for today.' }) %>
 </div></section>
 
+<%- include('_meeting-prep', { meetings: d.meetings }) %>
+
 <section class="grid"><div class="panel s12">
   <div class="panel-head"><h2>Other tasks</h2><span class="chip"><%= d.tasks.length %> open</span><a class="end" href="/crm/<%= space %>/tasks">View all</a></div>
   <%- include('_tasks', { taskList: d.tasks.slice(0, 8), taskBack: `/crm/${space}` }) %>

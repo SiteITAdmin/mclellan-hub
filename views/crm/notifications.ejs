@@ -1,0 +1,11 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Notifications</h1><p class="subline">Meeting prep 30 minutes before a meeting, and promises due today. Work can notify at any time.</p></div></div>
+<section class="grid first"><div class="panel s12">
+<p>On iPhone, use Share → Add to Home Screen, then open the Hub there before enabling notifications.</p>
+<input id="notification-key" type="hidden" value="<%= publicKey %>">
+<p><label><input type="checkbox" name="spaces" value="work" checked> Work</label> <label><input type="checkbox" name="spaces" value="personal" checked> Personal</label></p>
+<div class="decide"><button class="btn primary" id="enable-notifications" type="button">Enable on this device</button><button class="btn" id="disable-notifications" type="button">Disable on this device</button></div>
+<p id="notification-status" role="status"></p>
+<% for(const d of devices) { %><p class="stamp">Device added <%= fmt(d.created_at) %> · <%= JSON.parse(d.spaces).join(' and ') %> · <%= d.last_sent ? `Last notification ${ago(d.last_sent)}` : 'No notification sent yet' %><% if(d.error) { %> · <%= d.error %><% } %></p><% } %>
+</div></section><script src="/crm-notifications.js" defer></script>
+<%- include('_bottom') %>

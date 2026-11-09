@@ -78,6 +78,68 @@ function greeting() {
   return 'Evening';
 }
 
+router.get('/crm/messages', (req,res) => res.render('crm/messages', {page:'messages',title:'Messages',imessage:require('../lib/crm/imessage').status()}));
+router.post('/crm/messages/pause', requireSameOrigin, writeLimiter, (req,res) => {
+  require('../lib/crm/db').setSetting('imessage_paused',req.body.paused==='1'?'1':'0');res.redirect('/crm/messages');
+});
+
+router.get('/crm/notifications', (req, res) => res.render('crm/notifications', {
+  page: 'notifications', title: 'Notifications', publicKey: require('../lib/crm/notifications').keys().publicKey,
+  devices: require('../lib/crm/notifications').list(),
+}));
+router.post('/crm/notifications/subscribe', requireSameOrigin, writeLimiter, (req,res) => {
+  try { res.json({ id: require('../lib/crm/notifications').subscribe(req.body.subscription,req.body.spaces) }); }
+  catch(e) { res.status(400).json({error:e.message}); }
+});
+router.post('/crm/notifications/unsubscribe', requireSameOrigin, writeLimiter, (req,res) => {
+  require('../lib/crm/notifications').remove(req.body.endpoint); res.json({ok:true});
+});
+
+router.get('/crm/imports', (req, res) => res.render('crm/imports', {
+  page: 'imports', title: 'Contacts and LinkedIn', imports: require('../lib/crm/imports').list(),
+  people: crm().prepare('SELECT id,name,space FROM people ORDER BY name').all(), connected: require('../lib/crm/imports').connected(),
+  run: require('../lib/crm/runs').all().contacts_sync,
+}));
+router.get('/crm/imports/contacts/connect', (req, res) => require('../lib/crm/contacts-connect').start(req, res));
+router.post('/crm/imports/:id/decide', requireSameOrigin, writeLimiter, (req, res) => {
+  try { require('../lib/crm/imports').decide(req.params.id, req.body); flash(req, 'Contact reviewed.'); }
+  catch(e) { flash(req,e.message,'bad'); }
+  res.redirect('/crm/imports');
+});
+const identityUpload = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 2 * 1024 * 1024, files: 1 } }).single('file');
+router.post('/crm/imports/linkedin', requireSameOrigin, writeLimiter, (req, res) => identityUpload(req,res,err => {
+  try { if(err) throw new Error('Choose a Connections.csv file under 2 MB'); if(!req.file || !/\.csv$/i.test(req.file.originalname)) throw new Error('Choose the LinkedIn Connections.csv export');
+    const n = require('../lib/crm/imports').linkedin(req.file.buffer); flash(req, `${n} connections read. Unmatched people wait for review.`);
+  } catch(e) { flash(req,e.message,'bad'); }
+  res.redirect('/crm/imports');
+}));
+
+router.get('/crm/notebooks', (req, res) => {
+  const notebooks = require('../lib/crm/boox').list();
+  const pages = crm().prepare(`SELECT p.id, p.page_no, p.text, p.uncertainty, p.error, p.status, n.name, n.space FROM notebook_pages p
+    JOIN notebooks n ON n.id=p.notebook_id WHERE p.status IN ('review','failed') ORDER BY p.occurred_at DESC LIMIT 40`).all();
+  res.render('crm/notebooks', { page: 'notebooks', title: 'Boox notebooks', notebooks, pages, run: require('../lib/crm/runs').all().boox_capture });
+});
+router.post('/crm/notebooks/:id/configure', requireSameOrigin, writeLimiter, (req, res) => {
+  try { require('../lib/crm/boox').configure(req.params.id, req.body.space, req.body.kind); flash(req, 'Notebook set. Its pages will be read automatically.'); }
+  catch (e) { flash(req, e.message, 'bad'); }
+  res.redirect('/crm/notebooks');
+});
+router.get('/crm/notebook-pages/:id/pdf', (req, res) => {
+  const p = crm().prepare('SELECT pdf FROM notebook_pages WHERE id=?').get(req.params.id);
+  if (!p) return res.status(404).send('Page not found');
+  res.set('Cache-Control', 'no-store').type('pdf').send(p.pdf);
+});
+router.post('/crm/notebook-pages/:id/confirm', requireSameOrigin, writeLimiter, (req, res) => {
+  try { require('../lib/crm/boox').confirm(req.params.id, req.body.text); flash(req, 'Corrected page saved as source evidence.'); }
+  catch (e) { flash(req, e.message, 'bad'); }
+  res.redirect('/crm/notebooks');
+});
+router.post('/crm/notebook-pages/:id/retry', requireSameOrigin, writeLimiter, (req, res) => {
+  crm().prepare("UPDATE notebook_pages SET status='pending', error='', attempts=0 WHERE id=? AND status='failed' AND length(pdf)<=900000").run(req.params.id);
+  res.redirect('/crm/notebooks');
+});
+
 router.get('/crm', (req, res) => res.redirect('/crm/work'));
 
 // ── Who is this? ───────────────────────────────────────────────────────────
@@ -496,7 +558,7 @@ router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
     if (result === 'connected') res.locals.flash = { text: 'Wispr Flow connected.', level: 'ok' };
     if (result === 'expired') res.locals.flash = { text: 'The code ran out before sign-in finished. Connect again.', level: 'bad' };
   }
-  res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space) });
+  res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: require('../lib/crm/meetings').today(space) });
 });
 
 router.post('/crm/:space/meetings/:action', spaceParam, requireSameOrigin, writeLimiter, async (req, res) => {

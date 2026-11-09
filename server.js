@@ -12,6 +12,7 @@ const flightsRouter = require('./routes/flights');
 const workerRouter = require('./routes/worker');
 const crmRouter = require('./routes/crm');
 const whatsappCaptureRouter = require('./routes/whatsapp-capture');
+const imessageCaptureRouter = require('./routes/imessage-capture');
 const { processJobs, seedJobs } = require('./lib/jobs');
 
 const app = express();
@@ -81,6 +82,7 @@ function portfolioHost(req, res, next, user) {
     if (req.path.startsWith('/api/subscription-agent/')) return workerRouter(req, res, next);
     if (req.path === '/flights' || req.path.startsWith('/api/flights')) return flightsRouter(req, res, next);
     if (req.path === '/crm' || req.path.startsWith('/crm/')) return crmRouter(req, res, next);
+    if (req.path.startsWith('/api/crm/imessage/')) return imessageCaptureRouter(req, res, next);
     if (req.path.startsWith('/api/crm/whatsapp/')) return whatsappCaptureRouter(req, res, next);
   }
   if (req.path.startsWith('/admin')) return adminRouter(req, res, next);

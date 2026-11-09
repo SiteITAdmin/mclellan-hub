@@ -68,7 +68,7 @@ export function createHubTap({
   logger = console,
   clock = () => Date.now(),
 } = {}) {
-  const state = { approved: new Set(), paused: true, sent: 0, failed: 0, lastError: '', lastErrorAt: null, blockedPrivate: false };
+  const state = { approved: new Set(), selfChatIds: [], paused: true, sent: 0, failed: 0, lastError: '', lastErrorAt: null, blockedPrivate: false };
   const seenReported = new Map();
   const groupNames = new Map();
   let cfg = null;
@@ -132,7 +132,11 @@ export function createHubTap({
         whatsapp, sent: state.sent, failed: state.failed, last_error: state.lastError, last_error_at: state.lastErrorAt,
         blocked_private: state.blockedPrivate,
       });
-      if (r) { state.approved = new Set(r.approved || []); state.paused = !!r.paused; }
+      if (r) {
+        state.approved = new Set(r.approved || []);
+        state.selfChatIds = Array.isArray(r.self_chat_ids) ? r.self_chat_ids : [];
+        state.paused = !!r.paused;
+      }
     } catch (err) {
       // Without a fresh answer, assume paused: never send words on stale approval.
       state.paused = true;
@@ -140,8 +144,35 @@ export function createHubTap({
     }
   }
 
-  function start(getConnection) {
-    const beat = () => heartbeat(getConnection).catch(() => {});
+  // Reminders the Hub has queued for Douglas's own chat. Nothing is sent to
+  // anyone else, and each item is claimed once so a lost reply cannot duplicate.
+  async function deliverOutbox(getSock) {
+    if (state.paused || !state.selfChatIds.length) return 0;
+    const sock = getSock?.();
+    if (!sock) return 0;
+    let messages;
+    try {
+      const r = await post('/api/crm/whatsapp/outbox/claim', { self_chat_ids: state.selfChatIds });
+      messages = Array.isArray(r?.messages) ? r.messages : [];
+    } catch (err) {
+      failed(err);
+      return 0;
+    }
+    let sent = 0;
+    for (const m of messages) {
+      try {
+        await sock.sendMessage(m.chat_id, { text: m.body });
+        await post('/api/crm/whatsapp/outbox/complete', { id: m.id, ok: true });
+        sent += 1;
+      } catch (err) {
+        await post('/api/crm/whatsapp/outbox/complete', { id: m.id, ok: false, error: String(err.message || err).slice(0, 300) }).catch(() => {});
+      }
+    }
+    return sent;
+  }
+
+  function start(getConnection, getSock) {
+    const beat = () => heartbeat(getConnection).then(() => deliverOutbox(getSock)).catch(() => {});
     setTimeout(beat, 5000).unref?.();
     setInterval(beat, HEARTBEAT_MS).unref?.();
     return beat;
@@ -218,5 +249,5 @@ export function createHubTap({
     }
   }
 
-  return { onMessage, start, heartbeat, state };
+  return { onMessage, start, heartbeat, deliverOutbox, state };
 }
