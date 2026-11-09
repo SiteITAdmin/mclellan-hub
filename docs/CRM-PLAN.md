@@ -570,6 +570,6 @@ On 9 Nov Douglas asked for every remaining part of this plan to be built. This i
 
 - **Keep-in-touch** (`lib/crm/keepintouch.js`): `people.cadence_days` is Douglas's own choice (empty: not decided; 0: none wanted). The Hub suggests one only for someone seen on at least 4 days in the last year whose usual gap is 10 days or more, at about 1.25 times that gap. Suggestions show on Today (Yes / No) and on the person page. "Drifting" on Today is worked out from sources each time.
 - **Key dates** (`lib/crm/dates.js`): a view over date atoms in the next 7 days. The reader now marks a date that comes round every year (`atoms.yearly`), so a birthday shows each year.
-- **Morning email** (`lib/crm/digest.js`, job `crm_morning_digest`, 07:30 Dublin): one per space, Work on weekdays only, both sent to douglas@mclellan.scot through the Hub's existing Gmail sender. Sent once a day; a run that starts after 10:00 sends nothing; a failed send is not repeated that day and shows on Today. Receipts in `effects` (module `crm_morning_digest`).
+- **Morning email** (`lib/crm/digest.js`, job `crm_morning_digest`, 07:30 Dublin): one per space, Work on weekdays only, both sent to douglas@mclellan.scot through the Gmail API on the Hub's Google connection (the VPS cannot reach Gmail's SMTP port 465, checked 9 Nov). Sent once a day; a run that starts after 10:00 sends nothing; a failed send is not repeated that day and shows on Today. Receipts in `effects` (module `crm_morning_digest`).
 - Tests: `test/crm-remember.test.js`.
 
