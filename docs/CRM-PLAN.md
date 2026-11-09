@@ -550,3 +550,16 @@ A reply only counts if its quote is found in an email the model was shown. Check
 ## Where things stand as built (1 Nov 2026)
 
 Table `standings`: a disposable written summary per person, project and organisation with at least 3 facts. Up to 5 lines, newest 80 facts as input. A line that doesn't cite a fact it was given is dropped; if none remain, nothing is saved. Rewritten when the set of facts changes, at most once a day, after all sources are read and one at a time. The page shows when it was written, how many facts have arrived since, and flags a line whose fact has since changed. Department and team pages have no summary of their own.
+
+## Calendar as built (9 Nov 2026)
+
+Asked for on 9 Nov: a calendar in the CRM that plans tasks into free time and moves them as the diary changes, in the way Motion does. Decisions that day: blocks go to Google Calendar as well as the Hub; appointments move only when marked flexible; Personal diary only for now; the Hub guesses task lengths.
+
+- **Reads:** the Google calendars in `config.calendars` (the main one, Personal) for today plus 14 days, into `calendar_events`. Declined and cancelled events are left out. Events marked free don't block time; a busy all-day event blocks the day.
+- **Plans:** every open task, earliest due date first, into the first free time in its space's hours (Work 08:00 to 16:00 on weekdays; Personal 18:30 to 21:00 on weekdays and 10:00 to 17:00 at weekends; editable on the Calendar screen). Personal appointments block Work time too. Tasks over 2 hours are split into even sittings of at most 90 minutes. A block under way is left alone; one that ends with the task still open is planned again.
+- **Writes:** each block is a Google event tagged `hubBlock`, moved, renamed or removed as the plan changes, with a receipt in `effects` (module `crm_calendar`). A block Douglas drags in Google stays where he put it until he hands it back on the task page. A lost reply is recovered without a second event.
+- **Flexible appointments:** only one Douglas made himself with nobody else invited. It moves, in Google, only when something fixed lands on it.
+- **Lengths:** new tasks are sized in one batch through the `crm_atomise_tick` queue (15 minutes to 4 hours). Until then, and if sizing fails, 30 minutes. A length Douglas sets is never overwritten.
+- **Shown:** `/crm/:space/calendar` (7 days on a time grid, a list on a phone), "Your day" on Today, "Planned for" on each task. The other space's appointments appear only as "Busy". Today warns when the run fails or falls 30 minutes behind, when a task won't fit before its due date, and when one finds no time at all.
+- **Not built:** the Work diary (Outlook), the Boox view, priorities, recurring tasks, travel time, and reading calendar events into facts and meeting prep (Phase 4).
+- Tests: `test/crm-calendar.test.js`.

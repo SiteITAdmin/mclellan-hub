@@ -1,0 +1,80 @@
+<%- include('_top') %>
+<% const S = 7 * 60, E = 22 * 60, span = E - S;
+   const clamp = m => Math.min(E, Math.max(S, m));
+   const pos = i => `--top:${((clamp(i.from) - S) / span * 100).toFixed(2)}%;--h:${((clamp(i.until) - clamp(i.from)) / span * 100).toFixed(2)}%`;
+   const label = space === 'work' ? 'Work' : 'Personal';
+   const dayName = d => new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+   const nowLocal = (() => { const p = new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Dublin', hour: '2-digit', minute: '2-digit', hour12: false }).split(':'); return Number(p[0]) % 24 * 60 + Number(p[1]); })();
+   const run = state.run;
+   const failed = run && run.last_error && (!run.last_ok || run.last_error_at >= run.last_ok);
+   const own = days.flatMap(d => d.items.filter(i => i.type === 'event').map(i => ({ ...i, date: d.date }))).filter((i, n, all) => all.findIndex(x => x.id === i.id) === n); %>
+<div class="title-row">
+  <div><h1>Calendar</h1><p class="subline"><%= label %>. Tasks are planned into your free time and move by themselves when your diary changes. Planned <%= state.plannedAt ? ago(state.plannedAt) : 'not yet' %>; Google Calendar last updated <%= run?.last_ok ? ago(run.last_ok) : 'not yet' %>.</p></div>
+  <div class="form-row">
+    <% if (earlier) { %><a class="btn small" href="/crm/<%= space %>/calendar?from=<%= earlier %>">Earlier</a><% } %>
+    <% if (later) { %><a class="btn small" href="/crm/<%= space %>/calendar?from=<%= later %>">Later</a><% } %>
+    <form method="post" action="/crm/<%= space %>/calendar/replan"><button class="btn small">Replan now</button></form>
+  </div>
+</div>
+<% if (failed) { %><p class="flash bad" role="status" style="margin-top:20px"><%= run.last_error %></p><% } %>
+
+<section class="grid first"><div class="panel s12">
+  <div class="cal" role="group" aria-label="Seven days from <%= dayName(days[0]) %>">
+    <div class="cal-hours" aria-hidden="true"><% for (let h = 7; h < 22; h += 1) { %><span><%= String(h).padStart(2, '0') %>:00</span><% } %></div>
+    <% for (const d of days) { %>
+    <div class="cal-day<%= d.date === today ? ' is-today' : '' %>">
+      <h2 class="cal-head"><%= d.date === today ? 'Today' : dayName(d) %></h2>
+      <div class="cal-banners"><% for (const b of d.banners) { %><span class="cal-tag" title="<%= b.title %>"><%= b.title %></span><% } %></div>
+      <div class="cal-col">
+        <% if (d.window) { %><div class="cal-window" style="<%= pos({ from: d.window[0], until: d.window[1] }) %>"></div><% } %>
+        <% if (d.date === today && nowLocal >= S && nowLocal <= E) { %><div class="cal-now" style="<%= pos({ from: nowLocal, until: nowLocal }) %>"></div><% } %>
+        <% if (!d.items.length) { %><p class="cal-none">Nothing planned</p><% } %>
+        <% for (const i of d.items) { const text = `${fmt(i.start, 'time')}–${fmt(i.end, 'time')} ${i.title}`; %>
+          <% if (i.type === 'task') { %><a class="cal-item task<%= i.late ? ' late' : '' %><%= i.pinned ? ' pinned' : '' %>" style="<%= pos(i) %>" href="/crm/<%= space %>/tasks/<%= i.id %>" title="<%= text %><%= i.late ? ` (after it's due ${i.due})` : '' %><%= i.pinned ? ' (time chosen by you)' : '' %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></a>
+          <% } else if (i.link) { %><a class="cal-item event<%= i.flexible ? ' flexible' : '' %><%= i.free ? ' free' : '' %>" style="<%= pos(i) %>" href="<%= i.link %>" target="_blank" rel="noopener" title="<%= text %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></a>
+          <% } else { %><div class="cal-item <%= i.type %>" style="<%= pos(i) %>" title="<%= text %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></div><% } %>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+  </div>
+  <p class="cal-key"><span class="cal-swatch task"></span> Task, planned by the Hub <span class="cal-swatch event"></span> Appointment <span class="cal-swatch busy"></span> Busy in <%= space === 'work' ? 'Personal' : 'Work' %> <span class="cal-swatch window"></span> Your <%= label.toLowerCase() %> hours</p>
+</div></section>
+
+<section class="grid">
+  <div class="panel s8">
+    <div class="panel-head"><h2>Appointments</h2><span class="chip"><%= own.length %> in these 7 days</span></div>
+    <% if (!own.length) { %><div class="empty">No <%= label.toLowerCase() %> appointments in these 7 days.<%= space === 'work' ? ' Your work diary is not connected yet, so work tasks are planned around your personal appointments only.' : '' %></div><% } %>
+    <div class="day-list">
+    <% for (const e of own) { %>
+      <div class="day-row event">
+        <span class="t"><%= fmt(e.start, 'date') %> <%= fmt(e.start, 'time') %>–<%= fmt(e.end, 'time') %></span>
+        <span class="what"><%= e.title %></span>
+        <span class="tags">
+        <% if (e.solo) { %><form method="post" action="/crm/<%= space %>/calendar/flexible"><input type="hidden" name="event" value="<%= e.id %>"><input type="hidden" name="on" value="<%= e.flexible ? '0' : '1' %>"><button class="btn small" aria-pressed="<%= e.flexible %>"><%= e.flexible ? 'Flexible: the Hub may move it' : 'Fixed' %></button></form>
+        <% } else { %><span class="cal-tag">Fixed: others are invited</span><% } %>
+        </span>
+      </div>
+    <% } %>
+    </div>
+    <p class="subline">An appointment stays put unless you make it flexible. A flexible one is moved in Google Calendar only when something fixed lands on top of it.</p>
+  </div>
+  <div class="s4 side-stack">
+    <div class="panel">
+      <div class="panel-head"><h2>Needs a look</h2></div>
+      <% if (!state.late.length && !state.unplanned.length) { %><div class="empty">Every open task fits before it is due.</div><% } %>
+      <% for (const t of state.late) { %><p><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a><small class="task-via">Due <%= t.due %>, but the first free time ends <%= fmt(t.ends) %></small></p><% } %>
+      <% for (const t of state.unplanned) { %><p><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a><small class="task-via">No free time in the next 14 days</small></p><% } %>
+    </div>
+    <details class="panel">
+      <summary>Hours</summary>
+      <form method="post" action="/crm/<%= space %>/calendar/hours" class="list" style="margin-top:14px">
+        <% for (const [a, b, name] of [['workStart', 'workEnd', 'Work, Monday to Friday'], ['eveningStart', 'eveningEnd', 'Personal, weekday evenings'], ['weekendStart', 'weekendEnd', 'Personal, weekends']]) { %>
+        <div class="field"><label for="h-<%= a %>"><%= name %></label><div class="form-row"><input class="input" type="time" id="h-<%= a %>" name="<%= a %>" value="<%= hours[a] %>" required aria-label="<%= name %> from"><input class="input" type="time" name="<%= b %>" value="<%= hours[b] %>" required aria-label="<%= name %> until"></div></div>
+        <% } %>
+        <div><button class="btn primary" type="submit">Save hours</button></div>
+      </form>
+    </details>
+  </div>
+</section>
+<%- include('_bottom') %>

@@ -13,6 +13,7 @@
       <div class="field"><label for="task-title">Task</label><input class="input" id="task-title" name="title" value="<%= t.title %>" maxlength="1024" required></div>
       <div class="field"><label for="task-notes">Context and notes</label><textarea class="textarea" id="task-notes" name="notes" rows="5" maxlength="<%= t.google_id ? 8192 : 7000 %>"><%= t.notes %></textarea></div>
       <div class="form-row"><div class="field"><label for="task-due">Due date</label><input class="input" id="task-due" type="date" name="due" value="<%= t.due || '' %>"></div>
+        <div class="field"><label for="task-minutes">Time needed</label><select class="select" id="task-minutes" name="minutes"><option value=""><%= t.minutes && t.minutes_by !== 'you' ? `Hub's guess: ${t.minutes} min` : 'Let the Hub guess' %></option><% for (const m of [15, 30, 45, 60, 90, 120, 180, 240, 360, 480]) { %><option value="<%= m %>" <%= t.minutes_by === 'you' && Number(t.minutes) === m ? 'selected' : '' %>><%= m < 60 ? `${m} min` : `${m / 60} h` %></option><% } %></select></div>
         <div class="field"><label for="task-status">Status</label><select class="select" name="status" id="task-status"><option value="needsAction" <%= t.status === 'needsAction' ? 'selected' : '' %>>Open</option><option value="completed" <%= t.status === 'completed' ? 'selected' : '' %>>Completed</option></select></div></div>
       <% for (const [key, label] of [['personId','Person'],['orgId','Organisation'],['projectId','Project']]) { %>
       <div class="field"><label for="task-<%= key %>"><%= label %></label><select class="select" id="task-<%= key %>" name="<%= key %>"><option value=""><%= key === 'orgId' ? 'From linked people' : 'Let the Hub read the context' %></option><% for (const choice of choices[key]) { %><option value="<%= choice.id %>" <%= t.context[key] === choice.id ? 'selected' : '' %>><%= choice.name %></option><% } %></select></div>
@@ -30,6 +31,12 @@
       <p class="subline"><%= t.reading === 'done' ? 'Task text has been read.' : 'Task text is waiting to be read.' %></p>
       <a href="/crm/<%= space %>/sources/<%= t.source_id %>">View captured task</a>
     </div>
+    <% if (t.status === 'needsAction') { %><div class="panel"><div class="panel-head"><h2>Planned for</h2><a class="end" href="/crm/<%= space %>/calendar">Calendar</a></div>
+      <% if (!blocks.length) { %><p class="subline">No free time found yet. The calendar is replanned every 5 minutes.</p><% } %>
+      <% for (const b of blocks) { %><p><%= fmt(b.start_at) %>–<%= fmt(b.end_at, 'time') %><% if (b.late) { %> <span class="cal-tag warn">after it's due</span><% } %><% if (b.pinned) { %> <span class="cal-tag">time chosen by you</span><% } %></p><% } %>
+      <% if (blocks.some(b => b.pinned)) { %><form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/unpin"><button class="btn small">Let the Hub choose the time</button></form><% } %>
+      <p class="subline">It moves by itself as your diary changes. Drag it in Google Calendar to keep it at a time you choose.</p>
+    </div><% } %>
     <div class="panel"><div class="panel-head"><h2>Google Tasks</h2></div><p><%= t.pending ? 'Changes are waiting to sync.' : 'Synced.' %></p><p class="subline">Last synced <%= t.synced_at ? ago(t.synced_at) : 'not yet' %>.</p></div>
     <% if (t.status !== 'deleted') { %><details class="panel"><summary>Delete task</summary><p>This also deletes the task in Google at the next sync.</p><form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/delete"><input type="hidden" name="revision" value="<%= t.revision %>"><button class="btn" type="submit">Delete from both places</button></form></details><% } %>
   <% } else { %><div class="panel"><div class="panel-head"><h2>One task, both places</h2></div><p>It will appear in your <%= space === 'work' ? 'Work' : 'Personal' %> Google Tasks list. Edit it or tick it off here or there.</p></div><% } %>

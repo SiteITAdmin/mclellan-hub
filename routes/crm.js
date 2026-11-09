@@ -15,6 +15,8 @@ const orgs = require('../lib/crm/orgs');
 const tasks = require('../lib/crm/tasks');
 const promises = require('../lib/crm/promises');
 const wispr = require('../lib/crm/wispr');
+const calendar = require('../lib/crm/calendar');
+const planner = require('../lib/crm/planner');
 const { crm } = require('../lib/crm/db');
 
 const router = express.Router();
@@ -347,7 +349,7 @@ router.post('/crm/:space/promises/:atomId/:action', spaceParam, requireSameOrigi
 });
 
 function taskForm(req, res, t, error = null) {
-  res.render('crm/task', { page: 'tasks', t, error, choices: tasks.choices(req.params.space), title: t.id ? t.title : 'Add a task' });
+  res.render('crm/task', { page: 'tasks', t, error, choices: tasks.choices(req.params.space), blocks: t.id ? calendar.blocksFor(t.id) : [], title: t.id ? t.title : 'Add a task' });
 }
 
 router.get('/crm/:space/tasks', spaceParam, (req, res) => {
@@ -364,7 +366,9 @@ router.get('/crm/:space/tasks/new', spaceParam, (req, res) => {
 router.post('/crm/:space/tasks', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   try {
     const t = tasks.create(req.params.space, req.body);
-    flash(req, 'Task saved. Google Tasks sync runs every 15 minutes.');
+    tasks.setMinutes(t.id, req.body.minutes);
+    replanned();
+    flash(req, 'Task saved and planned into your calendar.');
     res.redirect(`/crm/${req.params.space}/tasks/${t.id}`);
   } catch (err) {
     res.status(400);
@@ -391,13 +395,15 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
   const t = tasks.get(req.params.id);
   if (!t || t.space !== req.params.space) return res.status(404).send('Not found');
   try {
-    if (req.params.action === 'edit') tasks.edit(t.id, { ...req.body, context: req.body });
+    if (req.params.action === 'edit') { tasks.edit(t.id, { ...req.body, context: req.body }); tasks.setMinutes(t.id, req.body.minutes); }
+    else if (req.params.action === 'unpin') calendar.unpin(t.id);
     else if (req.params.action === 'complete') tasks.edit(t.id, { status: 'completed', revision: req.body.revision });
     else if (req.params.action === 'reopen') tasks.edit(t.id, { status: 'needsAction', revision: req.body.revision });
     else if (req.params.action === 'resolve') crm().prepare("UPDATE tasks SET conflict = '' WHERE id = ?").run(t.id);
     else if (req.params.action === 'delete') tasks.edit(t.id, { status: 'deleted', revision: req.body.revision });
     else return res.status(404).send('Not found');
-    flash(req, 'Saved. Google Tasks will sync automatically.');
+    replanned();
+    flash(req, 'Saved. Your calendar has been replanned.');
   } catch (err) {
     if (req.params.action === 'edit') {
       res.status(400);
@@ -407,6 +413,38 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
   }
   const next = String(req.body.back || '');
   res.redirect(next.startsWith(`/crm/${t.space}/`) && !next.includes('\\') ? next : `/crm/${t.space}/tasks/${t.id}`);
+});
+
+// ── Calendar ───────────────────────────────────────────────────────────────
+// Replans from what the Hub holds now, then asks the job to carry it to Google.
+function replanned() {
+  calendar.replan();
+  calendar.soon();
+}
+
+router.get('/crm/:space/calendar', spaceParam, (req, res) => {
+  const today = planner.local(Math.floor(Date.now() / 1000)).date;
+  const last = planner.addDays(today, planner.HORIZON_DAYS - 7);
+  let from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : today;
+  if (from < today) from = today;
+  if (from > last) from = last;
+  res.render('crm/calendar', { page: 'calendar', title: 'Calendar', today, from,
+    earlier: from > today ? planner.addDays(from, -7) < today ? today : planner.addDays(from, -7) : null,
+    later: from < last ? planner.addDays(from, 7) > last ? last : planner.addDays(from, 7) : null,
+    days: calendar.week(req.params.space, from), state: calendar.state(req.params.space), hours: calendar.hours() });
+});
+
+router.post('/crm/:space/calendar/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    if (req.params.action === 'hours') { calendar.saveHours(req.body); flash(req, 'Hours saved. Your calendar has been replanned.'); }
+    else if (req.params.action === 'flexible') {
+      if (!calendar.setFlexible(String(req.body.event || ''), req.body.on === '1')) throw new Error('Only an appointment you made for yourself, with nobody else invited, can be flexible');
+      flash(req, req.body.on === '1' ? 'The Hub may now move that appointment when something lands on it.' : 'That appointment now stays where it is.');
+    } else if (req.params.action === 'replan') { calendar.replan(); flash(req, 'Replanned. Google Calendar follows within a minute.'); }
+    else return res.status(404).send('Not found');
+    calendar.soon();
+  } catch (err) { flash(req, err.message, 'bad'); }
+  back(req, res, `/crm/${req.params.space}/calendar`);
 });
 
 router.get('/crm/:space/projects', spaceParam, (req, res) => {
