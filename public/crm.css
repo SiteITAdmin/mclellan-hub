@@ -432,6 +432,7 @@ a.tag:hover { color: var(--text); border-color: var(--control); }
 .cal-item.task .t { color: rgba(255, 255, 255, .8); }
 .cal-item.task.pinned { border-left-color: var(--text); }
 .cal-item.task.late { background: var(--negative); border-color: var(--negative); }
+.cal-item.event, .cal-swatch.event { border-left-color: var(--accent); }
 .cal-item.event.flexible { border-style: dashed; border-left-style: solid; }
 .cal-item.event.free { opacity: .6; }
 .cal-item.busy { background: repeating-linear-gradient(135deg, var(--pill-neutral-bg) 0 6px, var(--ground) 6px 12px); border-color: var(--control); border-left-color: var(--muted); color: var(--muted); }
@@ -440,7 +441,7 @@ a.cal-item:hover { filter: brightness(.95); }
 .cal-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-left: 10px; border: 1px solid var(--control); }
 .cal-swatch:first-child { margin-left: 0; }
 .cal-swatch.task { background: var(--accent); border-color: var(--accent); }
-.cal-swatch.event { background: var(--row); border-left: 3px solid var(--text); }
+.cal-swatch.event { background: var(--row); border-left-width: 3px; }
 .cal-swatch.busy { background: repeating-linear-gradient(135deg, var(--pill-neutral-bg) 0 3px, var(--ground) 3px 6px); }
 .cal-swatch.window { background: var(--active); }
 .cal-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; line-height: 18px; background: var(--pill-neutral-bg); color: var(--pill-neutral-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -454,7 +455,7 @@ a.cal-item:hover { filter: brightness(.95); }
 }
 .day-row .t { color: var(--muted); font-size: 13px; }
 .day-row .what { font-weight: 500; overflow-wrap: anywhere; }
-.day-row .tags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.day-row .tags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
 .day-row.task { border-left-color: var(--accent); }
 .day-row.task.late { border-left-color: var(--negative); }
 .day-row.busy, .day-row.banner { border-left-color: var(--control); color: var(--muted); }

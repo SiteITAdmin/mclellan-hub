@@ -168,7 +168,7 @@ test('only an appointment Douglas made for himself alone can be flexible, and th
   assert.equal(clock(Date.parse(shared.start.dateTime) / 1000), '2026-11-09 14:00');
 });
 
-test('a Google failure is recorded and shown, and the other space sees only "Busy"', async () => {
+test('a Google failure is recorded and shown; Today hides the other space behind "Busy", the Calendar shows both', async () => {
   tasks.create('work', { title: 'Something' });
   api.add({ summary: 'Private appointment', start: iso(at(MON, '10:00')), end: iso(at(MON, '11:00')) });
   api.events.insert = async () => { throw Object.assign(new Error('Backend Error'), { code: 503 }); };
@@ -178,6 +178,10 @@ test('a Google failure is recorded and shown, and the other space sees only "Bus
   const work = calendar.day('work', MON).items.map(i => `${i.type}:${i.title}`);
   assert.deepEqual(work, ['task:Something', 'busy:Busy (Personal)']);
   assert.deepEqual(calendar.day('personal', MON).items.map(i => `${i.type}:${i.title}`), ['event:Private appointment']);
+  // The Calendar screen shows both spaces in full, each item carrying its own space.
+  const both = s => calendar.week(s, MON, 1)[0].items.map(i => `${i.space}:${i.type}:${i.title}:${i.other}`);
+  assert.deepEqual(both('work'), ['work:task:Something:false', 'personal:event:Private appointment:true']);
+  assert.deepEqual(both('personal'), ['work:task:Something:true', 'personal:event:Private appointment:false']);
 });
 
 test('the model sizes new tasks in one batch; a length Douglas set is never overwritten', () => {

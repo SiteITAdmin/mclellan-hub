@@ -4,10 +4,10 @@
 <% for (const i of day.items) { %>
   <div class="day-row <%= i.type %><%= i.late ? ' late' : '' %>">
     <span class="t"><%= fmt(i.start, 'time') %>–<%= fmt(i.end, 'time') %></span>
-    <% if (i.type === 'task') { %><a class="what" href="/crm/<%= space %>/tasks/<%= i.id %>"><%= i.title %></a>
+    <% if (i.type === 'task') { %><a class="what" href="/crm/<%= i.space %>/tasks/<%= i.id %>"><%= i.title %></a>
     <% } else if (i.link) { %><a class="what" href="<%= i.link %>" target="_blank" rel="noopener"><%= i.title %></a>
     <% } else { %><span class="what"><%= i.title %></span><% } %>
-    <span class="tags"><% if (i.type === 'task') { %><span class="cal-tag">Task</span><% } %><% if (i.pinned) { %><span class="cal-tag">Time chosen by you</span><% } %><% if (i.late) { %><span class="cal-tag warn">After it's due</span><% } %><% if (i.flexible) { %><span class="cal-tag">Flexible</span><% } %></span>
+    <span class="tags"><% if (i.other && i.type !== 'busy') { %><span class="cal-tag"><%= i.space === 'work' ? 'Work' : 'Personal' %></span><% } %><% if (i.type === 'task') { %><span class="cal-tag">Task</span><% } %><% if (i.pinned) { %><span class="cal-tag">Time chosen by you</span><% } %><% if (i.late) { %><span class="cal-tag warn">After it's due</span><% } %><% if (i.flexible) { %><span class="cal-tag">Flexible</span><% } %></span>
   </div>
 <% } %>
 </div>

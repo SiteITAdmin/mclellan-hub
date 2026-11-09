@@ -7,9 +7,10 @@
    const nowLocal = (() => { const p = new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Dublin', hour: '2-digit', minute: '2-digit', hour12: false }).split(':'); return Number(p[0]) % 24 * 60 + Number(p[1]); })();
    const run = state.run;
    const failed = run && run.last_error && (!run.last_ok || run.last_error_at >= run.last_ok);
+   const name = s => s === 'work' ? 'Work' : 'Personal';
    const own = days.flatMap(d => d.items.filter(i => i.type === 'event').map(i => ({ ...i, date: d.date }))).filter((i, n, all) => all.findIndex(x => x.id === i.id) === n); %>
 <div class="title-row">
-  <div><h1>Calendar</h1><p class="subline"><%= label %>. Tasks are planned into your free time and move by themselves when your diary changes. Planned <%= state.plannedAt ? ago(state.plannedAt) : 'not yet' %>; Google Calendar last updated <%= run?.last_ok ? ago(run.last_ok) : 'not yet' %>.</p></div>
+  <div><h1>Calendar</h1><p class="subline"><%= label %>. Both your Work and Personal diaries are shown here. Tasks are planned into your free time and move by themselves when your diary changes. Planned <%= state.plannedAt ? ago(state.plannedAt) : 'not yet' %>; Google Calendar last updated <%= run?.last_ok ? ago(run.last_ok) : 'not yet' %>.</p></div>
   <div class="form-row">
     <% if (earlier) { %><a class="btn small" href="/crm/<%= space %>/calendar?from=<%= earlier %>">Earlier</a><% } %>
     <% if (later) { %><a class="btn small" href="/crm/<%= space %>/calendar?from=<%= later %>">Later</a><% } %>
@@ -30,34 +31,34 @@
         <% if (d.date === today && nowLocal >= S && nowLocal <= E) { %><div class="cal-now" style="<%= pos({ from: nowLocal, until: nowLocal }) %>"></div><% } %>
         <% if (!d.items.length) { %><p class="cal-none">Nothing planned</p><% } %>
         <% for (const i of d.items) { const text = `${fmt(i.start, 'time')}–${fmt(i.end, 'time')} ${i.title}`; %>
-          <% if (i.type === 'task') { %><a class="cal-item task<%= i.late ? ' late' : '' %><%= i.pinned ? ' pinned' : '' %>" style="<%= pos(i) %>" href="/crm/<%= space %>/tasks/<%= i.id %>" title="<%= text %><%= i.late ? ` (after it's due ${i.due})` : '' %><%= i.pinned ? ' (time chosen by you)' : '' %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></a>
-          <% } else if (i.link) { %><a class="cal-item event<%= i.flexible ? ' flexible' : '' %><%= i.free ? ' free' : '' %>" style="<%= pos(i) %>" href="<%= i.link %>" target="_blank" rel="noopener" title="<%= text %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></a>
-          <% } else { %><div class="cal-item <%= i.type %>" style="<%= pos(i) %>" title="<%= text %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></div><% } %>
+          <% if (i.type === 'task') { %><a class="cal-item task<%= i.late ? ' late' : '' %><%= i.pinned ? ' pinned' : '' %>" data-space="<%= i.space %>" style="<%= pos(i) %>" href="/crm/<%= i.space %>/tasks/<%= i.id %>" title="<%= name(i.space) %> task: <%= text %><%= i.late ? ` (after it's due ${i.due})` : '' %><%= i.pinned ? ' (time chosen by you)' : '' %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></a>
+          <% } else if (i.link) { %><a class="cal-item event<%= i.flexible ? ' flexible' : '' %><%= i.free ? ' free' : '' %>" data-space="<%= i.space %>" style="<%= pos(i) %>" href="<%= i.link %>" target="_blank" rel="noopener" title="<%= name(i.space) %>: <%= text %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></a>
+          <% } else { %><div class="cal-item <%= i.type %>" data-space="<%= i.space %>" style="<%= pos(i) %>" title="<%= name(i.space) %>: <%= text %>"><span class="t"><%= fmt(i.start, 'time') %></span> <%= i.title %></div><% } %>
         <% } %>
       </div>
     </div>
     <% } %>
   </div>
-  <p class="cal-key"><span class="cal-swatch task"></span> Task, planned by the Hub <span class="cal-swatch event"></span> Appointment <span class="cal-swatch busy"></span> Busy in <%= space === 'work' ? 'Personal' : 'Work' %> <span class="cal-swatch window"></span> Your <%= label.toLowerCase() %> hours</p>
+  <p class="cal-key"><span class="cal-swatch task" data-space="work"></span> Work task <span class="cal-swatch task" data-space="personal"></span> Personal task <span class="cal-swatch event" data-space="work"></span> Work appointment <span class="cal-swatch event" data-space="personal"></span> Personal appointment <span class="cal-swatch window"></span> Your <%= label.toLowerCase() %> hours</p>
 </div></section>
 
 <section class="grid">
   <div class="panel s8">
     <div class="panel-head"><h2>Appointments</h2><span class="chip"><%= own.length %> in these 7 days</span></div>
-    <% if (!own.length) { %><div class="empty">No <%= label.toLowerCase() %> appointments in these 7 days.<%= space === 'work' ? ' Your work diary is not connected yet, so work tasks are planned around your personal appointments only.' : '' %></div><% } %>
+    <% if (!own.length) { %><div class="empty">No appointments in these 7 days.</div><% } %>
     <div class="day-list">
     <% for (const e of own) { %>
       <div class="day-row event">
         <span class="t"><%= fmt(e.start, 'date') %> <%= fmt(e.start, 'time') %>–<%= fmt(e.end, 'time') %></span>
         <span class="what"><%= e.title %></span>
-        <span class="tags">
+        <span class="tags"><span class="cal-tag"><%= name(e.space) %></span>
         <% if (e.solo) { %><form method="post" action="/crm/<%= space %>/calendar/flexible"><input type="hidden" name="event" value="<%= e.id %>"><input type="hidden" name="on" value="<%= e.flexible ? '0' : '1' %>"><button class="btn small" aria-pressed="<%= e.flexible %>"><%= e.flexible ? 'Flexible: the Hub may move it' : 'Fixed' %></button></form>
         <% } else { %><span class="cal-tag">Fixed: others are invited</span><% } %>
         </span>
       </div>
     <% } %>
     </div>
-    <p class="subline">An appointment stays put unless you make it flexible. A flexible one is moved in Google Calendar only when something fixed lands on top of it.</p>
+    <p class="subline">An appointment stays put unless you make it flexible. A flexible one is moved in Google Calendar only when something fixed lands on top of it.<%= space === 'work' ? ' Your work diary is not connected yet, so every appointment here is from your personal calendar.' : '' %></p>
   </div>
   <div class="s4 side-stack">
     <div class="panel">
