@@ -40,6 +40,14 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   assert.equal(krisp.rawForSource({...s,id:'spoof'}),null);
   assert.equal((await fetch(base+`/crm/personal/sources/${s.id}`)).status,200);
   require('../lib/crm/atoms').applyAtoms(s.id,[{statement:'Agreement',quote:'Yes, agreed.',kind:'fact'}]);
+  const plain=await fetch(base+'/api/krisp/webhook',{method:'POST',headers:{Authorization:'Bearer dummy','Content-Type':'text/plain'},body:'not json'}); assert.equal(plain.status,415);
+  require('../lib/crm/spaces').moveSource(s.id,'work','you','test');
+  const moved=db.crm().prepare('SELECT * FROM sources WHERE id=?').get(s.id); assert.equal(krisp.rawForSource(moved),JSON.stringify(payload));
+  const decided=await (await fetch(base+'/crm/krisp')).text(); assert.ok(decided.includes(`/crm/work/sources/${s.id}`)); assert.ok(!decided.includes(payload.transcript));
+  const undated=await post({meeting:{id:'undated'},created_at:1e30,transcript:'Receipt time test'});
+  const receipt=db.crm().prepare('SELECT received_at FROM krisp_intake WHERE id=?').get(undated.id).received_at;
+  db.crm().prepare('UPDATE krisp_intake SET received_at=? WHERE id=?').run(receipt-100,undated.id);
+  const undatedIds=krisp.classify(undated.id,'personal'); assert.equal(db.crm().prepare('SELECT occurred_at FROM sources WHERE id=?').get(undatedIds[0]).occurred_at,receipt-100);
   const empty=await post({notes:'no transcript'}); krisp.classify(empty.id,'ignore'); assert.equal((await post({notes:'no transcript'})).status,200); assert.equal(krisp.list().find(x=>x.id===empty.id).status,'ignored');
   const long=await post({meeting:{id:'long',started_at:1794301200000},transcript:'A long transcript. '.repeat(110000)});
   const ids=krisp.classify(long.id,'work'); assert.ok(ids.length>2);

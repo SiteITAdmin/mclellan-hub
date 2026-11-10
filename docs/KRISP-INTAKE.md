@@ -13,7 +13,7 @@ Home and CRM navigation link to this screen; Today shows only the pending count.
 Raw JSON is stored once in krisp_intake, outside sources, FTS and model processing.
 Classification atomically admits transcript parts through the existing source
 pipeline and records their IDs. Each source references the intake record; its
-signed-in page resolves raw provenance only for a matching space and source ID.
+signed-in page resolves raw provenance only for a matching current source, space and source ID, including moved sources.
 Repeated delivery does not reopen classified or ignored records. Conflicting
 classification returns 409. Failed classification rolls back admission and choice.
 No new scheduler, Mac program or model transport was added.
@@ -22,7 +22,7 @@ Use Krisp's individual Transcript created integration with a custom Authorizatio
 header. Account plan and telephone event support still need live confirmation.
 Both douglas.mclellan.scot and legacy dchat.mclellan.scot are handled by server
 routing, with optional trailing slash. Legacy DNS/nginx/certificate ownership is
-unverified. Missing secret returns 503; bad/missing Bearer returns 401. Invalid JSON
+unverified. Missing secret returns 503; bad/missing Bearer returns 401. Non-JSON content types return 415. Invalid JSON
 returns 400 and oversized JSON returns 413 at the webhook path (10 MB limit).
 Failures before capture remain in Krisp delivery history; credentials and payloads
 are not logged by this receiver.
