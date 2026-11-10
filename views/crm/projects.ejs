@@ -5,12 +5,14 @@
     <% if (!list.length) { %><div class="empty">No projects in <%= space === 'work' ? 'Work' : 'Personal' %> yet.</div><% } %>
     <div class="topics-list">
     <% for (const p of list) { %><a class="topic-row" href="/crm/<%= space %>/projects/<%= p.id %>"><span><%= p.name %></span><span class="n"><%= p.facts %> <%= p.facts === 1 ? 'fact' : 'facts' %><%= p.last ? `, latest ${fmt(p.last, 'date')}` : '' %></span></a><% } %>
+    <% if (unfiled) { %><a class="topic-row unfiled-row" href="/crm/<%= space %>/facts"><span>Not in a project</span><span class="n"><%= unfiled %> <%= unfiled === 1 ? 'fact' : 'facts' %></span></a><% } %>
     </div>
   </div>
   <div class="s4 side-stack">
   <div class="panel">
     <div class="panel-head"><h2>Not in a project</h2></div>
-    <p><a class="who" href="/crm/<%= space %>/facts"><%= unfiled %> <%= unfiled === 1 ? 'fact' : 'facts' %></a> aren't filed under any project. They still show on people, topics and search. Open the list to file them.</p>
+    <p><%= unfiled %> <%= unfiled === 1 ? 'fact isn’t' : 'facts aren’t' %> filed under any project. They still show on people, topics and search.</p>
+    <a class="btn primary small" href="/crm/<%= space %>/facts">Open the list and file them</a>
   </div>
   <div class="panel">
     <div class="panel-head"><h2>Add a project</h2></div>

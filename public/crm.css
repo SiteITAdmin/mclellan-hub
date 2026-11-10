@@ -493,3 +493,8 @@ details.panel > summary { cursor: pointer; font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-item { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 6px 0 12px; border-radius: 999px; background: var(--row); border: 1px solid var(--row-edge); font-size: 13px; }
 .chip-item small { color: var(--muted); }
+
+/* Clickable rows say so on hover; the unfiled-facts row reads as a different kind of entry. */
+a.topic-row:hover { border-color: var(--accent); }
+a.topic-row:hover span:first-child { text-decoration: underline; }
+.topic-row.unfiled-row { border-style: dashed; color: var(--muted); }
