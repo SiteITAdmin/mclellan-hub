@@ -1,6 +1,6 @@
 # Krisp transcript intake
 
-Implemented locally; not deployed or verified with a real Krisp delivery.
+A real delivery on 10 November 2026 exposed the segment contract below; this parser fix is locally verified with synthetic data. Production recovery and downstream model output remain for deployment verification.
 
 ## Setup and flow
 
@@ -29,30 +29,47 @@ are not logged by this receiver.
 
 ## Parsing and recovery
 
-Supported transcript string aliases: transcript_text, transcriptText, transcript,
-in the existing supported envelope locations. These aliases came from the retired
-receiver; current Krisp payload schema has not been verified. Notes, arrays and
-URLs are not substitutes. Any nonempty transcript is readable, including short
-calls. Empty/unsupported deliveries stay visible with their original JSON; if
-classified they produce skipped sources. Seconds, milliseconds and date strings
-are accepted for supported timestamp fields; missing dates use receipt time.
+The observed `transcript_created` delivery has an event `id`, `data.meeting`
+metadata (`id`, `title`, `start_date`, `end_date`, `duration`, owner, participants,
+speakers, URL), and `data.content` in chronological order. Each content item has
+`text`, `speaker`, and `speakerIndex`. This contract is evidenced by the user's
+real-delivery screenshot; no real transcript, identifiers or screenshot is committed.
+Tests use synthetic values only.
 
-Dedupe uses meeting ID and transcript content, independent of event ID and chosen
-space. Corrections with different text are separate evidence for existing synthesis.
-Without a meeting ID, identical content deduplicates. Unsupported JSON uses its raw
-hash, so event-only changes can produce separate unsupported items.
+Content segments render as `speaker: text`, separated by two newlines. Words,
+whitespace inside each text, and segment order are retained exactly, including
+across source parts (concatenate parts without adding separators). Missing names
+use only the supplied numeric index (`Speaker 7`); metadata never invents a name.
+Speaker metadata is not admitted as contact identity, including placeholder
+`@noemail.krisp.ai` addresses. Any malformed/empty segment, missing label and
+index, or non-array content makes the entire delivery unreadable, rather than
+silently losing part of the evidence. Raw JSON stays available for inspection.
+When content is present it takes precedence over legacy transcript aliases.
 
-There is no reparse button in this revision. For an unsupported delivery, leave it
-pending or Ignore it, inspect the raw JSON, repair the parser using that evidence,
-then resend the original delivery. Once the parser extracts text it has a new
-content identity and can be classified normally; the old item remains as the audit
-record. Resending unchanged unsupported JSON alone does not retry extraction or
-reopen a skipped source. Do not delete records to bypass deduplication.
+Legacy string aliases `transcript_text`, `transcriptText`, `transcript` remain
+supported in the existing envelope locations. Seconds, milliseconds and date
+strings are accepted; `data.meeting.start_date` supplies the observed meeting date.
+Missing/invalid dates fall back to receipt time on classification.
+
+Reading the intake list (including either Meetings page), receiving a webhook,
+or classifying lazily reparses only unreadable pending intake rows. Successful
+recovery updates transcript/readability in place, retaining ID, original JSON,
+title, dates, status and provenance. It creates no sources, FTS entries, contacts
+or model jobs. Unsupported pending rows remain inspectable; ignored/classified
+rows are never reparsed or reopened. No historical source backfill occurs.
+
+Dedupe uses meeting ID and rendered transcript, independent of event ID and space.
+Recovered records keep their original raw-based ID: resends match their stored
+transcript and meeting ID, even after classification or Ignore. Changed transcript
+content remains separate evidence. Without a meeting ID identical text deduplicates.
+Unsupported JSON retains raw-based identity, so event-only changes can still
+produce separate unsupported items. This revision does not consolidate duplicates
+that already existed before deployment.
 
 ## Remaining live verification
 
 With separate live authorization, verify only the single recording dated today,
-10 November 2026. Its exact title/ID and payload remain unconfirmed. Do not bulk
+10 November 2026. The screenshot established the segment payload contract; exact content must be compared only in the authorised live environment. Do not bulk
 backfill historical recordings. This is an initial verification target, not a
 permanent today-only filter. Compare full transcript/date and classification,
 then verify source-backed atoms through the existing subscription worker.

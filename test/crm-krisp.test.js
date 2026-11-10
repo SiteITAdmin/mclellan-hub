@@ -23,6 +23,45 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   process.env.KRISP_WEBHOOK_SECRET='dummy';
   assert.equal((await post({},'')).status,401); assert.equal((await post({},'wrong')).status,401);
   assert.equal((await post({space:'work',transcript:'Hello'})).status,400);
+  const segments = [{speaker:'Speaker 1',speakerIndex:1,text:'  Synthetic opening.\nSecond line.  '},{speaker:'Alex Example',speakerIndex:2,text:'Yes.'},{speakerIndex:7,text:'Unknown speaker.\n' + 'Evidence. '.repeat(5000)}];
+  const actual = {id:'synthetic-event',event:'transcript_created',data:{meeting:{id:'synthetic-meeting',title:'Synthetic mobile recording',duration:2835,owner:{id:'synthetic-owner'},calendar_event_id:null,participants:[],speakers:[{index:1},{index:2,email:'alex@example.invalid',first_name:'Alex',last_name:'Example'},{index:7,email:'unknown@noemail.krisp.ai'}],start_date:'2026-11-10T12:00:00.000Z',end_date:'2026-11-10T12:47:15.000Z',url:'https://example.invalid/meeting'},content:segments}};
+  const expected = segments.map(x=>`${x.speaker || 'Speaker '+x.speakerIndex}: ${x.text}`).join('\n\n');
+  const delivered = await post(actual); assert.equal(delivered.readable,true);
+  assert.equal(krisp.list().find(x=>x.id===delivered.id).transcript,expected);
+  // Simulate the exact pre-fix raw-based identity and unreadable state.
+  const oldId = require('crypto').createHash('sha256').update(JSON.stringify(['synthetic-meeting',JSON.stringify(actual)])).digest('hex');
+  db.crm().prepare('UPDATE krisp_intake SET id=?, transcript=?, readable=0 WHERE id=?').run(oldId,'',delivered.id);
+  const before = db.crm().prepare('SELECT * FROM krisp_intake WHERE id=?').get(oldId);
+  await fetch(base+'/crm/work/meetings');
+  const recovered = db.crm().prepare('SELECT * FROM krisp_intake WHERE id=?').get(oldId);
+  assert.deepEqual(recovered,{...before,transcript:expected,readable:1});
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,0);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM sources_fts').get().n,0);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM review_items').get().n,0);
+  const resend = await post({...actual,id:'synthetic-retry'}); assert.equal(resend.id,oldId); assert.equal(resend.created,false);
+  assert.equal((await choose(oldId,'work')).status,302);
+  const recoveredIds = JSON.parse(db.crm().prepare('SELECT source_ids FROM krisp_intake WHERE id=?').get(oldId).source_ids);
+  const recoveredSources = recoveredIds.map(id=>db.crm().prepare('SELECT * FROM sources WHERE id=?').get(id));
+  assert.equal(recoveredSources.map(x=>x.text).join(''),expected);
+  for (const source of recoveredSources) { assert.equal(source.occurred_at,1794312000); assert.equal(krisp.rawForSource(source),JSON.stringify(actual)); }
+  assert.equal((await post({...actual,id:'synthetic-retry-2'})).id,oldId);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,recoveredIds.length);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM review_items').get().n,0);
+  for (const content of [[segments[0],{speaker:'Bad',text:42}], [segments[0],null], [], [{text:'Missing label'}]]) {
+    const bad = await post({...actual,data:{...actual.data,content}}); assert.equal(bad.readable,false);
+    assert.equal(krisp.list().find(x=>x.id===bad.id).transcript,'');
+  }
+  // Archived unreadable records must never be recovered by later reads.
+  const archived = await post({...actual,data:{...actual.data,meeting:{id:'synthetic-archive'}}});
+  krisp.classify(archived.id,'ignore');
+  const ignoredRetry = await post({...actual,id:'synthetic-ignore-retry',data:{...actual.data,meeting:{id:'synthetic-archive'}}});
+  assert.equal(ignoredRetry.id,archived.id); assert.equal(ignoredRetry.created,false); assert.equal(krisp.list().find(x=>x.id===archived.id).status,'ignored');
+  db.crm().prepare('UPDATE krisp_intake SET readable=0, transcript=? WHERE id=?').run('',archived.id);
+  krisp.list(); assert.equal(db.crm().prepare('SELECT readable FROM krisp_intake WHERE id=?').get(archived.id).readable,0);
+  db.crm().prepare("UPDATE krisp_intake SET status='classified' WHERE id=?").run(archived.id);
+  krisp.list(); assert.equal(db.crm().prepare('SELECT readable FROM krisp_intake WHERE id=?').get(archived.id).readable,0);
+  // Isolate the existing legacy HTTP assertions below.
+  db.crm().prepare('DELETE FROM sources_fts').run(); db.crm().prepare('DELETE FROM sources').run(); db.crm().prepare('DELETE FROM krisp_intake').run();
   const payload={meeting:{id:'today',title:'<script>unsafe</script>',started_at:1794301200},transcript:'Yes, agreed.'};
   const r=await post(payload,'dummy','/'); assert.equal(r.status,200); assert.equal(r.created,true);
   assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,0);
