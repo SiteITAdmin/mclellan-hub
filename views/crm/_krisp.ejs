@@ -1,11 +1,22 @@
 <h2>Krisp transcripts</h2>
-<p>Krisp intake <%= configured ? 'configured' : 'not configured' %>. <%= deliveries.filter(x => x.status === 'pending').length %> waiting for your choice. Unfiled recordings appear in both spaces until you choose.</p>
-<p>Transcripts stay outside Search and the reader until you choose Work or Personal. Ignore recordings you do not want imported.</p>
+<p>Krisp intake <%= configured ? 'configured' : 'not configured' %>. <%= deliveries.filter(x => x.status === 'pending').length %> waiting for speaker review. Unfiled recordings appear in both spaces until you choose.</p>
+<p>Transcripts stay outside Search and the reader until you name every speaker and explicitly release to Work or Personal. Ignore recordings you do not want imported.</p>
 <% for (const d of deliveries) { %>
-<section class="panel"><h2><%= d.title %></h2><p><%= fmt(d.occurred_at || d.received_at) %> · <%= d.status === 'pending' ? 'Choose Work or Personal' : d.status %><%= d.sources.length ? ' · ' + [...new Set(d.sources.map(s => s.space))].join(', ') : '' %></p>
-<% if (!d.readable) { %><p class="flash bad">Empty or unsupported transcript. Inspect the original delivery before choosing.</p><% } %>
+<section class="panel"><h2><%= d.title %></h2><p><%= fmt(d.occurred_at || d.received_at) %> · <%= d.status === 'pending' ? 'Name speakers before release' : d.status %><%= d.sources.length ? ' · ' + [...new Set(d.sources.map(s => s.space))].join(', ') : '' %></p>
+<% if (!d.readable) { %><p class="flash bad">Empty or unsupported transcript. Held outside the reader. Inspect the original delivery or Ignore.</p><% } %>
 <% if (d.status === 'pending') { %><details><summary>Transcript</summary><pre style="white-space:pre-wrap"><%= d.transcript %></pre></details>
 <details><summary>Original Krisp delivery</summary><pre style="white-space:pre-wrap"><%= d.raw_json %></pre></details>
-<form method="post" action="/crm/krisp/<%= d.id %>/classify"><input type="hidden" name="returnSpace" value="<%= space %>"><button class="btn" name="choice" value="work">Work</button> <button class="btn" name="choice" value="personal">Personal</button> <button class="btn" name="choice" value="ignore">Ignore</button></form>
+<% if (d.review.speakers.length) { %>
+<form method="post" action="/crm/krisp/<%= d.id %>/classify">
+<input type="hidden" name="returnSpace" value="<%= space %>"><input type="hidden" name="revision" value="<%= d.review.revision %>">
+<% d.review.speakers.forEach((speaker, i) => { %>
+<label for="speaker-<%= d.id %>-<%= i %>">Name for <%= speaker.label %></label>
+<% for (const preview of speaker.previews) { %><blockquote><%= preview %></blockquote><% } %>
+<input id="speaker-<%= d.id %>-<%= i %>" name="names" required maxlength="120" autocomplete="off" placeholder="Confirmed name">
+<% }) %>
+<p>Confirm every name above. This releases the attributed transcript to the existing reader for facts and tasks.</p>
+<button class="btn" name="choice" value="work">Release to Work</button> <button class="btn" name="choice" value="personal">Release to Personal</button>
+</form><% } else { %><p class="flash bad"><%= d.review.reason %></p><% } %>
+<form method="post" action="/crm/krisp/<%= d.id %>/classify"><input type="hidden" name="returnSpace" value="<%= space %>"><button class="btn" name="choice" value="ignore">Ignore</button></form>
 <% } else { for (const source of d.sources) { %><p><a href="/crm/<%= source.space %>/sources/<%= source.id %>">View source</a></p><% } } %>
 </section><% } %>
