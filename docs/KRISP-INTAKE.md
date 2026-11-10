@@ -59,6 +59,8 @@ or model jobs. Unsupported pending rows remain inspectable; ignored/classified
 rows are never reparsed or reopened. No historical source backfill occurs.
 
 Dedupe uses meeting ID and rendered transcript, independent of event ID and space.
+Resends of previously unreadable ignored/classified records also preserve the existing decision when their stored payload parses to the same meeting and transcript, without changing the archived row.
+
 Recovered records keep their original raw-based ID: resends match their stored
 transcript and meeting ID, even after classification or Ignore. Changed transcript
 content remains separate evidence. Without a meeting ID identical text deduplicates.

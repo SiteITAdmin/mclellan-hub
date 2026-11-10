@@ -58,8 +58,10 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   assert.equal(ignoredRetry.id,archived.id); assert.equal(ignoredRetry.created,false); assert.equal(krisp.list().find(x=>x.id===archived.id).status,'ignored');
   db.crm().prepare('UPDATE krisp_intake SET readable=0, transcript=? WHERE id=?').run('',archived.id);
   krisp.list(); assert.equal(db.crm().prepare('SELECT readable FROM krisp_intake WHERE id=?').get(archived.id).readable,0);
+  const decidedResend=await post({...actual,id:'synthetic-decided-retry',data:{...actual.data,meeting:{id:'synthetic-archive'}}}); assert.equal(decidedResend.id,archived.id); assert.equal(decidedResend.created,false);
   db.crm().prepare("UPDATE krisp_intake SET status='classified' WHERE id=?").run(archived.id);
   krisp.list(); assert.equal(db.crm().prepare('SELECT readable FROM krisp_intake WHERE id=?').get(archived.id).readable,0);
+  const classifiedResend=await post({...actual,id:'synthetic-classified-retry',data:{...actual.data,meeting:{id:'synthetic-archive'}}}); assert.equal(classifiedResend.id,archived.id); assert.equal(classifiedResend.created,false);
   // Isolate the existing legacy HTTP assertions below.
   db.crm().prepare('DELETE FROM sources_fts').run(); db.crm().prepare('DELETE FROM sources').run(); db.crm().prepare('DELETE FROM krisp_intake').run();
   const payload={meeting:{id:'today',title:'<script>unsafe</script>',started_at:1794301200},transcript:'Yes, agreed.'};
