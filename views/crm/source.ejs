@@ -41,5 +41,5 @@
 </section>
 <p><a class="btn" href="/crm/<%= space %>/tasks/new?sourceId=<%= s.id %>">Add a task from this source</a></p>
 
-<% if (s.origin === "krisp") { %><details><summary>Original Krisp delivery</summary><pre style="white-space:pre-wrap"><%= s.raw_ref %></pre></details><% } %>
+<% if (s.origin === "krisp") { %><details><summary>Original Krisp delivery</summary><pre style="white-space:pre-wrap"><%= /^krisp-intake:[a-f0-9]{64}$/.test(s.raw_ref || '') ? (krispRaw || 'Original delivery unavailable') : s.raw_ref %></pre></details><% } %>
 <%- include('_bottom') %>

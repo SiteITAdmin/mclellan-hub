@@ -1,72 +1,73 @@
-# Krisp transcript intake — Change Desk 4d7499a4
+# Krisp transcript intake
 
-Implemented receiver; not deployed or verified against a real Krisp delivery.
+Implemented locally; not deployed or verified with a real Krisp delivery.
 
-## Supported automatic path
+## Setup and flow
 
-Krisp's official [Webhook API guide](https://help.krisp.ai/hc/en-us/articles/24514911804316-Webhook-API)
-(accessed 10 November 2026) supports automatic Transcript created events on
-Core/Advanced, custom Authorization headers, sample deliveries and delivery history.
-Use the individual integration; team webhooks additionally require broader meeting
-sharing. No calendar invitation or attendees are required. This receives existing
-transcripts; it does not record calls or transcribe audio.
+Set KRISP_WEBHOOK_SECRET securely. POST /api/krisp/webhook with Authorization:
+Bearer <secret>. No global space configuration exists. Body space fields are
+rejected; each transcript must be assigned Work or Personal at /crm/krisp behind
+Douglas's existing sign-in. Ignore keeps an unwanted delivery out of knowledge.
+Home and CRM navigation link to this screen; Today shows only the pending count.
 
-The guide does not publish an exact payload schema. Transcript string field aliases
-are evidence from version-old:routes/hub-crm.js, not a verified current API contract.
-The retired route accepted Bearer, x-krisp-token and x-api-key. This receiver retains
-only the user-confirmed Bearer contract. It never accepts a user/space from the body.
-Notes, outlines, arrays and URLs are not silently substituted for transcript text.
+Raw JSON is stored once in krisp_intake, outside sources, FTS and model processing.
+Classification atomically admits transcript parts through the existing source
+pipeline and records their IDs. Each source references the intake record; its
+signed-in page resolves raw provenance only for a matching space and source ID.
+Repeated delivery does not reopen classified or ignored records. Conflicting
+classification returns 409. Failed classification rolls back admission and choice.
+No new scheduler, Mac program or model transport was added.
 
-## Setup after review/deployment
+Use Krisp's individual Transcript created integration with a custom Authorization
+header. Account plan and telephone event support still need live confirmation.
+Both douglas.mclellan.scot and legacy dchat.mclellan.scot are handled by server
+routing, with optional trailing slash. Legacy DNS/nginx/certificate ownership is
+unverified. Missing secret returns 503; bad/missing Bearer returns 401. Invalid JSON
+returns 400 and oversized JSON returns 413 at the webhook path (10 MB limit).
+Failures before capture remain in Krisp delivery history; credentials and payloads
+are not logged by this receiver.
 
-1. Set KRISP_WEBHOOK_SECRET securely and KRISP_WEBHOOK_SPACE explicitly to work or
-   personal. Neither has a default; missing configuration returns 503. Use a dedicated
-   single-space integration. Mixed Work/Personal recordings must not automatically be
-   sent to this integration until the user chooses how to separate them.
-2. The receiver path is /api/krisp/webhook on douglas.mclellan.scot and, for compatibility,
-   dchat.mclellan.scot. The latter existed in Version Old, but current nginx routing,
-   certificate and which application owns it must be confirmed separately. A read-only
-   public web fetch failed; that does not establish endpoint health. No production POST
-   or configuration change was performed.
-3. In Krisp Settings → Integrations → Webhook, select Transcript created and set
-   Authorization to Bearer followed by the configured secret. Confirm account plan and
-   that telephone recordings trigger this event.
-4. With separate authorization for live testing, send a sample and one real telephone
-   transcript; inspect Krisp delivery History and Hub Captured in the configured space.
-   Compare the full transcript and timestamp to Krisp, then verify source-backed atoms
-   through the existing subscription worker. Do not call synthetic tests proof of this.
-5. If the real payload uses different fields, inspect Original Krisp delivery on the
-   signed-in source page and adapt the parser using that evidence. Unsupported/empty
-   payloads are saved as unreadable/skipped sources, never sent to the model. Re-send
-   after parser repair; no automatic retry of unreadable evidence is claimed.
+## Parsing and recovery
 
-## Data flow and limits
+Supported transcript string aliases: transcript_text, transcriptText, transcript,
+in the existing supported envelope locations. These aliases came from the retired
+receiver; current Krisp payload schema has not been verified. Notes, arrays and
+URLs are not substitutes. Any nonempty transcript is readable, including short
+calls. Empty/unsupported deliveries stay visible with their original JSON; if
+classified they produce skipped sources. Seconds, milliseconds and date strings
+are accepted for supported timestamp fields; missing dates use receipt time.
 
-No new table, scheduler or Mac program. Raw JSON (raw_ref), transcript parts, title,
-origin and available start time enter existing sources via admitSource, then the normal
-crm_atomise_tick subscription pipeline compiles atoms. Full JSON is retained on each
-part and shown only on the authenticated source page. Unknown named speakers use the
-existing same-space identity resolver; generic labels do not create people. No calendar
-attendee matching or automatic participant identity is inferred here.
+Dedupe uses meeting ID and transcript content, independent of event ID and chosen
+space. Corrections with different text are separate evidence for existing synthesis.
+Without a meeting ID, identical content deduplicates. Unsupported JSON uses its raw
+hash, so event-only changes can produce separate unsupported items.
 
-Exact transcript content plus meeting ID and configured space deduplicates redeliveries
-independently of event IDs. Corrected text is separate evidence for existing synthesis;
-semantic duplicate/supersession decisions remain with that pipeline. Without a meeting
-ID, identical text in the same space deduplicates. Without a parseable start time,
-receipt time is used. JSON request size remains the existing server limit (10 MB).
-Unauthorized requests create no source. Invalid JSON/non-object requests return errors;
-unsupported authenticated object payloads remain visible as skipped sources. Delivery
-failures before admission are visible in Krisp History, not a new Hub health dashboard.
+There is no reparse button in this revision. For an unsupported delivery, leave it
+pending or Ignore it, inspect the raw JSON, repair the parser using that evidence,
+then resend the original delivery. Once the parser extracts text it has a new
+content identity and can be classified normally; the old item remains as the audit
+record. Resending unchanged unsupported JSON alone does not retry extraction or
+reopen a skipped source. Do not delete records to bypass deduplication.
 
-## Synthetic verification
+## Remaining live verification
 
-HUB_DISABLE_JOBS=1 node --test test/crm-krisp.test.js exercises local HTTP Bearer
-rejection, missing configuration, payload-space spoofing, telephone transcript intake,
-raw provenance, repeated event delivery, corrected text, long transcript splitting,
-empty/notes-only visibility and a synthetic model result applied through applyAtoms
-with a source citation. No model was called; real subscription extraction remains to
-be verified with a real Krisp recording after deployment is authorized.
+With separate live authorization, verify only the single recording dated today,
+10 November 2026. Its exact title/ID and payload remain unconfirmed. Do not bulk
+backfill historical recordings. This is an initial verification target, not a
+permanent today-only filter. Compare full transcript/date and classification,
+then verify source-backed atoms through the existing subscription worker.
+No live data, supplied credential, production POST, deployment or import was used.
 
-Full suite on this Linux checkout: 149 tests, 148 pass, 1 failure in the existing
-Hermes tap installer test (BSD-style sed -i invocation is incompatible with GNU
-sed). The Krisp test passes. This change does not modify the Hermes installer.
+## Local evidence
+
+HUB_DISABLE_JOBS=1 node --test test/crm-krisp.test.js uses dummy Bearer credentials,
+local HTTP intake and owner-session route/render patterns. It covers missing
+configuration/auth, spoofed space, no pre-choice sources/FTS, escaped holding UI,
+auth/origin/choice guards, conflicts, dedupe after choice/ignore, source provenance,
+short text, numeric dates, split reference storage and synthetic atom application.
+Full-suite results are recorded in the revision commit and implementation report.
+
+Actual server.js with isolated temporary Hub/CRM databases passed 16 local HTTP
+checks across both host headers and both path variants: 400 malformed JSON,
+413 oversized JSON, 401 missing Bearer, 200 authenticated intake. Full npm test:
+149 tests, 148 pass; the pre-existing Hermes installer GNU/BSD sed failure remains.

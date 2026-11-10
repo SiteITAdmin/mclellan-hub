@@ -1,3 +1,4 @@
+<% if (krispWaiting) { %><p><a href="/crm/krisp"><%= krispWaiting %> Krisp transcripts waiting for Work or Personal choice</a></p><% } %>
 <%- include('_top') %>
 <% const d = data; const label = space === 'work' ? 'Work' : 'Personal'; %>
 <% const dateLine = new Date().toLocaleDateString('en-IE', { timeZone: 'Europe/Dublin', weekday: 'long', day: 'numeric', month: 'long' }); %>
