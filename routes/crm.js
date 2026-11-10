@@ -418,6 +418,19 @@ router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
   res.render('crm/source', { page: 'captured', s, title: s.title });
 });
 
+router.post('/crm/:space/sources/:id/move-space', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const spaces = require('../lib/crm/spaces');
+  const to = spaces.other(req.params.space);
+  try {
+    const s = crm().prepare('SELECT space FROM sources WHERE id = ?').get(req.params.id);
+    if (!s || s.space !== req.params.space) throw new Error('Source not found');
+    spaces.moveSource(req.params.id, to, 'you', 'You moved it');
+    flash(req, `Moved to ${spaces.label(to)}. It will be read again there in a minute or two.`);
+    return res.redirect(`/crm/${to}/sources/${encodeURIComponent(req.params.id)}`);
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(`/crm/${req.params.space}/sources/${encodeURIComponent(req.params.id)}`);
+});
+
 router.post('/crm/:space/sources/:id/retry', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   flash(req, atoms.retrySource(req.params.id) ? 'Queued to read again' : 'Nothing to retry');
   back(req, res, `/crm/${req.params.space}/captured`);

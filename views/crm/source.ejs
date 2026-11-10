@@ -1,10 +1,18 @@
 <%- include('_top') %>
 <% const quoted = s.text.length > (s.text_fresh || '').length ? s.text.slice((s.text_fresh || '').length).trim() : ''; %>
-<div class="crumbs"><a href="/crm/<%= space %>/captured">Captured</a> / <%= s.kind === 'note' ? 'Note' : s.kind === 'whatsapp' ? 'WhatsApp' : 'Email' %></div>
+<div class="crumbs"><a href="/crm/<%= space %>/captured">Captured</a> / <%= s.kind === 'note' ? 'Note' : s.kind === 'whatsapp' ? 'WhatsApp' : s.kind === 'calendar' ? 'Calendar entry' : 'Email' %></div>
 <div class="title-row"><div><h1><%= s.title %></h1>
   <p class="subline"><%= fmt(s.occurred_at) %><%= s.origin === 'outlook' ? ', Outlook' : s.origin === 'whatsapp' ? ', WhatsApp' : s.origin === 'gmail' ? ', Gmail' : String(s.origin).startsWith('gmail:') ? `, ${s.origin.slice(6)}` : '' %><%= s.direction === 'out' ? ', sent by you' : s.direction === 'in' ? ', received' : '' %>. <%- include('_state', { s }) %></p></div>
+  <div class="form-row" style="flex-wrap:nowrap">
   <% if (s.atomise_status === 'failed' || !s.readable) { %><form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/retry"><button class="btn" type="submit">Read again</button></form><% } %>
+  <% if (s.atomise_status !== 'queued' && !(s.origin === 'calendar' && s.atomise_status === 'ignored')) { %><form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/move-space"><button class="btn" type="submit" title="Its facts are taken back and it is read again in the other space">Move to <%= space === 'work' ? 'Personal' : 'Work' %></button></form><% } %>
+  </div>
 </div>
+<% if (s.space_by) { const sp = space === 'work' ? 'Work' : 'Personal'; %>
+<p class="subline space-why"><%= s.space_by === 'ask' ? `Under ${sp} for now: Claude decides Work or Personal when it reads this.`
+  : s.space_by === 'clues' ? `In ${sp} because ${s.space_why}.`
+  : s.space_why ? `In ${sp}: ${s.space_why}.` : '' %></p>
+<% } %>
 <section class="grid first">
   <div class="s8" style="display:flex;flex-direction:column;gap:var(--gap)">
     <div class="panel">
@@ -21,7 +29,7 @@
   <div class="s4 side-stack">
     <div class="panel">
       <div class="panel-head"><h2>People</h2></div>
-      <% if (!s.addresses.length) { %><div class="empty">Your own note.</div><% } %>
+      <% if (!s.addresses.length) { %><div class="empty"><%= s.kind === 'calendar' ? 'No attendees listed.' : 'Your own note.' %></div><% } %>
       <dl class="kv" style="margin:0">
       <% for (const a of s.addresses) { %>
         <div class="kv-row"><dt><%= a.role === 'from' ? 'From' : a.role === 'to' ? 'To' : 'Copy' %></dt>

@@ -628,3 +628,12 @@ Douglas found facts filed under Dad that had nothing to do with his father. The 
 - **"Not a vendor"** removes them, lifts their company rule if one was set (otherwise they could never be offered again), holds their mail again, and offers them straight back on Who is this?, so deciding there releases their mail for reading.
 - `lib/crm/vendors.js`. Tests: `test/crm-vendors.test.js`.
 
+## Work or Personal, per calendar entry (10 Nov 2026)
+
+- **Why:** the Google calendar is set to Personal but holds copies of Outlook work meetings, so every work meeting was read as Personal (the "Facts not in a project" list in Personal filled with on-call rotas and team meetings). Gmail, Outlook, WhatsApp, iMessage and notes already know their space from the channel and are unchanged.
+- **Clues first** (`lib/crm/spaces.js`): attendees who are known people, Douglas's work address, addresses at an organisation's domain, and full names of people, organisations and projects filed in exactly one space. A one-word name, or a name filed in both spaces, says nothing. If the clues all point one way, that is the space (`sources.space_by = 'clues'`, with the reasons in `space_why`, shown on the source page).
+- **Otherwise the reader decides** while reading (`space_by = 'ask'`): the packet gets a "Space check" describing both spaces from Douglas's own organisations and projects. If Claude says the other space, the source is moved and read again there, so its facts use the right space's people, projects and topics (`'reader'`). Later copies of the same entry keep that decision unless clues say otherwise.
+- **Douglas's own move:** "Move to Work/Personal" on any source page takes its facts back (facts he deleted stay deleted) and reads it again in the other space. For a calendar entry, later copies follow (`calendar_events.space_by = 'you'`).
+- **Changed entries:** a new copy of a calendar entry retires the earlier copy and its facts (an old time or agenda), shown as "Replaced by a newer copy". This also cleared the duplicates left by the switch to Dublin times.
+- **Once:** `recheckCalendar()` (setting `calendar_spaces_v1`) applied this to the copies read before.
+- Tests: `test/crm-spaces.test.js`.
