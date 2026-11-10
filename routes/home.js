@@ -8,9 +8,9 @@ const views = require('../lib/crm/views');
 
 const router = express.Router();
 
-// Change Desk runs on the dev server at home and listens on the home network
-// only, so this link opens nothing from anywhere else. The page says so.
-const CHANGE_DESK_URL = process.env.CHANGE_DESK_URL || 'http://192.168.0.3:3780/';
+// Change Desk runs on the dev server at home and is reached by its Tailscale
+// name, so the link opens only on a device signed in to Tailscale. The page says so.
+const CHANGE_DESK_URL = process.env.CHANGE_DESK_URL || 'https://dev-server.tailc6e5c3.ts.net/';
 
 function requireAuth(req, res, next) {
   if (req.portfolioUser === 'douglas' && req.session?.adminUser === 'douglas') return next();

@@ -45,8 +45,8 @@ test('every link on the landing page opens a real screen', async () => {
     // The public site and its editor are served by other routers with their own tests.
     const elsewhere = ['/', '/admin', '/chat'];
     const outside = links.filter(h => !h.startsWith('/'));
-    assert.deepStrictEqual(outside, ['http://192.168.0.3:3780/'], 'Change Desk is the only link off the site');
-    assert.match(body, /Change Desk<\/span><span class="what">[^<]*home network only/, 'and it says where it works');
+    assert.deepStrictEqual(outside, ['https://dev-server.tailc6e5c3.ts.net/'], 'Change Desk is the only link off the site');
+    assert.match(body, /Change Desk<\/span><span class="what">[^<]*Needs Tailscale/, 'and it says where it works');
     for (const href of links.filter(h => h.startsWith('/') && !elsewhere.includes(h))) {
       const page = await fetch(base + href);
       assert.strictEqual(page.status, 200, `${href} → ${page.status}`);
