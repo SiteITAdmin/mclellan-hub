@@ -150,7 +150,7 @@ test('atoms are checked against the source and names go through the matcher', ()
   review.createProject('work', 'M365 Rollout');
   const src = crm().prepare("SELECT * FROM sources WHERE raw_ref = 'f-jane-1'").get();
   const packet = atoms.buildPacket(src);
-  assert.match(packet.userPrompt, /Projects in this space: M365 Rollout/);
+  assert.match(packet.userPrompt, /^- M365 Rollout: /m);
   assert.match(packet.userPrompt, /DPIA for Purview/);
 
   const n = atoms.applyAtoms(src.id, [

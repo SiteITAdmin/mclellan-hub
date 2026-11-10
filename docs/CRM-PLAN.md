@@ -601,3 +601,14 @@ Validation: synthetic PDF and long-text ingestion, cross-space deduplication, si
 - **Push notifications** (`lib/crm/notifications.js`, `public/crm-worker.js`, `public/crm-notifications.js`): VAPID keys are generated once into `crm.db`; devices subscribe per space. Meeting prep 30 minutes before, and promises due today. Every send is an `effects` receipt, so a lost reply cannot duplicate a notification; 404/410 retires the device.
 - **WhatsApp self-chat** (`lib/crm/self-chat.js`, `whatsapp_outbox`, tap `outbox/claim` + `outbox/complete`): Douglas's approved own chat saves notes and asks questions, with an optional `Work:` / `Personal:` prefix. The same queue carries reminders, drift and answers. The tap claims each item once, sends only to the approved self chat, and records the outcome; nothing is sent to anyone else. `scripts/install-hermes-tap.sh` upgrades an existing tap so it passes the live socket through.
 - Validation: synthetic tests cover exact-match imports, identifier conflicts, LinkedIn parsing, Contacts pagination, cited relationships, iMessage identity/window/pause/unreadable messages, push receipts and expiry, self-chat queue/claim/complete, and the tap's one-shot outbox delivery. Live checks still needed: Google Contacts re-consent, a real Boox transcription and meeting prep once the Claude limit resets, Full Disk Access for iMessage, an iPhone home-screen subscription, and one self-chat round trip.
+
+## Projects as corrected (10 Nov 2026)
+
+Douglas found facts filed under Dad that had nothing to do with his father. The reader had been given only the project names ("Projects in this space: Dad") and was told to tag a fact when it belonged, so it filed family paperwork, banking and appointments under the only family-sounding project. Nothing checked the guess.
+
+- **What a project covers:** `projects.about` (Douglas's words) and `projects.person_id` (who it is about), set on the project page. The reader is now given these for every project. A project with no description is used only when the source names it directly.
+- **Stricter reader:** a fact is tagged only when it is plainly about what the project covers; an empty list is right whenever it is unsure.
+- **Not this project:** a button on each fact on the project page. The link moves to `project_removals` with who removed it and why, and can be put back. Douglas's own decisions are final and never re-checked.
+- **Re-check** (`lib/crm/project-check.js`, through the `crm_atomise_tick` queue): every fact filed before the project's current description is checked against it, 30 at a time. A fact the reply doesn't mention stays. Facts an earlier check took off are looked at again when the description changes, and come back if they now belong. Facts from a mailbox or chat Douglas filed under the project (channel projects) are not re-checked. The project's "Where things stand" is rewritten soon after any change.
+- Tests: `test/crm-project-check.test.js`.
+

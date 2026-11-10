@@ -528,6 +528,25 @@ router.get('/crm/:space/projects/:id', spaceParam, (req, res) => {
   res.render('crm/project', { page: 'projects', p, title: p.name });
 });
 
+router.post('/crm/:space/projects/:id/:action(about|remove|putback)', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { space, id, action } = req.params;
+  const p = crm().prepare('SELECT * FROM projects WHERE id = ? AND space = ?').get(id, space);
+  if (!p) return res.status(404).send('Not found');
+  const check = require('../lib/crm/project-check');
+  try {
+    if (action === 'about') {
+      check.setAbout(id, { about: req.body.about, personId: req.body.personId });
+      flash(req, `Saved. Claude will re-check the facts filed under ${p.name} against this.`);
+    } else {
+      const atomId = String(req.body.atomId || '');
+      if (!crm().prepare('SELECT 1 FROM atoms WHERE id = ? AND space = ?').get(atomId, space)) throw new Error('Fact not found');
+      if (action === 'remove') { check.remove(atomId, id, 'you', 'You took it off'); flash(req, `Taken off ${p.name}. You can put it back below.`); }
+      else { check.putBack(atomId, id); flash(req, `Put back on ${p.name}.`); }
+    }
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(`/crm/${space}/projects/${id}`);
+});
+
 router.get('/crm/:space/topics/:id', spaceParam, (req, res) => {
   const t = views.topic(req.params.id);
   if (!t || t.space !== req.params.space) return res.status(404).send('Not found');

@@ -1,6 +1,7 @@
 <%- include('_top') %>
 <div class="crumbs"><a href="/crm/<%= space %>/projects">Projects</a> / <%= p.name %></div>
-<div class="title-row"><div><h1><%= p.name %></h1><p class="subline"><%= p.atoms.length %> <%= p.atoms.length === 1 ? 'fact' : 'facts' %>, newest first.</p></div></div>
+<div class="title-row"><div><h1><%= p.name %></h1><p class="subline"><%= p.about ? p.about : 'No description yet. Say what this project covers so facts are filed here only when they belong.' %><% if (p.person) { %> About <a href="/crm/<%= space %>/people/<%= p.person.id %>"><%= p.person.name %></a>.<% } %></p>
+  <p class="subline"><%= p.atoms.length %> <%= p.atoms.length === 1 ? 'fact' : 'facts' %>, newest first.<% if (p.checkWaiting) { %> Claude is re-checking <%= p.checkWaiting %> of them against what the project covers.<% } %></p></div></div>
 <%- include('_standing', { standing: p.standing }) %>
 <section class="grid first"><div class="panel s12">
   <div class="panel-head"><h2>Tasks</h2><a class="end" href="/crm/<%= space %>/tasks/new?projectId=<%= p.id %>">Add a task</a></div>
@@ -9,9 +10,18 @@
 <section class="grid first">
   <div class="panel s8">
     <% if (!p.atoms.length) { %><div class="empty">No facts in this project yet.</div><% } %>
-    <% for (const a of p.atoms) { %><%- include('_atom', { a }) %><% } %>
+    <% for (const a of p.atoms) { %><%- include('_atom', { a, removeFrom: p.id }) %><% } %>
   </div>
   <div class="s4 side-stack">
+    <div class="panel"><div class="panel-head"><h2>What this project covers</h2></div>
+      <form method="post" action="/crm/<%= space %>/projects/<%= p.id %>/about" class="list">
+        <label class="sr-only" for="about">What this project covers</label>
+        <textarea class="textarea" id="about" name="about" rows="4" maxlength="600" placeholder="e.g. My father's care, health and appointments in Scotland. Not my own banking or the mediation."><%= p.about %></textarea>
+        <div class="field"><label for="aboutPerson">Who it is about</label><select class="select" id="aboutPerson" name="personId"><option value="">Nobody in particular</option><% for (const x of p.choices) { %><option value="<%= x.id %>" <%= p.person_id === x.id ? 'selected' : '' %>><%= x.name %></option><% } %></select></div>
+        <div><button class="btn small" type="submit">Save</button></div>
+      </form>
+      <p class="subline">Claude reads this before filing anything here, and re-checks what is already filed whenever you change it.</p>
+    </div>
     <div class="panel"><div class="panel-head"><h2>People</h2></div>
       <% if (!p.people.length) { %><div class="empty">Nobody linked yet.</div><% } %>
       <div class="topics-list"><% for (const x of p.people) { %><a class="topic-row" href="/crm/<%= space %>/people/<%= x.id %>"><span><%= x.name %></span><span class="n"><%= x.n %></span></a><% } %></div>
@@ -22,4 +32,17 @@
     </div>
   </div>
 </section>
+<% if (p.removed.length) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Taken off this project</h2><span class="chip"><%= p.removed.length %></span></div>
+  <div class="rows">
+  <% for (const r of p.removed) { %>
+    <div class="rowcard two" style="grid-template-columns:1fr auto">
+      <div class="main"><div class="what" style="font-weight:400"><%= r.statement %></div><div class="meta" style="white-space:normal"><%= r.by === 'you' ? 'You took it off' : `Claude: ${r.reason}` %>, <%= fmt(r.at, 'date') %></div></div>
+      <form method="post" action="/crm/<%= space %>/projects/<%= p.id %>/putback"><input type="hidden" name="atomId" value="<%= r.atom_id %>"><button class="btn small">Put back</button></form>
+    </div>
+  <% } %>
+  </div>
+</div></section>
+<% } %>
 <%- include('_bottom') %>
