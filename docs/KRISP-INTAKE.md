@@ -49,8 +49,9 @@ real-delivery screenshot; no real transcript, identifiers or screenshot is commi
 Tests use synthetic values only.
 
 Content segments render as `speaker: text`, separated by two newlines. Words,
-whitespace inside each text, and segment order are retained exactly, including
-across source parts (concatenate parts without adding separators). Missing names
+whitespace inside each text, and segment order are retained exactly in the held
+transcript. Released sources use confirmed names, indent continuation lines, and
+repeat attribution when a long turn needs another source part. Missing names
 use only the supplied numeric index (`Speaker 7`); metadata never invents a name.
 Speaker metadata is not admitted as contact identity, including placeholder
 `@noemail.krisp.ai` addresses. Any malformed/empty segment, missing label and
@@ -107,7 +108,7 @@ checks across both host headers and both path variants: 400 malformed JSON,
 
 Pending Krisp evidence stays in `krisp_intake`, outside sources, Search, facts
 and tasks. Name every speaker in the transcript previews, then explicitly
-**Release to Work** or **Release to Personal**. Names start blank even when Krisp
+choose **Work** or **Personal** and press **Release meeting**. Names start blank even when Krisp
 supplies a name: this requires confirmation. Ignore remains available independently.
 The original JSON and original transcript are retained unchanged. The existing
 intake row's `speaker_review` is a raw attribution receipt (revision + confirmed

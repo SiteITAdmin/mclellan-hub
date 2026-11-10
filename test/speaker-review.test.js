@@ -23,3 +23,8 @@ test('every long fragment repeats confirmed identity and continuation lines stay
  for (const part of result.parts) { assert.ok(part.length<=20000); assert.match(part,/^(Alex|Bea): /); }
  assert.ok(result.text.includes('\n    Douglas: quoted words'));
 });
+
+test('a terminal lone surrogate is consumed without hanging', () => {
+ const r=review({data:{content:[{speakerIndex:0,text:'abc\uD83D'}]}},'');
+ assert.equal(release(r,{revision:r.revision,names:['Alex']}).text,'Alex: abc\uD83D');
+});
