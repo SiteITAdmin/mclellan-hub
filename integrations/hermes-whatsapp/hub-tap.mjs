@@ -226,6 +226,8 @@ export function createHubTap({
       if (!msg?.message || !remote || remote === 'status@broadcast' || remote.endsWith('@newsletter') || remote.endsWith('@broadcast')) return 'skip';
       const { body, media } = messageText(msg.message);
       if (!body && !media) return 'skip';
+      // Our own reminders and answers come back from WhatsApp as sent messages; they are not Douglas's words.
+      if (msg.key.fromMe && body.startsWith('[Hub] ')) return 'own_reply';
       const numbers = privateList();
       if (!numbers) return 'blocked_private';
       if (state.paused) return 'paused';

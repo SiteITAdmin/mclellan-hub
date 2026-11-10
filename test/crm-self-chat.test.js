@@ -54,3 +54,18 @@ test('claim is refused for a chat that is not an approved self chat, and expired
   assert.equal(db.crm().prepare("SELECT status FROM whatsapp_outbox WHERE item_key='reminder:one'").get().status, 'expired');
   assert.equal(selfChat.claim([c.chat_id], db.now()).length, 0);
 });
+test("the Hub's own reply, echoed back by WhatsApp, is not stored and is never answered again", () => {
+  const c = chat();
+  const incoming = (id, body) => whatsapp.receive({ chat_id: c.chat_id, is_self: true, is_group: false, from_me: true, message_id: id, body, sent_at: db.now() });
+  assert.equal(incoming('m1', 'Met Aoife Brennan, she is moving to Stripe').stored, true);
+  db.crm().prepare('UPDATE whatsapp_messages SET received_at = received_at - 400').run();
+  whatsapp.settle(db.now());
+  const [reply] = selfChat.claim([c.chat_id], db.now());
+  assert.match(reply.body, /^\[Hub\] Saved in Personal/);
+  selfChat.complete(reply.id, { ok: true });
+  assert.deepEqual(incoming('m2', reply.body), { stored: false, reason: 'hub_reply' });
+  db.crm().prepare('UPDATE whatsapp_messages SET received_at = received_at - 400').run();
+  whatsapp.settle(db.now());
+  assert.equal(selfChat.claim([c.chat_id], db.now()).length, 0);
+  assert.equal(db.crm().prepare("SELECT COUNT(*) n FROM sources WHERE origin='whatsapp'").get().n, 1);
+});

@@ -138,6 +138,10 @@ test('tap: reminders are claimed once and sent only to the approved self chat', 
   assert.ok(hub.calls.some(c => c.route === '/api/crm/whatsapp/outbox/claim'));
   const done = hub.calls.find(c => c.route === '/api/crm/whatsapp/outbox/complete');
   assert.deepEqual(done.body, { id: 'o1', ok: true });
+  const before = hub.calls.length;
+  const echo = { key: { remoteJid: '353861111111@s.whatsapp.net', id: 'echo1', fromMe: true }, message: { conversation: '[Hub] Meeting in 30 minutes: Purview' } };
+  assert.equal(await tap.onMessage(echo, { ...quiet, sock }), 'own_reply', 'the reminder WhatsApp echoes back is not sent to the Hub as a note');
+  assert.equal(hub.calls.length, before);
   assert.equal(await tap.deliverOutbox(() => sock), 0, 'a claimed reminder is not sent twice');
   tap.state.paused = true;
   assert.equal(await tap.deliverOutbox(() => sock), 0, 'a paused Hub sends nothing');
