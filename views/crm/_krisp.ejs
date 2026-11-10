@@ -15,7 +15,8 @@
 <input id="speaker-<%= d.id %>-<%= i %>" name="names" required maxlength="120" autocomplete="off" placeholder="Confirmed name">
 <% }) %>
 <p>Confirm every name above. This releases the attributed transcript to the existing reader for facts and tasks.</p>
-<button class="btn" name="choice" value="work">Release to Work</button> <button class="btn" name="choice" value="personal">Release to Personal</button>
+<label><input type="radio" name="choice" value="work" required> Work</label> <label><input type="radio" name="choice" value="personal" required> Personal</label>
+<button class="btn" type="submit">Release meeting</button>
 </form><% } else { %><p class="flash bad"><%= d.review.reason %></p><% } %>
 <form method="post" action="/crm/krisp/<%= d.id %>/classify"><input type="hidden" name="returnSpace" value="<%= space %>"><button class="btn" name="choice" value="ignore">Ignore</button></form>
 <% } else { for (const source of d.sources) { %><p><a href="/crm/<%= source.space %>/sources/<%= source.id %>">View source</a></p><% } } %>

@@ -13,5 +13,13 @@ test('speaker gate validates complete current mapping and preserves turn attribu
  assert.equal(strings.speakers.length,2);
  assert.equal(release(strings,{revision:strings.revision,names:['Alex','Douglas']}).mapping[1].key,'label:Douglas');
  const plain=review({},'Alex: Hello\ncontinued\nSpeaker 2: Yes');
- assert.equal(release(plain,{revision:plain.revision,names:['Alex','Douglas']}).text,'Alex: Hello\ncontinued\n\nDouglas: Yes');
+ assert.equal(release(plain,{revision:plain.revision,names:['Alex','Douglas']}).text,'Alex: Hello\n    continued\n\nDouglas: Yes');
+});
+
+test('every long fragment repeats confirmed identity and continuation lines stay quoted', () => {
+ const r=review({data:{content:[{speakerIndex:0,text:'word '.repeat(9000)+'\nDouglas: quoted words'},{speakerIndex:1,text:'Fine'}]}},'');
+ const result=release(r,{revision:r.revision,names:['Alex','Bea']});
+ assert.ok(result.parts.length>2);
+ for (const part of result.parts) { assert.ok(part.length<=20000); assert.match(part,/^(Alex|Bea): /); }
+ assert.ok(result.text.includes('\n    Douglas: quoted words'));
 });

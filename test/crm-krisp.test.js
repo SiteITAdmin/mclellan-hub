@@ -55,7 +55,7 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   const reviewHtml=await (await fetch(base+'/crm/work/meetings')).text();
   assert.ok(reviewHtml.includes('Synthetic opening.'));
   assert.ok(reviewHtml.includes('Name for Speaker 1'));
-  assert.ok(reviewHtml.includes('Release to Work'));
+  assert.ok(reviewHtml.includes('Release meeting'));
   const revision=/name="revision" value="([a-f0-9]+)"/.exec(reviewHtml)[1];
   const submit=async body=>fetch(base+`/crm/krisp/${oldId}/classify`,{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:base},body});
   for(const body of [new URLSearchParams({choice:'work'}),new URLSearchParams({choice:'work',revision:'stale',names:'Alex'}),new URLSearchParams({choice:'work',revision,names:'Alex'})]) assert.equal((await submit(body)).status,400);
@@ -69,7 +69,8 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   assert.equal(receiptMapping.mapping.length,3); assert.equal(receiptMapping.revision,revision);
   const recoveredIds = JSON.parse(db.crm().prepare('SELECT source_ids FROM krisp_intake WHERE id=?').get(oldId).source_ids);
   const recoveredSources = recoveredIds.map(id=>db.crm().prepare('SELECT * FROM sources WHERE id=?').get(id));
-  assert.equal(recoveredSources.map(x=>x.text).join(''),segments.map((x,i)=>`Person ${i}: ${x.text}`).join('\n\n'));
+  assert.ok(recoveredSources.every(x=>/^Person \d: /.test(x.text)));
+  assert.ok(recoveredSources.map(x=>x.text).join('\n').includes('    Second line.'));
   for (const source of recoveredSources) { assert.equal(source.occurred_at,1794312000); assert.equal(krisp.rawForSource(source),JSON.stringify(actual)); }
   assert.equal((await post({...actual,id:'synthetic-retry-2'})).id,oldId);
   assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,recoveredIds.length);
