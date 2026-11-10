@@ -70,3 +70,14 @@ are migrated once as documented in WISPR-CONNECTION.md. This corrects duplicate
 Hub state; it is not evidence that the provider-side activation denial is fixed.
 
 Wispr operations have a 20-second deadline. Disconnect cancels the active operation so a fresh attempt can start immediately. Late replies cannot restore discarded state.
+
+## Resolution — 10 November 2026 (evening)
+
+The denial belongs to Wispr's device-code page, not to Douglas's account, the
+Hub's saved state or anything clicked. A fresh device-code client was denied
+with no interaction, while a fresh authorization-code client on the same
+browser and account connected and listed 16 tools. The live Hub held no Wispr
+credentials at all, only two expired device codes, and had logged nothing.
+The Hub now uses the authorization-code flow; evidence and remaining
+verification are in WISPR-CONNECTION.md. The device-code handling described
+above (polling, `expired_token`) has been removed with that flow.

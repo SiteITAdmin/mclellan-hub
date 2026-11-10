@@ -939,9 +939,9 @@ test('where things stand: written from cited facts, only when they change, and f
   crm().prepare("UPDATE standings SET error = ''").run();
 });
 
-test('wispr: the device sign-in connects both spaces, records the tools, and refreshes its token', async () => {
+test('wispr: the browser sign-in connects both spaces, records the tools, and refreshes its token', async () => {
+  const { setSetting } = require('../lib/crm/db');
   const calls = [];
-  let tokenReplies = [{ error: 'authorization_pending' }, { access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 }];
   const reply = (status, body, headers = {}) => ({
     status, ok: status < 400,
     headers: { get: h => ({ 'content-type': 'application/json', ...headers })[h.toLowerCase()] || null },
@@ -951,10 +951,9 @@ test('wispr: the device sign-in connects both spaces, records the tools, and ref
     const body = opts.headers['Content-Type'] === 'application/json' ? JSON.parse(opts.body) : Object.fromEntries(new URLSearchParams(opts.body));
     calls.push({ url, body, auth: opts.headers.Authorization, session: opts.headers['Mcp-Session-Id'] });
     if (url.endsWith('/register')) return reply(201, { client_id: 'client_test' });
-    if (url.endsWith('/device_authorization')) return reply(200, { device_code: 'dev-1', user_code: 'ABCD-EFGH', verification_uri_complete: 'https://mcp-auth.wisprflow.com/device?user_code=ABCD-EFGH', expires_in: 300, interval: 5 });
     if (url.endsWith('/token')) {
       if (body.grant_type === 'refresh_token') return reply(200, { access_token: 'at-2', expires_in: 3600 });
-      return reply(tokenReplies[0].error ? 400 : 200, tokenReplies.shift());
+      return reply(200, { access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 });
     }
     if (body.method === 'initialize') return reply(200, { jsonrpc: '2.0', id: body.id, result: { protocolVersion: '2025-06-18' } }, { 'mcp-session-id': 'sess-1' });
     if (body.method === 'notifications/initialized') return reply(202, '');
@@ -963,26 +962,47 @@ test('wispr: the device sign-in connects both spaces, records the tools, and ref
     throw new Error(`unexpected ${url} ${body.method}`);
   });
   try {
+    wispr.disconnect('work');
+    setSetting('wispr_browser_client_id', '');
+    setSetting('wispr_client_id', 'old-device-client');
     assert.strictEqual(wispr.status('work').connected, false);
-    await Promise.all([wispr.startConnect('work'), wispr.startConnect('personal')]);
-    assert.strictEqual(calls.filter(c => c.url.endsWith('/device_authorization')).length, 1);
-    const st = wispr.status('work');
-    assert.strictEqual(st.device.user_code, 'ABCD-EFGH');
-    assert.strictEqual(calls.find(c => c.url.endsWith('/device_authorization')).body.resource, wispr.MCP_URL, 'the token is asked for the MCP server');
-    assert.strictEqual(await wispr.pollConnect('work'), 'waiting', 'does not poll before the interval');
-    const dev = JSON.parse(setting('wispr_shared_device'));
-    const { setSetting } = require('../lib/crm/db');
-    setSetting('wispr_shared_device', JSON.stringify({ ...dev, next_poll_at: 0 }));
-    assert.deepStrictEqual(await Promise.all([wispr.pollConnect('work'), wispr.pollConnect('personal')]), ['waiting', 'waiting']);
-    assert.strictEqual(calls.filter(c => c.body.grant_type === 'urn:ietf:params:oauth:grant-type:device_code').length, 1);
-    setSetting('wispr_shared_device', JSON.stringify({ ...JSON.parse(setting('wispr_shared_device')), next_poll_at: 0 }));
-    assert.strictEqual(await wispr.pollConnect('work'), 'connected');
+    const first = new URL(await wispr.startConnect('work'));
+    const url = new URL(await wispr.startConnect('personal'));
+    const registration = calls.filter(c => c.url.endsWith('/register'));
+    assert.strictEqual(registration.length, 1, 'one client is registered and reused');
+    assert.deepStrictEqual(registration[0].body.grant_types, ['authorization_code', 'refresh_token']);
+    assert.deepStrictEqual(registration[0].body.redirect_uris, ['https://douglas.mclellan.scot/crm/wispr/callback']);
+    assert.strictEqual(url.origin + url.pathname, 'https://mcp-auth.wisprflow.com/oauth2/authorize');
+    const q = Object.fromEntries(url.searchParams);
+    assert.strictEqual(q.client_id, 'client_test', 'the client registered for device codes is not reused');
+    assert.strictEqual(q.response_type, 'code');
+    assert.strictEqual(q.redirect_uri, 'https://douglas.mclellan.scot/crm/wispr/callback');
+    assert.strictEqual(q.resource, wispr.MCP_URL, 'the token is asked for the MCP server');
+    assert.strictEqual(q.code_challenge_method, 'S256');
+    const saved = JSON.parse(setting('wispr_shared_device'));
+    assert.strictEqual(q.code_challenge, require('node:crypto').createHash('sha256').update(saved.verifier).digest('base64url'));
+    assert.ok(!url.href.includes(saved.verifier), 'the verifier never leaves the Hub');
+    assert.ok(wispr.status('work').pending && wispr.status('personal').pending);
+    assert.ok(!JSON.stringify(wispr.status('work')).includes(saved.verifier));
+
+    assert.deepStrictEqual(await wispr.finishConnect({ state: first.searchParams.get('state'), code: 'code-old' }), { result: 'stale', space: 'personal' },
+      'a reply to a replaced attempt is ignored');
+    assert.deepStrictEqual(await wispr.finishConnect({ state: q.state, code: 'code-1', iss: 'https://evil.example' }), { result: 'stale', space: 'personal' });
+    assert.strictEqual(calls.filter(c => c.url.endsWith('/token')).length, 0);
+    assert.ok(wispr.status('work').pending, 'the current attempt survives a stale reply');
+
+    assert.deepStrictEqual(await wispr.finishConnect({ state: q.state, code: 'code-1', iss: 'https://mcp-auth.wisprflow.com' }), { result: 'connected', space: 'personal' });
+    const exchange = calls.find(c => c.body.grant_type === 'authorization_code').body;
+    assert.deepStrictEqual([exchange.code, exchange.code_verifier, exchange.redirect_uri, exchange.client_id, exchange.resource],
+      ['code-1', saved.verifier, 'https://douglas.mclellan.scot/crm/wispr/callback', 'client_test', wispr.MCP_URL]);
     const after = wispr.status('work');
-    assert.ok(after.connected && !after.device);
+    assert.ok(after.connected && !after.pending);
     assert.deepStrictEqual(after.tools.map(t => t.name), ['search_meetings', 'get_account_info']);
     assert.strictEqual(after.account.email, 'douglas.mclellan@beaconhospital.ie');
     assert.ok(calls.filter(c => c.body.method === 'tools/list').every(c => c.session === 'sess-1' && c.auth === 'Bearer at-1'), 'session and token are sent');
     assert.deepStrictEqual(wispr.status('personal'), wispr.status('work'));
+    assert.strictEqual((await wispr.finishConnect({ state: q.state, code: 'code-1' })).result, 'stale', 'a code cannot be replayed');
+    assert.strictEqual(await wispr.startConnect('work'), null, 'already connected: nothing to start');
 
     const auth = JSON.parse(setting('wispr_shared_auth'));
     setSetting('wispr_shared_auth', JSON.stringify({ ...auth, expires_at: 0 }));
@@ -996,10 +1016,10 @@ test('wispr: the device sign-in connects both spaces, records the tools, and ref
     assert.ok(views.health('work').some(h => /Wispr Flow meetings/.test(h.text)), 'a lost sign-in shows on Today');
     setSetting('wispr_shared_error', '');
   } finally {
+    wispr.disconnect('work');
     wispr._setHttp((url, opts) => fetch(url, opts));
   }
 });
-
 
 test('wispr: migration preserves selected credentials and never resurrects legacy sign-in', () => {
   const { setSetting } = require('../lib/crm/db');
@@ -1014,7 +1034,7 @@ test('wispr: migration preserves selected credentials and never resurrects legac
     assert.strictEqual(wispr.status('personal').connected, true);
     assert.strictEqual(JSON.parse(setting('wispr_shared_auth')).refresh_token, 'work-valid');
     assert.strictEqual(wispr.status('work').account.email, 'shared@example.test');
-    assert.strictEqual(wispr.status('work').device, null);
+    assert.strictEqual(wispr.status('work').pending, false);
     assert.deepStrictEqual(wispr.status('work'), wispr.status('personal'));
     assert.strictEqual(setting('wispr_work_auth'), '', 'retired credentials removed');
     assert.strictEqual(setting('wispr_personal_auth'), '');
@@ -1045,36 +1065,36 @@ test('wispr: migration preserves selected credentials and never resurrects legac
   }
 });
 
-test('wispr: disconnect invalidates pending starts and refreshes before restart', async () => {
+test('wispr: disconnect invalidates pending starts, sign-ins and refreshes before restart', async () => {
   const { setSetting, now } = require('../lib/crm/db');
   const reply = body => ({ status: 200, json: async () => body });
   try {
-    for (const kind of ['start', 'refresh', 'poll']) {
+    for (const kind of ['start', 'refresh', 'finish']) {
       wispr.disconnect('work');
-      setSetting('wispr_client_id', 'test-client');
+      setSetting('wispr_browser_client_id', kind === 'start' ? '' : 'test-client');
       if (kind === 'refresh') setSetting('wispr_shared_auth', JSON.stringify({ refresh_token: 'old', expires_at: 0 }));
-      if (kind === 'poll') setSetting('wispr_shared_device', JSON.stringify({ device_code: 'old', expires_at: now() + 300, next_poll_at: 0 }));
+      if (kind === 'finish') setSetting('wispr_shared_device', JSON.stringify({ state: 'old-state', verifier: 'v', space: 'work', expires_at: now() + 300 }));
       let release, entered;
       const started = new Promise(resolve => { entered = resolve; });
       wispr._setHttp(async () => {
         entered();
         return new Promise(resolve => { release = () => resolve(reply(kind === 'start'
-          ? { device_code: 'late', expires_in: 300 }
+          ? { client_id: 'late-client' }
           : { access_token: 'late', refresh_token: 'late' })); });
       });
-      const pending = kind === 'start' ? wispr.startConnect('work') : kind === 'poll' ? wispr.pollConnect('work') : wispr.accessToken('work');
+      const pending = kind === 'start' ? wispr.startConnect('work') : kind === 'finish' ? wispr.finishConnect({ state: 'old-state', code: 'c' }) : wispr.accessToken('work');
       await started;
       wispr.disconnect('personal');
       await assert.rejects(pending, /connection changed/);
       assert.strictEqual(wispr.status('work').authorized, false);
-      assert.strictEqual(wispr.status('work').device, null);
+      assert.strictEqual(wispr.status('work').pending, false);
       assert.strictEqual(wispr.status('work').error, '');
-      wispr._setHttp(async () => reply({ device_code: 'new', user_code: 'SHARED', expires_in: 300 }));
-      await wispr.startConnect('personal');
-      assert.strictEqual(wispr.status('work').device.user_code, 'SHARED');
+      setSetting('wispr_browser_client_id', 'test-client');
+      const fresh = new URL(await wispr.startConnect('personal')).searchParams.get('state');
       release();
       await new Promise(resolve => setImmediate(resolve));
-      assert.strictEqual(wispr.status('work').device.user_code, 'SHARED', 'late reply cannot overwrite new attempt');
+      assert.strictEqual(JSON.parse(setting('wispr_shared_device')).state, fresh, 'late reply cannot overwrite new attempt');
+      assert.strictEqual(wispr.status('work').authorized, false);
     }
   } finally {
     wispr.disconnect('work');
@@ -1082,29 +1102,39 @@ test('wispr: disconnect invalidates pending starts and refreshes before restart'
   }
 });
 
-test('wispr: terminal OAuth errors retain their reason and stop polling', async () => {
+test('wispr: refused, failed and timed-out sign-ins keep a safe reason and end the attempt', async () => {
   const { setSetting, now } = require('../lib/crm/db');
+  const begin = (over = {}) => setSetting('wispr_shared_device', JSON.stringify({ state: 'st', verifier: 'private-verifier', space: 'personal', expires_at: now() + 300, ...over }));
   try {
-    for (const [reason, result] of [['access_denied', 'denied'], ['expired_token', 'expired'], ['invalid_client', 'error'], ['unexpected_secret_value', 'error']]) {
-      wispr.disconnect('personal');
-      setSetting('wispr_client_id', 'client_test');
-      setSetting('wispr_shared_device', JSON.stringify({ device_code: 'private-device-code', expires_at: now() + 300, next_poll_at: 0 }));
-      let calls = 0;
-      wispr._setHttp(async () => {
-        calls++;
-        return { status: 400, json: async () => ({ error: reason, error_description: 'secret-token-must-not-appear' }) };
-      });
-      assert.strictEqual(await wispr.pollConnect('personal'), result);
-      assert.strictEqual(wispr.status('personal').device, null);
-      assert.strictEqual(wispr.status('personal').connected, false);
-      assert.match(wispr.status('personal').error, new RegExp(reason === 'unexpected_secret_value' ? 'unknown_error' : reason));
-      assert.doesNotMatch(wispr.status('personal').error, /secret-token|private-device|unexpected_secret_value/);
-      await wispr.pollConnect('personal');
-      assert.strictEqual(calls, 1, 'terminal responses stop token polling');
+    wispr.disconnect('personal');
+    setSetting('wispr_browser_client_id', 'client_test');
+    let calls = 0;
+    wispr._setHttp(async () => { calls++; throw new Error('must not be called'); });
+    begin();
+    assert.deepStrictEqual(await wispr.finishConnect({ state: 'st', error: 'access_denied' }), { result: 'denied', space: 'personal' });
+    assert.match(wispr.status('personal').error, /cancelled or refused.*access_denied/);
+    begin();
+    assert.strictEqual((await wispr.finishConnect({ state: 'st', error: 'secret-token-must-not-appear' })).result, 'error');
+    assert.match(wispr.status('personal').error, /unknown_error/);
+    begin();
+    assert.strictEqual((await wispr.finishConnect({ state: 'st' })).result, 'error', 'no code and no error');
+    begin({ expires_at: now() - 1 });
+    assert.strictEqual(wispr.status('personal').pending, false);
+    assert.strictEqual((await wispr.finishConnect({ state: 'st', code: 'c' })).result, 'expired');
+    assert.match(wispr.status('personal').error, /not finished in time.*local_expiry/);
+    assert.strictEqual(calls, 0, 'none of these reach Wispr');
+
+    for (const [body, reason] of [[{ error: 'invalid_grant', error_description: 'secret-token-must-not-appear' }, 'invalid_grant'],
+      [{ error: 'unexpected_secret_value' }, 'unknown_error'], [{ access_token: 'private-access' }, 'unknown_error']]) {
+      begin();
+      wispr._setHttp(async () => ({ status: body.access_token ? 200 : 400, json: async () => body }));
+      assert.strictEqual((await wispr.finishConnect({ state: 'st', code: 'c' })).result, 'error');
+      assert.strictEqual(wispr.status('personal').pending, false);
+      assert.strictEqual(wispr.status('personal').authorized, false, 'no sign-in is kept without a refresh token');
+      assert.match(wispr.status('personal').error, new RegExp(reason));
+      assert.doesNotMatch(wispr.status('personal').error, /secret-token|private-|unexpected_secret_value/);
+      assert.strictEqual((await wispr.finishConnect({ state: 'st', code: 'c' })).result, 'stale', 'the attempt is over');
     }
-    setSetting('wispr_shared_device', JSON.stringify({ expires_at: now() - 1 }));
-    assert.strictEqual(await wispr.pollConnect('personal'), 'expired');
-    assert.match(wispr.status('personal').error, /No approval result.*local_expiry/);
   } finally {
     wispr.disconnect('personal');
     wispr._setHttp((url, opts) => fetch(url, opts));
@@ -1114,12 +1144,13 @@ test('wispr: terminal OAuth errors retain their reason and stop polling', async 
 test('wispr: a failed MCP connection check does not report connected and can be retried', async () => {
   const { setSetting, now } = require('../lib/crm/db');
   wispr.disconnect('personal');
-  setSetting('wispr_shared_device', JSON.stringify({ device_code: 'dev-test', expires_at: now() + 300, next_poll_at: 0 }));
+  setSetting('wispr_browser_client_id', 'client_test');
+  setSetting('wispr_shared_device', JSON.stringify({ state: 'st', verifier: 'v', space: 'personal', expires_at: now() + 300 }));
   wispr._setHttp(async url => url.endsWith('/token')
     ? { status: 200, json: async () => ({ access_token: 'secret-access', refresh_token: 'secret-refresh' }) }
     : { status: 403, ok: false, headers: { get: () => null }, text: async () => 'secret-access secret-refresh' });
   try {
-    assert.strictEqual(await wispr.pollConnect('personal'), 'error');
+    assert.strictEqual((await wispr.finishConnect({ state: 'st', code: 'c' })).result, 'error');
     assert.strictEqual(wispr.status('personal').connected, false);
     assert.strictEqual(wispr.status('personal').authorized, true);
     assert.match(wispr.status('personal').error, /connection check failed/);
@@ -1138,47 +1169,75 @@ test('wispr: a failed MCP connection check does not report connected and can be 
   }
 });
 
-test('wispr: Meetings renders denial, expiry and failed checks without a success message', async () => {
-  const { setSetting, now } = require('../lib/crm/db');
+test('wispr: Connect sends the browser to Wispr and the callback returns to Meetings with the outcome', async () => {
+  const { setSetting } = require('../lib/crm/db');
   const app = require('express')();
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, '..', 'views'));
-  app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = { adminUser: 'douglas' }; next(); });
+  const session = { adminUser: 'douglas' };
+  app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = session; next(); });
   app.use(require('../routes/crm'));
   const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const page = async space => { const res = await fetch(`${base}/crm/${space}/meetings`); assert.strictEqual(res.status, 200); return res.text(); };
+  const connect = async space => {
+    const res = await fetch(`${base}/crm/${space}/meetings/connect`, { method: 'POST', redirect: 'manual', headers: { Origin: base } });
+    assert.strictEqual(res.status, 302);
+    return new URL(res.headers.get('location'));
+  };
+  const callback = async query => {
+    const res = await fetch(`${base}/crm/wispr/callback?${new URLSearchParams(query)}`, { redirect: 'manual' });
+    assert.strictEqual(res.status, 302);
+    return res.headers.get('location');
+  };
+  const mcp = (url, opts) => {
+    const body = JSON.parse(opts.body);
+    return { status: 200, ok: true, headers: { get: () => null },
+      text: async () => JSON.stringify({ id: body.id, result: body.method === 'tools/list' ? { tools: [{ name: 'search_meetings' }] } : {} }) };
+  };
   try {
     wispr.disconnect('work');
-    setSetting('wispr_shared_device', JSON.stringify({ device_code: 'hidden-device', user_code: 'ONE-CODE',
-      url: 'https://example.test/device', next_poll_at: now() + 300, expires_at: now() + 300 }));
+    setSetting('wispr_browser_client_id', 'client_test');
     for (const space of ['work', 'personal']) {
-      const res = await fetch(`http://127.0.0.1:${server.address().port}/crm/${space}/meetings`);
-      const body = await res.text();
-      assert.strictEqual(res.status, 200);
-      assert.match(body, /ONE-CODE/);
+      const body = await page(space);
+      assert.match(body, /Connect Wispr Flow<\/button>/);
       assert.match(body, /One shared Wispr sign-in serves Work and Personal/);
-      assert.match(body, /Disconnect shared sign-in/);
-      assert.doesNotMatch(body, /hidden-device/);
+      assert.doesNotMatch(body, /http-equiv="refresh"|user-code/, 'no code to type and no polling');
     }
-    for (const reason of ['access_denied', 'expired_token', 'check_failed', 'local_expiry']) {
-      wispr.disconnect('personal');
-      setSetting('wispr_shared_device', JSON.stringify({ device_code: 'private-code', next_poll_at: 0, expires_at: now() + (reason === 'local_expiry' ? -1 : 300) }));
-      wispr._setHttp(async url => url.endsWith('/token')
-        ? { status: reason === 'check_failed' ? 200 : 400, json: async () => reason === 'check_failed'
-          ? { access_token: 'private-access', refresh_token: 'private-refresh' } : { error: reason } }
-        : { status: 403, ok: false, headers: { get: () => null }, text: async () => 'private-access' });
-      const res = await fetch(`http://127.0.0.1:${server.address().port}/crm/personal/meetings`);
-      const body = await res.text();
-      assert.strictEqual(res.status, 200);
-      assert.match(body, new RegExp(reason === 'check_failed' ? 'connection check failed' : reason === 'local_expiry' ? 'local_expiry' : reason));
-      assert.doesNotMatch(body, /Wispr Flow connected\.|>Connected<|private-access|private-refresh|private-code/);
-      if (reason === 'access_denied') assert.doesNotMatch(body, /code ran out/);
-      if (reason === 'check_failed') {
-        assert.match(body, /Check the connection/);
-        assert.match(body, /Connect again<\/button>/);
-        assert.doesNotMatch(body, /Choose “Connect Wispr Flow” below/);
-      }
-      assert.strictEqual(wispr.status('personal').device, null);
-    }
+
+    let to = await connect('personal');
+    assert.strictEqual(to.origin + to.pathname, 'https://mcp-auth.wisprflow.com/oauth2/authorize');
+    assert.match(await page('work'), /started but not finished/);
+    assert.strictEqual(await callback({ state: to.searchParams.get('state'), error: 'access_denied' }), '/crm/personal/meetings');
+    let body = await page('personal');
+    assert.match(body, /cancelled or refused/);
+    assert.doesNotMatch(body, />Connected</);
+
+    assert.strictEqual(await callback({ state: 'someone-elses', code: 'x' }), '/crm/work/meetings');
+    assert.match(await page('work'), /no longer the current one/);
+    assert.strictEqual(await callback({ state: ['a', 'b'], code: 'x' }), '/crm/work/meetings', 'repeated parameters do not crash');
+    await page('work');
+
+    to = await connect('work');
+    wispr._setHttp(async (url, opts) => url.endsWith('/token')
+      ? { status: 200, json: async () => ({ access_token: 'private-access', refresh_token: 'private-refresh' }) }
+      : { status: 403, ok: false, headers: { get: () => null }, text: async () => 'private-access' });
+    assert.strictEqual(await callback({ state: to.searchParams.get('state'), code: 'c1' }), '/crm/work/meetings');
+    body = await page('work');
+    assert.match(body, /connection check failed/);
+    assert.match(body, /Check the connection/);
+    assert.match(body, /Connect again<\/button>/);
+    assert.doesNotMatch(body, />Connected<|private-access|private-refresh|Choose “Connect Wispr Flow” below/);
+
+    to = await connect('work');
+    wispr._setHttp(async (url, opts) => url.endsWith('/token')
+      ? { status: 200, json: async () => ({ access_token: 'private-access', refresh_token: 'private-refresh' }) } : mcp(url, opts));
+    assert.strictEqual(await callback({ state: to.searchParams.get('state'), code: 'c2', iss: 'https://mcp-auth.wisprflow.com' }), '/crm/work/meetings');
+    body = await page('work');
+    assert.match(body, /Wispr Flow connected for Work and Personal/);
+    assert.match(body, />Connected</);
+    assert.match(await page('personal'), />Connected</);
+    assert.doesNotMatch(body, /private-access|private-refresh/);
   } finally {
     server.close();
     wispr.disconnect('personal');

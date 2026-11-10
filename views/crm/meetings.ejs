@@ -1,6 +1,5 @@
 <%- include('_top') %>
 <% const where = space === 'work' ? 'Work' : 'Personal'; %>
-<% if (w.device) { %><meta http-equiv="refresh" content="5"><% } %>
 <div class="title-row"><div><h1>Meetings</h1><p class="subline">Meeting preparation, recordings and transcripts for <%= where %>.</p></div></div>
 <%- include('_meeting-prep', { meetings }) %>
 <p><a class="btn" href="/crm/<%= space %>/note">Add a transcript or meeting note</a></p>
@@ -8,20 +7,15 @@
 <section class="grid first">
   <div class="panel s8">
     <div class="panel-head"><h2>Wispr Flow</h2>
-      <% if (w.connected) { %><span class="chip">Connected</span><% } else if (w.device) { %><span class="chip">Waiting for you</span><% } %></div>
+      <% if (w.connected) { %><span class="chip">Connected</span><% } %></div>
     <p class="subline">One shared Wispr sign-in serves Work and Personal. Disconnecting here disconnects both spaces. Wispr meeting capture is not enabled yet.</p>
-    <% if (!w.authorized && !w.device) { %>
-    <p>Choose “Connect Wispr Flow” below, then follow Wispr’s sign-in and approval prompts. Keep this page open while you finish.</p>
+    <% if (!w.authorized) { %>
+    <p>Choose “Connect Wispr Flow” below. Wispr opens in this tab: sign in, choose “Allow access”, and it brings you back here.</p>
     <p class="subline">The server address <code>https://api.wisprflow.ai/connect/mcp</code> is for MCP clients. Opening it directly in a browser shows “Method Not Allowed”; that does not mean sign-in has failed.</p>
     <p class="subline">Wispr Notetaker and MCP access must be available on your account. Approval gives access to all meetings in that Wispr account, including past meetings. Use your single Wispr account for both spaces. <a href="https://docs.wisprflow.ai/articles/9551372685-connect-an-mcp-client-to-wispr-flow-remote-mcp-server" target="_blank" rel="noopener">Wispr setup and access guidance</a></p>
     <% } %>
     <% if (w.error) { %><p><span class="pill neg">Problem</span> <%= w.error %></p><% } %>
-    <% if (w.device) { %>
-      <p>Open <a href="<%= w.device.url %>" target="_blank" rel="noopener">Wispr's sign-in page</a>, sign in with your shared Wispr account, and follow the prompts to approve access. If asked for a code, use:</p>
-      <form method="post" action="/crm/<%= space %>/meetings/disconnect"><button class="btn text" type="submit">Disconnect shared sign-in</button></form>
-      <p class="user-code"><%= w.device.user_code %></p>
-      <p class="subline">Keep this page open; it checks every few seconds. The code stops working at <%= fmt(w.device.expires_at, 'time') %>.</p>
-    <% } else if (w.authorized) { %>
+    <% if (w.authorized) { %>
       <p><%= w.connected ? 'Connected' : 'Signed in; connection check needed. Sign-in saved' %> <%= fmt(w.connectedAt) %><% if (w.account && (w.account.email || w.account.name)) { %> as <%= w.account.name || '' %> <%= w.account.email ? `(${w.account.email})` : '' %><% } %>.</p>
       <p class="subline">Meetings are not read into the CRM yet: that is the next step, built against what Wispr returns (<%= w.tools.length %> tools offered).</p>
       <div class="decide">
@@ -30,7 +24,7 @@
         <form method="post" action="/crm/<%= space %>/meetings/disconnect"><button class="btn text" type="submit">Disconnect shared sign-in</button></form>
       </div>
     <% } else { %>
-      <p>Shared Wispr sign-in is not connected.</p>
+      <p><%= w.pending ? 'Sign-in was started but not finished. Choose Connect to go to Wispr again.' : 'Shared Wispr sign-in is not connected.' %></p>
       <form method="post" action="/crm/<%= space %>/meetings/connect"><button class="btn primary" type="submit">Connect Wispr Flow</button></form>
     <% } %>
   </div>
