@@ -126,3 +126,25 @@ test('deleting a fact removes it everywhere, keeps the email, tidies what pointe
   assert.throws(() => facts.deleteFact(a, 'work'), /not found/);
   assert.throws(() => facts.deleteFact(older, 'personal'), /not found/);
 });
+
+test('several facts are filed or moved at once; a bad id or wrong space changes nothing', () => {
+  const dad = review.createProject('personal', 'Dad'), house = review.createProject('personal', 'House');
+  const a = fact('personal', 'The roof repair quote came to 4,000 euro');
+  const b = fact('personal', 'The boiler service is due in December');
+  const c = fact('personal', 'Dad has a GP appointment on Friday');
+  let r = facts.moveMany([a, b, a], house.id, 'personal');
+  assert.equal(r.count, 2);
+  assert.deepEqual(facts.unfiled('personal').rows.map(x => x.id), [c]);
+  facts.addProject(c, house.id, 'personal');
+  r = facts.moveMany([c], dad.id, 'personal', { from: house.id });
+  assert.deepEqual(facts.detail(c, 'personal').projects.map(p => p.name), ['Dad']);
+  assert.equal(check.removed(house.id)[0].reason, 'You moved it to Dad');
+  facts.moveMany([b], 'none', 'personal', { from: house.id });
+  assert.deepEqual(facts.detail(b, 'personal').projects, []);
+  const before = db.crm().prepare('SELECT COUNT(*) n FROM atom_projects').get().n;
+  assert.throws(() => facts.moveMany([a, 'not-a-fact'], dad.id, 'personal'), /not found/);
+  assert.throws(() => facts.moveMany([a], review.createProject('work', 'M365').id, 'personal'), /same space/);
+  assert.throws(() => facts.moveMany([], dad.id, 'personal'), /Tick at least one/);
+  assert.throws(() => facts.moveMany([a], house.id, 'personal', { from: house.id }), /already in that project/);
+  assert.equal(db.crm().prepare('SELECT COUNT(*) n FROM atom_projects').get().n, before, 'all or nothing');
+});

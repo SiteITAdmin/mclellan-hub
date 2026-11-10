@@ -569,6 +569,16 @@ router.get('/crm/:space/facts', spaceParam, (req, res) => {
     projectChoices: crm().prepare('SELECT id, name FROM projects WHERE space = ? ORDER BY name COLLATE NOCASE').all(req.params.space) });
 });
 
+router.post('/crm/:space/facts/bulk-move', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { space } = req.params;
+  try {
+    const r = require('../lib/crm/facts').moveMany(req.body.atomIds, req.body.projectId, space, { from: req.body.from || null });
+    const n = `${r.count} ${r.count === 1 ? 'fact' : 'facts'}`;
+    flash(req, r.to && r.from ? `Moved ${n} from ${r.from.name} to ${r.to.name}.` : r.to ? `Filed ${n} under ${r.to.name}.` : `Took ${n} off ${r.from.name}. They are listed at the bottom of its page.`);
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(factBack(req, space, `/crm/${space}/facts`));
+});
+
 router.get('/crm/:space/facts/:id', spaceParam, (req, res) => {
   try {
     const a = require('../lib/crm/facts').detail(req.params.id, req.params.space);

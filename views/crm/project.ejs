@@ -10,7 +10,8 @@
 <section class="grid first">
   <div class="panel s8">
     <% if (!p.atoms.length) { %><div class="empty">No facts in this project yet.</div><% } %>
-    <% for (const a of p.atoms) { %><%- include('_atom', { a, removeFrom: p.id }) %><% } %>
+    <% for (const a of p.atoms) { %><%- include('_atom', { a, removeFrom: p.id, selectForm: 'bulk' }) %><% } %>
+    <% if (p.atoms.length) { %><%- include('_bulk', { formId: 'bulk', back: `/crm/${space}/projects/${p.id}`, choices: p.projectChoices, from: p.id }) %><% } %>
   </div>
   <div class="s4 side-stack">
     <div class="panel"><div class="panel-head"><h2>What this project covers</h2></div>

@@ -1,0 +1,26 @@
+<%# The "Move to" bar for facts ticked on this page. from: the project they are being moved out of, if any. %>
+<form id="<%= formId %>" class="bulk-bar" method="post" action="/crm/<%= space %>/facts/bulk-move" data-bulk>
+  <input type="hidden" name="back" value="<%= back %>">
+  <% if (locals.from) { %><input type="hidden" name="from" value="<%= from %>"><% } %>
+  <label class="bulk-all"><input type="checkbox" data-bulk-all> Select all on this page</label>
+  <span class="bulk-count" data-bulk-count aria-live="polite">Tick the facts to move</span>
+  <label class="sr-only" for="<%= formId %>-to">Move to</label>
+  <select class="select" id="<%= formId %>-to" name="projectId" required>
+    <option value=""><%= locals.from ? 'Move selected to…' : 'File selected under…' %></option>
+    <% for (const p of choices) { if (p.id === locals.from) continue; %><option value="<%= p.id %>"><%= p.name %></option><% } %>
+    <% if (locals.from) { %><option value="none">No project: just take them off</option><% } %>
+  </select>
+  <button class="btn primary small" type="submit"><%= locals.from ? 'Move' : 'File' %></button>
+</form>
+<script>
+(() => {
+  const form = document.getElementById(<%- JSON.stringify(formId) %>);
+  if (!form) return;
+  const boxes = () => [...document.querySelectorAll(`input[name="atomIds"][form="${form.id}"]`)];
+  const all = form.querySelector('[data-bulk-all]'), count = form.querySelector('[data-bulk-count]');
+  const show = () => { const n = boxes().filter(b => b.checked).length; count.textContent = n ? `${n} selected` : 'Tick the facts to move'; all.checked = n > 0 && n === boxes().length; };
+  all.addEventListener('change', () => { boxes().forEach(b => { b.checked = all.checked; }); show(); });
+  document.addEventListener('change', e => { if (e.target.matches?.(`input[name="atomIds"][form="${form.id}"]`)) show(); });
+  form.addEventListener('submit', e => { if (!boxes().some(b => b.checked)) { e.preventDefault(); count.textContent = 'Tick at least one fact first'; } });
+})();
+</script>

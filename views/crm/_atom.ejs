@@ -1,5 +1,7 @@
 <% const sp = a.space; %>
-<div class="atom">
+<div class="atom<%= locals.selectForm ? ' selectable' : '' %>">
+  <% if (locals.selectForm) { %><input class="pick" type="checkbox" name="atomIds" value="<%= a.id %>" form="<%= selectForm %>" aria-label="Select: <%= a.statement %>"><% } %>
+  <div class="body">
   <div class="st"><%= a.statement %></div>
   <div class="meta">
     <span class="kind"><%= a.kind %></span>
@@ -13,5 +15,6 @@
     <a class="link-btn" href="/crm/<%= sp %>/facts/<%= a.id %>">Change people or projects</a>
     <details class="del"><summary class="link-btn">Delete</summary><form class="inline-form" method="post" action="/crm/<%= sp %>/facts/<%= a.id %>/delete"><input type="hidden" name="back" value="<%= locals.back || '' %>"><button class="btn small" type="submit">Delete this fact</button></form></details>
     <% if (locals.removeFrom) { %><form class="inline-form" method="post" action="/crm/<%= sp %>/projects/<%= removeFrom %>/remove"><input type="hidden" name="atomId" value="<%= a.id %>"><button class="link-btn" type="submit">Not this project</button></form><% } %>
+  </div>
   </div>
 </div>
