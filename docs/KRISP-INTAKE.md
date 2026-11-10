@@ -19,13 +19,25 @@ classification returns 409. Failed classification rolls back admission and choic
 No new scheduler, Mac program or model transport was added.
 
 Use Krisp's individual Transcript created integration with a custom Authorization
-header. Account plan and telephone event support still need live confirmation.
+header. A real mobile-recording transcript delivery has now been observed.
 Both douglas.mclellan.scot and legacy dchat.mclellan.scot are handled by server
-routing, with optional trailing slash. Legacy DNS/nginx/certificate ownership is
-unverified. Missing secret returns 503; bad/missing Bearer returns 401. Non-JSON content types return 415. Invalid JSON
+routing, with optional trailing slash. The old dchat hostname currently fails certificate validation, so configure the douglas hostname above. Missing secret returns 503; bad/missing Bearer returns 401. Non-JSON content types return 415. Invalid JSON
 returns 400 and oversized JSON returns 413 at the webhook path (10 MB limit).
 Failures before capture remain in Krisp delivery history; credentials and payloads
 are not logged by this receiver.
+
+## Event handling
+
+Live inspection on 10 November found one `transcript_created` and three identical
+empty `note_generated` payloads for the same meeting, differing only in delivery
+IDs. Known `note_generated` events receive HTTP 200 with `ignored: true` and are
+not stored or queued for a Work/Personal choice. This receiver imports transcripts,
+not Krisp-generated notes. Repeating those events creates no cards or knowledge.
+Authentication still runs first. Empty `transcript_created` and unknown events
+remain visible as unreadable deliveries, so genuine failures are not hidden.
+Legacy payloads without an event continue to work. No new table or job is needed.
+Existing note cards are not deleted by this code; the user-requested cleanup is
+performed separately after deployment, with source/dependency checks.
 
 ## Parsing and recovery
 
