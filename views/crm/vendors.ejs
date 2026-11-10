@@ -1,0 +1,21 @@
+<%- include('_top') %>
+<div class="crumbs"><a href="/crm/review">Who is this?</a> / Vendors</div>
+<div class="title-row"><div><h1>Vendors</h1><p class="subline">Salespeople and suppliers you put here from Who is this?. Nothing they send is read, and they aren’t asked about again. Take someone out and they go back to Who is this? for you to decide.</p></div></div>
+<section class="grid first">
+  <% if (domains.length) { %><div class="panel s12">
+    <div class="panel-head"><h2>Whole companies</h2></div>
+    <% for (const d of domains) { %>
+      <div class="vendor-line"><div class="main"><div class="what">Everyone at <%= d.domain %></div><div class="meta">Since <%= fmt(d.at, 'date') %>. Nobody new from here is asked about. People you already know there aren’t affected.</div></div>
+        <form class="inline-form" method="post" action="/crm/vendors/domain-remove"><input type="hidden" name="domain" value="<%= d.domain %>"><button class="btn text small" type="submit">Ask about new people again</button></form></div>
+    <% } %>
+  </div><% } %>
+  <div class="panel s12">
+    <div class="panel-head"><h2>People</h2><span class="chip"><%= people.length %></span></div>
+    <% if (!people.length) { %><div class="empty">Nobody yet. Press Vendor on Who is this? to put someone here.</div><% } %>
+    <% for (const v of people) { %>
+      <div class="vendor-line"><div class="main"><div class="what"><%= v.name || v.value %></div><div class="meta"><%= v.value %><%= v.space ? ` · ${v.space === 'work' ? 'Work' : 'Personal'}` : '' %> · <%= v.sources %> <%= v.sources === 1 ? 'message' : 'messages' %> seen · since <%= fmt(v.at, 'date') %></div></div>
+        <form class="inline-form" method="post" action="/crm/vendors/unmark"><input type="hidden" name="kind" value="<%= v.kind %>"><input type="hidden" name="value" value="<%= v.value %>"><button class="btn text small" type="submit">Not a vendor</button></form></div>
+    <% } %>
+  </div>
+</section>
+<%- include('_bottom') %>

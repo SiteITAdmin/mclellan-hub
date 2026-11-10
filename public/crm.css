@@ -516,3 +516,12 @@ details.del .btn { color: var(--negative); border-color: var(--negative); height
 .bulk-bar .select { height: 32px; font-size: 13px; max-width: 280px; }
 .bulk-all { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .bulk-count { color: var(--muted); font-size: 13px; margin-right: auto; }
+
+/* Vendors */
+.vendor-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--row-edge); }
+.vendor-row .subline { margin: 0; font-size: 13px; flex: 1; min-width: 220px; }
+.vendor-line { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--row-edge); }
+.panel-head + .vendor-line { border-top: 0; }
+.vendor-line .main { flex: 1; min-width: 220px; }
+.vendor-line .what { font-weight: 600; }
+.vendor-line .meta { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }

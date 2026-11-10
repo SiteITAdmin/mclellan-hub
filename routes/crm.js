@@ -152,6 +152,7 @@ router.get('/crm/review', (req, res) => {
     if (selected.kind === 'person') {
       detail.lookalikes = identity.lookalikes(selected.payload.name, selected.payload.value);
       detail.suggestedOrg = orgs.orgForEmail(selected.space, selected.payload.value);
+      detail.vendorDomain = selected.payload.kind === 'email' ? require('../lib/crm/vendors').companyDomain(selected.payload.value) : '';
       detail.lookEmails = Object.fromEntries(detail.lookalikes.map(l => [l.id,
         crm().prepare('SELECT value FROM identifiers WHERE person_id = ? AND kind = ?').all(l.id, selected.payload.kind || 'email').map(r => r.value)]));
     }
@@ -169,7 +170,7 @@ router.get('/crm/review', (req, res) => {
   }
   const peopleBySpace = Object.fromEntries(SPACES.map(s => [s, crm().prepare('SELECT id, name, org FROM people_v WHERE space = ? ORDER BY name COLLATE NOCASE').all(s)]));
   const orgsBySpace = Object.fromEntries(SPACES.map(s => [s, orgs.list(s)]));
-  res.render('crm/review', { page: 'review', space: null, items, selected, detail, peopleBySpace, orgsBySpace, title: 'Who is this?' });
+  res.render('crm/review', { page: 'review', space: null, items, selected, detail, peopleBySpace, orgsBySpace, vendorCount: require('../lib/crm/vendors').count(), title: 'Who is this?' });
 });
 
 router.post('/crm/review/:id', requireSameOrigin, writeLimiter, (req, res) => {
@@ -180,10 +181,16 @@ router.post('/crm/review/:id', requireSameOrigin, writeLimiter, (req, res) => {
       orgId: req.body[`orgId_${req.body.space}`] || req.body.orgId, orgName: req.body.orgName,
       personId: req.body.personId,
       shownIds: [].concat(req.body.shownIds || []).map(String),
+      wholeCompany: req.body.wholeCompany === '1',
     };
     const r = review.decide(req.params.id, body);
     const messages = { new: 'Added', same: 'Linked', ignore: 'Set aside for good', later: 'Moved to later', choose: 'Linked', none: 'Marked as nobody you know', add: 'Project added' };
-    flash(req, messages[body.action] || 'Done');
+    if (body.action === 'vendor') {
+      const others = r.vendors - 1;
+      flash(req, r.domain
+        ? `Put in Vendors, with everyone at ${r.domain}${others ? ` (${others} more waiting)` : ''}. Nobody new from there will be asked about.`
+        : 'Put in Vendors. Their mail won’t be read.');
+    } else flash(req, messages[body.action] || 'Done');
     if (r.personId && req.body.open === '1') {
       const p = crm().prepare('SELECT space FROM people WHERE id = ?').get(r.personId);
       return res.redirect(`/crm/${p.space}/people/${r.personId}`);
@@ -193,6 +200,26 @@ router.post('/crm/review/:id', requireSameOrigin, writeLimiter, (req, res) => {
     return res.redirect(`/crm/review?item=${encodeURIComponent(req.params.id)}`);
   }
   res.redirect('/crm/review');
+});
+
+// ── Vendors ────────────────────────────────────────────────────────────────
+router.get('/crm/vendors', (req, res) => {
+  const { people, domains } = require('../lib/crm/vendors').list();
+  res.render('crm/vendors', { page: 'review', space: null, people, domains, title: 'Vendors' });
+});
+
+router.post('/crm/vendors/:action(unmark|domain-remove)', requireSameOrigin, writeLimiter, (req, res) => {
+  const vendors = require('../lib/crm/vendors');
+  try {
+    if (req.params.action === 'unmark') {
+      const r = vendors.unmark(req.body.kind === 'phone' ? 'phone' : 'email', String(req.body.value || ''));
+      flash(req, `${r.name || r.value} is back in Who is this?${r.lifted ? ` Everyone at ${r.lifted} will be asked about again too.` : ''}`);
+    } else {
+      vendors.removeDomain(req.body.domain);
+      flash(req, `New people at ${req.body.domain} will be asked about again.`);
+    }
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect('/crm/vendors');
 });
 
 // ── WhatsApp (Hermes) ──────────────────────────────────────────────────────

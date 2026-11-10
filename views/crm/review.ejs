@@ -2,7 +2,7 @@
 <% const spaceName = s => s === 'work' ? 'Work' : 'Personal'; const ini = n => String(n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(); %>
 <div class="review-title">
   <h1>Who is this?</h1>
-  <p class="subline"><%= items.length %> waiting from both spaces. Nothing is linked to a person, and no new project is made, until you decide here.</p>
+  <p class="subline"><%= items.length %> waiting from both spaces. Nothing is linked to a person, and no new project is made, until you decide here. <a href="/crm/vendors">Vendors<% if (vendorCount) { %> (<%= vendorCount %>)<% } %></a></p>
 </div>
 <section class="grid first">
   <div class="s4">
@@ -48,6 +48,7 @@
     </div>
     <div class="panel">
       <div class="panel-head"><h2>Decide</h2><span class="actions">
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="vendor"><button class="btn small" type="submit">Vendor</button></form>
         <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit">Not a person</button></form>
         <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="later"><button class="btn text small" type="submit">Decide later</button></form>
       </span></div>
@@ -70,6 +71,11 @@
           </select></div>
         <button class="btn" type="submit">Link</button>
       </form>
+      <% if (detail.vendorDomain) { %><form method="post" action="/crm/review/<%= it.id %>" class="vendor-row">
+        <input type="hidden" name="action" value="vendor"><input type="hidden" name="wholeCompany" value="1">
+        <span class="subline">Selling to you? Put everyone at <strong><%= detail.vendorDomain %></strong> in Vendors, so nobody new from there is asked about.</span>
+        <button class="btn text small" type="submit">Whole company is a vendor</button>
+      </form><% } %>
       <% if (p.automated) { %><p class="subline" style="font-size:13px;margin-top:12px">This address looks automated (a notification or no-reply sender). "Not a person" stops its mail being read.</p><% } %>
     </div>
     <div class="panel">

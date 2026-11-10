@@ -621,3 +621,10 @@ Douglas found facts filed under Dad that had nothing to do with his father. The 
 - **Deleting a fact** (10 Nov): "Delete" on every fact (two clicks) and on its page. The fact and its people, project, topic and promise links go; the source is kept; a fact it replaced becomes current again; summaries built on it are rewritten; a task already made from it stays. `deleted_facts` records it so reading the same source again cannot recreate it. The reader is now told explicitly that out-of-office and automatic replies produce no facts.
 - **Moving several facts at once** (10 Nov): tick boxes on the "Facts not in a project" list and on each project page, with a "Select all on this page" box and a bar at the foot of the list to file the ticked facts under a project, or move them out of the current one (to another project, or to none). All or nothing; each counts as Douglas's own filing.
 
+## Vendors (10 Nov 2026)
+
+- **"Vendor" on Who is this?** puts a salesperson or supplier in the Vendor bucket. Like "Not a person", their address becomes an `ignored` identifier: mail from them is not read (held mail is set aside, Gmail skips it) and they are never offered for review again. Unlike it, they are listed in `vendors` and shown at `/crm/vendors` (linked from Who is this?).
+- **"Whole company is a vendor"** (company domains only: not public mail services or Douglas's own domains) also adds the domain to `vendor_domains`. Everyone else waiting in review at that domain goes into Vendors at once, and nobody new from it is offered. A person already linked at that domain is not affected, because a linked address always wins over the domain rule.
+- **"Not a vendor"** removes them, lifts their company rule if one was set (otherwise they could never be offered again), holds their mail again, and offers them straight back on Who is this?, so deciding there releases their mail for reading.
+- `lib/crm/vendors.js`. Tests: `test/crm-vendors.test.js`.
+
