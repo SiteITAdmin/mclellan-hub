@@ -12,6 +12,7 @@ What runs now is deliberately small:
 
 | Piece | Where |
 |-------|-------|
+| Landing page | `routes/home.js`, `views/home.ejs`, `public/home.css` — https://douglas.mclellan.scot/home behind the site admin's Google sign-in. Links only (CRM Work and Personal, Flights, the both-spaces screens, the public site and its editor); it reads no data. Sign-in on douglas.mclellan.scot lands here; the CRM's Hub mark and the Flights back link return to it |
 | Flight tracker | `lib/flights.js`, `routes/flights.js`, `views/flights.ejs` — https://douglas.mclellan.scot/flights behind the site admin's Google sign-in |
 | Public sites | `routes/portfolio.js`, `routes/admin.js` — douglas.mclellan.scot, nakai.mclellan.scot |
 | Site chat + JD analyser | `lib/model.js` → `lib/subscription-agent-jobs.js` → Mac worker (`scripts/subscription-agent-worker.js`) |

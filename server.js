@@ -11,6 +11,7 @@ const adminRouter = require('./routes/admin');
 const flightsRouter = require('./routes/flights');
 const workerRouter = require('./routes/worker');
 const crmRouter = require('./routes/crm');
+const homeRouter = require('./routes/home');
 const whatsappCaptureRouter = require('./routes/whatsapp-capture');
 const imessageCaptureRouter = require('./routes/imessage-capture');
 const { processJobs, seedJobs } = require('./lib/jobs');
@@ -73,14 +74,15 @@ app.use(session({
 }));
 
 // ── Hostname router ───────────────────────────────────────────────────────────
-// douglas.mclellan.scot: portfolio, its admin, the flight tracker, the personal
-// CRM, and the Mac worker API. nakai.mclellan.scot: portfolio and its admin.
+// douglas.mclellan.scot: portfolio, its admin, the signed-in landing page, the
+// flight tracker, the personal CRM, and the Mac worker API. nakai.mclellan.scot: portfolio and its admin.
 // rholdsworthconsulting.com is static and served by nginx directly.
 function portfolioHost(req, res, next, user) {
   req.portfolioUser = user;
   if (user === 'douglas') {
     if (req.path.startsWith('/api/subscription-agent/')) return workerRouter(req, res, next);
     if (req.path === '/flights' || req.path.startsWith('/api/flights')) return flightsRouter(req, res, next);
+    if (req.path === '/home') return homeRouter(req, res, next);
     if (req.path === '/crm' || req.path.startsWith('/crm/')) return crmRouter(req, res, next);
     if (req.path.startsWith('/api/crm/imessage/')) return imessageCaptureRouter(req, res, next);
     if (req.path.startsWith('/api/crm/whatsapp/')) return whatsappCaptureRouter(req, res, next);

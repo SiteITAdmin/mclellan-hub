@@ -1,0 +1,93 @@
+/* The signed-in landing page. Tokens, buttons and focus rings come from crm.css.
+   Each door wears the colour of the place it leads to: Work blue, Personal green, Flights violet. */
+
+[data-space="flights"] {
+  --panel: #eeeefb; --row: #fafaff; --row-edge: #dadaf2; --accent: #5456c4; --active: #e3e3f7;
+}
+
+.home { max-width: 1148px; margin: 0 auto; padding: 24px 24px 72px; }
+.home-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 64px; }
+.home-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+.home-hello {
+  margin: 0; font-family: var(--serif); font-weight: 400; font-size: 56px; line-height: 60px; letter-spacing: -0.01em;
+}
+
+/* ---------- the two CRM doors ---------- */
+.doors { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); margin-top: 40px; }
+.door, .flight { position: relative; background: var(--panel); border-radius: var(--radius-card); transition: background-color 150ms; }
+.door { padding: 20px 28px 28px; }
+.door:has(h2 a:hover), .flight:has(h2 a:hover) { background: var(--active); }
+.door h2, .flight h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 44px; }
+/* The name is the link; it stretches over the whole panel so anywhere on it opens the place. */
+.door h2 a::after, .flight h2 a::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-card); }
+.door h2 a:focus-visible, .flight h2 a:focus-visible { outline: none; }
+.door h2 a:focus-visible::after, .flight h2 a:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
+.door p, .flight p { margin: 6px 0 0; color: var(--muted); font-size: 15px; line-height: 22px; max-width: 46ch; }
+
+.door-art { display: block; width: 100%; height: auto; margin-bottom: 12px; }
+.door-art .link { stroke: var(--accent); stroke-opacity: 0.3; stroke-width: 1.5; fill: none; }
+.door-art .sat { fill: var(--row); stroke: var(--row-edge); stroke-width: 1.5; }
+.door-art .core { fill: var(--accent); }
+.door-art .sat-ic { color: var(--accent); }
+.door-art .core-ic { color: #ffffff; }
+
+.door-links { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.door-links a {
+  height: 32px; padding: 0 13px 0 10px; display: inline-flex; align-items: center; gap: 7px;
+  border-radius: var(--radius-control); background: var(--row); border: 1px solid var(--row-edge);
+  font-size: 13px; font-weight: 500; white-space: nowrap; transition: border-color 150ms, background-color 150ms;
+}
+.door-links a svg { flex: none; color: var(--accent); }
+.door-links a:hover { background: var(--ground); border-color: var(--accent); }
+
+/* ---------- flights ---------- */
+.flight {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: center; gap: 24px;
+  margin-top: var(--gap); padding: 20px 28px;
+}
+.flight-art { display: block; width: 100%; height: auto; overflow: visible; }
+.flight-art .track { stroke: var(--accent); stroke-opacity: 0.22; stroke-width: 1.5; stroke-dasharray: 1 7; stroke-linecap: round; fill: none; }
+.flight-art .arc { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 6; stroke-linecap: round; fill: none; }
+.flight-art .city { fill: var(--row); stroke: var(--accent); stroke-width: 2; }
+.flight-art text { font-family: var(--font); font-size: 14px; font-weight: 600; fill: var(--text); }
+.flight-art .plane path { fill: var(--accent); }
+
+/* The one moving thing on the page: the plane leaves Dublin once, when the page opens. */
+@supports (offset-path: path("M0 0")) {
+  .flight-art .plane {
+    transform: none; offset-path: path("M70 160Q300 -20 570 60"); offset-rotate: auto; offset-distance: 58%;
+    animation: fly 1800ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+@keyframes fly { from { offset-distance: 0%; } to { offset-distance: 58%; } }
+@media (prefers-reduced-motion: reduce) { .flight-art .plane { animation: none; } }
+
+/* ---------- everything else ---------- */
+.more { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 32px 56px; margin-top: 56px; }
+.more h2 { margin: 0 0 8px; font-size: 15px; line-height: 22px; font-weight: 600; }
+.more ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.more-wide ul { columns: 2; column-gap: 56px; border-top: 0; }
+.more li { break-inside: avoid; border-bottom: 1px solid var(--rule); }
+.more-wide li { border-top: 1px solid var(--rule); margin-bottom: -1px; }
+.more li a { display: grid; grid-template-columns: 16px 1fr; column-gap: 12px; align-items: center; padding: 11px 4px; border-radius: 8px; }
+.more li a svg { grid-row: span 2; color: #74746f; }
+.more li a .name { font-weight: 500; }
+.more li a .what { grid-column: 2; color: var(--muted); font-size: 13px; line-height: 18px; }
+.more li a:hover .name { text-decoration: underline; text-underline-offset: 3px; }
+
+@media (max-width: 900px) {
+  .doors { grid-template-columns: 1fr; }
+  .flight { grid-template-columns: 1fr; gap: 8px; }
+  .more { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .home { padding: 16px 16px 56px; }
+  .home-bar { margin-bottom: 40px; }
+  .home-hello { font-size: 40px; line-height: 44px; }
+  .doors { margin-top: 28px; }
+  .door { padding: 14px 18px 20px; }
+  .flight { padding: 18px; }
+  .door h2, .flight h2 { font-size: 34px; line-height: 38px; }
+  .more-wide ul { columns: 1; }
+  .flight-art text { font-size: 19px; }
+}

@@ -71,13 +71,6 @@ function fmt(ts, style = 'short') {
 
 function hueStyle(p) { return `--h:${Number(p?.hue) || 0}`; }
 
-function greeting() {
-  const h = Number(new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Dublin', hour: '2-digit', hour12: false }));
-  if (h < 12) return 'Morning';
-  if (h < 18) return 'Afternoon';
-  return 'Evening';
-}
-
 router.get('/crm/messages', (req,res) => res.render('crm/messages', {page:'messages',title:'Messages',imessage:require('../lib/crm/imessage').status()}));
 router.post('/crm/messages/pause', requireSameOrigin, writeLimiter, (req,res) => {
   require('../lib/crm/db').setSetting('imessage_paused',req.body.paused==='1'?'1':'0');res.redirect('/crm/messages');
@@ -262,7 +255,7 @@ router.post('/crm/whatsapp/:action(pause|resume)', requireSameOrigin, writeLimit
 router.get('/crm/:space', spaceParam, (req, res) => {
   const space = req.params.space;
   const data = views.today(space);
-  res.render('crm/today', { page: 'today', data, greeting: greeting(), title: space === 'work' ? 'Work' : 'Personal' });
+  res.render('crm/today', { page: 'today', data, greeting: views.greeting(), title: space === 'work' ? 'Work' : 'Personal' });
 });
 
 router.get('/crm/:space/people', spaceParam, (req, res) => {

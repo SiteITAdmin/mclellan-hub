@@ -120,12 +120,15 @@ router.get('/admin/login', (req, res) => {
   res.render('admin/login', { user: req.portfolioUser, displayUser: getPortfolioDisplayName(req.portfolioUser), error: null });
 });
 
+// Douglas signs in to more than the site editor, so he lands on the page that links to all of it.
+const afterSignIn = req => (req.portfolioUser === 'douglas' ? '/home' : '/admin');
+
 router.get('/admin/auth/google', (req, res, next) =>
-  startGoogleAuth({ purpose: 'portfolio-admin', user: req.portfolioUser, callbackPath: '/admin/auth/google/callback', returnTo: '/admin' })(req, res, next)
+  startGoogleAuth({ purpose: 'portfolio-admin', user: req.portfolioUser, callbackPath: '/admin/auth/google/callback', returnTo: afterSignIn(req) })(req, res, next)
 );
 
 router.get('/admin/auth/google/callback', (req, res, next) =>
-  contactsConnect.isMine(req) ? contactsConnect.finish(req, res) : gmailConnect.isMine(req) ? gmailConnect.finish(req, res) : finishGoogleAuth({ purpose: 'portfolio-admin', user: req.portfolioUser, callbackPath: '/admin/auth/google/callback', sessionKey: 'adminUser', returnTo: '/admin' })(req, res, next)
+  contactsConnect.isMine(req) ? contactsConnect.finish(req, res) : gmailConnect.isMine(req) ? gmailConnect.finish(req, res) : finishGoogleAuth({ purpose: 'portfolio-admin', user: req.portfolioUser, callbackPath: '/admin/auth/google/callback', sessionKey: 'adminUser', returnTo: afterSignIn(req) })(req, res, next)
 );
 
 router.post('/admin/logout', requireSameOrigin, (req, res) => {

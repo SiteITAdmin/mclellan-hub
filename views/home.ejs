@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en-IE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Home – Hub</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/crm.css">
+  <link rel="stylesheet" href="/home.css">
+</head>
+<body>
+<%
+  // One circle of a door's drawing, with a CRM icon centred in it.
+  const node = (x, y, r, ic, core) => `<circle cx="${x}" cy="${y}" r="${r}" class="${core ? 'core' : 'sat'}"/>`
+    + icon[ic].replace('width="16" height="16"', `x="${x - r / 2}" y="${y - r / 2}" width="${r}" height="${r}" class="${core ? 'core-ic' : 'sat-ic'}"`);
+  const link = (a, b) => `<path class="link" d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}"/>`;
+  const art = (nodes, links) => `<svg class="door-art" viewBox="0 0 500 180" aria-hidden="true">${links.map(([a, b]) => link(nodes[a], nodes[b])).join('')}${nodes.map((n, i) => node(n[0], n[1], n[2], n[3], i === 0)).join('')}</svg>`;
+  const pill = (href, ic, label) => `<a href="${href}">${icon[ic]}${label}</a>`;
+  const shortcuts = s => [
+    pill(`/crm/${s}/calendar`, 'calendar', 'Calendar'), pill(`/crm/${s}/tasks`, 'tasks', 'Tasks'), pill(`/crm/${s}/people`, 'people', 'People'),
+    pill(`/crm/${s}/projects`, 'projects', 'Projects'), pill(`/crm/${s}/search`, 'search', 'Search'), pill(`/crm/${s}/note`, 'plus', 'Add a note'),
+  ].join('');
+  const row = (href, ic, name, what) => `<li><a href="${href}">${icon[ic]}<span class="name">${name}</span><span class="what">${what}</span></a></li>`;
+%>
+<div class="home">
+  <header class="home-bar">
+    <span class="home-brand"><%- icon.mark %>Hub</span>
+    <form method="POST" action="/admin/logout"><button class="btn small" type="submit">Sign out</button></form>
+  </header>
+
+  <h1 class="home-hello"><%= greeting %>, Douglas.</h1>
+  <p class="subline"><%= dateLine %></p>
+
+  <section class="doors" aria-label="CRM">
+    <article class="door" data-space="work">
+      <%- art([[118, 92, 38, 'people'], [232, 44, 24, 'email'], [250, 130, 24, 'calendar'], [342, 78, 22, 'meeting'], [362, 150, 18, 'org'], [440, 106, 20, 'tasks']],
+              [[0, 1], [0, 2], [1, 3], [2, 3], [2, 4], [3, 5]]) %>
+      <h2><a href="/crm/work">Work</a></h2>
+      <p>Outlook mail, meetings and tasks from your job, and the people in them.</p>
+      <nav class="door-links" aria-label="Work shortcuts"><%- shortcuts('work') %></nav>
+    </article>
+    <article class="door" data-space="personal">
+      <%- art([[382, 90, 38, 'people'], [264, 48, 24, 'email'], [252, 134, 24, 'whatsapp'], [160, 82, 22, 'note'], [138, 152, 18, 'calendar'], [62, 112, 20, 'captured']],
+              [[0, 1], [0, 2], [1, 3], [2, 3], [2, 4], [3, 5]]) %>
+      <h2><a href="/crm/personal">Personal</a></h2>
+      <p>Gmail, WhatsApp and iMessage: family, home, money and everyone outside work.</p>
+      <nav class="door-links" aria-label="Personal shortcuts"><%- shortcuts('personal') %></nav>
+    </article>
+  </section>
+
+  <article class="flight" data-space="flights">
+    <div>
+      <h2><a href="/flights">Flights</a></h2>
+      <p>Dublin to Edinburgh and back. Every flight you've taken, scheduled against what actually happened.</p>
+    </div>
+    <svg class="flight-art" viewBox="0 0 640 200" aria-hidden="true">
+      <path class="track" d="M70 160L570 60"/>
+      <path class="arc" d="M70 160Q300 -20 570 60"/>
+      <circle class="city" cx="70" cy="160" r="6"/>
+      <circle class="city" cx="570" cy="60" r="6"/>
+      <text x="70" y="186" text-anchor="middle"><tspan class="place">Dublin</tspan></text>
+      <text x="570" y="88" text-anchor="middle"><tspan class="place">Edinburgh</tspan></text>
+      <g class="plane" transform="translate(350 39) rotate(-7)">
+        <path d="M-11 0l-3-5h3l4 3.5h7L-5-11h3.5L6-1.5h5a3 1.5 0 0 1 0 3H6L-1.5 11H-5l5-9.5h-7L-11 5h-3z"/>
+      </g>
+    </svg>
+  </article>
+
+  <section class="more">
+    <div class="more-wide">
+      <h2>Both spaces</h2>
+      <ul>
+        <%- row('/crm/review', 'review', 'Who is this?', 'People the Hub doesn’t know yet') %>
+        <%- row('/crm/vendors', 'org', 'Vendors', 'Salespeople and suppliers you set aside') %>
+        <%- row('/crm/whatsapp', 'whatsapp', 'WhatsApp', 'The chats you let the Hub read') %>
+        <%- row('/crm/messages', 'note', 'iMessage', 'The Mac’s message reader') %>
+        <%- row('/crm/notebooks', 'captured', 'Boox notebooks', 'Handwritten pages') %>
+        <%- row('/crm/imports', 'people', 'Contacts & LinkedIn', 'Imported names to check') %>
+        <%- row('/crm/notifications', 'today', 'Notifications', 'Reminders on this device') %>
+      </ul>
+    </div>
+    <div>
+      <h2>Public site</h2>
+      <ul>
+        <%- row('/', 'report', 'douglas.mclellan.scot', 'What visitors see') %>
+        <%- row('/admin', 'note', 'Site editor', 'Profile, CV and skills') %>
+        <%- row('/chat', 'search', 'Site chat', 'Ask it about your experience') %>
+      </ul>
+    </div>
+  </section>
+</div>
+</body>
+</html>
