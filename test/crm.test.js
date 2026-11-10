@@ -998,6 +998,98 @@ test('wispr: the device sign-in connects one space, records the tools, and refre
   }
 });
 
+test('wispr: terminal OAuth errors retain their reason and stop polling', async () => {
+  const { setSetting, now } = require('../lib/crm/db');
+  try {
+    for (const [reason, result] of [['access_denied', 'denied'], ['expired_token', 'expired'], ['invalid_client', 'error'], ['unexpected_secret_value', 'error']]) {
+      wispr.disconnect('personal');
+      setSetting('wispr_client_id', 'client_test');
+      setSetting('wispr_personal_device', JSON.stringify({ device_code: 'private-device-code', expires_at: now() + 300, next_poll_at: 0 }));
+      let calls = 0;
+      wispr._setHttp(async () => {
+        calls++;
+        return { status: 400, json: async () => ({ error: reason, error_description: 'secret-token-must-not-appear' }) };
+      });
+      assert.strictEqual(await wispr.pollConnect('personal'), result);
+      assert.strictEqual(wispr.status('personal').device, null);
+      assert.strictEqual(wispr.status('personal').connected, false);
+      assert.match(wispr.status('personal').error, new RegExp(reason === 'unexpected_secret_value' ? 'unknown_error' : reason));
+      assert.doesNotMatch(wispr.status('personal').error, /secret-token|private-device|unexpected_secret_value/);
+      await wispr.pollConnect('personal');
+      assert.strictEqual(calls, 1, 'terminal responses stop token polling');
+    }
+    setSetting('wispr_personal_device', JSON.stringify({ expires_at: now() - 1 }));
+    assert.strictEqual(await wispr.pollConnect('personal'), 'expired');
+    assert.match(wispr.status('personal').error, /No approval result.*local_expiry/);
+  } finally {
+    wispr.disconnect('personal');
+    wispr._setHttp((url, opts) => fetch(url, opts));
+  }
+});
+
+test('wispr: a failed MCP connection check does not report connected and can be retried', async () => {
+  const { setSetting, now } = require('../lib/crm/db');
+  wispr.disconnect('personal');
+  setSetting('wispr_personal_device', JSON.stringify({ device_code: 'dev-test', expires_at: now() + 300, next_poll_at: 0 }));
+  wispr._setHttp(async url => url.endsWith('/token')
+    ? { status: 200, json: async () => ({ access_token: 'secret-access', refresh_token: 'secret-refresh' }) }
+    : { status: 403, ok: false, headers: { get: () => null }, text: async () => 'secret-access secret-refresh' });
+  try {
+    assert.strictEqual(await wispr.pollConnect('personal'), 'error');
+    assert.strictEqual(wispr.status('personal').connected, false);
+    assert.strictEqual(wispr.status('personal').authorized, true);
+    assert.match(wispr.status('personal').error, /connection check failed/);
+    assert.doesNotMatch(wispr.status('personal').error, /secret-access|secret-refresh/);
+    wispr._setHttp(async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      return { status: 200, ok: true, headers: { get: () => null },
+        text: async () => JSON.stringify({ id: body.id, result: body.method === 'tools/list' ? { tools: [] } : {} }) };
+    });
+    await wispr.afterConnect('personal');
+    assert.strictEqual(wispr.status('personal').connected, true);
+    assert.strictEqual(wispr.status('personal').error, '');
+  } finally {
+    wispr.disconnect('personal');
+    wispr._setHttp((url, opts) => fetch(url, opts));
+  }
+});
+
+test('wispr: Meetings renders denial, expiry and failed checks without a success message', async () => {
+  const { setSetting, now } = require('../lib/crm/db');
+  const app = require('express')();
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, '..', 'views'));
+  app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = { adminUser: 'douglas' }; next(); });
+  app.use(require('../routes/crm'));
+  const server = app.listen(0);
+  try {
+    for (const reason of ['access_denied', 'expired_token', 'check_failed', 'local_expiry']) {
+      wispr.disconnect('personal');
+      setSetting('wispr_personal_device', JSON.stringify({ device_code: 'private-code', next_poll_at: 0, expires_at: now() + (reason === 'local_expiry' ? -1 : 300) }));
+      wispr._setHttp(async url => url.endsWith('/token')
+        ? { status: reason === 'check_failed' ? 200 : 400, json: async () => reason === 'check_failed'
+          ? { access_token: 'private-access', refresh_token: 'private-refresh' } : { error: reason } }
+        : { status: 403, ok: false, headers: { get: () => null }, text: async () => 'private-access' });
+      const res = await fetch(`http://127.0.0.1:${server.address().port}/crm/personal/meetings`);
+      const body = await res.text();
+      assert.strictEqual(res.status, 200);
+      assert.match(body, new RegExp(reason === 'check_failed' ? 'connection check failed' : reason === 'local_expiry' ? 'local_expiry' : reason));
+      assert.doesNotMatch(body, /Wispr Flow connected\.|>Connected<|private-access|private-refresh|private-code/);
+      if (reason === 'access_denied') assert.doesNotMatch(body, /code ran out/);
+      if (reason === 'check_failed') {
+        assert.match(body, /Check the connection/);
+        assert.match(body, /Connect again<\/button>/);
+        assert.doesNotMatch(body, /Choose “Connect Wispr Flow” below/);
+      }
+      assert.strictEqual(wispr.status('personal').device, null);
+    }
+  } finally {
+    server.close();
+    wispr.disconnect('personal');
+    wispr._setHttp((url, opts) => fetch(url, opts));
+  }
+});
+
 // ── WhatsApp (Hermes) ───────────────────────────────────────────────────────
 const whatsapp = require('../lib/crm/whatsapp');
 const SECONDS = s => Math.floor(Date.now() / 1000) - s;

@@ -674,7 +674,7 @@ router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
   if (wispr.status(space).device) {
     const result = await wispr.pollConnect(space).catch(err => { flash(req, err.message, 'bad'); return 'error'; });
     if (result === 'connected') res.locals.flash = { text: 'Wispr Flow connected.', level: 'ok' };
-    if (result === 'expired') res.locals.flash = { text: 'The code ran out before sign-in finished. Connect again.', level: 'bad' };
+    if (['denied', 'expired', 'error'].includes(result) && wispr.status(space).error) res.locals.flash = { text: wispr.status(space).error, level: 'bad' };
   }
   res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: require('../lib/crm/meetings').today(space),
     configured: !!process.env.KRISP_WEBHOOK_SECRET,
