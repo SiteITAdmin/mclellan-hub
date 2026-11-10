@@ -37,6 +37,21 @@
       <% } %>
       </dl>
     </div>
+    <% if (speakers && speakers.labels.length) { %>
+    <div class="panel">
+      <div class="panel-head"><h2>Speaker names</h2></div>
+      <p class="subline">Correct a speaker after the meeting was read. The original recording and the exact words stay as they were; facts, promises and tasks already made are updated in place.</p>
+      <form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/speaker-names">
+      <% speakers.labels.forEach((speaker, i) => { %>
+        <label for="speaker-name-<%= i %>"><%= speaker.label %><%= speaker.placeholder ? ' (not named yet)' : '' %></label>
+        <input id="speaker-name-<%= i %>" name="name" value="<%= speaker.label %>" maxlength="120" autocomplete="off">
+        <input type="hidden" name="label" value="<%= speaker.label %>">
+      <% }) %>
+      <p class="subline">Type the confirmed name over the label you want to change, then save. A label left as it is stays as it is.</p>
+      <button class="btn" type="submit">Save speaker names</button>
+      </form>
+    </div>
+    <% } %>
   </div>
 </section>
 <p><a class="btn" href="/crm/<%= space %>/tasks/new?sourceId=<%= s.id %>">Add a task from this source</a></p>
