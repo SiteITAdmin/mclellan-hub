@@ -20,7 +20,7 @@
   const art = (nodes, links) => `<svg class="door-art" viewBox="0 0 500 180" aria-hidden="true">${links.map(([a, b]) => link(nodes[a], nodes[b])).join('')}${nodes.map((n, i) => node(n[0], n[1], n[2], n[3], i === 0)).join('')}</svg>`;
   const pill = (href, ic, label) => `<a href="${href}">${icon[ic]}${label}</a>`;
   const shortcuts = s => [
-    pill(`/crm/${s}/calendar`, 'calendar', 'Calendar'), pill(`/crm/${s}/tasks`, 'tasks', 'Tasks'), pill(`/crm/${s}/people`, 'people', 'People'),
+    pill(`/crm/${s}/calendar`, 'calendar', 'Calendar'), pill(`/crm/${s}/meetings`, 'meeting', 'Meetings'), pill(`/crm/${s}/tasks`, 'tasks', 'Tasks'), pill(`/crm/${s}/people`, 'people', 'People'),
     pill(`/crm/${s}/projects`, 'projects', 'Projects'), pill(`/crm/${s}/search`, 'search', 'Search'), pill(`/crm/${s}/note`, 'plus', 'Add a note'),
   ].join('');
   const row = (href, ic, name, what) => `<li><a href="${href}">${icon[ic]}<span class="name">${name}</span><span class="what">${what}</span></a></li>`;
@@ -77,7 +77,6 @@
         <%- row('/crm/vendors', 'org', 'Vendors', 'Salespeople and suppliers you set aside') %>
         <%- row('/crm/whatsapp', 'whatsapp', 'WhatsApp', 'The chats you let the Hub read') %>
         <%- row('/crm/messages', 'note', 'iMessage', 'The Mac’s message reader') %>
-        <%- row('/crm/krisp', 'captured', 'Krisp transcripts', 'Choose Work or Personal') %>
         <%- row('/crm/notebooks', 'captured', 'Boox notebooks', 'Handwritten pages') %>
         <%- row('/crm/imports', 'people', 'Contacts & LinkedIn', 'Imported names to check') %>
         <%- row('/crm/notifications', 'today', 'Notifications', 'Reminders on this device') %>

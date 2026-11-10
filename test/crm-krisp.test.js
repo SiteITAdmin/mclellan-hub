@@ -27,13 +27,16 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   const r=await post(payload,'dummy','/'); assert.equal(r.status,200); assert.equal(r.created,true);
   assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,0);
   assert.equal(db.crm().prepare('SELECT count(*) n FROM sources_fts').get().n,0);
-  const html=await (await fetch(base+'/crm/krisp')).text(); assert.ok(html.includes('&lt;script&gt;')); assert.ok(html.includes('value="personal"'));
+  const legacy=await fetch(base+'/crm/krisp',{redirect:'manual'}); assert.equal(legacy.headers.get('location'),'/crm/work/meetings');
+  const html=await (await fetch(base+'/crm/work/meetings')).text(); assert.ok(html.includes('&lt;script&gt;')); assert.ok(html.includes('value="personal"'));
   assert.equal((await fetch(base+'/crm/krisp',{headers:{'x-no-auth':'1'},redirect:'manual'})).status,302);
   assert.equal((await choose(r.id,'work',{'x-no-auth':'1'})).status,302);
   assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,0);
   assert.equal((await choose(r.id,'bad')).status,400);
   assert.equal((await choose(r.id,'personal',{Origin:'https://evil.invalid'})).status,403);
-  assert.equal((await choose(r.id,'personal')).status,302);
+  const chosen=await choose(r.id,'personal'); assert.equal(chosen.status,302); assert.equal(chosen.headers.get('location'),'/crm/work/meetings');
+  const personal=await (await fetch(base+'/crm/personal/meetings')).text(); assert.ok(personal.includes('&lt;script&gt;unsafe'));
+  const work=await (await fetch(base+'/crm/work/meetings')).text(); assert.ok(!work.includes('&lt;script&gt;unsafe'));
   assert.equal((await choose(r.id,'work')).status,409);
   assert.equal((await post({...payload,event_id:'retry'})).created,false);
   const s=db.crm().prepare('SELECT * FROM sources').get(); assert.equal(s.space,'personal'); assert.equal(s.occurred_at,1794301200); assert.equal(krisp.rawForSource(s),JSON.stringify(payload));
@@ -48,6 +51,8 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   const receipt=db.crm().prepare('SELECT received_at FROM krisp_intake WHERE id=?').get(undated.id).received_at;
   db.crm().prepare('UPDATE krisp_intake SET received_at=? WHERE id=?').run(receipt-100,undated.id);
   const undatedIds=krisp.classify(undated.id,'personal'); assert.equal(db.crm().prepare('SELECT occurred_at FROM sources WHERE id=?').get(undatedIds[0]).occurred_at,receipt-100);
+  const returnTest=await post({meeting:{id:'personal-return'},transcript:'Personal return'});
+  const returnResult=await fetch(base+`/crm/krisp/${returnTest.id}/classify`,{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:base},body:new URLSearchParams({choice:'ignore',returnSpace:'personal'})}); assert.equal(returnResult.headers.get('location'),'/crm/personal/meetings');
   const empty=await post({notes:'no transcript'}); krisp.classify(empty.id,'ignore'); assert.equal((await post({notes:'no transcript'})).status,200); assert.equal(krisp.list().find(x=>x.id===empty.id).status,'ignored');
   const long=await post({meeting:{id:'long',started_at:1794301200000},transcript:'A long transcript. '.repeat(110000)});
   const ids=krisp.classify(long.id,'work'); assert.ok(ids.length>2);

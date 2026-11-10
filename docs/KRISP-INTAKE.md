@@ -6,9 +6,9 @@ Implemented locally; not deployed or verified with a real Krisp delivery.
 
 Set KRISP_WEBHOOK_SECRET securely. POST /api/krisp/webhook with Authorization:
 Bearer <secret>. No global space configuration exists. Body space fields are
-rejected; each transcript must be assigned Work or Personal at /crm/krisp behind
+rejected; each transcript must be assigned Work or Personal on /crm/work/meetings or /crm/personal/meetings behind
 Douglas's existing sign-in. Ignore keeps an unwanted delivery out of knowledge.
-Home and CRM navigation link to this screen; Today shows only the pending count.
+Home has a Meetings shortcut in each space; the old /crm/krisp link redirects to Work Meetings. Pending recordings appear in both spaces, while classified source links appear only in their current space; Today shows only the pending count.
 
 Raw JSON is stored once in krisp_intake, outside sources, FTS and model processing.
 Classification atomically admits transcript parts through the existing source
