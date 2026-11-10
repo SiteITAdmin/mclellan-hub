@@ -23,6 +23,18 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   process.env.KRISP_WEBHOOK_SECRET='dummy';
   assert.equal((await post({},'')).status,401); assert.equal((await post({},'wrong')).status,401);
   assert.equal((await post({space:'work',transcript:'Hello'})).status,400);
+  for (const id of ['note-attempt-1','note-attempt-2','note-attempt-3']) {
+    const note=await post({id,event:'note_generated',data:{meeting:{id:'synthetic-meeting'},sections:{action_items:null,key_points:null,outline:null},raw_content:''}});
+    assert.equal(note.status,200); assert.equal(note.ignored,true); assert.equal(note.created,false);
+  }
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM krisp_intake').get().n,0);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,0);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM sources_fts').get().n,0);
+  for (const event of ['transcript_created','future_unknown_event']) {
+    const failed=await post({event,data:{meeting:{id:'failure-'+event}}}); assert.equal(failed.readable,false); assert.equal(failed.created,true);
+  }
+  assert.equal(krisp.list().filter(x=>x.status==='pending'&&!x.readable).length,2);
+  db.crm().prepare('DELETE FROM krisp_intake').run();
   const segments = [{speaker:'Speaker 1',speakerIndex:1,text:'  Synthetic opening.\nSecond line.  '},{speaker:'Alex Example',speakerIndex:2,text:'Yes.'},{speakerIndex:7,text:'Unknown speaker.\n' + 'Evidence. '.repeat(5000)}];
   const actual = {id:'synthetic-event',event:'transcript_created',data:{meeting:{id:'synthetic-meeting',title:'Synthetic mobile recording',duration:2835,owner:{id:'synthetic-owner'},calendar_event_id:null,participants:[],speakers:[{index:1},{index:2,email:'alex@example.invalid',first_name:'Alex',last_name:'Example'},{index:7,email:'unknown@noemail.krisp.ai'}],start_date:'2026-11-10T12:00:00.000Z',end_date:'2026-11-10T12:47:15.000Z',url:'https://example.invalid/meeting'},content:segments}};
   const expected = segments.map(x=>`${x.speaker || 'Speaker '+x.speakerIndex}: ${x.text}`).join('\n\n');
