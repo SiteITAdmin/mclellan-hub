@@ -72,12 +72,9 @@ function fmt(ts, style = 'short') {
 
 function hueStyle(p) { return `--h:${Number(p?.hue) || 0}`; }
 
-router.get('/crm/krisp', (req, res) => res.render('crm/krisp', {
-  page: 'krisp', title: 'Krisp transcripts', deliveries: require('../lib/crm/krisp').list(),
-  configured: !!process.env.KRISP_WEBHOOK_SECRET,
-}));
+router.get('/crm/krisp', (req, res) => res.redirect('/crm/work/meetings'));
 router.post('/crm/krisp/:id/classify', requireSameOrigin, writeLimiter, (req, res) => {
-  try { require('../lib/crm/krisp').classify(req.params.id, req.body.choice); res.redirect('/crm/krisp'); }
+  try { require('../lib/crm/krisp').classify(req.params.id, req.body.choice); res.redirect(`/crm/${req.body.returnSpace === 'personal' ? 'personal' : 'work'}/meetings`); }
   catch (err) { res.status(err.status || 500).send(err.status ? err.message : 'Classification failed; transcript remains pending'); }
 });
 
@@ -679,7 +676,10 @@ router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
     if (result === 'connected') res.locals.flash = { text: 'Wispr Flow connected.', level: 'ok' };
     if (result === 'expired') res.locals.flash = { text: 'The code ran out before sign-in finished. Connect again.', level: 'bad' };
   }
-  res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: require('../lib/crm/meetings').today(space) });
+  res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: require('../lib/crm/meetings').today(space),
+    configured: !!process.env.KRISP_WEBHOOK_SECRET,
+    deliveries: require('../lib/crm/krisp').list().filter(d => d.status === 'pending' || d.sources.some(s => s.space === space)).map(d => ({ ...d, sources: d.sources.filter(s => s.space === space) })),
+  });
 });
 
 router.post('/crm/:space/meetings/:action', spaceParam, requireSameOrigin, writeLimiter, async (req, res) => {

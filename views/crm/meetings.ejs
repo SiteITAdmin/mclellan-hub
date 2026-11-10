@@ -1,9 +1,10 @@
 <%- include('_top') %>
 <% const where = space === 'work' ? 'Work' : 'Personal'; %>
 <% if (w.device) { %><meta http-equiv="refresh" content="5"><% } %>
-<div class="title-row"><div><h1>Meetings</h1><p class="subline">Meetings recorded by Wispr Flow Notetaker. Connect the Wispr account you use for <%= where.toLowerCase() %> meetings; its meetings go into <%= where %> only.</p></div></div>
+<div class="title-row"><div><h1>Meetings</h1><p class="subline">Meeting preparation, recordings and transcripts for <%= where %>.</p></div></div>
 <%- include('_meeting-prep', { meetings }) %>
 <p><a class="btn" href="/crm/<%= space %>/note">Add a transcript or meeting note</a></p>
+<%- include('_krisp', { deliveries, configured }) %>
 <section class="grid first">
   <div class="panel s8">
     <div class="panel-head"><h2>Wispr Flow</h2>
