@@ -23,8 +23,20 @@
       <p class="subline">Claude reads this before filing anything here, and re-checks what is already filed whenever you change it.</p>
     </div>
     <div class="panel"><div class="panel-head"><h2>People</h2></div>
-      <% if (!p.people.length) { %><div class="empty">Nobody linked yet.</div><% } %>
-      <div class="topics-list"><% for (const x of p.people) { %><a class="topic-row" href="/crm/<%= space %>/people/<%= x.id %>"><span><%= x.name %></span><span class="n"><%= x.n %></span></a><% } %></div>
+      <% if (!p.people.added.length && !p.people.fromFacts.length) { %><div class="empty">Nobody on this project yet.</div><% } %>
+      <% if (p.people.added.length) { %><p class="group-label">On this project</p><div class="topics-list">
+        <% for (const x of p.people.added) { %><div class="topic-row"><a href="/crm/<%= space %>/people/<%= x.id %>"><%= x.name %></a><span class="n"><%= x.n %> <%= x.n === 1 ? 'fact' : 'facts' %>
+          <form class="inline-form" method="post" action="/crm/<%= space %>/projects/<%= p.id %>/member-remove"><input type="hidden" name="personId" value="<%= x.id %>"><button class="link-btn" type="submit" aria-label="Take <%= x.name %> off this project">Remove</button></form></span></div><% } %>
+      </div><% } %>
+      <% if (p.people.fromFacts.length) { %><p class="group-label">Named in its facts</p><div class="topics-list">
+        <% for (const x of p.people.fromFacts) { %><div class="topic-row"><a href="/crm/<%= space %>/people/<%= x.id %>"><%= x.name %></a><span class="n"><%= x.n %>
+          <form class="inline-form" method="post" action="/crm/<%= space %>/projects/<%= p.id %>/member-add"><input type="hidden" name="personId" value="<%= x.id %>"><button class="link-btn" type="submit" aria-label="Put <%= x.name %> on this project">Add</button></form></span></div><% } %>
+      </div><% } %>
+      <form class="form-row" method="post" action="/crm/<%= space %>/projects/<%= p.id %>/member-add" style="margin-top:12px">
+        <label class="sr-only" for="memberAdd">Add a person</label>
+        <select class="select" id="memberAdd" name="personId" required><option value="">Add a person…</option><% for (const x of p.choices) { if (p.people.added.some(y => y.id === x.id)) continue; %><option value="<%= x.id %>"><%= x.name %></option><% } %></select>
+        <button class="btn small" type="submit">Add</button>
+      </form>
     </div>
     <div class="panel"><div class="panel-head"><h2>Topics</h2></div>
       <% if (!p.topics.length) { %><div class="empty">None yet.</div><% } %>

@@ -1,0 +1,39 @@
+<%- include('_top') %>
+<div class="crumbs"><% if (back) { %><a href="<%= back %>">Back</a> / <% } %>Fact</div>
+<div class="title-row"><div><h1 style="font-size:26px;line-height:32px;max-width:60ch"><%= a.statement %></h1>
+  <p class="subline"><%= a.kind %>, said <%= fmt(a.said_at, 'date') %><%= a.confidence === 'low' ? ', low confidence' : '' %><%= a.status !== 'active' ? ', replaced by a newer fact' : '' %>.</p></div></div>
+<section class="grid first">
+  <div class="s8 side-stack">
+    <div class="panel">
+      <div class="panel-head"><h2>Projects</h2></div>
+      <% if (!a.projects.length) { %><div class="empty">Not in any project.</div><% } %>
+      <div class="chips"><% for (const p of a.projects) { %><span class="chip-item"><a href="/crm/<%= space %>/projects/<%= p.id %>"><%= p.name %></a><% if (p.kept_by_you) { %><small>filed by you</small><% } %>
+        <form class="inline-form" method="post" action="/crm/<%= space %>/facts/<%= a.id %>/project-remove"><input type="hidden" name="projectId" value="<%= p.id %>"><input type="hidden" name="back" value="<%= `/crm/${space}/facts/${a.id}${back ? `?back=${encodeURIComponent(back)}` : ''}` %>"><button class="btn small text" type="submit" aria-label="Take off <%= p.name %>">Remove</button></form></span><% } %></div>
+      <form class="form-row" method="post" action="/crm/<%= space %>/facts/<%= a.id %>/project-add" style="margin-top:12px">
+        <input type="hidden" name="back" value="<%= `/crm/${space}/facts/${a.id}${back ? `?back=${encodeURIComponent(back)}` : ''}` %>">
+        <label class="sr-only" for="addProject">File under a project</label>
+        <select class="select" id="addProject" name="projectId" required><option value="">File under…</option><% for (const p of a.projectChoices) { if (a.projects.some(x => x.id === p.id)) continue; %><option value="<%= p.id %>"><%= p.name %></option><% } %></select>
+        <button class="btn small" type="submit">File</button>
+      </form>
+      <% if (a.removedFrom.length) { %><p class="subline">Taken off: <%= a.removedFrom.map(r => `${r.name} (${r.by === 'you' ? 'by you' : r.reason})`).join('; ') %>. Filing it there again puts it back.</p><% } %>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>People it is about</h2></div>
+      <% if (!a.people.length) { %><div class="empty">Not linked to anyone.</div><% } %>
+      <div class="chips"><% for (const p of a.people) { %><span class="chip-item"><a href="/crm/<%= space %>/people/<%= p.id %>"><%= p.name %></a><% if (p.how === 'you') { %><small>linked by you</small><% } %>
+        <form class="inline-form" method="post" action="/crm/<%= space %>/facts/<%= a.id %>/person-remove"><input type="hidden" name="personId" value="<%= p.id %>"><input type="hidden" name="back" value="<%= `/crm/${space}/facts/${a.id}${back ? `?back=${encodeURIComponent(back)}` : ''}` %>"><button class="btn small text" type="submit" aria-label="Unlink <%= p.name %>">Remove</button></form></span><% } %></div>
+      <form class="form-row" method="post" action="/crm/<%= space %>/facts/<%= a.id %>/person-add" style="margin-top:12px">
+        <input type="hidden" name="back" value="<%= `/crm/${space}/facts/${a.id}${back ? `?back=${encodeURIComponent(back)}` : ''}` %>">
+        <label class="sr-only" for="addPerson">Link a person</label>
+        <select class="select" id="addPerson" name="personId" required><option value="">Link a person…</option><% for (const p of a.peopleChoices) { if (a.people.some(x => x.id === p.id)) continue; %><option value="<%= p.id %>"><%= p.name %></option><% } %></select>
+        <button class="btn small" type="submit">Link</button>
+      </form>
+      <% if (a.unclear.length) { %><p class="subline">Names Claude saw but couldn't match: <%= a.unclear.map(m => m.name).join(', ') %>. <a href="/crm/review">Sort them in Who is this?</a></p><% } %>
+    </div>
+  </div>
+  <div class="panel s4">
+    <div class="panel-head"><h2>Where it came from</h2></div>
+    <% for (const s of a.sources) { %><p><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a><small class="task-via"><%= fmt(s.occurred_at, 'date') %><%= s.quote ? ` · “${s.quote}”` : '' %></small></p><% } %>
+  </div>
+</section>
+<%- include('_bottom') %>

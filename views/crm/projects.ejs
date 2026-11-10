@@ -7,13 +7,19 @@
     <% for (const p of list) { %><a class="topic-row" href="/crm/<%= space %>/projects/<%= p.id %>"><span><%= p.name %></span><span class="n"><%= p.facts %> <%= p.facts === 1 ? 'fact' : 'facts' %><%= p.last ? `, latest ${fmt(p.last, 'date')}` : '' %></span></a><% } %>
     </div>
   </div>
-  <div class="panel s4">
+  <div class="s4 side-stack">
+  <div class="panel">
+    <div class="panel-head"><h2>Not in a project</h2></div>
+    <p><a class="who" href="/crm/<%= space %>/facts"><%= unfiled %> <%= unfiled === 1 ? 'fact' : 'facts' %></a> aren't filed under any project. They still show on people, topics and search. Open the list to file them.</p>
+  </div>
+  <div class="panel">
     <div class="panel-head"><h2>Add a project</h2></div>
     <form method="post" action="/crm/<%= space %>/projects" class="form-row">
       <label class="sr-only" for="pname">Project name</label>
       <input class="input" id="pname" name="name" required placeholder="Project name">
       <button class="btn" type="submit">Add</button>
     </form>
+  </div>
   </div>
 </section>
 <%- include('_bottom') %>

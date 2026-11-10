@@ -612,3 +612,10 @@ Douglas found facts filed under Dad that had nothing to do with his father. The 
 - **Re-check** (`lib/crm/project-check.js`, through the `crm_atomise_tick` queue): every fact filed before the project's current description is checked against it, 30 at a time. A fact the reply doesn't mention stays. Facts an earlier check took off are looked at again when the description changes, and come back if they now belong. Facts from a mailbox or chat Douglas filed under the project (channel projects) are not re-checked. The project's "Where things stand" is rewritten soon after any change.
 - Tests: `test/crm-project-check.test.js`.
 
+## Filing facts by hand (10 Nov 2026)
+
+- **Facts in no project** stay in `atoms` like every other fact; they simply have no `atom_projects` row. They show on people, topics, sources and search, and are listed at `/crm/:space/facts` (linked from Projects), where each can be filed under a project.
+- **Each fact has its own page** (`/crm/:space/facts/:id`, "Change people or projects" on every fact): file it under or take it off projects, and link or unlink people. Filing by Douglas sets `atom_projects.kept_by_you`, so the project check never undoes it. Unlinking a person keeps the mention row as status `none`, so the name matcher never links it again.
+- **People on a project** (`project_people`): added or removed from the project page or the person page. This is Douglas's word, shown apart from "named in its facts". It is given to the reader and the project check as context, and lets the name matcher tell two people with the same name apart on that project. It never files a person's facts under the project by itself (§5: a person on a project isn't proof a fact is about it).
+- `lib/crm/facts.js`. Tests: `test/crm-filing.test.js`.
+

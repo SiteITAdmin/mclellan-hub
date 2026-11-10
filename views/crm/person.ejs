@@ -39,12 +39,23 @@
     </div>
   </div>
   <div class="s4 side-stack">
-    <% if (p.projects.length) { %>
     <div class="panel">
       <div class="panel-head"><h2>Projects</h2></div>
-      <div class="topics-list"><% for (const pr of p.projects) { %><a class="topic-row" href="/crm/<%= space %>/projects/<%= pr.id %>"><span><%= pr.name %></span><span class="n"><%= pr.n %></span></a><% } %></div>
+      <% if (!p.projects.added.length && !p.projects.fromFacts.length) { %><div class="empty"><%= first %> isn't on any project yet.</div><% } %>
+      <% if (p.projects.added.length) { %><p class="group-label">On these projects</p><div class="topics-list">
+        <% for (const pr of p.projects.added) { %><div class="topic-row"><a href="/crm/<%= space %>/projects/<%= pr.id %>"><%= pr.name %></a><span class="n"><%= pr.n %> <%= pr.n === 1 ? 'fact' : 'facts' %>
+          <form class="inline-form" method="post" action="/crm/<%= space %>/people/<%= p.id %>/leave"><input type="hidden" name="projectId" value="<%= pr.id %>"><button class="link-btn" type="submit" aria-label="Take <%= first %> off <%= pr.name %>">Remove</button></form></span></div><% } %>
+      </div><% } %>
+      <% if (p.projects.fromFacts.length) { %><p class="group-label">Named in facts filed under</p><div class="topics-list">
+        <% for (const pr of p.projects.fromFacts) { %><div class="topic-row"><a href="/crm/<%= space %>/projects/<%= pr.id %>"><%= pr.name %></a><span class="n"><%= pr.n %>
+          <form class="inline-form" method="post" action="/crm/<%= space %>/people/<%= p.id %>/join"><input type="hidden" name="projectId" value="<%= pr.id %>"><button class="link-btn" type="submit" aria-label="Put <%= first %> on <%= pr.name %>">Add</button></form></span></div><% } %>
+      </div><% } %>
+      <form class="form-row" method="post" action="/crm/<%= space %>/people/<%= p.id %>/join" style="margin-top:12px">
+        <label class="sr-only" for="joinProject">Add to a project</label>
+        <select class="select" id="joinProject" name="projectId" required><option value="">Add to a project…</option><% for (const pr of p.projectChoices) { if (p.projects.added.some(y => y.id === pr.id)) continue; %><option value="<%= pr.id %>"><%= pr.name %></option><% } %></select>
+        <button class="btn small" type="submit">Add</button>
+      </form>
     </div>
-    <% } %>
     <div class="panel">
       <div class="panel-head"><h2>Keep in touch</h2></div>
       <% const sug = p.cadence.suggestion; %>

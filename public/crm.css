@@ -482,3 +482,14 @@ details.panel > summary { cursor: pointer; font-weight: 600; }
 .suggest .acts { display: flex; gap: 6px; }
 .date-row { margin: 0 0 10px; }
 .date-row strong { display: block; font-weight: 500; font-size: 13px; color: var(--muted); }
+
+/* filing facts: people and projects */
+.group-label { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.topics-list + .group-label { margin-top: 12px; }
+.topic-row a:hover { text-decoration: underline; }
+.topic-row .n .inline-form { margin-left: 8px; }
+.file-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.file-row .select { height: 30px; font-size: 13px; max-width: 260px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-item { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 6px 0 12px; border-radius: 999px; background: var(--row); border: 1px solid var(--row-edge); font-size: 13px; }
+.chip-item small { color: var(--muted); }

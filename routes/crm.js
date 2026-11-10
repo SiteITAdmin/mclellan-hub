@@ -296,6 +296,10 @@ router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, wri
       identity.log('edit_person', id, { name });
       atoms.reresolveMentions(space);
       flash(req, 'Saved');
+    } else if (action === 'join' || action === 'leave') {
+      const facts = require('../lib/crm/facts');
+      const { project } = facts[action === 'join' ? 'addMember' : 'removeMember'](req.body.projectId, id, space);
+      flash(req, action === 'join' ? `Added to ${project.name}` : `Taken off ${project.name}`);
     } else if (action === 'cadence') {
       require('../lib/crm/keepintouch').setCadence(id, req.body.days);
       flash(req, Number(req.body.days) ? 'Keep-in-touch saved' : 'No keep-in-touch for this person');
@@ -513,7 +517,7 @@ router.post('/crm/:space/calendar/:action', spaceParam, requireSameOrigin, write
 });
 
 router.get('/crm/:space/projects', spaceParam, (req, res) => {
-  res.render('crm/projects', { page: 'projects', list: views.projects(req.params.space), title: 'Projects' });
+  res.render('crm/projects', { page: 'projects', list: views.projects(req.params.space), unfiled: require('../lib/crm/facts').unfiled(req.params.space, { limit: 0 }).total, title: 'Projects' });
 });
 
 router.post('/crm/:space/projects', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -528,13 +532,17 @@ router.get('/crm/:space/projects/:id', spaceParam, (req, res) => {
   res.render('crm/project', { page: 'projects', p, title: p.name });
 });
 
-router.post('/crm/:space/projects/:id/:action(about|remove|putback)', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+router.post('/crm/:space/projects/:id/:action(about|remove|putback|member-add|member-remove)', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   const { space, id, action } = req.params;
   const p = crm().prepare('SELECT * FROM projects WHERE id = ? AND space = ?').get(id, space);
   if (!p) return res.status(404).send('Not found');
   const check = require('../lib/crm/project-check');
   try {
-    if (action === 'about') {
+    if (action === 'member-add' || action === 'member-remove') {
+      const facts = require('../lib/crm/facts');
+      const { person } = facts[action === 'member-add' ? 'addMember' : 'removeMember'](id, req.body.personId, space);
+      flash(req, action === 'member-add' ? `${person.name} added to ${p.name}. Their facts are not filed here unless they are about it.` : `${person.name} is no longer on ${p.name}.`);
+    } else if (action === 'about') {
       check.setAbout(id, { about: req.body.about, personId: req.body.personId });
       flash(req, `Saved. Claude will re-check the facts filed under ${p.name} against this.`);
     } else {
@@ -545,6 +553,39 @@ router.post('/crm/:space/projects/:id/:action(about|remove|putback)', spaceParam
     }
   } catch (err) { flash(req, err.message, 'bad'); }
   res.redirect(`/crm/${space}/projects/${id}`);
+});
+
+// ── Facts ──────────────────────────────────────────────────────────────────
+function factBack(req, space, fallback) {
+  const b = String(req.body?.back || req.query?.back || '');
+  return b.startsWith(`/crm/${space}/`) && !b.includes('\\') && !b.startsWith('//') ? b : fallback;
+}
+
+router.get('/crm/:space/facts', spaceParam, (req, res) => {
+  const facts = require('../lib/crm/facts');
+  const page = Math.max(0, Number(req.query.page) || 0);
+  const { total, rows } = facts.unfiled(req.params.space, { limit: 50, offset: page * 50 });
+  res.render('crm/facts', { page: 'projects', title: 'Facts not in a project', total, list: views.withDetail(rows), pageNo: page,
+    projectChoices: crm().prepare('SELECT id, name FROM projects WHERE space = ? ORDER BY name COLLATE NOCASE').all(req.params.space) });
+});
+
+router.get('/crm/:space/facts/:id', spaceParam, (req, res) => {
+  try {
+    const a = require('../lib/crm/facts').detail(req.params.id, req.params.space);
+    res.render('crm/fact', { page: 'projects', title: 'Fact', a, back: factBack(req, req.params.space, '') });
+  } catch (_) { res.status(404).send('Not found'); }
+});
+
+router.post('/crm/:space/facts/:id/:action(project-add|project-remove|person-add|person-remove)', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { space, id, action } = req.params;
+  const facts = require('../lib/crm/facts');
+  try {
+    if (action === 'project-add') flash(req, `Filed under ${facts.addProject(id, req.body.projectId, space).name}`);
+    else if (action === 'project-remove') flash(req, `Taken off ${facts.removeProject(id, req.body.projectId, space).name}. It is listed on that project's page if you want it back.`);
+    else if (action === 'person-add') flash(req, `Linked to ${facts.addPerson(id, req.body.personId, space).name}`);
+    else flash(req, `No longer linked to ${facts.removePerson(id, req.body.personId, space).name}`);
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(factBack(req, space, `/crm/${space}/facts/${id}`));
 });
 
 router.get('/crm/:space/topics/:id', spaceParam, (req, res) => {
