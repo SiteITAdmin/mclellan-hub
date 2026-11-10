@@ -38,6 +38,7 @@ router.use('/crm', requireAuth, (req, res, next) => {
   res.locals.flash = req.session.crmFlash || null;
   delete req.session.crmFlash;
   res.locals.reviewAll = review.openCount();
+  res.locals.krispWaiting = crm().prepare("SELECT count(*) n FROM krisp_intake WHERE status = 'pending'").get().n;
   res.locals.whatsappWaiting = require('../lib/crm/whatsapp').waitingCount();
   res.locals.ago = views.ago;
   res.locals.fmt = fmt;
@@ -70,6 +71,15 @@ function fmt(ts, style = 'short') {
 }
 
 function hueStyle(p) { return `--h:${Number(p?.hue) || 0}`; }
+
+router.get('/crm/krisp', (req, res) => res.render('crm/krisp', {
+  page: 'krisp', title: 'Krisp transcripts', deliveries: require('../lib/crm/krisp').list(),
+  configured: !!process.env.KRISP_WEBHOOK_SECRET,
+}));
+router.post('/crm/krisp/:id/classify', requireSameOrigin, writeLimiter, (req, res) => {
+  try { require('../lib/crm/krisp').classify(req.params.id, req.body.choice); res.redirect('/crm/krisp'); }
+  catch (err) { res.status(err.status || 500).send(err.status ? err.message : 'Classification failed; transcript remains pending'); }
+});
 
 router.get('/crm/messages', (req,res) => res.render('crm/messages', {page:'messages',title:'Messages',imessage:require('../lib/crm/imessage').status()}));
 router.post('/crm/messages/pause', requireSameOrigin, writeLimiter, (req,res) => {
@@ -408,7 +418,7 @@ router.get('/crm/:space/captured', spaceParam, (req, res) => {
 router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
   const s = views.source(req.params.id);
   if (!s || s.space !== req.params.space) return res.status(404).send('Not found');
-  res.render('crm/source', { page: 'captured', s, title: s.title });
+  res.render('crm/source', { krispRaw: s.origin === 'krisp' ? require('../lib/crm/krisp').rawForSource(s) : null, page: 'captured', s, title: s.title });
 });
 
 router.post('/crm/:space/sources/:id/move-space', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {

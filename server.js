@@ -13,6 +13,7 @@ const workerRouter = require('./routes/worker');
 const crmRouter = require('./routes/crm');
 const homeRouter = require('./routes/home');
 const whatsappCaptureRouter = require('./routes/whatsapp-capture');
+const krispCaptureRouter = require('./routes/krisp-capture');
 const imessageCaptureRouter = require('./routes/imessage-capture');
 const { processJobs, seedJobs } = require('./lib/jobs');
 
@@ -56,6 +57,12 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '10mb' }));
+app.use((err, req, res, next) => {
+  if (/^\/api\/krisp\/webhook\/?$/.test(req.path) && ['entity.parse.failed', 'entity.too.large'].includes(err.type)) {
+    return res.status(err.type === 'entity.too.large' ? 413 : 400).json({ error: err.type === 'entity.too.large' ? 'Payload too large' : 'Invalid JSON' });
+  }
+  next(err);
+});
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -80,6 +87,7 @@ app.use(session({
 function portfolioHost(req, res, next, user) {
   req.portfolioUser = user;
   if (user === 'douglas') {
+    if (/^\/api\/krisp\/webhook\/?$/.test(req.path)) return krispCaptureRouter(req, res, next);
     if (req.path.startsWith('/api/subscription-agent/')) return workerRouter(req, res, next);
     if (req.path === '/flights' || req.path.startsWith('/api/flights')) return flightsRouter(req, res, next);
     if (req.path === '/home') return homeRouter(req, res, next);
@@ -93,6 +101,7 @@ function portfolioHost(req, res, next, user) {
 
 app.use((req, res, next) => {
   const host = req.hostname;
+  if (host === 'dchat.mclellan.scot' && /^\/api\/krisp\/webhook\/?$/.test(req.path)) return krispCaptureRouter(req, res, next);
   if (host === 'douglas.mclellan.scot') return portfolioHost(req, res, next, 'douglas');
   if (host === 'nakai.mclellan.scot') return portfolioHost(req, res, next, 'nakai');
 

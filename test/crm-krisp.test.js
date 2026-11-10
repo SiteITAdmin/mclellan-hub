@@ -1,0 +1,56 @@
+'use strict';
+const { test, after } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs'), os = require('os'), path = require('path');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'krisp-'));
+process.env.CRM_DB_PATH = path.join(tmp, 'crm.db');
+process.env.HUB_DISABLE_JOBS = '1';
+const db = require('../lib/crm/db'), krisp = require('../lib/crm/krisp');
+after(() => { db._reset(); fs.rmSync(tmp, { recursive: true, force: true }); });
+test('HTTP holding intake and signed-in classification keep evidence out of sources until choice', async () => {
+ const express = require('express'), app = express();
+ app.set('view engine','ejs'); app.set('views',path.join(__dirname,'..','views'));
+ app.use(express.json({limit:'10mb'})); app.use(express.urlencoded({extended:false}));
+ app.use(require('../routes/krisp-capture'));
+ app.use((req,res,next)=>{req.portfolioUser='douglas';req.session={adminUser:req.headers['x-no-auth'] ? null : 'douglas'};next();});
+ app.use(require('../routes/crm'));
+ const server=app.listen(0,'127.0.0.1'); await new Promise(r=>server.once('listening',r));
+ const base=`http://127.0.0.1:${server.address().port}`;
+ const post=async(payload,token='dummy',suffix='')=>{const r=await fetch(base+'/api/krisp/webhook'+suffix,{method:'POST',headers:{'Content-Type':'application/json',...(token ? {Authorization:`Bearer ${token}`} : {})},body:JSON.stringify(payload)});return {...await r.json(),status:r.status};};
+ const choose=async(id,choice,extra={})=>fetch(base+`/crm/krisp/${id}/classify`,{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:base,...extra},body:new URLSearchParams({choice})});
+ try {
+  delete process.env.KRISP_WEBHOOK_SECRET; assert.equal((await post({})).status,503);
+  process.env.KRISP_WEBHOOK_SECRET='dummy';
+  assert.equal((await post({},'')).status,401); assert.equal((await post({},'wrong')).status,401);
+  assert.equal((await post({space:'work',transcript:'Hello'})).status,400);
+  const payload={meeting:{id:'today',title:'<script>unsafe</script>',started_at:1794301200},transcript:'Yes, agreed.'};
+  const r=await post(payload,'dummy','/'); assert.equal(r.status,200); assert.equal(r.created,true);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,0);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM sources_fts').get().n,0);
+  const html=await (await fetch(base+'/crm/krisp')).text(); assert.ok(html.includes('&lt;script&gt;')); assert.ok(html.includes('value="personal"'));
+  assert.equal((await fetch(base+'/crm/krisp',{headers:{'x-no-auth':'1'},redirect:'manual'})).status,302);
+  assert.equal((await choose(r.id,'work',{'x-no-auth':'1'})).status,302);
+  assert.equal(db.crm().prepare('SELECT count(*) n FROM sources').get().n,0);
+  assert.equal((await choose(r.id,'bad')).status,400);
+  assert.equal((await choose(r.id,'personal',{Origin:'https://evil.invalid'})).status,403);
+  assert.equal((await choose(r.id,'personal')).status,302);
+  assert.equal((await choose(r.id,'work')).status,409);
+  assert.equal((await post({...payload,event_id:'retry'})).created,false);
+  const s=db.crm().prepare('SELECT * FROM sources').get(); assert.equal(s.space,'personal'); assert.equal(s.occurred_at,1794301200); assert.equal(krisp.rawForSource(s),JSON.stringify(payload));
+  assert.equal(krisp.rawForSource({...s,id:'spoof'}),null);
+  assert.equal((await fetch(base+`/crm/personal/sources/${s.id}`)).status,200);
+  require('../lib/crm/atoms').applyAtoms(s.id,[{statement:'Agreement',quote:'Yes, agreed.',kind:'fact'}]);
+  const plain=await fetch(base+'/api/krisp/webhook',{method:'POST',headers:{Authorization:'Bearer dummy','Content-Type':'text/plain'},body:'not json'}); assert.equal(plain.status,415);
+  require('../lib/crm/spaces').moveSource(s.id,'work','you','test');
+  const moved=db.crm().prepare('SELECT * FROM sources WHERE id=?').get(s.id); assert.equal(krisp.rawForSource(moved),JSON.stringify(payload));
+  const decided=await (await fetch(base+'/crm/krisp')).text(); assert.ok(decided.includes(`/crm/work/sources/${s.id}`)); assert.ok(!decided.includes(payload.transcript));
+  const undated=await post({meeting:{id:'undated'},created_at:1e30,transcript:'Receipt time test'});
+  const receipt=db.crm().prepare('SELECT received_at FROM krisp_intake WHERE id=?').get(undated.id).received_at;
+  db.crm().prepare('UPDATE krisp_intake SET received_at=? WHERE id=?').run(receipt-100,undated.id);
+  const undatedIds=krisp.classify(undated.id,'personal'); assert.equal(db.crm().prepare('SELECT occurred_at FROM sources WHERE id=?').get(undatedIds[0]).occurred_at,receipt-100);
+  const empty=await post({notes:'no transcript'}); krisp.classify(empty.id,'ignore'); assert.equal((await post({notes:'no transcript'})).status,200); assert.equal(krisp.list().find(x=>x.id===empty.id).status,'ignored');
+  const long=await post({meeting:{id:'long',started_at:1794301200000},transcript:'A long transcript. '.repeat(110000)});
+  const ids=krisp.classify(long.id,'work'); assert.ok(ids.length>2);
+  for(const id of ids) { const part=db.crm().prepare('SELECT * FROM sources WHERE id=?').get(id); assert.ok(part.raw_ref.length<100); assert.equal(part.occurred_at,1794301200); }
+ } finally {await new Promise(r=>server.close(r));}
+});

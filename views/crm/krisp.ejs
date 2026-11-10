@@ -1,0 +1,13 @@
+<%- include('_top') %>
+<h1>Krisp transcripts</h1>
+<p>Webhook <%= configured ? 'configured' : 'not configured' %>. <%= deliveries.filter(x => x.status === 'pending').length %> waiting for your choice.</p>
+<p>Transcripts stay outside Search and the reader until you choose Work or Personal. Ignore recordings you do not want imported.</p>
+<% for (const d of deliveries) { %>
+<section class="panel"><h2><%= d.title %></h2><p><%= fmt(d.occurred_at || d.received_at) %> · <%= d.status %><%= d.space ? ' · ' + d.space : '' %></p>
+<% if (!d.readable) { %><p class="flash bad">Empty or unsupported transcript. Inspect the original delivery before choosing.</p><% } %>
+<% if (d.status === 'pending') { %><details><summary>Transcript</summary><pre style="white-space:pre-wrap"><%= d.transcript %></pre></details>
+<details><summary>Original Krisp delivery</summary><pre style="white-space:pre-wrap"><%= d.raw_json %></pre></details>
+<form method="post" action="/crm/krisp/<%= d.id %>/classify"><button class="btn" name="choice" value="work">Work</button> <button class="btn" name="choice" value="personal">Personal</button> <button class="btn" name="choice" value="ignore">Ignore</button></form>
+<% } else { for (const source of d.sources) { %><p><a href="/crm/<%= source.space %>/sources/<%= source.id %>">View source</a></p><% } } %>
+</section><% } %>
+<%- include('_bottom') %>
