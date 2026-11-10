@@ -673,7 +673,7 @@ router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
   const space = req.params.space;
   if (wispr.status(space).device) {
     const result = await wispr.pollConnect(space).catch(err => { flash(req, err.message, 'bad'); return 'error'; });
-    if (result === 'connected') res.locals.flash = { text: 'Wispr Flow connected.', level: 'ok' };
+    if (result === 'connected') res.locals.flash = { text: 'Wispr Flow connected for Work and Personal.', level: 'ok' };
     if (['denied', 'expired', 'error'].includes(result) && wispr.status(space).error) res.locals.flash = { text: wispr.status(space).error, level: 'bad' };
   }
   res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: require('../lib/crm/meetings').today(space),
@@ -686,7 +686,7 @@ router.post('/crm/:space/meetings/:action', spaceParam, requireSameOrigin, write
   const space = req.params.space;
   try {
     if (req.params.action === 'connect') await wispr.startConnect(space);
-    else if (req.params.action === 'disconnect') { wispr.disconnect(space); flash(req, 'Wispr Flow disconnected here. Remove the Hub in your Wispr account too if you want it fully cut off.'); }
+    else if (req.params.action === 'disconnect') { wispr.disconnect(space); flash(req, 'Wispr Flow disconnected for Work and Personal. Remove the Hub in your Wispr account too if you want it fully cut off.'); }
     else if (req.params.action === 'check') { await wispr.afterConnect(space); flash(req, 'The connection works.'); }
     else return res.status(404).send('Not found');
   } catch (err) {

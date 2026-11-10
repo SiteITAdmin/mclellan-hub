@@ -939,7 +939,7 @@ test('where things stand: written from cited facts, only when they change, and f
   crm().prepare("UPDATE standings SET error = ''").run();
 });
 
-test('wispr: the device sign-in connects one space, records the tools, and refreshes its token', async () => {
+test('wispr: the device sign-in connects both spaces, records the tools, and refreshes its token', async () => {
   const calls = [];
   let tokenReplies = [{ error: 'authorization_pending' }, { access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 }];
   const reply = (status, body, headers = {}) => ({
@@ -964,36 +964,120 @@ test('wispr: the device sign-in connects one space, records the tools, and refre
   });
   try {
     assert.strictEqual(wispr.status('work').connected, false);
-    await wispr.startConnect('work');
+    await Promise.all([wispr.startConnect('work'), wispr.startConnect('personal')]);
+    assert.strictEqual(calls.filter(c => c.url.endsWith('/device_authorization')).length, 1);
     const st = wispr.status('work');
     assert.strictEqual(st.device.user_code, 'ABCD-EFGH');
     assert.strictEqual(calls.find(c => c.url.endsWith('/device_authorization')).body.resource, wispr.MCP_URL, 'the token is asked for the MCP server');
     assert.strictEqual(await wispr.pollConnect('work'), 'waiting', 'does not poll before the interval');
-    const dev = JSON.parse(setting('wispr_work_device'));
+    const dev = JSON.parse(setting('wispr_shared_device'));
     const { setSetting } = require('../lib/crm/db');
-    setSetting('wispr_work_device', JSON.stringify({ ...dev, next_poll_at: 0 }));
-    assert.strictEqual(await wispr.pollConnect('work'), 'waiting', 'pending sign-in keeps waiting');
-    setSetting('wispr_work_device', JSON.stringify({ ...JSON.parse(setting('wispr_work_device')), next_poll_at: 0 }));
+    setSetting('wispr_shared_device', JSON.stringify({ ...dev, next_poll_at: 0 }));
+    assert.deepStrictEqual(await Promise.all([wispr.pollConnect('work'), wispr.pollConnect('personal')]), ['waiting', 'waiting']);
+    assert.strictEqual(calls.filter(c => c.body.grant_type === 'urn:ietf:params:oauth:grant-type:device_code').length, 1);
+    setSetting('wispr_shared_device', JSON.stringify({ ...JSON.parse(setting('wispr_shared_device')), next_poll_at: 0 }));
     assert.strictEqual(await wispr.pollConnect('work'), 'connected');
     const after = wispr.status('work');
     assert.ok(after.connected && !after.device);
     assert.deepStrictEqual(after.tools.map(t => t.name), ['search_meetings', 'get_account_info']);
     assert.strictEqual(after.account.email, 'douglas.mclellan@beaconhospital.ie');
     assert.ok(calls.filter(c => c.body.method === 'tools/list').every(c => c.session === 'sess-1' && c.auth === 'Bearer at-1'), 'session and token are sent');
-    assert.strictEqual(wispr.status('personal').connected, false, 'personal stays unconnected');
-    await assert.rejects(wispr.open('personal'), /not connected in personal/);
+    assert.deepStrictEqual(wispr.status('personal'), wispr.status('work'));
 
-    const auth = JSON.parse(setting('wispr_work_auth'));
-    setSetting('wispr_work_auth', JSON.stringify({ ...auth, expires_at: 0 }));
-    assert.strictEqual(await wispr.accessToken('work'), 'at-2');
-    assert.strictEqual(JSON.parse(setting('wispr_work_auth')).refresh_token, 'rt-1', 'an unrotated refresh token is kept');
+    const auth = JSON.parse(setting('wispr_shared_auth'));
+    setSetting('wispr_shared_auth', JSON.stringify({ ...auth, expires_at: 0 }));
+    assert.deepStrictEqual(await Promise.all([wispr.accessToken('work'), wispr.accessToken('personal')]), ['at-2', 'at-2']);
+    assert.strictEqual(calls.filter(c => c.body.grant_type === 'refresh_token').length, 1);
+    assert.strictEqual(JSON.parse(setting('wispr_shared_auth')).refresh_token, 'rt-1', 'an unrotated refresh token is kept');
 
     wispr._setHttp(async () => reply(400, { error: 'invalid_grant' }));
-    setSetting('wispr_work_auth', JSON.stringify({ ...JSON.parse(setting('wispr_work_auth')), expires_at: 0 }));
+    setSetting('wispr_shared_auth', JSON.stringify({ ...JSON.parse(setting('wispr_shared_auth')), expires_at: 0 }));
     await assert.rejects(wispr.accessToken('work'), /expired/);
     assert.ok(views.health('work').some(h => /Wispr Flow meetings/.test(h.text)), 'a lost sign-in shows on Today');
-    setSetting('wispr_work_error', '');
+    setSetting('wispr_shared_error', '');
   } finally {
+    wispr._setHttp((url, opts) => fetch(url, opts));
+  }
+});
+
+
+test('wispr: migration preserves selected credentials and never resurrects legacy sign-in', () => {
+  const { setSetting } = require('../lib/crm/db');
+  wispr.disconnect('work');
+  const seed = (space, auth) => setSetting(`wispr_${space}_auth`, JSON.stringify(auth));
+  try {
+    setSetting('wispr_shared_migration', '');
+    seed('work', { refresh_token: 'work-valid', verified: true, connected_at: 10 });
+    seed('personal', { refresh_token: 'personal-unverified', verified: false, connected_at: 20 });
+    setSetting('wispr_work_account', JSON.stringify({ email: 'shared@example.test' }));
+    setSetting('wispr_personal_device', JSON.stringify({ device_code: 'obsolete' }));
+    assert.strictEqual(wispr.status('personal').connected, true);
+    assert.strictEqual(JSON.parse(setting('wispr_shared_auth')).refresh_token, 'work-valid');
+    assert.strictEqual(wispr.status('work').account.email, 'shared@example.test');
+    assert.strictEqual(wispr.status('work').device, null);
+    assert.deepStrictEqual(wispr.status('work'), wispr.status('personal'));
+    assert.strictEqual(setting('wispr_work_auth'), '', 'retired credentials removed');
+    assert.strictEqual(setting('wispr_personal_auth'), '');
+    assert.strictEqual(setting('wispr_personal_device'), '');
+    wispr.disconnect('personal');
+    assert.strictEqual(wispr.status('work').authorized, false);
+    assert.strictEqual(wispr.status('personal').account, null);
+    assert.ok(setting('wispr_shared_migration'), 'disconnect retains migration marker');
+    assert.strictEqual(setting('wispr_work_auth'), '');
+    assert.strictEqual(setting('wispr_personal_auth'), '');
+    setSetting('wispr_shared_migration', '');
+    seed('personal', { refresh_token: 'personal-valid', verified: true, connected_at: 20 });
+    wispr.status('work');
+    assert.strictEqual(JSON.parse(setting('wispr_shared_auth')).refresh_token, 'personal-valid');
+    wispr.disconnect('work');
+    setSetting('wispr_shared_migration', '');
+    seed('work', { refresh_token: 'work-tie', connected_at: 20 });
+    seed('personal', { refresh_token: 'personal-tie', connected_at: 20 });
+    wispr.status('personal');
+    assert.strictEqual(JSON.parse(setting('wispr_shared_auth')).refresh_token, 'work-tie');
+    wispr.disconnect('work');
+    setSetting('wispr_shared_migration', '');
+    setSetting('wispr_work_error', 'Wispr denied activation (access_denied)');
+    assert.match(wispr.status('personal').error, /access_denied/);
+  } finally {
+    wispr.disconnect('work');
+    for (const space of ['work', 'personal']) for (const field of ['auth', 'account', 'device', 'tools', 'error']) setSetting(`wispr_${space}_${field}`, '');
+  }
+});
+
+test('wispr: disconnect invalidates pending starts and refreshes before restart', async () => {
+  const { setSetting, now } = require('../lib/crm/db');
+  const reply = body => ({ status: 200, json: async () => body });
+  try {
+    for (const kind of ['start', 'refresh', 'poll']) {
+      wispr.disconnect('work');
+      setSetting('wispr_client_id', 'test-client');
+      if (kind === 'refresh') setSetting('wispr_shared_auth', JSON.stringify({ refresh_token: 'old', expires_at: 0 }));
+      if (kind === 'poll') setSetting('wispr_shared_device', JSON.stringify({ device_code: 'old', expires_at: now() + 300, next_poll_at: 0 }));
+      let release, entered;
+      const started = new Promise(resolve => { entered = resolve; });
+      wispr._setHttp(async () => {
+        entered();
+        return new Promise(resolve => { release = () => resolve(reply(kind === 'start'
+          ? { device_code: 'late', expires_in: 300 }
+          : { access_token: 'late', refresh_token: 'late' })); });
+      });
+      const pending = kind === 'start' ? wispr.startConnect('work') : kind === 'poll' ? wispr.pollConnect('work') : wispr.accessToken('work');
+      await started;
+      wispr.disconnect('personal');
+      await assert.rejects(pending, /connection changed/);
+      assert.strictEqual(wispr.status('work').authorized, false);
+      assert.strictEqual(wispr.status('work').device, null);
+      assert.strictEqual(wispr.status('work').error, '');
+      wispr._setHttp(async () => reply({ device_code: 'new', user_code: 'SHARED', expires_in: 300 }));
+      await wispr.startConnect('personal');
+      assert.strictEqual(wispr.status('work').device.user_code, 'SHARED');
+      release();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.strictEqual(wispr.status('work').device.user_code, 'SHARED', 'late reply cannot overwrite new attempt');
+    }
+  } finally {
+    wispr.disconnect('work');
     wispr._setHttp((url, opts) => fetch(url, opts));
   }
 });
@@ -1004,7 +1088,7 @@ test('wispr: terminal OAuth errors retain their reason and stop polling', async 
     for (const [reason, result] of [['access_denied', 'denied'], ['expired_token', 'expired'], ['invalid_client', 'error'], ['unexpected_secret_value', 'error']]) {
       wispr.disconnect('personal');
       setSetting('wispr_client_id', 'client_test');
-      setSetting('wispr_personal_device', JSON.stringify({ device_code: 'private-device-code', expires_at: now() + 300, next_poll_at: 0 }));
+      setSetting('wispr_shared_device', JSON.stringify({ device_code: 'private-device-code', expires_at: now() + 300, next_poll_at: 0 }));
       let calls = 0;
       wispr._setHttp(async () => {
         calls++;
@@ -1018,7 +1102,7 @@ test('wispr: terminal OAuth errors retain their reason and stop polling', async 
       await wispr.pollConnect('personal');
       assert.strictEqual(calls, 1, 'terminal responses stop token polling');
     }
-    setSetting('wispr_personal_device', JSON.stringify({ expires_at: now() - 1 }));
+    setSetting('wispr_shared_device', JSON.stringify({ expires_at: now() - 1 }));
     assert.strictEqual(await wispr.pollConnect('personal'), 'expired');
     assert.match(wispr.status('personal').error, /No approval result.*local_expiry/);
   } finally {
@@ -1030,7 +1114,7 @@ test('wispr: terminal OAuth errors retain their reason and stop polling', async 
 test('wispr: a failed MCP connection check does not report connected and can be retried', async () => {
   const { setSetting, now } = require('../lib/crm/db');
   wispr.disconnect('personal');
-  setSetting('wispr_personal_device', JSON.stringify({ device_code: 'dev-test', expires_at: now() + 300, next_poll_at: 0 }));
+  setSetting('wispr_shared_device', JSON.stringify({ device_code: 'dev-test', expires_at: now() + 300, next_poll_at: 0 }));
   wispr._setHttp(async url => url.endsWith('/token')
     ? { status: 200, json: async () => ({ access_token: 'secret-access', refresh_token: 'secret-refresh' }) }
     : { status: 403, ok: false, headers: { get: () => null }, text: async () => 'secret-access secret-refresh' });
@@ -1063,9 +1147,21 @@ test('wispr: Meetings renders denial, expiry and failed checks without a success
   app.use(require('../routes/crm'));
   const server = app.listen(0);
   try {
+    wispr.disconnect('work');
+    setSetting('wispr_shared_device', JSON.stringify({ device_code: 'hidden-device', user_code: 'ONE-CODE',
+      url: 'https://example.test/device', next_poll_at: now() + 300, expires_at: now() + 300 }));
+    for (const space of ['work', 'personal']) {
+      const res = await fetch(`http://127.0.0.1:${server.address().port}/crm/${space}/meetings`);
+      const body = await res.text();
+      assert.strictEqual(res.status, 200);
+      assert.match(body, /ONE-CODE/);
+      assert.match(body, /One shared Wispr sign-in serves Work and Personal/);
+      assert.match(body, /Disconnect shared sign-in/);
+      assert.doesNotMatch(body, /hidden-device/);
+    }
     for (const reason of ['access_denied', 'expired_token', 'check_failed', 'local_expiry']) {
       wispr.disconnect('personal');
-      setSetting('wispr_personal_device', JSON.stringify({ device_code: 'private-code', next_poll_at: 0, expires_at: now() + (reason === 'local_expiry' ? -1 : 300) }));
+      setSetting('wispr_shared_device', JSON.stringify({ device_code: 'private-code', next_poll_at: 0, expires_at: now() + (reason === 'local_expiry' ? -1 : 300) }));
       wispr._setHttp(async url => url.endsWith('/token')
         ? { status: reason === 'check_failed' ? 200 : 400, json: async () => reason === 'check_failed'
           ? { access_token: 'private-access', refresh_token: 'private-refresh' } : { error: reason } }

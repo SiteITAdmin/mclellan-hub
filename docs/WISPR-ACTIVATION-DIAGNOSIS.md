@@ -60,3 +60,13 @@ button after a failed check, hide irrelevant first-time instructions, distinguis
 local timeout from provider-confirmed expiry, and sanitize tool-call errors.
 Transient failures still require a manual retry; this change does not add
 background polling or identify the provider's activation-denial cause.
+
+## Shared sign-in correction
+
+Douglas confirmed that Work and Personal use one Wispr account. The Hub now
+shares one authorization attempt and credential set between both spaces, reuses
+an unexpired code and serializes starts, polling and refreshes. Legacy sign-ins
+are migrated once as documented in WISPR-CONNECTION.md. This corrects duplicate
+Hub state; it is not evidence that the provider-side activation denial is fixed.
+
+Wispr operations have a 20-second deadline. Disconnect cancels the active operation so a fresh attempt can start immediately. Late replies cannot restore discarded state.
