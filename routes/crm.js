@@ -74,7 +74,7 @@ function hueStyle(p) { return `--h:${Number(p?.hue) || 0}`; }
 
 router.get('/crm/krisp', (req, res) => res.redirect('/crm/work/meetings'));
 router.post('/crm/krisp/:id/classify', requireSameOrigin, writeLimiter, (req, res) => {
-  try { require('../lib/crm/krisp').classify(req.params.id, req.body.choice); res.redirect(`/crm/${req.body.returnSpace === 'personal' ? 'personal' : 'work'}/meetings`); }
+  try { require('../lib/crm/krisp').classify(req.params.id, req.body.choice, { revision: req.body.revision, names: typeof req.body.names === 'string' ? [req.body.names] : req.body.names }); res.redirect(`/crm/${req.body.returnSpace === 'personal' ? 'personal' : 'work'}/meetings`); }
   catch (err) { res.status(err.status || 500).send(err.status ? err.message : 'Classification failed; transcript remains pending'); }
 });
 

@@ -49,8 +49,9 @@ real-delivery screenshot; no real transcript, identifiers or screenshot is commi
 Tests use synthetic values only.
 
 Content segments render as `speaker: text`, separated by two newlines. Words,
-whitespace inside each text, and segment order are retained exactly, including
-across source parts (concatenate parts without adding separators). Missing names
+whitespace inside each text, and segment order are retained exactly in the held
+transcript. Released sources use confirmed names, indent continuation lines, and
+repeat attribution when a long turn needs another source part. Missing names
 use only the supplied numeric index (`Speaker 7`); metadata never invents a name.
 Speaker metadata is not admitted as contact identity, including placeholder
 `@noemail.krisp.ai` addresses. Any malformed/empty segment, missing label and
@@ -102,3 +103,28 @@ Actual server.js with isolated temporary Hub/CRM databases passed 16 local HTTP
 checks across both host headers and both path variants: 400 malformed JSON,
 413 oversized JSON, 401 missing Bearer, 200 authenticated intake. Full npm test:
 149 tests, 148 pass; the pre-existing Hermes installer GNU/BSD sed failure remains.
+
+### Speaker release gate
+
+Pending Krisp evidence stays in `krisp_intake`, outside sources, Search, facts
+and tasks. Name every speaker in the transcript previews, then explicitly
+choose **Work** or **Personal** and press **Release meeting**. Names start blank even when Krisp
+supplies a name: this requires confirmation. Ignore remains available independently.
+The original JSON and original transcript are retained unchanged. The existing
+intake row's `speaker_review` is a raw attribution receipt (revision + confirmed
+mapping), not a CRM relationship. Released sources contain attributed turns and
+point back to that original delivery; the existing subscription reader alone
+synthesizes facts and actions.
+
+Structured `data.content` uses `speakerIndex` as identity when present, otherwise
+speaker strings. Every turn must be valid. Plain transcripts support explicit
+`Name: text` lines and continuation lines, with no unlabelled preamble. At most
+50 speakers are reviewable. Unsupported/unlabelled evidence stays held and may
+be ignored; there is no unreadable-source admission bypass. Forms must match the
+current raw revision and contain exactly one nonblank name per speaker. Release
+is transactional and repeated submissions return the existing sources.
+
+Wispr remains connection-only. Future capture must first retain raw evidence,
+use the reusable `lib/crm/speaker-review.js` gate, persist a confirmed attribution
+receipt, and require explicit space release before calling source admission.
+No capture, polling, new model path, or Wispr admission has been added here.
