@@ -498,3 +498,11 @@ details.panel > summary { cursor: pointer; font-weight: 600; }
 a.topic-row:hover { border-color: var(--accent); }
 a.topic-row:hover span:first-child { text-decoration: underline; }
 .topic-row.unfiled-row { border-style: dashed; color: var(--muted); }
+
+/* Delete sits behind one extra click, so a fact is never removed by a stray tap. */
+details.del { display: inline-flex; align-items: center; gap: 6px; }
+details.del > summary { display: inline; list-style: none; }
+details.del > summary::-webkit-details-marker { display: none; }
+details.del[open] > summary { color: var(--text); }
+details.del .inline-form { margin: 0; }
+details.del .btn { color: var(--negative); border-color: var(--negative); height: 24px; font-size: 12px; }

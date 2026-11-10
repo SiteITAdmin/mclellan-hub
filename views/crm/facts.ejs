@@ -1,6 +1,6 @@
 <%- include('_top') %>
 <div class="crumbs"><a href="/crm/<%= space %>/projects">Projects</a> / Not in a project</div>
-<div class="title-row"><div><h1>Facts not in a project</h1><p class="subline"><%= total %> <%= total === 1 ? 'fact' : 'facts' %> in <%= space === 'work' ? 'Work' : 'Personal' %> aren't filed under any project, newest first. They are kept in full and still show on people, topics and search. File any of them here.</p></div></div>
+<div class="title-row"><div><h1>Facts not in a project</h1><p class="subline"><%= total %> <%= total === 1 ? 'fact' : 'facts' %> in <%= space === 'work' ? 'Work' : 'Personal' %> <%= total === 1 ? 'isn’t' : 'aren’t' %> filed under any project, newest first. They are kept in full and still show on people, topics and search. File any of them here.</p></div></div>
 <section class="grid first"><div class="panel s12">
   <% if (!list.length) { %><div class="empty">Every fact is in a project.</div><% } %>
   <% for (const a of list) { %>

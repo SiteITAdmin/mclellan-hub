@@ -31,9 +31,16 @@
       <% if (a.unclear.length) { %><p class="subline">Names Claude saw but couldn't match: <%= a.unclear.map(m => m.name).join(', ') %>. <a href="/crm/review">Sort them in Who is this?</a></p><% } %>
     </div>
   </div>
-  <div class="panel s4">
+  <div class="s4 side-stack">
+  <div class="panel">
     <div class="panel-head"><h2>Where it came from</h2></div>
     <% for (const s of a.sources) { %><p><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a><small class="task-via"><%= fmt(s.occurred_at, 'date') %><%= s.quote ? ` · “${s.quote}”` : '' %></small></p><% } %>
+  </div>
+  <details class="panel">
+    <summary>Delete this fact</summary>
+    <p>For noise like an out-of-office reply. The fact goes from every page, and from the summaries and dates built on it. The email it came from is kept, and reading that email again won't bring the fact back.</p>
+    <form method="post" action="/crm/<%= space %>/facts/<%= a.id %>/delete"><input type="hidden" name="back" value="<%= back %>"><button class="btn" type="submit">Delete for good</button></form>
+  </details>
   </div>
 </section>
 <%- include('_bottom') %>

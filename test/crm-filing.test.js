@@ -97,3 +97,32 @@ test('the reader is told who is on each project, and members tell two people wit
   assert.equal(identity.resolveName('work', 'Alec').status, 'ambiguous', 'outside the project it is still asked');
   assert.ok(alecA);
 });
+
+test('deleting a fact removes it everywhere, keeps the email, tidies what pointed at it, and re-reading cannot bring it back', () => {
+  const ken = person('work', 'Karol Podziewski');
+  const m365 = review.createProject('work', 'M365 Rollout');
+  const s = sources.admitSource({ space: 'work', kind: 'email', origin: 'outlook', externalId: 'ooo', title: 'Automatic reply: Infra group', occurredAt: db.now(),
+    text: 'I am out of the office and return on Monday 9 November 2026.', participants: [] }).source;
+  const raw = { statement: 'Karol Podziewski is out of the office and returns on Monday, 9 November 2026.', kind: 'date', quote: 'I am out of the office and return on Monday 9 November 2026', people: ['Karol Podziewski'], projects: ['M365 Rollout'], topics: ['leave'], valid_from: '2026-11-09', confidence: 'high' };
+  atoms.applyAtoms(s.id, [raw]);
+  const a = db.crm().prepare('SELECT id FROM atoms').get().id;
+  const older = fact('work', 'The licence count was 400');
+  db.crm().prepare("UPDATE atoms SET status = 'superseded', superseded_by = ? WHERE id = ?").run(a, older);
+  db.crm().prepare("INSERT INTO standings (entity_type, entity_id, space, tried_at) VALUES ('person', ?, 'work', ?)").run(ken, db.now());
+
+  facts.deleteFact(a, 'work');
+  assert.equal(db.crm().prepare('SELECT COUNT(*) n FROM atoms WHERE id = ?').get(a).n, 0);
+  for (const t of ['atom_sources', 'atom_mentions', 'atom_projects', 'atom_topics', 'atoms_fts']) assert.equal(db.crm().prepare(`SELECT COUNT(*) n FROM ${t} WHERE atom_id = ?`).get(a).n, 0, t);
+  assert.ok(db.crm().prepare('SELECT 1 FROM sources WHERE id = ?').get(s.id), 'the email is kept');
+  assert.equal(db.crm().prepare('SELECT status FROM atoms WHERE id = ?').get(older).status, 'active', 'what it replaced is current again');
+  assert.equal(db.crm().prepare("SELECT tried_at FROM standings WHERE entity_id = ?").get(ken).tried_at, 0, "Karol's summary is rewritten");
+  assert.equal(views.person(ken).atoms.length, 0);
+
+  atoms.applyAtoms(s.id, [raw, { ...raw, statement: 'Karol is away until 9 November', quote: 'I am out of the office and return on Monday 9 November 2026' }]);
+  assert.equal(db.crm().prepare("SELECT COUNT(*) n FROM atoms WHERE statement LIKE 'Karol%'").get().n, 0, 'reading the same email again brings neither wording back');
+  const other = sources.admitSource({ space: 'work', kind: 'email', origin: 'outlook', externalId: 'other', title: 'Leave', occurredAt: db.now(), text: raw.statement, participants: [] }).source;
+  atoms.applyAtoms(other.id, [raw]);
+  assert.equal(db.crm().prepare("SELECT COUNT(*) n FROM atoms WHERE statement LIKE 'Karol%'").get().n, 1, 'a different email saying it is a new fact');
+  assert.throws(() => facts.deleteFact(a, 'work'), /not found/);
+  assert.throws(() => facts.deleteFact(older, 'personal'), /not found/);
+});

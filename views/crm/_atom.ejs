@@ -11,6 +11,7 @@
     <% const src = a.sources[0]; if (src) { %><a href="/crm/<%= sp %>/sources/<%= src.id %>" title="<%= src.quote %>"><%= src.kind === 'note' ? 'Note' : src.kind === 'whatsapp' ? 'WhatsApp' : 'Email' %>, <%= fmt(src.occurred_at, 'date') %><%= a.sources.length > 1 ? ` (+${a.sources.length - 1} more)` : '' %></a><% if (!src.quote_verified) { %><span class="unsure" title="The quoted words weren't found in the source">quote not found</span><% } %><% } %>
     <% if (a.confidence === 'low') { %><span class="unsure">low confidence</span><% } %>
     <a class="link-btn" href="/crm/<%= sp %>/facts/<%= a.id %>">Change people or projects</a>
+    <details class="del"><summary class="link-btn">Delete</summary><form class="inline-form" method="post" action="/crm/<%= sp %>/facts/<%= a.id %>/delete"><input type="hidden" name="back" value="<%= locals.back || '' %>"><button class="btn small" type="submit">Delete this fact</button></form></details>
     <% if (locals.removeFrom) { %><form class="inline-form" method="post" action="/crm/<%= sp %>/projects/<%= removeFrom %>/remove"><input type="hidden" name="atomId" value="<%= a.id %>"><button class="link-btn" type="submit">Not this project</button></form><% } %>
   </div>
 </div>

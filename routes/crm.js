@@ -576,10 +576,18 @@ router.get('/crm/:space/facts/:id', spaceParam, (req, res) => {
   } catch (_) { res.status(404).send('Not found'); }
 });
 
-router.post('/crm/:space/facts/:id/:action(project-add|project-remove|person-add|person-remove)', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+router.post('/crm/:space/facts/:id/:action(project-add|project-remove|person-add|person-remove|delete)', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   const { space, id, action } = req.params;
   const facts = require('../lib/crm/facts');
   try {
+    if (action === 'delete') {
+      const a = facts.deleteFact(id, space);
+      flash(req, `Deleted: “${a.statement.slice(0, 120)}”`);
+      let ref = '';
+      try { ref = new URL(req.get('referer') || '', 'https://x').pathname + new URL(req.get('referer') || '', 'https://x').search; } catch (_) {}
+      const back = factBack(req, space, '') || (ref.startsWith(`/crm/${space}/`) || ref === '/crm/review' ? ref : `/crm/${space}/facts`);
+      return res.redirect(back.startsWith(`/crm/${space}/facts/${id}`) ? `/crm/${space}/facts` : back);
+    }
     if (action === 'project-add') flash(req, `Filed under ${facts.addProject(id, req.body.projectId, space).name}`);
     else if (action === 'project-remove') flash(req, `Taken off ${facts.removeProject(id, req.body.projectId, space).name}. It is listed on that project's page if you want it back.`);
     else if (action === 'person-add') flash(req, `Linked to ${facts.addPerson(id, req.body.personId, space).name}`);
