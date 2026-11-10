@@ -1,6 +1,6 @@
 <%- include('_top') %>
 <% const quoted = s.text.length > (s.text_fresh || '').length ? s.text.slice((s.text_fresh || '').length).trim() : ''; %>
-<div class="crumbs"><a href="/crm/<%= space %>/captured">Captured</a> / <%= s.kind === 'note' ? 'Note' : s.kind === 'whatsapp' ? 'WhatsApp' : s.kind === 'calendar' ? 'Calendar entry' : 'Email' %></div>
+<div class="crumbs"><a href="/crm/<%= space %>/captured">Captured</a> / <%= s.origin === 'krisp' ? 'Krisp transcript' : s.kind === 'note' ? 'Note' : s.kind === 'whatsapp' ? 'WhatsApp' : s.kind === 'calendar' ? 'Calendar entry' : 'Email' %></div>
 <div class="title-row"><div><h1><%= s.title %></h1>
   <p class="subline"><%= fmt(s.occurred_at) %><%= s.origin === 'outlook' ? ', Outlook' : s.origin === 'whatsapp' ? ', WhatsApp' : s.origin === 'gmail' ? ', Gmail' : String(s.origin).startsWith('gmail:') ? `, ${s.origin.slice(6)}` : '' %><%= s.direction === 'out' ? ', sent by you' : s.direction === 'in' ? ', received' : '' %>. <%- include('_state', { s }) %></p></div>
   <div class="form-row" style="flex-wrap:nowrap">
@@ -40,4 +40,6 @@
   </div>
 </section>
 <p><a class="btn" href="/crm/<%= space %>/tasks/new?sourceId=<%= s.id %>">Add a task from this source</a></p>
+
+<% if (s.origin === "krisp") { %><details><summary>Original Krisp delivery</summary><pre style="white-space:pre-wrap"><%= s.raw_ref %></pre></details><% } %>
 <%- include('_bottom') %>

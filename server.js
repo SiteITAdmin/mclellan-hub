@@ -13,6 +13,7 @@ const workerRouter = require('./routes/worker');
 const crmRouter = require('./routes/crm');
 const homeRouter = require('./routes/home');
 const whatsappCaptureRouter = require('./routes/whatsapp-capture');
+const krispCaptureRouter = require('./routes/krisp-capture');
 const imessageCaptureRouter = require('./routes/imessage-capture');
 const { processJobs, seedJobs } = require('./lib/jobs');
 
@@ -80,6 +81,7 @@ app.use(session({
 function portfolioHost(req, res, next, user) {
   req.portfolioUser = user;
   if (user === 'douglas') {
+    if (req.path === '/api/krisp/webhook') return krispCaptureRouter(req, res, next);
     if (req.path.startsWith('/api/subscription-agent/')) return workerRouter(req, res, next);
     if (req.path === '/flights' || req.path.startsWith('/api/flights')) return flightsRouter(req, res, next);
     if (req.path === '/home') return homeRouter(req, res, next);
@@ -93,6 +95,7 @@ function portfolioHost(req, res, next, user) {
 
 app.use((req, res, next) => {
   const host = req.hostname;
+  if (host === 'dchat.mclellan.scot' && req.path === '/api/krisp/webhook') return krispCaptureRouter(req, res, next);
   if (host === 'douglas.mclellan.scot') return portfolioHost(req, res, next, 'douglas');
   if (host === 'nakai.mclellan.scot') return portfolioHost(req, res, next, 'nakai');
 
