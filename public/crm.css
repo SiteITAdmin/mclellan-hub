@@ -331,6 +331,11 @@ button { font: inherit; color: inherit; }
 .form-row > .input { flex: 1; }
 .field .input, .field .select { width: 100%; }
 .list { display: flex; flex-direction: column; gap: 8px; }
+.speaker { margin: 0 0 12px; padding: 14px 16px; border: 1px solid var(--row-edge); border-radius: var(--radius-row); background: var(--row); min-width: 0; }
+.speaker legend { padding: 0 6px; font-weight: 600; }
+.speaker .input { max-width: 360px; }
+.speaker-said { margin: 14px 0 6px; color: var(--muted); font-size: 13px; }
+.speaker blockquote { margin: 0 0 6px; padding: 2px 0 2px 12px; border-left: 3px solid var(--row-edge); }
 a.rowcard:hover { border-color: var(--control); }
 .rowcard.two { grid-template-columns: 32px 1fr auto; }
 .empty { padding: 12px 14px; border: 1px dashed var(--row-edge); border-radius: var(--radius-row); color: var(--muted); }
