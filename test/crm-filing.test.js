@@ -127,6 +127,23 @@ test('deleting a fact removes it everywhere, keeps the email, tidies what pointe
   assert.throws(() => facts.deleteFact(older, 'personal'), /not found/);
 });
 
+test('several facts are deleted at once; a bad id or wrong space deletes nothing', () => {
+  const a = fact('personal', 'Spam: 20% off garden furniture');
+  const b = fact('personal', 'Spam: your parcel is waiting');
+  const keep = fact('personal', 'The bins go out on Tuesday');
+  const work = fact('work', 'The licence count was 400');
+  const n = () => db.crm().prepare('SELECT COUNT(*) n FROM atoms').get().n;
+  const before = n();
+  assert.throws(() => facts.deleteMany([a, 'not-a-fact'], 'personal'), /not found/);
+  assert.throws(() => facts.deleteMany([a, work], 'personal'), /not found/);
+  assert.throws(() => facts.deleteMany([], 'personal'), /Tick at least one/);
+  assert.equal(n(), before, 'all or nothing');
+  assert.equal(facts.deleteMany([a, b, a], 'personal').count, 2);
+  assert.deepEqual(facts.unfiled('personal').rows.map(x => x.id), [keep]);
+  assert.equal(db.crm().prepare("SELECT COUNT(*) n FROM deleted_facts WHERE atom_id IN (?, ?)").get(a, b).n, 2, 'tombstoned so re-reading cannot bring them back');
+  assert.ok(db.crm().prepare('SELECT 1 FROM atoms WHERE id = ?').get(work));
+});
+
 test('several facts are filed or moved at once; a bad id or wrong space changes nothing', () => {
   const dad = review.createProject('personal', 'Dad'), house = review.createProject('personal', 'House');
   const a = fact('personal', 'The roof repair quote came to 4,000 euro');
@@ -147,4 +164,31 @@ test('several facts are filed or moved at once; a bad id or wrong space changes 
   assert.throws(() => facts.moveMany([], dad.id, 'personal'), /Tick at least one/);
   assert.throws(() => facts.moveMany([a], house.id, 'personal', { from: house.id }), /already in that project/);
   assert.equal(db.crm().prepare('SELECT COUNT(*) n FROM atom_projects').get().n, before, 'all or nothing');
+});
+
+test('the facts page offers Delete selected, even with no projects, and the bulk delete route deletes only same-origin ticks', async () => {
+  const app = require('express')();
+  app.set('view engine', 'ejs'); app.set('views', path.join(__dirname, '..', 'views'));
+  app.use(require('express').urlencoded({ extended: true }));
+  app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = { adminUser: 'douglas' }; next(); });
+  app.use(require('../routes/crm'));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const a = fact('personal', 'Spam: 20% off garden furniture');
+  const b = fact('personal', 'Spam: your parcel is waiting');
+  const keep = fact('personal', 'The bins go out on Tuesday');
+  const post = (ids, origin = base) => fetch(`${base}/crm/personal/facts/bulk-delete`, { method: 'POST', redirect: 'manual',
+    headers: { Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams([...ids.map(id => ['atomIds', id]), ['back', '/crm/personal/facts?page=0']]) });
+  try {
+    const html = await (await fetch(`${base}/crm/personal/facts`)).text();
+    assert.match(html, /formaction="\/crm\/personal\/facts\/bulk-delete"/);
+    assert.doesNotMatch(html, /File selected under/, 'no project picker without projects');
+    assert.equal((html.match(/type="checkbox" name="atomIds"/g) || []).length, 3);
+    assert.equal((await post([a], 'https://elsewhere.example')).status, 403);
+    const r = await post([a, b]);
+    assert.equal(r.headers.get('location'), '/crm/personal/facts?page=0');
+    assert.deepEqual(facts.unfiled('personal').rows.map(x => x.id), [keep]);
+  } finally { await new Promise(resolve => server.close(resolve)); }
 });

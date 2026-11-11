@@ -619,6 +619,15 @@ router.post('/crm/:space/facts/bulk-move', spaceParam, requireSameOrigin, writeL
   res.redirect(factBack(req, space, `/crm/${space}/facts`));
 });
 
+router.post('/crm/:space/facts/bulk-delete', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { space } = req.params;
+  try {
+    const { count } = require('../lib/crm/facts').deleteMany(req.body.atomIds, space);
+    flash(req, `Deleted ${count} ${count === 1 ? 'fact' : 'facts'}. The emails and notes they came from are kept, and re-reading them won't bring these back.`);
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(factBack(req, space, `/crm/${space}/facts`));
+});
+
 router.get('/crm/:space/facts/:id', spaceParam, (req, res) => {
   try {
     const a = require('../lib/crm/facts').detail(req.params.id, req.params.space);
