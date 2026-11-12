@@ -640,6 +640,15 @@ router.post('/crm/:space/facts/bulk-move', spaceParam, requireSameOrigin, writeL
   res.redirect(factBack(req, space, `/crm/${space}/facts`));
 });
 
+router.post('/crm/:space/facts/bulk-delete', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { space } = req.params;
+  try {
+    const { count } = require('../lib/crm/facts').deleteMany(req.body.atomIds, space);
+    flash(req, `Deleted ${count} ${count === 1 ? 'fact' : 'facts'}. The emails and notes they came from are kept, and re-reading them won't bring these back.`);
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(factBack(req, space, `/crm/${space}/facts`));
+});
+
 router.get('/crm/:space/facts/:id', spaceParam, (req, res) => {
   try {
     const a = require('../lib/crm/facts').detail(req.params.id, req.params.space);
@@ -690,13 +699,23 @@ router.get('/crm/personal/mailboxes/connect', (req, res) => {
   require('../lib/crm/gmail-connect').start(req, res, req.query.account);
 });
 
+router.get('/crm/wispr/callback', async (req, res) => {
+  const text = v => (typeof v === 'string' ? v : '');
+  let space = 'work';
+  try {
+    const done = await wispr.finishConnect({ state: text(req.query.state), code: text(req.query.code), error: text(req.query.error), iss: text(req.query.iss) });
+    space = done.space;
+    if (done.result === 'connected') flash(req, 'Wispr Flow connected for Work and Personal.');
+    else if (done.result === 'stale') flash(req, 'That Wispr sign-in is no longer the current one. Choose Connect Wispr Flow again.', 'bad');
+    else flash(req, wispr.status(space).error || 'Wispr could not finish sign-in. Connect again to retry.', 'bad');
+  } catch (err) {
+    flash(req, err.message, 'bad');
+  }
+  res.redirect(`/crm/${space}/meetings`);
+});
+
 router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
   const space = req.params.space;
-  if (wispr.status(space).device) {
-    const result = await wispr.pollConnect(space).catch(err => { flash(req, err.message, 'bad'); return 'error'; });
-    if (result === 'connected') res.locals.flash = { text: 'Wispr Flow connected.', level: 'ok' };
-    if (result === 'expired') res.locals.flash = { text: 'The code ran out before sign-in finished. Connect again.', level: 'bad' };
-  }
   res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: require('../lib/crm/meetings').today(space),
     configured: !!process.env.KRISP_WEBHOOK_SECRET,
     deliveries: require('../lib/crm/krisp').list().filter(d => d.status === 'pending' || d.sources.some(s => s.space === space)).map(d => ({ ...d, sources: d.sources.filter(s => s.space === space) })),
@@ -706,8 +725,11 @@ router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
 router.post('/crm/:space/meetings/:action', spaceParam, requireSameOrigin, writeLimiter, async (req, res) => {
   const space = req.params.space;
   try {
-    if (req.params.action === 'connect') await wispr.startConnect(space);
-    else if (req.params.action === 'disconnect') { wispr.disconnect(space); flash(req, 'Wispr Flow disconnected here. Remove the Hub in your Wispr account too if you want it fully cut off.'); }
+    if (req.params.action === 'connect') {
+      const url = await wispr.startConnect(space);
+      if (url) return res.redirect(url);
+    }
+    else if (req.params.action === 'disconnect') { wispr.disconnect(space); flash(req, 'Wispr Flow disconnected for Work and Personal. Remove the Hub in your Wispr account too if you want it fully cut off.'); }
     else if (req.params.action === 'check') { await wispr.afterConnect(space); flash(req, 'The connection works.'); }
     else return res.status(404).send('Not found');
   } catch (err) {

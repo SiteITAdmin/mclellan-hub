@@ -205,3 +205,41 @@ test('the model sizes new tasks in one batch; a length Douglas set is never over
   assert.equal(taskLength.failedCount('work'), 1);
   assert.deepEqual(calendar.blocksFor(a.id).map(x => (x.end_at - x.start_at) / 60), [15]);
 });
+
+test('the Calendar pop-out lists the people, the transcript recorded in that meeting, and tasks that came from it', () => {
+  const sources = require('../lib/crm/sources'), atoms = require('../lib/crm/atoms'), identity = require('../lib/crm/identity');
+  const person = (id, name) => db.crm().prepare("INSERT INTO people (id, space, name) VALUES (?, 'work', ?)").run(id, name);
+  person('mary', 'Mary Byrne'); person('ken', 'Ken Doyle');
+  identity.linkIdentifier('mary', 'email', 'mary@example.org');
+  calendar.storeEvents({ id: 'primary', space: 'work' }, [
+    { id: 'm1', status: 'confirmed', summary: 'Bluecat and Beacon - DHCP', htmlLink: 'https://calendar.google.com/event?eid=m1', start: iso(at(MON, '14:00')), end: iso(at(MON, '15:00')),
+      attendees: [{ self: true, email: 'douglas@mclellan.scot' }, { email: 'mary@example.org', displayName: 'Mary' }, { email: 'stranger@example.com', displayName: 'Sam Stranger' }] },
+    { id: 'm2', status: 'confirmed', summary: 'MS Governance', start: iso(at(MON, '14:30')), end: iso(at(MON, '15:30')) },
+  ], at(MON, '08:00'));
+  const transcript = (ext, hhmm, text) => sources.admitSource({ space: 'work', kind: 'meeting', origin: 'krisp', externalId: ext, title: `Mobile recording ${hhmm}`, occurredAt: at(MON, hhmm), text }).source;
+  const ours = transcript('k1', '14:05', 'Ken Doyle will send the IPAM licence quote by Friday.');
+  transcript('k2', '14:45', 'Governance board notes.');
+  transcript('k3', '16:10', 'Unrelated call.');
+  atoms.applyAtoms(ours.id, [{ statement: 'Ken Doyle will send the IPAM licence quote by Friday', kind: 'fact', quote: 'Ken Doyle will send the IPAM licence quote by Friday', people: ['Ken Doyle'], topics: [], confidence: 'high' }]);
+  const t = tasks.create('work', { title: 'Chase Ken for the IPAM quote', context: { sourceId: ours.id } });
+  tasks.create('work', { title: 'Unrelated task' });
+
+  const items = calendar.week('work', MON, 1)[0].items.filter(i => i.type === 'event');
+  const pop = id => items.find(i => i.id === id).detail;
+  const d = pop('m1');
+  assert.deepEqual(d.people.map(p => `${p.name}:${p.via}`), ['Ken Doyle:Mentioned', 'Mary Byrne:Invited']);
+  assert.deepEqual(d.guests, [{ name: 'Sam Stranger', email: 'stranger@example.com' }]);
+  assert.deepEqual(d.transcripts.map(s => s.id), [ours.id], 'the 14:45 recording is closer to the 14:30 meeting');
+  assert.deepEqual(d.tasks.map(x => x.id), [t.id]);
+  assert.deepEqual(pop('m2').transcripts.map(s => s.title), ['Mobile recording 14:45']);
+  assert.deepEqual(pop('m2').tasks, []);
+  assert.equal(calendar.day('work', MON).items.find(i => i.id === 'm1').detail, null, 'Today does not need the pop-out');
+  // Two meetings starting at the same time: a recording between them belongs to neither.
+  calendar.storeEvents({ id: 'primary', space: 'work' }, [
+    { id: 'a', status: 'confirmed', summary: 'A', start: iso(at(MON, '17:00')), end: iso(at(MON, '18:00')) },
+    { id: 'b', status: 'confirmed', summary: 'B', start: iso(at(MON, '17:00')), end: iso(at(MON, '17:30')) },
+  ], at(MON, '08:05'));
+  transcript('k4', '17:05', 'Who was this for?');
+  const later = calendar.week('work', MON, 1)[0].items.filter(i => i.type === 'event');
+  assert.deepEqual(later.map(i => `${i.title}:${i.detail.transcripts.length}`).sort(), ['A:0', 'B:0']);
+});

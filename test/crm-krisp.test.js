@@ -54,7 +54,7 @@ test('HTTP holding intake and signed-in classification keep evidence out of sour
   const resend = await post({...actual,id:'synthetic-retry'}); assert.equal(resend.id,oldId); assert.equal(resend.created,false);
   const reviewHtml=await (await fetch(base+'/crm/work/meetings')).text();
   assert.ok(reviewHtml.includes('Synthetic opening.'));
-  assert.ok(reviewHtml.includes('Name for Speaker 1'));
+  assert.ok(reviewHtml.includes('Who is &ldquo;Speaker 1&rdquo;?'));
   assert.ok(reviewHtml.includes('Release meeting'));
   const revision=/name="revision" value="([a-f0-9]+)"/.exec(reviewHtml)[1];
   const submit=async body=>fetch(base+`/crm/krisp/${oldId}/classify`,{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:base},body});

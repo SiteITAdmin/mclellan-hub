@@ -1,10 +1,10 @@
 <%- include('_top') %>
 <div class="crumbs"><a href="/crm/<%= space %>/projects">Projects</a> / Not in a project</div>
-<div class="title-row"><div><h1>Facts not in a project</h1><p class="subline"><%= total %> <%= total === 1 ? 'fact' : 'facts' %> in <%= space === 'work' ? 'Work' : 'Personal' %> <%= total === 1 ? 'isn’t' : 'aren’t' %> filed under any project, newest first. They are kept in full and still show on people, topics and search. Tick the ones that belong together and file them under a project at the bottom.</p></div></div>
+<div class="title-row"><div><h1>Facts not in a project</h1><p class="subline"><%= total %> <%= total === 1 ? 'fact' : 'facts' %> in <%= space === 'work' ? 'Work' : 'Personal' %> <%= total === 1 ? 'isn’t' : 'aren’t' %> filed under any project, newest first. They are kept in full and still show on people, topics and search. Tick the ones that belong together and file them under a project at the bottom, or tick the ones you don’t want and delete them.</p></div></div>
 <section class="grid first"><div class="panel s12">
   <% if (!list.length) { %><div class="empty">Every fact is in a project.</div><% } %>
-  <% for (const a of list) { %><%- include('_atom', { a, selectForm: projectChoices.length ? 'bulk' : null }) %><% } %>
-  <% if (list.length && projectChoices.length) { %><%- include('_bulk', { formId: 'bulk', back: `/crm/${space}/facts?page=${pageNo}`, choices: projectChoices }) %><% } %>
+  <% for (const a of list) { %><%- include('_atom', { a, selectForm: 'bulk' }) %><% } %>
+  <% if (list.length) { %><%- include('_bulk', { formId: 'bulk', back: `/crm/${space}/facts?page=${pageNo}`, choices: projectChoices, canDelete: true }) %><% } %>
   <% if (list.length && !projectChoices.length) { %><p class="subline">Add a project on the Projects page to file these.</p><% } %>
   <div class="form-row" style="margin-top:16px">
     <% if (pageNo > 0) { %><a class="btn small" href="/crm/<%= space %>/facts?page=<%= pageNo - 1 %>">Newer</a><% } %>

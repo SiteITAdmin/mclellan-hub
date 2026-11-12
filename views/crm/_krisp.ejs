@@ -10,13 +10,17 @@
 <form method="post" action="/crm/krisp/<%= d.id %>/classify">
 <input type="hidden" name="returnSpace" value="<%= space %>"><input type="hidden" name="revision" value="<%= d.review.revision %>">
 <% d.review.speakers.forEach((speaker, i) => { %>
-<label for="speaker-<%= d.id %>-<%= i %>">Name for <%= speaker.label %></label>
+<fieldset class="speaker">
+<legend><%= speaker.label %></legend>
+<div class="field"><label for="speaker-<%= d.id %>-<%= i %>">Who is &ldquo;<%= speaker.label %>&rdquo;?</label>
+<input class="input" id="speaker-<%= d.id %>-<%= i %>" name="names" required maxlength="120" autocomplete="off" placeholder="Full name"></div>
+<p class="speaker-said">What <%= speaker.label %> said</p>
 <% for (const preview of speaker.previews) { %><blockquote><%= preview %></blockquote><% } %>
-<input id="speaker-<%= d.id %>-<%= i %>" name="names" required maxlength="120" autocomplete="off" placeholder="Confirmed name">
+</fieldset>
 <% }) %>
 <p>Confirm every name above. This releases the attributed transcript to the existing reader for facts and tasks.</p>
-<label><input type="radio" name="choice" value="work" required> Work</label> <label><input type="radio" name="choice" value="personal" required> Personal</label>
-<button class="btn" type="submit">Release meeting</button>
+<div class="form-row"><label><input type="radio" name="choice" value="work" required> Work</label> <label><input type="radio" name="choice" value="personal" required> Personal</label>
+<button class="btn" type="submit">Release meeting</button></div>
 </form><% } else { %><p class="flash bad"><%= d.review.reason %></p><% } %>
 <form method="post" action="/crm/krisp/<%= d.id %>/classify"><input type="hidden" name="returnSpace" value="<%= space %>"><button class="btn" name="choice" value="ignore">Ignore</button></form>
 <% } else { for (const source of d.sources) { %><p><a href="/crm/<%= source.space %>/sources/<%= source.id %>">View source</a></p><% } } %>
