@@ -298,3 +298,66 @@ test('an unreadable promise-sorting state refuses the save with a clear message'
   assert.equal(crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text, before);
   crm.prepare("DELETE FROM settings WHERE key = 'promise_classify_job'").run();
 });
+
+test('giving a speaker another speaker\'s name needs Douglas to say they are the same person', () => {
+  const { source } = seed();
+  const crm = db.crm();
+  const before = crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text;
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Karen' }]), /Speaker 1 and Karen one speaker/);
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'karen' }]), /one speaker/, 'case does not hide a merge');
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Ann Lee' }, { label: 'Speaker 10', name: 'Ann Lee' }]),
+    /Speaker 1 and Speaker 10 one speaker/);
+  assert.equal(crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text, before, 'a refused save writes nothing');
+
+  const swap = correction.correct(source.id, [{ label: 'Speaker 1', name: 'Karen' }, { label: 'Karen', name: 'Margaret Callanan' }]);
+  assert.deepEqual(swap.merged, []);
+  const text = crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text;
+  assert.match(text, /^Karen: The quote as spoken\./);
+  assert.ok(text.includes('Margaret Callanan: Fine.'));
+
+  const merged = correction.correct(source.id, [{ label: 'Speaker 10', name: 'Karen' }], { merge: true });
+  assert.deepEqual(merged.merged, [['Karen', 'Speaker 10']]);
+  assert.ok(crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text.includes('Karen: Other.'));
+  assert.equal(correction.review(source.id).labels.find(x => x.label === 'Karen').count, 3);
+});
+
+test('the form leaves an empty box alone and saves the rest', async () => {
+  const { source } = seed();
+  const express = require('express');
+  const app = express();
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, '..', 'views'));
+  app.use(express.urlencoded({ extended: false }));
+  const session = { adminUser: 'douglas' };
+  app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = session; next(); });
+  app.use(require('../routes/crm'));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(r => server.once('listening', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = body => fetch(`${base}/crm/work/sources/${source.id}/speaker-names`, {
+    method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: base }, body,
+  });
+  const text = () => db.crm().prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text;
+  try {
+    const html = await (await fetch(`${base}/crm/work/sources/${source.id}`)).text();
+    assert.ok(html.includes('name="merge" value="1"'));
+
+    const body = new URLSearchParams();
+    for (const [label, name] of [['Speaker 1', 'Margaret Callanan'], ['Speaker 10', '  '], ['Karen', 'Karen'], ['Douglas McLellan', 'Douglas McLellan ']]) {
+      body.append('label', label); body.append('name', name);
+    }
+    assert.equal((await post(body)).status, 302);
+    assert.match(text(), /^Margaret Callanan: /);
+    assert.ok(text().includes('Speaker 10: Other.'), 'the empty box kept its speaker');
+    assert.ok(text().includes('Douglas McLellan: Yes.'));
+    assert.match(JSON.stringify(session), /A box left empty was kept as before/);
+
+    const merge = new URLSearchParams([['label', 'Speaker 10'], ['name', 'Karen']]);
+    await post(merge);
+    assert.ok(text().includes('Speaker 10: Other.'), 'no merge without the tick');
+    assert.match(JSON.stringify(session), /one speaker, which can't be undone/);
+    merge.append('merge', '1');
+    await post(merge);
+    assert.ok(text().includes('Karen: Other.'));
+  } finally { server.close(); }
+});
