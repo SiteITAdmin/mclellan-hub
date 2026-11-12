@@ -533,12 +533,13 @@ function replanned() {
 
 router.get('/crm/:space/calendar', spaceParam, (req, res) => {
   const today = planner.local(Math.floor(Date.now() / 1000)).date;
+  const first = planner.addDays(today, -calendar.HISTORY_DAYS);
   const last = planner.addDays(today, planner.HORIZON_DAYS - 7);
   let from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : today;
-  if (from < today) from = today;
+  if (from < first) from = first;
   if (from > last) from = last;
   res.render('crm/calendar', { page: 'calendar', title: 'Calendar', today, from,
-    earlier: from > today ? planner.addDays(from, -7) < today ? today : planner.addDays(from, -7) : null,
+    earlier: from > first ? planner.addDays(from, -7) < first ? first : planner.addDays(from, -7) : null,
     later: from < last ? planner.addDays(from, 7) > last ? last : planner.addDays(from, 7) : null,
     days: calendar.week(req.params.space, from), state: calendar.state(req.params.space), hours: calendar.hours() });
 });

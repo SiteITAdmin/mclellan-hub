@@ -9,12 +9,13 @@
    const failed = run && run.last_error && (!run.last_ok || run.last_error_at >= run.last_ok);
    const name = s => s === 'work' ? 'Work' : 'Personal';
    const pops = [];
-   const own = days.flatMap(d => d.items.filter(i => i.type === 'event').map(i => ({ ...i, date: d.date }))).filter((i, n, all) => all.findIndex(x => x.id === i.id) === n); %>
+   const own = days.flatMap(d => [...d.items.filter(i => i.type === 'event'), ...d.banners.map(b => ({ ...b, start: b.start_at, end: b.end_at }))].map(i => ({ ...i, date: d.date }))).filter((i, n, all) => all.findIndex(x => x.id === i.id) === n); %>
 <div class="title-row">
   <div><h1>Calendar</h1><p class="subline"><%= label %>. Both your Work and Personal diaries are shown here. Tasks are planned into your free time and move by themselves when your diary changes. Planned <%= state.plannedAt ? ago(state.plannedAt) : 'not yet' %>; Google Calendar last updated <%= run?.last_ok ? ago(run.last_ok) : 'not yet' %>.</p></div>
   <div class="form-row">
     <% if (earlier) { %><a class="btn small" href="/crm/<%= space %>/calendar?from=<%= earlier %>">Earlier</a><% } %>
     <% if (later) { %><a class="btn small" href="/crm/<%= space %>/calendar?from=<%= later %>">Later</a><% } %>
+    <a class="btn small" href="/crm/<%= space %>/calendar">Today</a>
     <form method="post" action="/crm/<%= space %>/calendar/replan"><button class="btn small">Replan now</button></form>
   </div>
 </div>
@@ -26,7 +27,7 @@
     <% for (const d of days) { %>
     <div class="cal-day<%= d.date === today ? ' is-today' : '' %>">
       <h2 class="cal-head"><%= d.date === today ? 'Today' : dayName(d) %></h2>
-      <div class="cal-banners"><% for (const b of d.banners) { %><span class="cal-tag" title="<%= b.title %>"><%= b.title %></span><% } %></div>
+      <div class="cal-banners"><% for (const b of d.banners) { pops.push({ i: { ...b, start: b.start_at, end: b.end_at, detail: { people: [], guests: [], transcripts: [], tasks: [] } }, n: pops.length }); %><button type="button" class="cal-tag" data-pop="cal-pop-<%= pops.length - 1 %>" aria-haspopup="dialog"><%= b.title %></button><% } %></div>
       <div class="cal-col">
         <% if (d.window) { %><div class="cal-window" style="<%= pos({ from: d.window[0], until: d.window[1] }) %>"></div><% } %>
         <% if (d.date === today && nowLocal >= S && nowLocal <= E) { %><div class="cal-now" style="<%= pos({ from: nowLocal, until: nowLocal }) %>"></div><% } %>
@@ -54,6 +55,11 @@
     <div class="cal-pop-sec"><h3>Transcript</h3>
       <% if (!d.transcripts.length) { %><p class="cal-pop-none"><%= i.start > Date.now() / 1000 ? 'Not held yet' : 'None yet' %></p><% } %>
       <% if (d.transcripts.length) { %><ul><% for (const t of d.transcripts) { %><li><a href="/crm/<%= t.space %>/sources/<%= t.id %>"><%= t.title %></a> <small><%= fmt(t.occurred_at, 'time') %></small></li><% } %></ul><% } %>
+    </div>
+    <div class="cal-pop-sec"><h3>What happened</h3>
+      <% if (!d.happened?.length) { %><p class="cal-pop-none">No transcript facts read yet. Open the transcript for the full record.</p><% } else { %>
+      <ul><% for (const f of d.happened) { %><li><%= f.statement %> <a href="/crm/<%= f.source_space %>/sources/<%= f.source_id %>">Source</a></li><% } %></ul>
+      <% } %>
     </div>
     <div class="cal-pop-sec"><h3>Tasks from this meeting</h3>
       <% if (!d.tasks.length) { %><p class="cal-pop-none">None</p><% } %>
@@ -104,9 +110,9 @@
     <% for (const e of own) { %>
       <div class="day-row event">
         <span class="t"><%= fmt(e.start, 'date') %> <%= fmt(e.start, 'time') %>–<%= fmt(e.end, 'time') %></span>
-        <span class="what"><%= e.title %></span>
+        <span class="what"><button class="btn small" type="button" data-pop="cal-pop-<%= pops.findIndex(p => p.i.id === e.id) %>" aria-haspopup="dialog"><%= e.title %></button></span>
         <span class="tags"><span class="cal-tag"><%= name(e.space) %></span>
-        <% if (e.solo) { %><form method="post" action="/crm/<%= space %>/calendar/flexible"><input type="hidden" name="event" value="<%= e.id %>"><input type="hidden" name="on" value="<%= e.flexible ? '0' : '1' %>"><button class="btn small" aria-pressed="<%= e.flexible %>"><%= e.flexible ? 'Flexible: the Hub may move it' : 'Fixed' %></button></form>
+        <% if (e.solo && e.start > Date.now() / 1000) { %><form method="post" action="/crm/<%= space %>/calendar/flexible"><input type="hidden" name="event" value="<%= e.id %>"><input type="hidden" name="on" value="<%= e.flexible ? '0' : '1' %>"><button class="btn small" aria-pressed="<%= e.flexible %>"><%= e.flexible ? 'Flexible: the Hub may move it' : 'Fixed' %></button></form>
         <% } else { %><span class="cal-tag">Fixed: others are invited</span><% } %>
         </span>
       </div>

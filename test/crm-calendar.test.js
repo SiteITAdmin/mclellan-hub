@@ -243,3 +243,41 @@ test('the Calendar pop-out lists the people, the transcript recorded in that mee
   const later = calendar.week('work', MON, 1)[0].items.filter(i => i.type === 'event');
   assert.deepEqual(later.map(i => `${i.title}:${i.detail.transcripts.length}`).sort(), ['A:0', 'B:0']);
 });
+
+test('past-month meetings retain source-backed outcomes and completed tasks without historical task blocks', async () => {
+  const sources = require('../lib/crm/sources'), atoms = require('../lib/crm/atoms');
+  const date = '2026-10-20';
+  const old = api.add({ summary: 'Historical review', start: iso(at(date, '10:00')), end: iso(at(date, '11:00')) });
+  api.add({ summary: 'Outside import window', start: iso(at('2026-09-01', '10:00')), end: iso(at('2026-09-01', '11:00')) });
+  await calendar.run({ api, at: at(MON, '09:00') });
+  const e = db.crm().prepare('SELECT * FROM calendar_events WHERE id=?').get(old.id);
+  assert.ok(e);
+  assert.equal(db.crm().prepare('SELECT COUNT(*) n FROM calendar_events').get().n, 1);
+  const s = sources.admitSource({ space: e.space, kind: 'meeting', origin: 'test', externalId: 'historical', title: 'Review transcript', occurredAt: at(date, '10:05'), text: 'The board approved the budget.' }).source;
+  atoms.applyAtoms(s.id, [{ statement: 'The board approved the budget.', kind: 'decision', quote: 'The board approved the budget.', people: [], topics: [], confidence: 'high' }]);
+  const task = tasks.create(e.space, { title: 'Send budget', context: { sourceId: s.id } });
+  tasks.edit(task.id, { status: 'completed' });
+  const detail = calendar.week('work', date, 1)[0].items[0].detail;
+  assert.equal(detail.transcripts[0].id, s.id);
+  assert.equal(detail.happened[0].source_id, s.id);
+  assert.equal(detail.tasks[0].status, 'completed');
+  api.rows.splice(api.rows.indexOf(old), 1);
+  await calendar.run({ api, at: at(MON, '09:05') });
+  assert.ok(db.crm().prepare('SELECT id FROM calendar_events WHERE id=?').get(old.id));
+  assert.deepEqual(calendar.blocksFor(task.id), []);
+  assert.deepEqual(api.calls, []);
+  assert.equal(db.crm().prepare("SELECT COUNT(*) n FROM sources WHERE kind='calendar' AND is_history=0").get().n, 0);
+});
+
+test('historical calendar renders click targets, source links and valid pop-out JavaScript', () => {
+  const ejs = require('ejs'), vm = require('node:vm');
+  calendar.storeEvents({ id: 'primary', space: 'work' }, [{ id: 'history', summary: '<Review>', start: iso(at('2026-10-20', '10:00')), end: iso(at('2026-10-20', '11:00')) }], at(MON, '09:00'));
+  const template = fs.readFileSync(path.join(__dirname, '../views/crm/calendar.ejs'), 'utf8').replace(/<%- include\('_top'\) %>|<%- include\('_bottom'\) %>/g, '');
+  const html = ejs.render(template, { space: 'work', today: MON, from: '2026-10-20', earlier: '2026-10-13', later: '2026-10-27', days: calendar.week('work', '2026-10-20'), state: calendar.state('work'), hours: calendar.hours(), ago: () => 'just now', fmt: ts => String(ts) });
+  assert.match(html, /Earlier/);
+  assert.match(html, /What happened/);
+  assert.match(html, /data-pop="cal-pop-0"/);
+  assert.match(html, /&lt;Review&gt;/);
+  assert.doesNotMatch(html, /data-pop="cal-pop--1"/);
+  for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
+});
