@@ -104,3 +104,62 @@ test('the morning email goes once, only in the morning, and never for Work at th
   await assert.rejects(digest.send('work', { t: NOW, mail: broken }), /Work morning email: Invalid login/);
   assert.deepEqual(await digest.send('work', { t: NOW + 60, mail: broken }), { skipped: 'already sent' });
 });
+
+test('previous Dublin day knowledge briefing isolates evidence, distinguishes replacements and renders safe links', () => {
+  const start = planner.epoch('2026-11-09');
+  const s = mail('personal', 'source@example.com', 100);
+  const other = mail('work', 'secret@example.com', 1);
+  function fact(id, space, created, source, statement = id) {
+    db.crm().prepare(`INSERT INTO atoms (id, space, statement, said_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(id, space, statement, NOW - 100 * DAY, created, start + 200);
+    if (source) db.crm().prepare('INSERT INTO atom_sources (atom_id, source_id) VALUES (?, ?)').run(id, source.id);
+  }
+  fact('old', 'personal', start - 1, s);
+  fact('new', 'personal', start, s, 'Budget <approved> & ready');
+  db.crm().prepare("UPDATE atoms SET status = 'superseded', superseded_by = 'new' WHERE id = 'old'").run();
+  fact('addition', 'personal', start + 1, s);
+  db.crm().prepare("UPDATE atoms SET is_history = 1 WHERE id = 'addition'").run();
+  fact('duplicate-evidence', 'personal', start - 10, s);
+  fact('today', 'personal', planner.epoch('2026-11-10'), s);
+  fact('secret', 'work', start, other);
+  fact('wrong-source', 'personal', start, other);
+  fact('no-source', 'personal', start, null);
+  const result = digest.build('personal', NOW);
+  assert.match(result.text, /CRM briefing — 2026-11-09 \(Dublin\)/);
+  assert.match(result.text, /Updated knowledge: Budget <approved> & ready/);
+  assert.match(result.text, /Added knowledge \(historical evidence\): addition/);
+  assert.match(result.text, /Fact: https:.*\/personal\/facts\/new/);
+  assert.match(result.html, /Budget &lt;approved&gt; &amp; ready/);
+  assert.match(result.html, /<a href="https:.*\/personal\/sources\//);
+  for (const excluded of ['duplicate-evidence', 'today', 'secret', 'wrong-source', 'no-source']) {
+    assert.ok(!result.text.includes(`knowledge: ${excluded}`));
+  }
+  assert.match(digest.build('work', NOW).text, /Added knowledge: secret/);
+});
+
+test('Dublin previous calendar day includes both DST boundaries and bounds the briefing', () => {
+  for (const [date, hours] of [['2026-03-29', 23], ['2026-10-25', 25]]) {
+    const start = planner.epoch(date), end = planner.epoch(planner.addDays(date, 1));
+    assert.equal(end - start, hours * 3600);
+    const s = mail('personal', 'evidence@example.com', 1);
+    for (const [id, created] of [[`start-${date}`, start], [`last-${date}`, end - 1], [`end-${date}`, end]]) {
+      db.crm().prepare('INSERT INTO atoms (id, space, statement, said_at, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(id, 'personal', id, created, created);
+      db.crm().prepare('INSERT INTO atom_sources (atom_id, source_id) VALUES (?, ?)').run(id, s.id);
+    }
+    const text = JSON.stringify(digest.previousDay('personal', end + 7 * 3600));
+    assert.ok(text.includes(`start-${date}`));
+    assert.ok(text.includes(`last-${date}`));
+    assert.ok(!text.includes(`end-${date}`));
+  }
+  const s = mail('work', 'work@example.com', 1);
+  for (let i = 0; i < 12; i++) {
+    db.crm().prepare('INSERT INTO atoms (id, space, statement, said_at, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(`bounded${i}`, 'work', `bounded${i}`, NOW, planner.epoch('2026-11-09') + i);
+    db.crm().prepare('INSERT INTO atom_sources (atom_id, source_id) VALUES (?, ?)').run(`bounded${i}`, s.id);
+  }
+  const briefing = digest.previousDay('work', NOW);
+  assert.equal(briefing.lines.filter(l => l.text?.startsWith('Added knowledge')).length, 8);
+  assert.match(briefing.lines.at(-1).text, /More knowledge/);
+  assert.match(JSON.stringify(digest.previousDay('personal', planner.epoch('2026-12-01', 450))), /No source-backed/);
+});
