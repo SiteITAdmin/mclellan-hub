@@ -27,7 +27,7 @@
     <% for (const d of days) { %>
     <div class="cal-day<%= d.date === today ? ' is-today' : '' %>">
       <h2 class="cal-head"><%= d.date === today ? 'Today' : dayName(d) %></h2>
-      <div class="cal-banners"><% for (const b of d.banners) { pops.push({ i: { ...b, start: b.start_at, end: b.end_at, detail: { people: [], guests: [], transcripts: [], tasks: [] } }, n: pops.length }); %><button type="button" class="cal-tag" data-pop="cal-pop-<%= pops.length - 1 %>" aria-haspopup="dialog"><%= b.title %></button><% } %></div>
+      <div class="cal-banners"><% for (const b of d.banners) { pops.push({ i: { ...b, start: b.start_at, end: b.end_at, detail: b.detail }, n: pops.length }); %><button type="button" class="cal-tag" data-pop="cal-pop-<%= pops.length - 1 %>" aria-haspopup="dialog"><%= b.title %></button><% } %></div>
       <div class="cal-col">
         <% if (d.window) { %><div class="cal-window" style="<%= pos({ from: d.window[0], until: d.window[1] }) %>"></div><% } %>
         <% if (d.date === today && nowLocal >= S && nowLocal <= E) { %><div class="cal-now" style="<%= pos({ from: nowLocal, until: nowLocal }) %>"></div><% } %>
@@ -113,7 +113,7 @@
         <span class="what"><button class="btn small" type="button" data-pop="cal-pop-<%= pops.findIndex(p => p.i.id === e.id) %>" aria-haspopup="dialog"><%= e.title %></button></span>
         <span class="tags"><span class="cal-tag"><%= name(e.space) %></span>
         <% if (e.solo && e.start > Date.now() / 1000) { %><form method="post" action="/crm/<%= space %>/calendar/flexible"><input type="hidden" name="event" value="<%= e.id %>"><input type="hidden" name="on" value="<%= e.flexible ? '0' : '1' %>"><button class="btn small" aria-pressed="<%= e.flexible %>"><%= e.flexible ? 'Flexible: the Hub may move it' : 'Fixed' %></button></form>
-        <% } else { %><span class="cal-tag">Fixed: others are invited</span><% } %>
+        <% } else { %><span class="cal-tag"><%= e.solo ? 'Fixed' : 'Fixed: others are invited' %></span><% } %>
         </span>
       </div>
     <% } %>

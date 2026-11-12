@@ -281,3 +281,16 @@ test('historical calendar renders click targets, source links and valid pop-out 
   assert.doesNotMatch(html, /data-pop="cal-pop--1"/);
   for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
+
+test('cancelled ongoing events release future time while ended meetings remain', () => {
+  const cal = { id: 'primary', space: 'work' };
+  calendar.storeEvents(cal, [
+    { id: 'ongoing', summary: 'Ongoing', start: iso(at(MON, '08:00')), end: iso(at(MON, '17:00')) },
+    { id: 'day', summary: 'Offsite', start: { date: MON }, end: { date: '2026-11-10' }, attendees: [{ email: 'guest@example.com' }] },
+    { id: 'ended', summary: 'Finished', start: iso(at(MON, '07:00')), end: iso(at(MON, '08:00')) }
+  ], at(MON, '07:30'));
+  const banner = calendar.week('work', MON, 1)[0].banners[0];
+  assert.equal(banner.detail.guests[0].email, 'guest@example.com');
+  calendar.storeEvents(cal, [], at(MON, '10:00'));
+  assert.deepEqual(db.crm().prepare('SELECT id FROM calendar_events').all().map(e => e.id), ['ended']);
+});
