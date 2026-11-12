@@ -39,6 +39,7 @@ test('journal pages never create promises even if the reader calls one a promise
   await boox.capture(notebook('journal','journal'),await pdf(['I will send the annual report to Jane']),T);
   let job={status:'failed',error:'usage_limit_reached'};const jobs={enqueue:()=>({jobId:'j'}),getJob:()=>job};
   boox.enqueueNext(jobs); assert.equal(boox.collect(jobs).retrying,true);
+  assert.equal(boox.enqueueNext(jobs),false); db.setSetting('boox_reader_retry_at','0');
   boox.enqueueNext(jobs);job={status:'completed',result:{output:JSON.stringify({text:'I will send the annual report to Jane',uncertain:false,reason:''})}};boox.collect(jobs);
   const s=db.crm().prepare('SELECT * FROM sources').get(); assert.equal(s.kind,'journal');assert.equal(s.is_history,1);
   atoms.applyAtoms(s.id,[{statement:s.text,quote:s.text,kind:'promise',confidence:'high',promise:{direction:'mine',certainty:'clear',action:'send the annual report'}}]);

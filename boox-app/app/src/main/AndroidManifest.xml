@@ -5,7 +5,7 @@
         <package android:name="com.onyx.android.note" />
         <provider android:authorities="com.onyx.android.sdk.note.ContentProvider" />
     </queries>
-    <application android:allowBackup="false" android:dataExtractionRules="@xml/extraction_rules" android:icon="@drawable/ic_hub" android:usesCleartextTraffic="false"
+    <application android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/extraction_rules" android:icon="@drawable/ic_hub" android:usesCleartextTraffic="false"
         android:label="McLellan Hub" android:theme="@style/HubTheme" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

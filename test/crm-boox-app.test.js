@@ -236,3 +236,23 @@ test('device HTTP routes reject missing and wrong tokens and return uncached aut
     assert.equal(db.crm().prepare("SELECT count(*) n FROM effects WHERE module='boox_app'").get().n, 1);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+
+test('Claude capacity pauses page reading without exhausting retries, then resumes automatically', async () => {
+  db.setSetting('boox_started', String(T - 3 * DAY));
+  await boox.discover(drive([file('day', `${TODAY} Work.pdf`)]), T);
+  await boox.capture(notebook('day'), await pdf(['Boox connection test. No actions.']), T);
+  let job = { status: 'failed', error: 'usage_limit_reached: resets at 10:30pm' };
+  const jobs = { enqueue: () => ({ jobId: 'quota-job' }), getJob: () => job };
+  assert.equal(boox.enqueueNext(jobs, true, T), true);
+  const retry = boox.collect(jobs, T);
+  assert.equal(retry.retryAt, T + 900);
+  assert.equal(db.crm().prepare('SELECT attempts FROM notebook_pages').get().attempts, 0);
+  assert.equal(boox.enqueueNext(jobs, true, T + 899), false);
+  assert.match(boox.health('work')[0].text, /Claude capacity/);
+  assert.equal(boox.enqueueNext(jobs, true, T + 900), true);
+  job = { status: 'completed', result: { output: JSON.stringify({ text: 'Boox connection test. No actions.', uncertain: false }) } };
+  boox.collect(jobs, T + 901);
+  assert.equal(db.crm().prepare('SELECT status FROM notebook_pages').get().status, 'done');
+  assert.equal(boox.readerWait(T + 901), null);
+});

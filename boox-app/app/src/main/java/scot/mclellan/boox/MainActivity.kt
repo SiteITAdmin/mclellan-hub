@@ -105,7 +105,8 @@ class MainActivity : Activity() {
     private fun updateStatus() {
         val cachedAt = data?.optLong("serverTime") ?: 0
         status.text = listOf(if (syncing) "Syncing…" else message, "Saved on tablet: ${stamp(cachedAt)}", "Calendar checked: ${stamp(data?.optLong("calendarSyncedAt") ?: 0)}",
-            if (store.pendingCount() > 0) "${store.pendingCount()} note reports waiting to sync" else "").filter { it.isNotBlank() }.joinToString("\n")
+            if (store.pendingCount() > 0) "${store.pendingCount()} note reports waiting to sync" else "",
+            (data?.optLong("readerRetryAt") ?: 0).let { if (it > System.currentTimeMillis() / 1000) "Handwriting reader is busy; automatic retry after ${stamp(it)}" else "" }).filter { it.isNotBlank() }.joinToString("\n")
     }
     private fun render() {
         root = column().apply { setPadding(dp(22), dp(14), dp(22), dp(12)); setBackgroundColor(Color.WHITE) }

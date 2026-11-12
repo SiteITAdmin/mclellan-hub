@@ -17,7 +17,9 @@ Enable PDF sync from Boox Notes to Google Drive's `onyx/NoteMax/Notebooks`
 folder. On leaving Notes, its native sync exports the notebook. Hub checks Drive
 every fifteen minutes and reads changed pages through `crm_boox_read` on the
 Mac subscription worker. Unclear handwriting waits at `/crm/notebooks`.
-Confirmed writing enters the normal source → atoms → promises/tasks pipeline;
+A Claude usage/capacity limit holds the page and retries every fifteen minutes
+without consuming its malformed-page retry allowance. The waiting state appears
+on the tablet, Today and the notebook screen. Confirmed writing enters the normal source → atoms → promises/tasks pipeline;
 the note's date remains its source date even if exported the following day.
 Notes more than seven days old are history. A changed day-note page can add new
 writing; unchanged lines are context, with the existing atomiser deciding
@@ -70,3 +72,20 @@ The native Notes content provider and `OPEN_NOTE_BEAN` intent are private Onyx
 interfaces, verified on the attached Note Max. Recheck opening, saving and
 reopening a dated notebook after a Boox firmware update. Drive exports and the
 subscription worker must both be available for handwriting to reach the CRM.
+
+## Local worker installation
+
+The running Mac LaunchAgent currently uses the separate local directory
+`~/.local/share/proxmox-dev/hub-worker`, not this repository's SMB checkout.
+When changing model transport, copy `scripts/subscription-agent-worker.js`,
+`lib/subscription-agent.js` and `lib/feature-runners.js` into the corresponding
+paths there. Preserve its `.env` and dependencies. Restart
+`com.mclellan.hub.subscription-agent-worker` after its active CLI job ends.
+The deployed VPS and that local copy must agree about PDF input support; a VPS
+code deploy alone does not update this worker.
+
+On 12 November 2026, version 2 was installed on the attached Note Max. Live
+calendar/CRM sync and native creation/reopening were verified. Douglas's dated
+Work PDF reached Drive and was captured as one day-note page. The updated Mac
+worker received its PDF, but Claude returned a usage limit with a 22:30 Dublin
+reset; transcription verification is pending that capacity reset.
