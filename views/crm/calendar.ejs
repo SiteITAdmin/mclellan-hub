@@ -112,7 +112,7 @@
         <span class="t"><%= fmt(e.start, 'date') %> <%= fmt(e.start, 'time') %>–<%= fmt(e.end, 'time') %></span>
         <span class="what"><button class="btn small" type="button" data-pop="cal-pop-<%= pops.findIndex(p => p.i.id === e.id) %>" aria-haspopup="dialog"><%= e.title %></button></span>
         <span class="tags"><span class="cal-tag"><%= name(e.space) %></span>
-        <% if (e.solo && e.start > Date.now() / 1000) { %><form method="post" action="/crm/<%= space %>/calendar/flexible"><input type="hidden" name="event" value="<%= e.id %>"><input type="hidden" name="on" value="<%= e.flexible ? '0' : '1' %>"><button class="btn small" aria-pressed="<%= e.flexible %>"><%= e.flexible ? 'Flexible: the Hub may move it' : 'Fixed' %></button></form>
+        <% if (e.solo && !e.all_day && e.start > Date.now() / 1000) { %><form method="post" action="/crm/<%= space %>/calendar/flexible"><input type="hidden" name="event" value="<%= e.id %>"><input type="hidden" name="on" value="<%= e.flexible ? '0' : '1' %>"><button class="btn small" aria-pressed="<%= e.flexible %>"><%= e.flexible ? 'Flexible: the Hub may move it' : 'Fixed' %></button></form>
         <% } else { %><span class="cal-tag"><%= e.solo ? 'Fixed' : 'Fixed: others are invited' %></span><% } %>
         </span>
       </div>
