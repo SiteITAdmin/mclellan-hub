@@ -135,14 +135,24 @@ A meeting that has already been read can still have a speaker corrected. The
 signed-in source page for any part of a classified Krisp delivery shows
 **Speaker names** with the labels found at the start of released turns. Typing a
 confirmed name over a placeholder and saving applies the change to every part of
-that delivery.
+that delivery in the same space. A part Douglas moved to the other space is left
+alone and the receipt counts it (`otherSpaceParts`).
+
+A name may use letters, numbers, spaces, full stops, apostrophes and hyphens, up
+to 80 characters: exactly what a transcript label can be, so a saved name is
+always offered again and a typo in it can be corrected. The save is refused while
+any part of the delivery is queued for reading, or while one of its facts is in
+the promise-sorting batch, because those replies were asked with the old text and
+would bring the placeholder back.
 
 This is **containment**, not re-synthesis: `lib/crm/speaker-correction.js`
 patches the rows that already carry the placeholder. It rewrites column-zero
 `Label:` prefixes in the released source text, the `Speaker N` placeholder inside
 statements, promise `who` and `action` fields, the matching `atom_mentions` rows
 (then re-runs the existing deterministic matcher), and the title of any task
-already made from those atoms. Quotes, the original `raw_json`, the original
+already made from those atoms, together with the title line and statement
+prefix of that task's own snapshot sources (so search no longer finds the
+placeholder there). Quotes, the original `raw_json`, the original
 transcript and existing task/atom/source IDs are left untouched. A promise task's
 notes keep their verbatim quote; only the statement prefix is replaced. Indented
 `Label:` lines are quoted speech and are not rewritten, and `Speaker 1` never

@@ -434,7 +434,9 @@ router.post('/crm/:space/sources/:id/speaker-names', spaceParam, requireSameOrig
     const changed = done.mapping.map(x => `${x.label} is ${x.name}`).join('; ');
     const shared = done.skippedAtoms.length
       ? ` ${done.skippedAtoms.length} fact${done.skippedAtoms.length === 1 ? ' is' : 's are'} shared with other evidence and left unchanged.` : '';
-    flash(req, `${changed}. Existing facts and tasks were updated; the original recording is unchanged.${shared}`);
+    const elsewhere = done.otherSpaceParts
+      ? ` ${done.otherSpaceParts === 1 ? 'One part' : `${done.otherSpaceParts} parts`} of this meeting in the other space ${done.otherSpaceParts === 1 ? 'was' : 'were'} left unchanged.` : '';
+    flash(req, `${changed}. Existing facts and tasks were updated; the original recording is unchanged.${shared}${elsewhere}`);
   } catch (err) { flash(req, err.message, 'bad'); }
   res.redirect(fallback);
 });

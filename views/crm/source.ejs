@@ -44,10 +44,11 @@
       <form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/speaker-names">
       <% speakers.labels.forEach((speaker, i) => { %>
         <label for="speaker-name-<%= i %>"><%= speaker.label %><%= speaker.placeholder ? ' (not named yet)' : '' %></label>
-        <input id="speaker-name-<%= i %>" name="name" value="<%= speaker.label %>" maxlength="120" autocomplete="off">
+        <input id="speaker-name-<%= i %>" name="name" value="<%= speaker.label %>" maxlength="80" autocomplete="off">
         <input type="hidden" name="label" value="<%= speaker.label %>">
       <% }) %>
       <p class="subline">Type the confirmed name over the label you want to change, then save. A label left as it is stays as it is.</p>
+      <% if (speakers.otherSpace) { %><p class="subline"><%= speakers.otherSpace === 1 ? 'One part' : speakers.otherSpace + ' parts' %> of this meeting moved to the other space <%= speakers.otherSpace === 1 ? 'is' : 'are' %> not changed from here.</p><% } %>
       <button class="btn" type="submit">Save speaker names</button>
       </form>
     </div>

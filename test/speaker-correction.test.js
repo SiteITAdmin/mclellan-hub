@@ -99,7 +99,7 @@ test('names are validated and an already-corrected label cannot be replayed', ()
   assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Speaker 2' }]), /real name/);
   assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: '' }]), /real name/);
   assert.throws(() => correction.correct(source.id, [{ label: 'Nobody', name: 'Alex' }]), /no speaker called/);
-  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Alex: Admin' }]), /real name/);
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Alex: Admin' }]), /Use only letters/);
   correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]);
   assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]), /no speaker called/);
   assert.equal(correction.review(source.id).labels.find(x => x.label === 'Speaker 1'), undefined);
@@ -196,4 +196,76 @@ test('the signed-in source page offers the correction and saves it', async () =>
     assert.equal(res.status, 302);
     assert.match(db.crm().prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text, /^Margaret Callanan: /);
   } finally { server.close(); }
+});
+
+test('a real task snapshot follows the correction and keeps its id and quote', () => {
+  const { source, taskId } = seed();
+  const crm = db.crm();
+  require('../lib/crm/tasks').snapshot(taskId);
+  const snapId = crm.prepare('SELECT source_id FROM tasks WHERE id = ?').get(taskId).source_id;
+  assert.notEqual(snapId, source.id);
+  assert.match(crm.prepare('SELECT text FROM sources WHERE id = ?').get(snapId).text, /^Chase Speaker 1 for the quote\n\nSpeaker 1 will send/);
+
+  const done = correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]);
+  assert.deepEqual(done.tasks, [taskId]);
+  assert.equal(crm.prepare('SELECT source_id FROM tasks WHERE id = ?').get(taskId).source_id, snapId, 'no new snapshot source');
+  const snap = crm.prepare('SELECT title, text, text_fresh FROM sources WHERE id = ?').get(snapId);
+  assert.equal(snap.title, 'Chase Margaret Callanan for the quote');
+  assert.ok(snap.text.startsWith('Chase Margaret Callanan for the quote\n\nMargaret Callanan will send the quote. Speaker 10 will not.\n\n“I will send the quote.”'));
+  assert.ok(snap.text.includes('Task state: needsAction'));
+  assert.equal(snap.text_fresh, snap.text);
+  const fts = crm.prepare("SELECT title, body FROM sources_fts WHERE source_id = ?").get(snapId);
+  assert.ok(!/Speaker 1\b(?!0)/.test(fts.title + fts.body), 'search no longer finds the placeholder in the task');
+  assert.equal(crm.prepare("SELECT count(*) n FROM sources_fts WHERE source_id = ? AND sources_fts MATCH 'Margaret'").get(snapId).n, 1);
+});
+
+test('nothing is corrected while part of the meeting is being read or its promise sorted', () => {
+  const { source, atomId } = seed();
+  const crm = db.crm();
+  const before = crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text;
+  crm.prepare("UPDATE sources SET atomise_status = 'queued' WHERE id = ?").run(source.id);
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]), /being read right now/);
+  crm.prepare("UPDATE sources SET atomise_status = 'done' WHERE id = ?").run(source.id);
+
+  db.setSetting('promise_classify_job', JSON.stringify({ jobId: 'job-1', ids: [atomId] }));
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]), /being sorted right now/);
+  assert.equal(crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text, before);
+  assert.equal(crm.prepare('SELECT statement FROM atoms WHERE id = ?').get(atomId).statement, 'Speaker 1 will send the quote. Speaker 10 will not.');
+  assert.equal(crm.prepare("SELECT count(*) n FROM settings WHERE key LIKE 'speaker-correction:%'").get().n, 0);
+
+  db.setSetting('promise_classify_job', JSON.stringify({ jobId: 'job-2', ids: [uuid()] }));
+  correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]);
+  assert.match(crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text, /^Margaret Callanan: /);
+});
+
+test('a saved name can always be offered and corrected again', () => {
+  const { source } = seed();
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Dr. Pat (Acme), Ltd' }]), /Use only letters/);
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'A$&B$1' }]), /Use only letters/);
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'x'.repeat(81) }]), /up to 80/);
+  correction.correct(source.id, [{ label: 'Speaker 1', name: 'Seán O’Brien-Kelly' }]);
+  assert.ok(correction.review(source.id).labels.some(x => x.label === 'Seán O’Brien-Kelly'));
+  correction.correct(source.id, [{ label: 'Seán O’Brien-Kelly', name: 'Seán O’Brien' }]);
+  const text = db.crm().prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text;
+  assert.match(text, /^Seán O’Brien: The quote as spoken\./);
+});
+
+test('a part moved to the other space is not corrected from this one', () => {
+  const { source } = seed();
+  const crm = db.crm();
+  const text = 'Speaker 1: Personal part.\n\nSpeaker 7: Only here.';
+  const personal = sources.admitSource({ space: 'personal', kind: 'meeting', origin: 'krisp', externalId: `${INTAKE}:9`,
+    title: 'Mobile recording', occurredAt: 1762787482, text, fresh: text, rawRef: `krisp-intake:${INTAKE}` }).source;
+  crm.prepare('UPDATE krisp_intake SET source_ids = ? WHERE id = ?').run(JSON.stringify([source.id, personal.id]), INTAKE);
+
+  const found = correction.review(source.id);
+  assert.equal(found.otherSpace, 1);
+  assert.ok(!found.labels.some(x => x.label === 'Speaker 7'), 'labels from the other space are not offered');
+  assert.equal(found.labels.find(x => x.label === 'Speaker 1').count, 2);
+
+  const done = correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]);
+  assert.equal(done.otherSpaceParts, 1);
+  assert.deepEqual(done.sourceIds, [source.id]);
+  assert.equal(crm.prepare('SELECT text FROM sources WHERE id = ?').get(personal.id).text, text);
+  assert.match(crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text, /^Margaret Callanan: /);
 });
