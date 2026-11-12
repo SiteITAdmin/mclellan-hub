@@ -124,10 +124,35 @@ be ignored; there is no unreadable-source admission bypass. Forms must match the
 current raw revision and contain exactly one nonblank name per speaker. Release
 is transactional and repeated submissions return the existing sources.
 
-Wispr remains connection-only. Future capture must first retain raw evidence,
-use the reusable `lib/crm/speaker-review.js` gate, persist a confirmed attribution
-receipt, and require explicit space release before calling source admission.
-No capture, polling, new model path, or Wispr admission has been added here.
+### Wispr Flow meetings (12 November 2026)
+
+`crm_wispr_capture` (every 15 minutes, `lib/crm/wispr-capture.js`) asks Wispr's
+MCP server for the meetings of the last 7 days (`search_meetings`), and for each
+one that is finalized with a transcript fetches it with `get_meeting`. Wispr
+returns the transcript in ranges of at most 40,000 characters, each wrapped in a
+guard line and `<<<END TRANSCRIPT>>>`, with a continuation note giving the next
+offset; the ranges are joined exactly. A wrapper or note the Hub does not
+recognise makes the meeting an unreadable held record, never guessed-at text.
+
+The meeting is held in `krisp_intake` with `origin = 'wispr'` (id =
+sha256 of `wispr:<meeting id>`, so one card per meeting) behind the same speaker
+gate: nothing reaches sources, Search or the reader until Douglas confirms every
+speaker and releases to Work or Personal. Unlike Krisp, Wispr's labels are
+usually real names, so the form offers them filled in (placeholders such as
+`Speaker 3` stay blank) and pressing Release is the confirmation. While a copy
+is held it follows Wispr: it is fetched again whenever `modified_at` changes and,
+for its first two days, on every run, so a speaker reassigned in Wispr shows up
+here and any form opened before the change is refused. Once released or ignored
+the meeting is never fetched again. Shared meetings (not Douglas's own) and
+meetings Wispr has not finished are skipped; unfinished ones are picked up on a
+later run.
+
+Released sources have `origin = 'wispr'`, `kind = 'meeting'` and
+`occurred_at` = the meeting's start as Wispr reports it (the calendar start), so
+they attach to their calendar entry by the existing time rule. The speaker
+correction panel works on them as it does for Krisp. A failed run is recorded in
+`job_runs` (`wispr_capture`), shown on the Meetings page and on Today, as is a
+capture that has not succeeded for 45 minutes while Wispr is connected.
 
 ### Correcting a processed meeting
 

@@ -1,6 +1,6 @@
 <%- include('_top') %>
 <% const quoted = s.text.length > (s.text_fresh || '').length ? s.text.slice((s.text_fresh || '').length).trim() : ''; %>
-<div class="crumbs"><a href="/crm/<%= space %>/captured">Captured</a> / <%= s.origin === 'krisp' ? 'Krisp transcript' : s.kind === 'note' ? 'Note' : s.kind === 'whatsapp' ? 'WhatsApp' : s.kind === 'calendar' ? 'Calendar entry' : 'Email' %></div>
+<div class="crumbs"><a href="/crm/<%= space %>/captured">Captured</a> / <%= s.origin === 'krisp' ? 'Krisp transcript' : s.origin === 'wispr' ? 'Wispr Flow transcript' : s.kind === 'note' ? 'Note' : s.kind === 'whatsapp' ? 'WhatsApp' : s.kind === 'calendar' ? 'Calendar entry' : 'Email' %></div>
 <div class="title-row"><div><h1><%= s.title %></h1>
   <p class="subline"><%= fmt(s.occurred_at) %><%= s.origin === 'outlook' ? ', Outlook' : s.origin === 'whatsapp' ? ', WhatsApp' : s.origin === 'gmail' ? ', Gmail' : String(s.origin).startsWith('gmail:') ? `, ${s.origin.slice(6)}` : '' %><%= s.direction === 'out' ? ', sent by you' : s.direction === 'in' ? ', received' : '' %>. <%- include('_state', { s }) %></p></div>
   <div class="form-row" style="flex-wrap:nowrap">
@@ -8,6 +8,9 @@
   <% if (s.atomise_status !== 'queued' && !(s.origin === 'calendar' && s.atomise_status === 'ignored')) { %><form method="post" action="/crm/<%= space %>/sources/<%= s.id %>/move-space"><button class="btn" type="submit" title="Its facts are taken back and it is read again in the other space">Move to <%= space === 'work' ? 'Personal' : 'Work' %></button></form><% } %>
   </div>
 </div>
+<% if (s.kind === 'meeting') { const m = locals.meeting; %>
+<p class="subline"><% if (m) { %>Recorded in <a href="/crm/<%= space %>/calendar?from=<%= new Date(m.start_at * 1000).toLocaleDateString('en-CA', { timeZone: 'Europe/Dublin' }) %>"><%= m.title || '(No title)' %></a>, <%= fmt(m.start_at) %>. <% } else { %>No calendar entry at the time this was recorded. <% } %><a href="/crm/<%= space %>/meetings">All transcripts</a></p>
+<% } %>
 <% if (s.space_by) { const sp = space === 'work' ? 'Work' : 'Personal'; %>
 <p class="subline space-why"><%= s.space_by === 'ask' ? `Under ${sp} for now: Claude decides Work or Personal when it reads this.`
   : s.space_by === 'clues' ? `In ${sp} because ${s.space_why}.`
@@ -58,5 +61,5 @@
 </section>
 <p><a class="btn" href="/crm/<%= space %>/tasks/new?sourceId=<%= s.id %>">Add a task from this source</a></p>
 
-<% if (s.origin === "krisp") { %><details><summary>Original Krisp delivery</summary><pre style="white-space:pre-wrap"><%= /^krisp-intake:[a-f0-9]{64}$/.test(s.raw_ref || '') ? (krispRaw || 'Original delivery unavailable') : s.raw_ref %></pre></details><% } %>
+<% if (s.origin === "krisp" || s.origin === "wispr") { %><details><summary>Original <%= s.origin === 'wispr' ? 'Wispr record' : 'Krisp delivery' %></summary><pre style="white-space:pre-wrap"><%= /^krisp-intake:[a-f0-9]{64}$/.test(s.raw_ref || '') ? (krispRaw || 'Original delivery unavailable') : s.raw_ref %></pre></details><% } %>
 <%- include('_bottom') %>

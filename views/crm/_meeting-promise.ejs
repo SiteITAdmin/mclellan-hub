@@ -1,0 +1,2 @@
+<% const mine = p.direction === 'mine'; %><span><%= mine ? p.action.charAt(0).toUpperCase() + p.action.slice(1) : `${p.who || 'They'} will ${p.action}` %><% if (mine && p.who) { %> <small>to <%= p.who %></small><% } %><% if (p.due) { %> <small>due <%= p.due %></small><% } %></span>
+<% if (mine) { %><form class="inline-form" method="post" action="/crm/<%= p.space %>/promises/<%= p.atom_id %>/task"><input type="hidden" name="back" value="<%= back %>"><button class="btn small" type="submit">Create task</button></form><% } %>

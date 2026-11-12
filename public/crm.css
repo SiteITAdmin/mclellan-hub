@@ -458,6 +458,20 @@ a.cal-item:hover { filter: brightness(.95); }
 .cal-pop-sec small { color: var(--muted); }
 .cal-pop-sec li.done a { text-decoration: line-through; color: var(--muted); }
 .cal-pop a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.cal-pop-sec li form { margin-left: 6px; }
+.recording { padding: 16px 0; border-top: 1px solid var(--row-edge); }
+.recording:first-of-type { margin-top: 14px; }
+.recording h3 { margin: 0 0 4px; }
+.recording .stamp { margin: 0 0 4px; color: var(--muted); font-size: 13px; }
+.recording .stamp a, .recording-row a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.recording-row { margin: 10px 0 0; font-size: 14px; }
+.recording-row > strong { display: inline-block; min-width: 190px; font-weight: 600; vertical-align: top; }
+.recording-row ul { display: inline-grid; gap: 4px; margin: 0; padding: 0; list-style: none; max-width: calc(100% - 200px); }
+.recording-row li.done a { text-decoration: line-through; color: var(--muted); }
+.recording-row small { color: var(--muted); }
+.recording-row li form { margin-left: 6px; }
+.recording details, .recording form { margin-top: 10px; }
+@media (max-width: 700px) { .recording-row > strong { display: block; } .recording-row ul { max-width: 100%; } }
 .cal-pop-none { margin: 0; color: var(--muted); font-size: 13px; }
 a.cal-item.event { cursor: pointer; }
 .cal-key { margin: 14px 0 0; color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }

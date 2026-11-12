@@ -1,0 +1,49 @@
+<% const from = o => o === 'wispr' ? 'Wispr Flow' : o === 'krisp' ? 'Krisp' : o === 'boox' ? 'Boox notebook' : 'Added by hand';
+   const spaceName = s => s === 'work' ? 'Work' : 'Personal';
+   const calDate = ts => new Date(ts * 1000).toLocaleDateString('en-CA', { timeZone: 'Europe/Dublin' });
+   const placeholder = label => /^(speaker|unknown|unidentified)(\s*\d+)?$/i.test(label.trim()); %>
+<section class="grid first"><div class="panel s12">
+<div class="panel-head"><h2>Waiting for you</h2><span class="chip"><%= held.length %> to release</span></div>
+<p class="subline">A recording stays outside Search and the reader until you confirm every speaker and release it to Work or Personal. Unreleased recordings appear in both spaces. Ignore the ones you do not want imported. Krisp intake is <%= configured ? 'configured' : 'not configured' %>.</p>
+<% if (!held.length) { %><div class="empty" style="margin-top:14px">Nothing is waiting.</div><% } %>
+<% for (const d of held) { %>
+<article class="recording"><h3><%= d.title %></h3>
+<p class="stamp"><%= fmt(d.occurred_at || d.received_at) %> · <%= from(d.origin) %> · <%= d.event ? `In your calendar as ${d.event.title || '(No title)'} (${spaceName(d.event.space)})` : 'No calendar entry at that time' %></p>
+<% if (d.attendees.length) { %><p class="stamp">Wispr lists: <%= d.attendees.join(', ') %></p><% } %>
+<% if (!d.readable) { %><p class="flash bad">Empty or unsupported transcript. Held outside the reader. Inspect the original record or Ignore.</p><% } %>
+<details><summary>Transcript</summary><pre style="white-space:pre-wrap"><%= d.transcript %></pre></details>
+<details><summary>Original <%= from(d.origin) %> record</summary><pre style="white-space:pre-wrap"><%= d.raw_json %></pre></details>
+<% if (d.review.speakers.length) { %>
+<form method="post" action="/crm/krisp/<%= d.id %>/classify">
+<input type="hidden" name="returnSpace" value="<%= space %>"><input type="hidden" name="revision" value="<%= d.review.revision %>">
+<% d.review.speakers.forEach((speaker, i) => { %>
+<fieldset class="speaker">
+<legend><%= speaker.label %></legend>
+<div class="field"><label for="speaker-<%= d.id %>-<%= i %>">Who is &ldquo;<%= speaker.label %>&rdquo;?</label>
+<input class="input" id="speaker-<%= d.id %>-<%= i %>" name="names" required maxlength="120" autocomplete="off" placeholder="Full name"<% if (d.origin === 'wispr' && !placeholder(speaker.label)) { %> value="<%= speaker.label %>"<% } %>></div>
+<p class="speaker-said">What <%= speaker.label %> said</p>
+<% for (const preview of speaker.previews) { %><blockquote><%= preview %></blockquote><% } %>
+</fieldset>
+<% }) %>
+<p><%= d.origin === 'wispr' ? 'Wispr’s own names are filled in: correct any that are wrong. A change you make in Wispr reaches this copy while it waits here. ' : 'Confirm every name above. ' %>This releases the attributed transcript to the existing reader for facts and tasks.</p>
+<div class="form-row"><label><input type="radio" name="choice" value="work" required> Work</label> <label><input type="radio" name="choice" value="personal" required> Personal</label>
+<button class="btn" type="submit">Release meeting</button></div>
+</form><% } else { %><p class="flash bad"><%= d.review.reason %></p><% } %>
+<form method="post" action="/crm/krisp/<%= d.id %>/classify"><input type="hidden" name="returnSpace" value="<%= space %>"><button class="btn" name="choice" value="ignore">Ignore</button></form>
+</article><% } %>
+</div></section>
+
+<section class="grid"><div class="panel s12">
+<div class="panel-head"><h2>Transcripts</h2><span class="chip"><%= recordings.length %> in <%= spaceName(space) %></span><a class="end" href="/crm/<%= space %>/calendar">Calendar</a></div>
+<p class="subline">Each transcript with the calendar entry it was recorded in and what came out of it.</p>
+<% if (!recordings.length) { %><div class="empty" style="margin-top:14px">No transcripts in <%= spaceName(space) %> yet.</div><% } %>
+<% for (const r of recordings) { %>
+<article class="recording"><h3><%= r.event ? (r.event.title || '(No title)') : r.title %></h3>
+<p class="stamp"><%= fmt(r.occurred_at) %> · <%= from(r.origin) %><% if (r.event) { %> · <a href="/crm/<%= space %>/calendar?from=<%= calDate(r.event.start_at) %>">In the calendar</a><%= r.event.space === space ? '' : ` (filed as ${spaceName(r.event.space)} there)` %> · recorded as <%= r.title %><% } else { %> · no calendar entry at that time<% } %></p>
+<p class="recording-row"><strong>Transcript</strong> <% r.sources.slice().reverse().forEach((s, i) => { %><a href="/crm/<%= s.space %>/sources/<%= s.id %>"><%= r.sources.length > 1 ? `Part ${i + 1}` : 'Read it' %></a> <% }) %>
+<% if (r.failed) { %><span class="pill neg"><%= r.failed %> could not be read</span><% } else if (r.unread) { %><span class="pill neutral">Still being read</span><% } else { %><span class="stamp"><%= r.facts %> <%= r.facts === 1 ? 'fact' : 'facts' %></span><% } %></p>
+<% if (r.tasks.length) { %><div class="recording-row"><strong>Tasks</strong><ul><% for (const t of r.tasks) { %><li<%- t.status === 'completed' ? ' class="done"' : '' %>><a href="/crm/<%= t.space %>/tasks/<%= t.id %>"><%= t.title %></a><% if (t.due) { %> <small>due <%= t.due %></small><% } %></li><% } %></ul></div><% } %>
+<% if (r.promises.length) { %><div class="recording-row"><strong>Promised, no task yet</strong><ul><% for (const p of r.promises) { %><li><%- include('_meeting-promise', { p, back: `/crm/${p.space}/meetings` }) %></li><% } %></ul></div><% } %>
+<% if (!r.tasks.length && !r.promises.length && !r.unread && !r.failed) { %><p class="recording-row stamp">No tasks or promises came out of this one.</p><% } %>
+</article><% } %>
+</div></section>

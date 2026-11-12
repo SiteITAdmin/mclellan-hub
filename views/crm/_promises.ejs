@@ -8,7 +8,7 @@
     <div class="meta">
       <% if (!owedToMe && p.who) { %><span>To <% if (p.person_id) { %><a href="/crm/<%= space %>/people/<%= p.person_id %>"><%= p.person_name %></a><% } else { %><%= p.who %><% } %></span><% } %>
       <span class="<%= p.overdue ? 'late' : '' %>"><%= p.due ? `Due ${p.due_label}` : owedToMe ? (p.days === 0 ? 'Since today' : `Waiting ${p.days} ${p.days === 1 ? 'day' : 'days'}`) : (p.days === 0 ? 'Said today' : `Said ${p.days} ${p.days === 1 ? 'day' : 'days'} ago`) %></span>
-      <% if (p.source_id) { %><a href="/crm/<%= space %>/sources/<%= p.source_id %>" title="<%= p.source_title %>"><%= p.source_kind === 'note' ? 'The note' : p.source_kind === 'whatsapp' ? 'The WhatsApp chat' : 'The email' %></a><% } %>
+      <% if (p.source_id) { %><a href="/crm/<%= space %>/sources/<%= p.source_id %>" title="<%= p.source_title %>"><%= p.source_kind === 'note' ? 'The note' : p.source_kind === 'whatsapp' ? 'The WhatsApp chat' : p.source_kind === 'meeting' ? 'The meeting' : 'The email' %></a><% } %>
       <% if (p.task_id) { %><a href="/crm/<%= space %>/tasks/<%= p.task_id %>"><%= owedToMe ? 'Chase task' : 'Task' %></a><% } %>
       <% if (owedToMe && !p.task_id && p.certainty === 'clear') { %><span><%= p.looks_done_source_id ? 'No chase while this waits for you' : `Chase task on ${p.chase_on}` %></span><% } %>
       <% if (p.certainty === 'unsure') { %><span>Not definite</span><% } %>

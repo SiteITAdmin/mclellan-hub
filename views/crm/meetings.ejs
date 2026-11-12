@@ -3,12 +3,12 @@
 <div class="title-row"><div><h1>Meetings</h1><p class="subline">Meeting preparation, recordings and transcripts for <%= where %>.</p></div></div>
 <%- include('_meeting-prep', { meetings }) %>
 <p><a class="btn" href="/crm/<%= space %>/note">Add a transcript or meeting note</a></p>
-<%- include('_krisp', { deliveries, configured }) %>
-<section class="grid first">
+<%- include('_recordings', { held, recordings, configured }) %>
+<section class="grid">
   <div class="panel s8">
     <div class="panel-head"><h2>Wispr Flow</h2>
       <% if (w.connected) { %><span class="chip">Connected</span><% } %></div>
-    <p class="subline">One shared Wispr sign-in serves Work and Personal. Disconnecting here disconnects both spaces. Wispr meeting capture is not enabled yet.</p>
+    <p class="subline">One shared Wispr sign-in serves Work and Personal. Disconnecting here disconnects both spaces. Meetings Wispr has finished are fetched every 15 minutes, for the last 7 days, and wait above until you release them.</p>
     <% if (!w.authorized) { %>
     <p>Choose “Connect Wispr Flow” below. Wispr opens in this tab: sign in, choose “Allow access”, and it brings you back here.</p>
     <p class="subline">The server address <code>https://api.wisprflow.ai/connect/mcp</code> is for MCP clients. Opening it directly in a browser shows “Method Not Allowed”; that does not mean sign-in has failed.</p>
@@ -17,8 +17,11 @@
     <% if (w.error) { %><p><span class="pill neg">Problem</span> <%= w.error %></p><% } %>
     <% if (w.authorized) { %>
       <p><%= w.connected ? 'Connected' : 'Signed in; connection check needed. Sign-in saved' %> <%= fmt(w.connectedAt) %><% if (w.account && (w.account.email || w.account.name)) { %> as <%= w.account.name || '' %> <%= w.account.email ? `(${w.account.email})` : '' %><% } %>.</p>
-      <p class="subline">Meetings are not read into the CRM yet: that is the next step, built against what Wispr returns (<%= w.tools.length %> tools offered).</p>
+      <% if (capture.failed) { %><p><span class="pill neg">Problem</span> Fetching meetings failed <%= fmt(capture.run.last_error_at) %>: <%= capture.run.last_error %></p>
+      <% } else if (capture.run && capture.run.last_ok) { const c = capture.run.detail || {}; %><p class="subline">Meetings last checked <%= fmt(capture.run.last_ok) %>: Wispr has <%= c.seen || 0 %> from the last 7 days<%= c.notReady ? `, ${c.notReady} not finished yet` : '' %><%= c.held ? `, ${c.held} newly held for you` : '' %><%= c.updated ? `, ${c.updated} updated` : '' %>.</p>
+      <% } else { %><p class="subline">Meetings have not been checked yet.</p><% } %>
       <div class="decide">
+        <form method="post" action="/crm/<%= space %>/meetings/fetch"><button class="btn small" type="submit">Fetch meetings now</button></form>
         <form method="post" action="/crm/<%= space %>/meetings/check"><button class="btn small" type="submit">Check the connection</button></form>
         <% if (!w.connected) { %><form method="post" action="/crm/<%= space %>/meetings/connect"><button class="btn primary" type="submit">Connect again</button></form><% } %>
         <form method="post" action="/crm/<%= space %>/meetings/disconnect"><button class="btn text" type="submit">Disconnect shared sign-in</button></form>

@@ -416,7 +416,7 @@ router.get('/crm/:space/captured', spaceParam, (req, res) => {
 router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
   const s = views.source(req.params.id);
   if (!s || s.space !== req.params.space) return res.status(404).send('Not found');
-  res.render('crm/source', { krispRaw: s.origin === 'krisp' ? require('../lib/crm/krisp').rawForSource(s) : null, speakers: speakerCorrection.review(s.id), page: 'captured', s, title: s.title });
+  res.render('crm/source', { krispRaw: ['krisp', 'wispr'].includes(s.origin) ? require('../lib/crm/krisp').rawForSource(s) : null, meeting: s.kind === 'meeting' ? require('../lib/crm/meetings').eventFor(s) : null, speakers: speakerCorrection.review(s.id), page: 'captured', s, title: s.title });
 });
 
 router.post('/crm/:space/sources/:id/speaker-names', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -723,9 +723,15 @@ router.get('/crm/wispr/callback', async (req, res) => {
 
 router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
   const space = req.params.space;
-  res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: require('../lib/crm/meetings').today(space),
+  const meetings = require('../lib/crm/meetings');
+  res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: meetings.today(space),
     configured: !!process.env.KRISP_WEBHOOK_SECRET,
-    deliveries: require('../lib/crm/krisp').list().filter(d => d.status === 'pending' || d.sources.some(s => s.space === space)).map(d => ({ ...d, sources: d.sources.filter(s => s.space === space) })),
+    held: require('../lib/crm/krisp').list().filter(d => d.status === 'pending').map(d => {
+      let attendees = [];
+      if (d.origin === 'wispr') try { attendees = (JSON.parse(d.raw_json).meeting.attendees || []).map(a => a && a.name).filter(x => typeof x === 'string' && x); } catch { /* shown without them */ }
+      return { ...d, attendees, event: d.occurred_at ? meetings.eventFor(d) : null };
+    }),
+    recordings: meetings.recordings(space), capture: require('../lib/crm/wispr-capture').state(),
   });
 });
 
@@ -738,6 +744,10 @@ router.post('/crm/:space/meetings/:action', spaceParam, requireSameOrigin, write
     }
     else if (req.params.action === 'disconnect') { wispr.disconnect(space); flash(req, 'Wispr Flow disconnected for Work and Personal. Remove the Hub in your Wispr account too if you want it fully cut off.'); }
     else if (req.params.action === 'check') { await wispr.afterConnect(space); flash(req, 'The connection works.'); }
+    else if (req.params.action === 'fetch') {
+      const r = await require('../lib/crm/wispr-capture').run();
+      flash(req, r.connected ? `Wispr has ${r.seen} meeting${r.seen === 1 ? '' : 's'} from the last 7 days: ${r.held} newly held for you${r.updated ? `, ${r.updated} updated` : ''}${r.notReady ? `, ${r.notReady} not finished yet` : ''}.` : 'Wispr Flow is not connected.');
+    }
     else return res.status(404).send('Not found');
   } catch (err) {
     flash(req, err.message, 'bad');

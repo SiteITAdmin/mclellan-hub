@@ -42,7 +42,7 @@
     <% } %>
   </div>
   <% const longDay = ts => new Date(ts * 1000).toLocaleDateString('en-IE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Dublin' }); %>
-  <% for (const { i, n } of pops) { const d = i.detail || { people: [], guests: [], transcripts: [], tasks: [] }; %>
+  <% for (const { i, n } of pops) { const d = i.detail || { people: [], guests: [], transcripts: [], tasks: [], promises: [] }; %>
   <template id="cal-pop-<%= n %>">
     <div class="cal-pop-head"><span class="cal-pop-swatch" data-space="<%= i.space %>"></span><div><h2 class="cal-pop-title"><%= i.title %></h2>
       <p class="cal-pop-when"><%= longDay(i.start) %> · <%= fmt(i.start, 'time') %>–<%= fmt(i.end, 'time') %> <span class="cal-tag"><%= name(i.space) %></span></p></div></div>
@@ -62,9 +62,12 @@
       <% } %>
     </div>
     <div class="cal-pop-sec"><h3>Tasks from this meeting</h3>
-      <% if (!d.tasks.length) { %><p class="cal-pop-none">None</p><% } %>
+      <% if (!d.tasks.length) { %><p class="cal-pop-none"><%= d.promises.length ? 'None made yet' : 'None' %></p><% } %>
       <% if (d.tasks.length) { %><ul><% for (const t of d.tasks) { %><li<%- t.status === 'completed' ? ' class="done"' : '' %>><a href="/crm/<%= t.space %>/tasks/<%= t.id %>"><%= t.title %></a><% if (t.due) { %> <small>due <%= t.due %></small><% } %></li><% } %></ul><% } %>
     </div>
+    <% if (d.promises.length) { %><div class="cal-pop-sec"><h3>Promised, no task yet</h3>
+      <ul><% for (const p of d.promises) { %><li><%- include('_meeting-promise', { p, back: `/crm/${p.space}/calendar?from=${days[0].date}` }) %></li><% } %></ul>
+    </div><% } %>
   </template>
   <% } %>
   <div class="cal-pop" id="cal-pop" role="dialog" aria-modal="false" aria-labelledby="cal-pop-label" hidden>
