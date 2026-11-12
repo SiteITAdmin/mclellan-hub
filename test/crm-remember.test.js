@@ -126,15 +126,17 @@ test('previous Dublin day knowledge briefing isolates evidence, distinguishes re
   fact('no-source', 'personal', start, null);
   const result = digest.build('personal', NOW);
   assert.match(result.text, /CRM briefing — 2026-11-09 \(Dublin\)/);
-  assert.match(result.text, /Updated knowledge: Budget <approved> & ready/);
-  assert.match(result.text, /Added knowledge \(historical evidence\): addition/);
+  assert.match(result.text, /Updated: Budget <approved> & ready \(Previously: old\)/);
+  assert.equal(result.empty, false);
+  assert.ok(!result.text.includes('historical evidence'));
+  assert.match(result.text, /Learned: addition/);
   assert.match(result.text, /Fact: https:.*\/personal\/facts\/new/);
   assert.match(result.html, /Budget &lt;approved&gt; &amp; ready/);
   assert.match(result.html, /<a href="https:.*\/personal\/sources\//);
   for (const excluded of ['duplicate-evidence', 'today', 'secret', 'wrong-source', 'no-source']) {
-    assert.ok(!result.text.includes(`knowledge: ${excluded}`));
+    assert.ok(!result.text.includes(`: ${excluded}`));
   }
-  assert.match(digest.build('work', NOW).text, /Added knowledge: secret/);
+  assert.match(digest.build('work', NOW).text, /Learned: secret/);
 });
 
 test('Dublin previous calendar day includes both DST boundaries and bounds the briefing', () => {
@@ -159,7 +161,51 @@ test('Dublin previous calendar day includes both DST boundaries and bounds the b
     db.crm().prepare('INSERT INTO atom_sources (atom_id, source_id) VALUES (?, ?)').run(`bounded${i}`, s.id);
   }
   const briefing = digest.previousDay('work', NOW);
-  assert.equal(briefing.lines.filter(l => l.text?.startsWith('Added knowledge')).length, 8);
-  assert.match(briefing.lines.at(-1).text, /More knowledge/);
+  assert.equal(briefing.lines.filter(l => l.text?.startsWith('Learned')).length, 8);
+  assert.equal(briefing.lines.at(-1), '4 more facts learned or updated in this period are not shown.');
   assert.match(JSON.stringify(digest.previousDay('personal', planner.epoch('2026-12-01', 450))), /No source-backed/);
+});
+
+test('Monday Work covers Friday through Sunday only; Personal and Tuesday retain yesterday', () => {
+  const monday = planner.epoch('2026-11-09', 450);
+  for (const space of ['work', 'personal']) {
+    const source = mail(space, `${space}@example.com`, 1);
+    for (const date of ['2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09']) {
+      const id = `${space}-${date}`, created = planner.epoch(date);
+      db.crm().prepare('INSERT INTO atoms (id, space, statement, said_at, created_at) VALUES (?, ?, ?, ?, ?)').run(id, space, date, created, created);
+      db.crm().prepare('INSERT INTO atom_sources (atom_id, source_id) VALUES (?, ?)').run(id, source.id);
+    }
+  }
+  const work = digest.previousDay('work', monday);
+  assert.equal(work.title, 'CRM briefing — 2026-11-06 to 2026-11-08 (Dublin)');
+  assert.deepEqual(work.lines.filter(l => l.text).map(l => l.text), ['Learned: 2026-11-08', 'Learned: 2026-11-07', 'Learned: 2026-11-06']);
+  assert.deepEqual(digest.previousDay('personal', monday).lines.filter(l => l.text).map(l => l.text), ['Learned: 2026-11-08']);
+  assert.deepEqual(digest.previousDay('work', NOW).lines.filter(l => l.text).map(l => l.text), ['Learned: 2026-11-09']);
+});
+
+test('non-calendar and mixed evidence outrank calendar copies, with at most eight fact/source pairs', () => {
+  const note = mail('work', 'evidence@example.com', 1);
+  const calendar = mail('work', 'calendar@example.com', 1);
+  db.crm().prepare("UPDATE sources SET kind = 'calendar', origin = 'calendar', is_history = 1 WHERE id = ?").run(calendar.id);
+  for (let i = 0; i < 11; i++) {
+    const id = `rank-${i}`, created = planner.epoch('2026-11-09') + i;
+    db.crm().prepare('INSERT INTO atoms (id, space, statement, said_at, created_at, is_history) VALUES (?, ?, ?, ?, ?, 1)').run(id, 'work', id, created, created);
+    db.crm().prepare('INSERT INTO atom_sources (atom_id, source_id) VALUES (?, ?)').run(id, calendar.id);
+    if (i < 2) db.crm().prepare('INSERT INTO atom_sources (atom_id, source_id) VALUES (?, ?)').run(id, note.id);
+  }
+  const briefing = digest.previousDay('work', NOW);
+  const facts = briefing.lines.filter(l => l.links);
+  assert.equal(facts.length, 8);
+  assert.deepEqual(facts.slice(0, 2).map(l => l.text), ['Learned: rank-1', 'Learned: rank-0']);
+  assert.ok(facts.slice(0, 2).every(l => l.links[1].url.endsWith(note.id)));
+  assert.ok(facts.every(l => l.links.length === 2));
+  assert.equal(briefing.lines.at(-1), '3 more facts learned or updated in this period are not shown.');
+  assert.ok(!JSON.stringify(briefing).includes('historical evidence'));
+});
+
+test('empty briefing keeps a meaningful empty flag', t => {
+  t.mock.method(require('../lib/crm/views'), 'health', () => []);
+  assert.equal(digest.previousDay('work', NOW).empty, true);
+  assert.equal(digest.build('work', NOW).empty, true);
+  assert.match(digest.build('work', NOW).text, /No source-backed knowledge learned or updated/);
 });
