@@ -2,7 +2,8 @@
 <div class="title-row"><div><h1>Boox notebooks</h1><p class="subline">Pages from onyx / NoteMax / Notebooks in Drive. Choose the space and kind once for each notebook.</p></div></div>
 <section class="grid first"><div class="panel s12">
 <p>Existing pages are history only. New pages are read automatically. Journals never create promises or tasks. Unclear handwriting waits here for you to check.</p>
-<p class="stamp"><%= run?.last_ok ? `Drive checked ${ago(run.last_ok)}` : 'Waiting for the first Drive check' %><% if (run?.last_error) { %> · <%= run.last_error %><% } %></p>
+<p>A day note made with “New note” in the Boox app is named for its day and space, so it is placed and read without being asked about. Each time you add to a page, only the new writing is read.</p>
+<p class="stamp"><%= run?.last_ok ? `Drive checked ${ago(run.last_ok)}` : 'Waiting for the first Drive check' %><% if (run?.last_error) { %> · <%= run.last_error %><% } %> · <%= app?.at ? `Boox app last asked for your calendar ${ago(app.at)}` : 'The Boox app has not connected yet' %></p>
 <% if (!notebooks.length) { %><p>No notebooks found yet. Sync a PDF from your Boox to the Drive folder.</p><% } %>
 <div class="list"><% for (const n of notebooks) { %><div class="row" style="display:block;padding:16px 0">
 <h2><a href="https://drive.google.com/file/d/<%= encodeURIComponent(n.id) %>/view" target="_blank" rel="noopener"><%= n.name %></a></h2>
@@ -11,7 +12,7 @@
 <label>Space <select class="input" name="space" required><option value="">Choose…</option><option value="work">Work</option><option value="personal">Personal</option></select></label>
 <label>Kind <select class="input" name="kind" required><option value="">Choose…</option><option value="meetings">Meetings</option><option value="todos">To-dos</option><option value="journal">Journal</option></select></label>
 <button class="btn" type="submit">Use this notebook</button></form>
-<% } else { %><p><span class="chip"><%= n.space === 'work' ? 'Work' : 'Personal' %></span> <%= n.kind %> · <%= n.page_count %> pages · <%= n.waiting %> waiting to read · <%= n.reviewing %> to check<% if(n.failed) { %> · <%= n.failed %> failed<% } %></p><% } %>
+<% } else { %><p><span class="chip"><%= n.space === 'work' ? 'Work' : 'Personal' %></span> <%= n.kind === 'day' ? `day note for ${dayLabel(n.day)}` : n.kind %> · <%= n.page_count %> pages · <%= n.waiting %> waiting to read · <%= n.reviewing %> to check<% if(n.failed) { %> · <%= n.failed %> failed<% } %></p><% } %>
 <% if(n.error) { %><p class="flash bad"><%= n.error %></p><% } %>
 </div><% } %></div></div></section>
 <% for (const p of pages) { %><section class="grid"><div class="panel s12">

@@ -27,7 +27,7 @@
     <% for (const d of days) { %>
     <div class="cal-day<%= d.date === today ? ' is-today' : '' %>">
       <h2 class="cal-head"><%= d.date === today ? 'Today' : dayName(d) %></h2>
-      <div class="cal-banners"><% for (const b of d.banners) { pops.push({ i: { ...b, start: b.start_at, end: b.end_at, detail: b.detail }, n: pops.length }); %><button type="button" class="cal-tag" data-pop="cal-pop-<%= pops.length - 1 %>" aria-haspopup="dialog"><%= b.title %></button><% } %></div>
+      <div class="cal-banners"><% for (const b of d.banners) { pops.push({ i: { ...b, start: b.start_at, end: b.end_at, detail: b.detail }, n: pops.length }); %><button type="button" class="cal-tag" data-pop="cal-pop-<%= pops.length - 1 %>" aria-haspopup="dialog"><%= b.title %></button><% } %><% if (notes[d.date]) { %><a class="cal-tag" href="#boox-notes" title="Handwritten on the Boox this day">Boox note</a><% } %></div>
       <div class="cal-col">
         <% if (d.window) { %><div class="cal-window" style="<%= pos({ from: d.window[0], until: d.window[1] }) %>"></div><% } %>
         <% if (d.date === today && nowLocal >= S && nowLocal <= E) { %><div class="cal-now" style="<%= pos({ from: nowLocal, until: nowLocal }) %>"></div><% } %>
@@ -129,6 +129,16 @@
       <% if (!state.late.length && !state.unplanned.length) { %><div class="empty">Every open task fits before it is due.</div><% } %>
       <% for (const t of state.late) { %><p><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a><small class="task-via">Due <%= t.due %>, but the first free time ends <%= fmt(t.ends) %></small></p><% } %>
       <% for (const t of state.unplanned) { %><p><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a><small class="task-via">No free time in the next 14 days</small></p><% } %>
+    </div>
+    <div class="panel" id="boox-notes">
+      <div class="panel-head"><h2>Boox notes</h2></div>
+      <% const noted = days.filter(d => notes[d.date]); %>
+      <% if (!noted.length) { %><div class="empty">Nothing handwritten in these 7 days. “New note” on the Boox app's calendar starts one for that day.</div><% } %>
+      <% for (const d of noted) { for (const s of ['work', 'personal']) { const n = notes[d.date][s]; if (!n) continue; %>
+      <p><strong><%= dayName(d) %></strong> <span class="cal-tag"><%= name(s) %></span>
+        <% for (const src of n.sources) { %><br><a href="/crm/<%= s %>/sources/<%= src.id %>">Page <%= src.page %></a><% } %>
+        <small class="task-via"><%= [n.waiting ? `${n.waiting} ${n.waiting === 1 ? 'page' : 'pages'} waiting to be read` : '', n.checking ? `${n.checking} to check` : '', n.failed ? `${n.failed} couldn't be read` : '', !n.sources.length && !n.waiting && !n.checking && !n.failed ? 'Nothing written on it yet' : ''].filter(Boolean).join(' · ') %><% if (n.checking || n.failed) { %> · <a href="/crm/notebooks">Open notebooks</a><% } %></small></p>
+      <% } } %>
     </div>
     <details class="panel">
       <summary>Hours</summary>

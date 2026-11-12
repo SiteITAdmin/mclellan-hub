@@ -119,7 +119,8 @@ router.get('/crm/notebooks', (req, res) => {
   const notebooks = require('../lib/crm/boox').list();
   const pages = crm().prepare(`SELECT p.id, p.page_no, p.text, p.uncertainty, p.error, p.status, n.name, n.space FROM notebook_pages p
     JOIN notebooks n ON n.id=p.notebook_id WHERE p.status IN ('review','failed') ORDER BY p.occurred_at DESC LIMIT 40`).all();
-  res.render('crm/notebooks', { page: 'notebooks', title: 'Boox notebooks', notebooks, pages, run: require('../lib/crm/runs').all().boox_capture });
+  res.render('crm/notebooks', { page: 'notebooks', title: 'Boox notebooks', notebooks, pages, run: require('../lib/crm/runs').all().boox_capture,
+    app: require('../lib/crm/boox-app').lastSeen(), dayLabel: require('../lib/crm/boox').dayLabel });
 });
 router.post('/crm/notebooks/:id/configure', requireSameOrigin, writeLimiter, (req, res) => {
   try { require('../lib/crm/boox').configure(req.params.id, req.body.space, req.body.kind); flash(req, 'Notebook set. Its pages will be read automatically.'); }
@@ -568,7 +569,8 @@ router.get('/crm/:space/calendar', spaceParam, (req, res) => {
   res.render('crm/calendar', { page: 'calendar', title: 'Calendar', today, from,
     earlier: from > first ? planner.addDays(from, -7) < first ? first : planner.addDays(from, -7) : null,
     later: from < last ? planner.addDays(from, 7) > last ? last : planner.addDays(from, 7) : null,
-    days: calendar.week(req.params.space, from), state: calendar.state(req.params.space), hours: calendar.hours() });
+    days: calendar.week(req.params.space, from), state: calendar.state(req.params.space), hours: calendar.hours(),
+    notes: require('../lib/crm/boox').dayNotes(from, planner.addDays(from, 6)) });
 });
 
 router.post('/crm/:space/calendar/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {

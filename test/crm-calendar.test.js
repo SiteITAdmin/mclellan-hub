@@ -273,7 +273,7 @@ test('historical calendar renders click targets, source links and valid pop-out 
   const ejs = require('ejs'), vm = require('node:vm');
   calendar.storeEvents({ id: 'primary', space: 'work' }, [{ id: 'history', summary: '<Review>', start: iso(at('2026-10-20', '10:00')), end: iso(at('2026-10-20', '11:00')) }], at(MON, '09:00'));
   const template = fs.readFileSync(path.join(__dirname, '../views/crm/calendar.ejs'), 'utf8').replace(/<%- include\('_top'\) %>|<%- include\('_bottom'\) %>/g, '');
-  const html = ejs.render(template, { space: 'work', today: MON, from: '2026-10-20', earlier: '2026-10-13', later: '2026-10-27', days: calendar.week('work', '2026-10-20'), state: calendar.state('work'), hours: calendar.hours(), ago: () => 'just now', fmt: ts => String(ts) });
+  const html = ejs.render(template, { space: 'work', today: MON, from: '2026-10-20', earlier: '2026-10-13', later: '2026-10-27', days: calendar.week('work', '2026-10-20'), notes: {}, state: calendar.state('work'), hours: calendar.hours(), ago: () => 'just now', fmt: ts => String(ts) });
   assert.match(html, /Earlier/);
   assert.match(html, /What happened/);
   assert.match(html, /data-pop="cal-pop-0"/);
@@ -304,7 +304,7 @@ test('future all-day appointments stay fixed while timed solo appointments offer
     { id: 'timed-solo', summary: 'Solo work', organizer: { self: true }, start: iso(at(date, '10:00')), end: iso(at(date, '11:00')) }
   ], at(date, '09:00'));
   const template = fs.readFileSync(path.join(__dirname, '../views/crm/calendar.ejs'), 'utf8').replace(/<%- include\('_top'\) %>|<%- include\('_bottom'\) %>/g, '');
-  const html = ejs.render(template, { space: 'work', today: date, from: date, earlier: null, later: null, days: calendar.week('work', date), state: calendar.state('work'), hours: calendar.hours(), ago: () => 'just now', fmt: ts => String(ts) });
+  const html = ejs.render(template, { space: 'work', today: date, from: date, earlier: null, later: null, days: calendar.week('work', date), notes: {}, state: calendar.state('work'), hours: calendar.hours(), ago: () => 'just now', fmt: ts => String(ts) });
   assert.doesNotMatch(html, /name="event" value="all-day-solo"/);
   assert.match(html, /name="event" value="timed-solo"/);
   assert.equal((html.match(/action="\/crm\/work\/calendar\/flexible"/g) || []).length, 1);
