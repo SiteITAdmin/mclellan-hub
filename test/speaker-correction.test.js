@@ -269,3 +269,32 @@ test('a part moved to the other space is not corrected from this one', () => {
   assert.equal(crm.prepare('SELECT text FROM sources WHERE id = ?').get(personal.id).text, text);
   assert.match(crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text, /^Margaret Callanan: /);
 });
+
+test('an older snapshot is corrected even when the task itself has since been retitled', () => {
+  const { source, taskId } = seed();
+  const crm = db.crm();
+  require('../lib/crm/tasks').snapshot(taskId);
+  const oldSnap = crm.prepare('SELECT source_id FROM tasks WHERE id = ?').get(taskId).source_id;
+  crm.prepare("UPDATE tasks SET title = 'Send quote', notes = '' WHERE id = ?").run(taskId);
+
+  const done = correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]);
+  assert.deepEqual(done.tasks, [], 'the task itself had nothing left to correct');
+  const t = crm.prepare('SELECT title, revision FROM tasks WHERE id = ?').get(taskId);
+  assert.equal(t.title, 'Send quote');
+  assert.equal(t.revision, 1);
+  const snap = crm.prepare('SELECT title, text FROM sources WHERE id = ?').get(oldSnap);
+  assert.equal(snap.title, 'Chase Margaret Callanan for the quote');
+  assert.ok(snap.text.startsWith('Chase Margaret Callanan for the quote\n\nMargaret Callanan will send the quote.'));
+  assert.equal(crm.prepare("SELECT count(*) n FROM sources_fts WHERE source_id = ? AND sources_fts MATCH '\"Speaker 1\"'").get(oldSnap).n, 0);
+});
+
+test('an unreadable promise-sorting state refuses the save with a clear message', () => {
+  const { source } = seed();
+  const crm = db.crm();
+  const before = crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text;
+  db.setSetting('promise_classify_job', '{not json');
+  assert.throws(() => correction.correct(source.id, [{ label: 'Speaker 1', name: 'Margaret Callanan' }]),
+    err => err.status === 400 && /unreadable state/.test(err.message));
+  assert.equal(crm.prepare('SELECT text FROM sources WHERE id = ?').get(source.id).text, before);
+  crm.prepare("DELETE FROM settings WHERE key = 'promise_classify_job'").run();
+});
