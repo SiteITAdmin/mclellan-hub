@@ -14,6 +14,7 @@ const atoms = require('../lib/crm/atoms');
 const orgs = require('../lib/crm/orgs');
 const tasks = require('../lib/crm/tasks');
 const promises = require('../lib/crm/promises');
+const speakerCorrection = require('../lib/crm/speaker-correction');
 const wispr = require('../lib/crm/wispr');
 const calendar = require('../lib/crm/calendar');
 const planner = require('../lib/crm/planner');
@@ -415,7 +416,29 @@ router.get('/crm/:space/captured', spaceParam, (req, res) => {
 router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
   const s = views.source(req.params.id);
   if (!s || s.space !== req.params.space) return res.status(404).send('Not found');
-  res.render('crm/source', { krispRaw: s.origin === 'krisp' ? require('../lib/crm/krisp').rawForSource(s) : null, page: 'captured', s, title: s.title });
+  res.render('crm/source', { krispRaw: s.origin === 'krisp' ? require('../lib/crm/krisp').rawForSource(s) : null, speakers: speakerCorrection.review(s.id), page: 'captured', s, title: s.title });
+});
+
+router.post('/crm/:space/sources/:id/speaker-names', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const fallback = `/crm/${req.params.space}/sources/${encodeURIComponent(req.params.id)}`;
+  try {
+    const s = crm().prepare('SELECT id, space FROM sources WHERE id = ?').get(req.params.id);
+    if (!s || s.space !== req.params.space) throw new Error('Source not found');
+    const labels = [].concat(req.body.label || []);
+    const names = [].concat(req.body.name || []);
+    if (labels.length !== names.length) throw new Error('Reload the page and name the speakers again');
+    const mapping = labels.map((label, i) => ({ label: String(label), name: String(names[i] || '') }))
+      .filter(x => x.name.trim() !== x.label);
+    if (!mapping.length) { flash(req, 'No speaker name was changed'); return res.redirect(fallback); }
+    const done = speakerCorrection.correct(s.id, mapping);
+    const changed = done.mapping.map(x => `${x.label} is ${x.name}`).join('; ');
+    const shared = done.skippedAtoms.length
+      ? ` ${done.skippedAtoms.length} fact${done.skippedAtoms.length === 1 ? ' is' : 's are'} shared with other evidence and left unchanged.` : '';
+    const elsewhere = done.otherSpaceParts
+      ? ` ${done.otherSpaceParts === 1 ? 'One part' : `${done.otherSpaceParts} parts`} of this meeting in the other space ${done.otherSpaceParts === 1 ? 'was' : 'were'} left unchanged.` : '';
+    flash(req, `${changed}. Existing facts and tasks were updated; the original recording is unchanged.${shared}${elsewhere}`);
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(fallback);
 });
 
 router.post('/crm/:space/sources/:id/move-space', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {

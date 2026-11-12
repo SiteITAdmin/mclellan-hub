@@ -128,3 +128,48 @@ Wispr remains connection-only. Future capture must first retain raw evidence,
 use the reusable `lib/crm/speaker-review.js` gate, persist a confirmed attribution
 receipt, and require explicit space release before calling source admission.
 No capture, polling, new model path, or Wispr admission has been added here.
+
+### Correcting a processed meeting
+
+A meeting that has already been read can still have a speaker corrected. The
+signed-in source page for any part of a classified Krisp delivery shows
+**Speaker names** with the labels found at the start of released turns. Typing a
+confirmed name over a placeholder and saving applies the change to every part of
+that delivery in the same space. A part Douglas moved to the other space is left
+alone and the receipt counts it (`otherSpaceParts`).
+
+A name may use letters, numbers, spaces, full stops, apostrophes and hyphens, up
+to 80 characters: exactly what a transcript label can be, so a saved name is
+always offered again and a typo in it can be corrected. The save is refused while
+any part of the delivery is queued for reading, or while one of its facts is in
+the promise-sorting batch, because those replies were asked with the old text and
+would bring the placeholder back.
+
+This is **containment**, not re-synthesis: `lib/crm/speaker-correction.js`
+patches the rows that already carry the placeholder. It rewrites column-zero
+`Label:` prefixes in the released source text, the `Speaker N` placeholder inside
+statements, promise `who` and `action` fields, the matching `atom_mentions` rows
+(then re-runs the existing deterministic matcher), and the title of any task
+already made from those atoms, together with the title line and statement
+prefix of that task's own snapshot sources (so search no longer finds the
+placeholder there). Quotes, the original `raw_json`, the original
+transcript and existing task/atom/source IDs are left untouched. A promise task's
+notes keep their verbatim quote; only the statement prefix is replaced. Indented
+`Label:` lines are quoted speech and are not rewritten, and `Speaker 1` never
+matches `Speaker 10`.
+
+Only the reader's own `Speaker N` form is rewritten inside prose. A real name
+such as `Karen` is corrected in the transcript, but not inside statements or task
+text, where the same first name could belong to someone else. An atom shared with
+evidence outside this delivery (the reader merges an identical statement) is
+reported and left unchanged, along with any task made from it, so another
+meeting's facts are never altered. A mention Douglas decided himself (`how` `you`
+or `decided`) keeps that decision. A task typed by hand and merely linked to the
+source has its title corrected, but not its notes, which are Douglas's own words.
+
+Facts are re-indexed in FTS and the correction is recorded as a receipt in
+`settings` and in the intake's `speaker_review.corrections`, so it can be audited.
+Sources are not read again, so no fact or task is duplicated. A corrected task
+gets a new revision, which the existing Google Tasks sync pushes; nothing is sent
+to anyone. Derived text that regenerates on its own — standings, meeting
+preparation, promise action wording — may keep the old label until it is rebuilt.
