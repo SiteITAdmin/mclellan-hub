@@ -294,3 +294,18 @@ test('cancelled ongoing events release future time while ended meetings remain',
   calendar.storeEvents(cal, [], at(MON, '10:00'));
   assert.deepEqual(db.crm().prepare('SELECT id FROM calendar_events').all().map(e => e.id), ['ended']);
 });
+
+
+test('future all-day appointments stay fixed while timed solo appointments offer flexibility', () => {
+  const ejs = require('ejs');
+  const date = planner.addDays(planner.local(Date.now() / 1000).date, 7);
+  calendar.storeEvents({ id: 'primary', space: 'work' }, [
+    { id: 'all-day-solo', summary: 'Day off', organizer: { self: true }, start: { date }, end: { date: planner.addDays(date, 1) } },
+    { id: 'timed-solo', summary: 'Solo work', organizer: { self: true }, start: iso(at(date, '10:00')), end: iso(at(date, '11:00')) }
+  ], at(date, '09:00'));
+  const template = fs.readFileSync(path.join(__dirname, '../views/crm/calendar.ejs'), 'utf8').replace(/<%- include\('_top'\) %>|<%- include\('_bottom'\) %>/g, '');
+  const html = ejs.render(template, { space: 'work', today: date, from: date, earlier: null, later: null, days: calendar.week('work', date), state: calendar.state('work'), hours: calendar.hours(), ago: () => 'just now', fmt: ts => String(ts) });
+  assert.doesNotMatch(html, /name="event" value="all-day-solo"/);
+  assert.match(html, /name="event" value="timed-solo"/);
+  assert.equal((html.match(/action="\/crm\/work\/calendar\/flexible"/g) || []).length, 1);
+});
