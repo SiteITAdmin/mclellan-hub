@@ -427,16 +427,20 @@ router.post('/crm/:space/sources/:id/speaker-names', spaceParam, requireSameOrig
     const labels = [].concat(req.body.label || []);
     const names = [].concat(req.body.name || []);
     if (labels.length !== names.length) throw new Error('Reload the page and name the speakers again');
-    const mapping = labels.map((label, i) => ({ label: String(label), name: String(names[i] || '') }))
-      .filter(x => x.name.trim() !== x.label);
-    if (!mapping.length) { flash(req, 'No speaker name was changed'); return res.redirect(fallback); }
-    const done = speakerCorrection.correct(s.id, mapping);
+    const typed = labels.map((label, i) => ({ label: String(label), name: String(names[i] || '') }));
+    // A cleared box means "leave this one", not a request to save an empty name.
+    const blank = typed.filter(x => !x.name.trim()).length;
+    const mapping = typed.filter(x => x.name.trim() && x.name.trim() !== x.label.trim());
+    const left = blank ? ` ${blank === 1 ? 'A box left empty was' : `${blank} boxes left empty were`} kept as before.` : '';
+    if (!mapping.length) { flash(req, `No speaker name was changed.${left}`); return res.redirect(fallback); }
+    const done = speakerCorrection.correct(s.id, mapping, { merge: req.body.merge === '1' });
     const changed = done.mapping.map(x => `${x.label} is ${x.name}`).join('; ');
     const shared = done.skippedAtoms.length
       ? ` ${done.skippedAtoms.length} fact${done.skippedAtoms.length === 1 ? ' is' : 's are'} shared with other evidence and left unchanged.` : '';
     const elsewhere = done.otherSpaceParts
       ? ` ${done.otherSpaceParts === 1 ? 'One part' : `${done.otherSpaceParts} parts`} of this meeting in the other space ${done.otherSpaceParts === 1 ? 'was' : 'were'} left unchanged.` : '';
-    flash(req, `${changed}. Existing facts and tasks were updated; the original recording is unchanged.${shared}${elsewhere}`);
+    const merged = done.merged.length ? ` ${done.merged.map(group => group.join(' and ')).join('; ')} are now one speaker.` : '';
+    flash(req, `${changed}. Existing facts and tasks were updated; the original recording is unchanged.${merged}${shared}${elsewhere}${left}`);
   } catch (err) { flash(req, err.message, 'bad'); }
   res.redirect(fallback);
 });

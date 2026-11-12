@@ -145,6 +145,14 @@ any part of the delivery is queued for reading, or while one of its facts is in
 the promise-sorting batch, because those replies were asked with the old text and
 would bring the placeholder back.
 
+Giving a speaker a name another speaker already has (or will have after the same
+save, ignoring case) would make them one speaker in the transcript for good, so
+it is refused unless Douglas ticks **Some of these are the same person**. A swap
+or chain in one save (Speaker 1 → Karen, Karen → Margaret) is not a merge, since
+every line is renamed in one pass. The receipt lists any merge under `merged`.
+A box left empty, or holding its own label with stray spaces, means "leave this
+speaker as it is"; the rest of the save goes ahead and the message says so.
+
 This is **containment**, not re-synthesis: `lib/crm/speaker-correction.js`
 patches the rows that already carry the placeholder. It rewrites column-zero
 `Label:` prefixes in the released source text, the `Speaker N` placeholder inside
