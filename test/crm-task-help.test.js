@@ -34,6 +34,11 @@ function fixture() {
 
 test('help is written from same-space evidence, keeps only cited lines, and reaches the task page and lists', () => {
   const f = fixture(), q = queue();
+  tasks.create('work', { title: 'Rename NCHD Owner group', context: { sourceId: f.s.id } });
+  tasks.create('work', { title: 'Unrelated work task' });
+  tasks.create('personal', { title: 'Personal errand' });
+  db.crm().prepare("UPDATE tasks SET due = '2026-01-01' WHERE id = ?").run(f.t.id);
+  db.crm().prepare("UPDATE tasks SET created_at = created_at + 1 WHERE title = 'Unrelated work task'").run();
   assert.equal(help.forTask(f.t.id).state, 'queued');
   assert.equal(help.enqueueNext(q, { t: T }), true);
   const prompt = q.sent[0].payload.userPrompt;
@@ -41,11 +46,17 @@ test('help is written from same-space evidence, keeps only cited lines, and reac
   assert.match(prompt, /\[F1\].*has no members/);
   assert.doesNotMatch(prompt, /Personal note|SECRET/);
   assert.equal(q.sent[0].feature, 'crm_atomise');
+  assert.equal(q.sent[0].payload.model, 'opus');
+  assert.match(prompt, /\[T1\] Rename NCHD Owner group \(from the same source as this task\)/);
+  assert.match(prompt, /\[T2\] Unrelated work task\n/);
+  assert.doesNotMatch(prompt, /Personal errand/);
   assert.equal(help.enqueueNext(q, { t: T + 1 }), false, 'one job at a time');
   assert.equal(help.forTask(f.t.id).state, 'waiting');
   assert.equal(help.collect(q, parse, T + 2), null);
 
   q.reply({ gist: 'Ken wants the empty Visitors group removed.',
+    behind: { text: 'Visitors is a built-in site group, not an Entra group.', refs: ['S1', 'nope'] },
+    options: [{ text: 'Delete it as asked.' }, { text: 'Rename it instead.', refs: ['F1'] }], recommend: 'Rename it.', with: ['T1', 'T9', 'T1'],
     should: { verdict: 'check', text: 'Deleting a default group can break sharing links.', refs: ['S1'] },
     have: [{ text: 'The group has no members.', refs: ['F1'] }, { text: 'Invented claim', refs: [] }, { text: 'Wrong id', refs: ['F9'] }],
     steps: [{ text: 'Open Site settings > People and groups.', refs: [] }, { text: 'Confirm it is empty.', refs: ['F1', 'S1'] }],
@@ -55,6 +66,10 @@ test('help is written from same-space evidence, keeps only cited lines, and reac
   const shown = help.forTask(f.t.id);
   assert.equal(shown.state, 'done');
   assert.deepEqual(shown.help.have.map(l => l.text), ['The group has no members.']);
+  assert.equal(shown.help.behind.sources[0].id, f.s.id);
+  assert.equal(shown.help.options.length, 2);
+  assert.equal(shown.help.recommend, 'Rename it.');
+  assert.deepEqual(shown.help.with.map(o => o.title), ['Rename NCHD Owner group']);
   assert.equal(shown.help.have[0].sources[0].id, f.s.id);
   assert.equal(shown.help.steps.length, 2);
   assert.equal(shown.help.steps[0].sources.length, 0);
@@ -62,8 +77,8 @@ test('help is written from same-space evidence, keeps only cited lines, and reac
   assert.equal(shown.help.draft.to, 'Ken');
   assert.equal(shown.help.missing.length, 4);
   assert.deepEqual(tasks.list('work')[0].help, { verdict: 'check', draft: true, next: 'Open Site settings > People and groups.', why: 'Deleting a default group can break sharing links.' });
-  assert.equal(help.enqueueNext(q, { t: T + 4 }), false);
-  assert.equal(help.enqueueNext(q, { refresh: true, t: T + 4 }), false);
+  assert.equal(help.enqueueNext(q, { t: T + 4 }), true);
+  assert.notEqual(q.sent.at(-1).payload.meta.taskHelp, f.t.id, 'moves on to the next task');
 });
 
 test('rewritten when the task is reworded, when evidence changes (daily at most), or when asked; removed when closed', () => {
@@ -139,8 +154,11 @@ test('the shared tick queues help and the task page renders it', async () => {
 
 test('task screens render with help, and "Write it again" queues a rewrite', async () => {
   const f = fixture(), q = queue();
+  db.crm().prepare("INSERT INTO task_help (task_id, space, task_print, evidence_print, status, help, tried_at, written_at) VALUES (?, 'work', 'old', 'old', 'done', ?, ?, ?)")
+    .run(f.t.id, JSON.stringify({ gist: 'Version 1 help', should: { verdict: 'do', text: '', refs: [] }, have: [], steps: [], draft: null, missing: [] }), T, T);
+  assert.equal(help.forTask(f.t.id).help.behind.text, '', 'help written before the deeper analysis still shows');
   help.enqueueNext(q, { t: T });
-  q.reply({ gist: 'Remove the group', should: { verdict: 'do', text: 'Still wanted.' }, have: [{ text: 'It is empty.', refs: ['F1'] }], steps: [{ text: 'Open settings' }], draft: { to: 'Ken', body: 'Hi Ken' } });
+  q.reply({ gist: 'Remove the group', should: { verdict: 'do', text: 'Still wanted.' }, behind: { text: 'It is a built-in group.' }, options: [{ text: 'Rename it.' }], recommend: 'Rename.', have: [{ text: 'It is empty.', refs: ['F1'] }], steps: [{ text: 'Open settings' }], draft: { to: 'Ken', body: 'Hi Ken' } });
   help.collect(q, parse, T + 1);
   const express = require('express');
   const app = express();
@@ -154,7 +172,7 @@ test('task screens render with help, and "Write it again" queues a rewrite', asy
   try {
     const page = async p => { const res = await fetch(base + p); assert.equal(res.status, 200, p); return res.text(); };
     const task = await page(`/crm/work/tasks/${f.t.id}`);
-    assert.match(task, /Help with this/); assert.match(task, /It is empty\./); assert.match(task, /Draft to Ken/); assert.match(task, /Open settings/);
+    assert.match(task, /Help with this/); assert.match(task, /It is empty\./); assert.match(task, /Draft to Ken/); assert.match(task, /What's really going on[\s\S]*It is a built-in group\.[\s\S]*The Hub would:<\/strong> Rename\./); assert.match(task, /Open settings/);
     assert.match(await page('/crm/work/tasks'), /Draft ready<\/span> Start: Open settings/);
     assert.doesNotMatch(await page('/crm/work/tasks/new'), /Help with this/);
     await page('/crm/work');

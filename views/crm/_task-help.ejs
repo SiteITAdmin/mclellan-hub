@@ -9,6 +9,13 @@
   <% } else { %>
     <% if (h.gist) { %><p class="help-gist"><%= h.gist %></p><% } %>
     <% if (h.should.text) { %><p class="help-should <%= h.should.verdict %>"><strong><%= h.should.verdict === 'do' ? 'Worth doing.' : h.should.verdict === 'skip' ? 'May not be needed.' : 'Check first.' %></strong> <%= h.should.text %> <span class="cites"><%- cite(h.should) %></span></p><% } %>
+    <% if (h.behind.text || h.options.length || h.recommend) { %><div class="help-deeper"><h3>What's really going on</h3>
+      <% if (h.behind.text) { %><p><%= h.behind.text %> <span class="cites"><%- cite(h.behind) %></span></p><% } %>
+      <% if (h.options.length) { %><h3>Options</h3><ul class="help-options"><% for (const l of h.options) { %><li><%= l.text %> <span class="cites"><%- cite(l) %></span></li><% } %></ul><% } %>
+      <% if (h.recommend) { %><p class="help-recommend"><strong>The Hub would:</strong> <%= h.recommend %></p><% } %>
+      <% if (h.with.length) { %><p class="subline">Part of the same job: <% h.with.forEach((o, i) => { %><%= i ? ' · ' : '' %><a href="/crm/<%= space %>/tasks/<%= o.id %>#help"><%= o.title %></a><% }) %></p><% } %>
+      <p class="subline">This is the Hub's own reading of the thread and of how the tools work. Check it before relying on it.</p>
+    </div><% } %>
     <div class="help-cols">
       <% if (h.steps.length) { %><div><h3>How to do it</h3>
         <ol class="help-steps"><% for (const l of h.steps) { %><li><%= l.text %> <span class="cites"><%- cite(l) %></span></li><% } %></ol>

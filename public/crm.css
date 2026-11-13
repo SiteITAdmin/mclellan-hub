@@ -581,3 +581,6 @@ details.del .btn { color: var(--negative); border-color: var(--negative); height
 .help-missing { margin: 0; padding-left: 20px; color: var(--muted); }
 .help-draft .textarea { width: 100%; }
 @media (max-width: 760px) { .help-cols { grid-template-columns: 1fr; } }
+.help-deeper { margin-top: 16px; padding: 4px 16px 14px; border: 1px solid var(--row-edge); border-radius: var(--radius-row); }
+.help-deeper p { margin: 0 0 8px; font-size: 16px; line-height: 24px; }
+.help-options { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
