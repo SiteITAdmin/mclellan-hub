@@ -584,3 +584,16 @@ details.del .btn { color: var(--negative); border-color: var(--negative); height
 .help-deeper { margin-top: 16px; padding: 4px 16px 14px; border: 1px solid var(--row-edge); border-radius: var(--radius-row); }
 .help-deeper p { margin: 0 0 8px; font-size: 16px; line-height: 24px; }
 .help-options { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
+
+.report-body h2 { margin-top: 28px; }
+.report-paragraph { margin: 16px 0; }
+.report-paragraph p { white-space: pre-line; line-height: 1.65; margin-bottom: 5px; }
+.report-citations { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+@media print {
+  .sidebar, .topbar, .sheet, .no-print { display: none !important; }
+  .shell, .canvas, .column { display: block !important; width: auto !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  .report-body { display: block; }
+  .report-body .panel { border: 0; box-shadow: none; padding: 0; }
+  .report-body h2 { break-after: avoid; }
+  .report-paragraph { break-inside: avoid; }
+}

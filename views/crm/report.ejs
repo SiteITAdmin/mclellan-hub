@@ -1,0 +1,31 @@
+<%- include('_top') %>
+<div class="crumbs no-print"><a href="/crm/<%= space %>/reports<%= report.project_id ? '?projectId=' + report.project_id : '' %>">Reports</a><% if (report.project_id) { %> / <a href="/crm/<%= space %>/projects/<%= report.project_id %>">Project</a><% } %></div>
+<div class="title-row"><div><h1><%= report.title %></h1><p class="subline"><%= report.date_from || 'All captured history' %> to <%= report.date_to %> · Generated <%= fmt(report.created_at) %></p></div></div>
+<% if (report.status === 'waiting') { %>
+<meta http-equiv="refresh" content="8">
+<section class="grid first"><div class="panel s12" role="status"><h2>Preparing your report</h2><p><%= report.slow ? 'This is taking longer than usual. The report is still waiting for the Mac worker.' : 'The Hub is reading the evidence and writing your report. This page refreshes automatically.' %></p><p>You can leave and return through Reports.</p></div></section>
+<% } else if (report.status === 'failed') { %>
+<section class="grid first"><div class="panel s12"><h2>Could not generate this report</h2><p><%= report.error %></p></div></section>
+<% } else { %>
+<div class="form-row no-print"><button class="btn" onclick="window.print()">Print / Save PDF</button><a class="btn" href="/crm/<%= space %>/reports/<%= report.id %>/download">Download text</a></div>
+<section class="grid first report-body"><article class="panel s12">
+<p class="subline">Based on <%= report.coverage.includedFacts %> of <%= report.coverage.matchingFacts %> matching facts recorded in the period, <%= report.coverage.backgroundFacts %> older background facts and <%= report.coverage.currentTasks %> current tasks.</p>
+<% if (report.coverage.partialPeriod) { %><p class="subline">This period is unfinished: coverage stops at generation time.</p><% } %>
+<% if (report.coverage.includedFacts < report.coverage.matchingFacts) { %><p class="task-warning">This report uses a limited selection of the newest matching evidence. It is not a complete account of the period; narrow the dates or topic for more detail.</p><% } %>
+<% if (report.coverage.topicSearch) { %><p class="subline">Topic evidence was retrieved by matching words in your question. Relevant material using other wording may be missing.</p><% } %>
+<p class="subline">Task statuses describe the position when generated; they do not establish when work was completed. Sources may describe earlier events than their recorded dates.</p>
+<% for (const section of report.sections) { %>
+<h2><%= section.heading %></h2>
+<% for (const p of section.paragraphs) { %><div class="report-paragraph"><p><% if (p.kind !== 'evidence') { %><strong><%= p.kind === 'analysis' ? 'Interpretation: ' : 'Proposed next step: ' %></strong><% } %><%= p.text %></p><div class="report-citations">
+<% const seen = new Set(); for (const e of p.citations) { if (e.type === 'task') { %><a href="/crm/<%= space %>/tasks/<%= e.id %>"><%= e.text %> (task)</a>
+<% } else { for (const s of e.sources) { if (seen.has(s.id)) continue; seen.add(s.id); %><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title || s.kind %> · <%= fmt(s.occurred_at, 'date') %></a><% } } } %>
+</div></div><% } %>
+<% } %>
+<% if (report.gaps.length) { %><h2>Gaps and limits</h2><ul><% for (const gap of report.gaps) { %><li><%= gap %></li><% } %></ul><% } %>
+<p class="subline">Saved snapshot. New evidence does not rewrite this report; generate another to update it.</p>
+</article></section>
+<% } %>
+<% if (report.status !== 'waiting') { %><form method="post" action="/crm/<%= space %>/reports" class="form-row no-print">
+<input type="hidden" name="projectId" value="<%= report.project_id || '' %>"><input type="hidden" name="kind" value="<%= report.kind %>"><input type="hidden" name="question" value="<%= report.question %>"><input type="hidden" name="anchor" value="<%= report.date_from %>"><input type="hidden" name="from" value="<%= report.date_from %>"><input type="hidden" name="to" value="<%= report.date_to %>"><button class="btn" type="submit"><%= report.status === 'failed' ? 'Try again' : 'Generate a fresh version' %></button>
+</form><% } %>
+<%- include('_bottom') %>

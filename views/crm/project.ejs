@@ -2,6 +2,7 @@
 <div class="crumbs"><a href="/crm/<%= space %>/projects">Projects</a> / <%= p.name %></div>
 <div class="title-row"><div><h1><%= p.name %></h1><p class="subline"><%= p.about ? p.about : 'No description yet. Say what this project covers so facts are filed here only when they belong.' %><% if (p.person) { %> About <a href="/crm/<%= space %>/people/<%= p.person.id %>"><%= p.person.name %></a>.<% } %></p>
   <p class="subline"><%= p.atoms.length %> <%= p.atoms.length === 1 ? 'fact' : 'facts' %>, newest first.<% if (p.checkWaiting) { %> Claude is re-checking <%= p.checkWaiting %> of them against what the project covers.<% } %></p></div></div>
+<div class="form-row no-print"><a class="btn primary" href="/crm/<%= space %>/reports?projectId=<%= p.id %>">Project reports</a><span class="subline">Weekly, monthly, quarterly or a question of your own.</span></div>
 <%- include('_standing', { standing: p.standing }) %>
 <section class="grid first"><div class="panel s12">
   <div class="panel-head"><h2>Tasks</h2><a class="end" href="/crm/<%= space %>/tasks/new?projectId=<%= p.id %>">Add a task</a></div>

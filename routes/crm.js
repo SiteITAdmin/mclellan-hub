@@ -615,6 +615,33 @@ router.post('/crm/:space/calendar/:action', spaceParam, requireSameOrigin, write
   back(req, res, `/crm/${req.params.space}/calendar`);
 });
 
+const reports = require('../lib/crm/reports');
+function reportForm(req, res, values = req.query, error = '') {
+  const projects = crm().prepare('SELECT id,name FROM projects WHERE space=? ORDER BY name COLLATE NOCASE').all(req.params.space);
+  const projectId = typeof values.projectId === 'string' ? values.projectId : '';
+  if (projectId && !projects.some(p => p.id === projectId)) return res.status(404).send('Project not found');
+  const recent = reports.list(req.params.space, projectId).map(r => reports.collect(reports.get(r.id, req.params.space)));
+  res.render('crm/reports', { page:'reports', title:'Reports', projects, recent, values, error, today:planner.local(Math.floor(Date.now()/1000)).date });
+}
+router.get('/crm/:space/reports', spaceParam, (req,res) => reportForm(req,res));
+router.post('/crm/:space/reports', spaceParam, requireSameOrigin, writeLimiter, (req,res) => {
+  try { const report = reports.create(req.params.space,req.body); res.redirect(`/crm/${req.params.space}/reports/${report.id}`); }
+  catch (e) { res.status(400); reportForm(req,res,req.body,e.message); }
+});
+router.get('/crm/:space/reports/:id', spaceParam, (req,res) => {
+  const row = reports.get(req.params.id,req.params.space);
+  if (!row) return res.status(404).send('Not found');
+  const report = reports.shown(reports.collect(row));
+  res.render('crm/report', {page:'reports',title:report.title,report});
+});
+router.get('/crm/:space/reports/:id/download', spaceParam, (req,res) => {
+  const row = reports.get(req.params.id,req.params.space);
+  if (!row) return res.status(404).send('Not found');
+  const report = reports.collect(row);
+  if (report.status !== 'done') return res.status(409).send('The report is not ready');
+  res.attachment(`report-${report.date_to}.txt`).type('text/plain').send(reports.text(report));
+});
+
 router.get('/crm/:space/projects', spaceParam, (req, res) => {
   res.render('crm/projects', { page: 'projects', list: views.projects(req.params.space), unfiled: require('../lib/crm/facts').unfiled(req.params.space, { limit: 0 }).total, title: 'Projects' });
 });

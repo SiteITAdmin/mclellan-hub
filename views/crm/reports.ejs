@@ -1,0 +1,26 @@
+<%- include('_top') %>
+<div class="title-row"><div><h1>Reports</h1><p class="subline">Generate a report when you need it, using the evidence captured in <%= space === 'work' ? 'Work' : 'Personal' %>.</p></div></div>
+<section class="grid first"><div class="panel s8">
+<% if (error) { %><p class="flash bad" role="alert"><%= error %></p><% } %>
+<form method="post" action="/crm/<%= space %>/reports" class="list" id="report-form">
+  <div class="field"><label for="report-project">Project</label><select class="select" name="projectId" id="report-project"><option value="">Across this space (question or topic only)</option><% for (const p of projects) { %><option value="<%= p.id %>" <%= values.projectId === p.id ? 'selected' : '' %>><%= p.name %></option><% } %></select></div>
+  <div class="field"><label for="report-kind">Report type</label><select class="select" name="kind" id="report-kind"><% for (const [key,name] of [['weekly','Weekly'],['monthly','Monthly'],['quarterly','Quarterly'],['topic','Question or topic']]) { %><option value="<%= key %>" <%= (values.kind || (values.projectId ? 'weekly' : 'topic')) === key ? 'selected' : '' %>><%= name %></option><% } %></select></div>
+  <div id="period-fields"><div class="field"><label for="report-anchor">A date in the week, month or quarter</label><input class="input" type="date" name="anchor" id="report-anchor" value="<%= values.anchor || today %>" max="<%= today %>"></div><p class="subline">Weeks run Monday–Sunday; quarters are Jan–Mar, Apr–Jun, Jul–Sep and Oct–Dec. An unfinished period reports progress so far.</p></div>
+  <div id="topic-fields"><div class="form-row"><div class="field"><label for="report-from">From (optional)</label><input class="input" type="date" name="from" id="report-from" value="<%= values.from || '' %>" max="<%= today %>"></div><div class="field"><label for="report-to">To (optional)</label><input class="input" type="date" name="to" id="report-to" value="<%= values.to || '' %>" max="<%= today %>"></div></div><p class="subline">Leave dates empty to search all captured history through today.</p></div>
+  <div class="field"><label for="report-question">Question, topic or focus</label><textarea class="textarea" name="question" id="report-question" rows="4" maxlength="1500" placeholder="e.g. What is holding up the NCHD roster project, and what should we do next?"><%= values.question || '' %></textarea></div>
+  <p class="subline">Required for a topic report; optional focus for a periodic report. Reports distinguish evidence, interpretation and proposed next steps.</p>
+  <div><button class="btn primary" type="submit">Generate report</button></div>
+</form>
+</div><div class="panel s4"><h2>What goes into a report</h2><p>Relevant facts and their source excerpts, with current task context. Each report links back to its evidence and identifies gaps.</p><p>Generation usually takes a few minutes. Your saved reports remain available here.</p><p class="subline">The Hub can only report on what it has captured and read. A quiet period in the records does not prove no work happened.</p></div></section>
+<section class="grid"><div class="panel s12"><div class="panel-head"><h2>Saved reports<%= values.projectId ? ' for this project' : '' %></h2></div>
+<% if (!recent.length) { %><div class="empty">No reports generated yet.</div><% } %>
+<div class="list"><% for (const r of recent) { %><a class="rowcard" style="grid-template-columns:1fr" href="/crm/<%= space %>/reports/<%= r.id %>"><div class="main"><div class="what"><%= r.title %></div><div class="meta"><%= r.date_from || 'All captured history' %> to <%= r.date_to %> · <%= r.status === 'done' ? 'Ready' : r.status === 'waiting' ? 'Being prepared' : 'Could not generate' %> · <%= fmt(r.created_at) %></div></div></a><% } %></div>
+</div></section>
+<script>
+(() => {
+ const kind = document.getElementById('report-kind');
+ const update = () => { const topic = kind.value === 'topic'; document.getElementById('period-fields').hidden = topic; document.getElementById('topic-fields').hidden = !topic; document.getElementById('report-question').required = topic; document.getElementById('report-project').required = !topic; };
+ kind.addEventListener('change', update); update();
+})();
+</script>
+<%- include('_bottom') %>
