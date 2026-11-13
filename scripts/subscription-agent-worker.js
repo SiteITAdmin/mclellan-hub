@@ -89,7 +89,7 @@ async function processJob(job) {
       effort: local.effort,
       tier: local.tier,
       durationMs: local.durationMs,
-      ...(local.fallbackFrom ? { fallbackFrom: local.fallbackFrom } : {}),
+      ...(local.fallbackFrom ? { fallbackFrom: local.fallbackFrom, fallbackChain: local.fallbackChain } : {}),
     },
   });
   console.log(`[subscription-agent-worker] completed ${job.feature} ${job.id} (${local.runner}/${local.model}/${local.effort})`);

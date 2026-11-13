@@ -249,7 +249,7 @@ test('Claude capacity pauses page reading without exhausting retries, then resum
   assert.equal(retry.retryAt, T + 900);
   assert.equal(db.crm().prepare('SELECT attempts FROM notebook_pages').get().attempts, 0);
   assert.equal(boox.enqueueNext(jobs, true, T + 899), false);
-  assert.match(boox.health('work')[0].text, /Claude capacity/);
+  assert.match(boox.health('work')[0].text, /provider capacity/);
   assert.equal(boox.enqueueNext(jobs, true, T + 900), true);
   job = { status: 'completed', result: { output: JSON.stringify({ text: 'Boox connection test. No actions.', uncertain: false }) } };
   boox.collect(jobs, T + 901);

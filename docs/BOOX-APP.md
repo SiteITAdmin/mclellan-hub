@@ -17,9 +17,12 @@ Enable PDF sync from Boox Notes to Google Drive's `onyx/NoteMax/Notebooks`
 folder. On leaving Notes, its native sync exports the notebook. Hub checks Drive
 every fifteen minutes and reads changed pages through `crm_boox_read` on the
 Mac subscription worker. Unclear handwriting waits at `/crm/notebooks`.
-A Claude usage/capacity limit holds the page and retries every fifteen minutes
+Only when all three providers fail does a usage/capacity limit hold the page and retries every fifteen minutes
 without consuming its malformed-page retry allowance. The waiting state appears
-on the tablet, Today and the notebook screen. Confirmed writing enters the normal source → atoms → promises/tasks pipeline;
+on the tablet, Today and the notebook screen. Reading tries Claude, then ChatGPT,
+then Grok; the same PDF page is rendered to an image for the latter two. Poppler
+(`pdftoppm`) must be installed on the Mac. Temporary images are removed after
+each attempt, and job receipts identify the providers tried. Confirmed writing enters the normal source → atoms → promises/tasks pipeline;
 the note's date remains its source date even if exported the following day.
 Notes more than seven days old are history. A changed day-note page can add new
 writing; unchanged lines are context, with the existing atomiser deciding
@@ -88,4 +91,7 @@ On 12 November 2026, version 2 was installed on the attached Note Max. Live
 calendar/CRM sync and native creation/reopening were verified. Douglas's dated
 Work PDF reached Drive and was captured as one day-note page. The updated Mac
 worker received its PDF, but Claude returned a usage limit with a 22:30 Dublin
-reset; transcription verification is pending that capacity reset.
+reset; the subsequent failover update enables immediate reading through ChatGPT or Grok.
+
+Provider input references: [Codex CLI image attachments](https://developers.openai.com/codex/cli/reference/)
+and [Grok structured prompt files](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/src/headless/cli.rs).

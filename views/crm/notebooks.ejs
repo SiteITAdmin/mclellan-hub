@@ -1,6 +1,6 @@
 <%- include('_top') %>
 <div class="title-row"><div><h1>Boox notebooks</h1><p class="subline">Pages from onyx / NoteMax / Notebooks in Drive. Choose the space and kind once for each notebook.</p></div></div>
-<% if (readerRetryAt) { %><p class="flash" role="status">Handwriting is waiting for Claude capacity. The Hub will retry automatically after <%= fmt(readerRetryAt, 'time') %>.</p><% } %>
+<% if (readerRetryAt) { %><p class="flash" role="status">Handwriting is waiting for provider capacity. The Hub will retry automatically after <%= fmt(readerRetryAt, 'time') %>.</p><% } %>
 <section class="grid first"><div class="panel s12">
 <p>Existing pages are history only. New pages are read automatically. Journals never create promises or tasks. Unclear handwriting waits here for you to check.</p>
 <p>A day note made with “New note” in the Boox app is named for its day and space, so it is placed and read without being asked about. Each time you add to a page, only the new writing is read.</p>

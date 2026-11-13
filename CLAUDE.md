@@ -68,7 +68,7 @@ The design ideas from Version Old that still stand (details in `docs/VERSION-OLD
 Model work runs on the Mac mini's subscription CLIs (Claude, Codex) through the
 pull queue: the VPS enqueues, the Mac worker claims one job at a time. There is
 no API-key or OpenRouter path; `lib/openrouter-guard.js` blocks
-`*.openrouter.ai` at boot. When one subscription is unavailable the other stands in: every Claude lane falls back to ChatGPT (Codex `gpt-5.6-luna`, high) and every ChatGPT lane to Claude (Sonnet, medium), set by `fallbackTo` in `lib/feature-runners.js` and run in `lib/subscription-agent.js`. The job result records `fallbackFrom`, and Today says when a stand-in did the work. Boox page reading (`crm_boox_read`) has no stand-in, because only the Claude lane takes a PDF. If the site chat stops answering, check the Mac
+`*.openrouter.ai` at boot. Model availability follows Claude → ChatGPT (Codex `gpt-5.6-luna`, high) → Grok (`grok-4.7`). A ChatGPT-primary job falls forward to Grok. The chain is set by `fallbackTo` in `lib/feature-runners.js` and run once per provider in `lib/subscription-agent.js`. Job receipts record `fallbackFrom` and `fallbackChain`, and Today identifies the stand-in. Boox page reading uses the same chain: Claude receives the PDF; Poppler on the Mac renders that same page to PNG for ChatGPT and Grok. If every provider fails, the page waits and retries automatically. If the site chat stops answering, check the Mac
 worker (`com.mclellan.hub.subscription-agent-worker`) before the code.
 
 ## The most important rules
