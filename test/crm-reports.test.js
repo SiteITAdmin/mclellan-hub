@@ -130,3 +130,13 @@ test('HTTP report screens enforce auth, space and same-origin writes, render esc
   const invalid=await fetch(base+'/crm/work/reports',{method:'POST',headers:{origin:base,'content-type':'application/x-www-form-urlencoded'},body:'kind=topic&question='}); assert.equal(invalid.status,400); assert.match(await invalid.text(),/Enter the question/);
  } finally { await new Promise(resolve=>server.close(resolve)); }
 });
+
+test('unfiled tasks remain candidates for synthesis rather than disappearing from project reports', () => {
+ const f=fixture(),q=queue();
+ const task=tasks.create('work',{title:'Confirm the roster membership'});
+ db.crm().prepare('UPDATE tasks SET created_at=? WHERE id=?').run(T-60,task.id);
+ const r=reports.create('work',{kind:'weekly',projectId:f.p.id,anchor:'2026-11-13'},{jobs:q,t:T});
+ const candidate=JSON.parse(r.evidence).find(e=>e.id===task.id);
+ assert.match(candidate.relevance,/candidate only/);
+ assert.match(reports.SYSTEM_PROMPT,/may not belong/);
+});

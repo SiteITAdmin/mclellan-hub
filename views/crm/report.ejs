@@ -9,7 +9,7 @@
 <% } else { %>
 <div class="form-row no-print"><button class="btn" onclick="window.print()">Print / Save PDF</button><a class="btn" href="/crm/<%= space %>/reports/<%= report.id %>/download">Download text</a></div>
 <section class="grid first report-body"><article class="panel s12">
-<p class="subline">Based on <%= report.coverage.includedFacts %> of <%= report.coverage.matchingFacts %> matching facts recorded in the period, <%= report.coverage.backgroundFacts %> older background facts and <%= report.coverage.currentTasks %> current tasks.</p>
+<p class="subline">Based on <%= report.coverage.includedFacts %> of <%= report.coverage.matchingFacts %> matching facts recorded in the period, <%= report.coverage.backgroundFacts %> older background facts and <%= report.coverage.currentTasks %> current task candidates.</p>
 <% if (report.coverage.partialPeriod) { %><p class="subline">This period is unfinished: coverage stops at generation time.</p><% } %>
 <% if (report.coverage.includedFacts < report.coverage.matchingFacts) { %><p class="task-warning">This report uses a limited selection of the newest matching evidence. It is not a complete account of the period; narrow the dates or topic for more detail.</p><% } %>
 <% if (report.coverage.topicSearch) { %><p class="subline">Topic evidence was retrieved by matching words in your question. Relevant material using other wording may be missing.</p><% } %>
