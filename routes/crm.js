@@ -417,7 +417,7 @@ router.get('/crm/:space/captured', spaceParam, (req, res) => {
 router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
   const s = views.source(req.params.id);
   if (!s || s.space !== req.params.space) return res.status(404).send('Not found');
-  res.render('crm/source', { krispRaw: ['krisp', 'wispr'].includes(s.origin) ? require('../lib/crm/krisp').rawForSource(s) : null, meeting: s.kind === 'meeting' ? require('../lib/crm/meetings').eventFor(s) : null, speakers: speakerCorrection.review(s.id), page: 'captured', s, title: s.title });
+  res.render('crm/source', { krispRaw: ['krisp', 'wispr', 'transcript'].includes(s.origin) ? require('../lib/crm/krisp').rawForSource(s) : null, meeting: s.kind === 'meeting' ? require('../lib/crm/meetings').eventFor(s) : null, speakers: speakerCorrection.review(s.id), page: 'captured', s, title: s.title });
 });
 
 router.post('/crm/:space/sources/:id/speaker-names', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -570,7 +570,31 @@ router.get('/crm/:space/calendar', spaceParam, (req, res) => {
     earlier: from > first ? planner.addDays(from, -7) < first ? first : planner.addDays(from, -7) : null,
     later: from < last ? planner.addDays(from, 7) > last ? last : planner.addDays(from, 7) : null,
     days: calendar.week(req.params.space, from), state: calendar.state(req.params.space), hours: calendar.hours(),
-    notes: require('../lib/crm/boox').dayNotes(from, planner.addDays(from, 6)) });
+    notes: require('../lib/crm/boox').dayNotes(from, planner.addDays(from, 6)), transcriptTypes: require('../lib/crm/transcript-upload').ACCEPT.join(',') });
+});
+
+const transcriptFile = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
+router.post('/crm/:space/calendar/transcript', spaceParam, requireSameOrigin, writeLimiter, (req, res, next) => transcriptFile.single('file')(req, res, err => {
+  if (!err) return next();
+  flash(req, err.code === 'LIMIT_FILE_SIZE' ? 'The transcript must be under 20 MB.' : 'Upload failed: choose one transcript file.', 'bad');
+  back(req, res, `/crm/${req.params.space}/calendar`);
+}), async (req, res) => {
+  try {
+    const name = req.file ? Buffer.from(req.file.originalname, 'latin1').toString('utf8') : '';
+    const r = await require('../lib/crm/transcript-upload').hold({ eventId: req.body.event, buffer: req.file?.buffer, name });
+    const what = r.event.title || 'this meeting';
+    if (r.status === 'classified') {
+      flash(req, `That transcript of ${what} was already released to ${r.space === 'work' ? 'Work' : 'Personal'}. It is listed under Transcripts.`);
+      return res.redirect(`/crm/${r.space}/meetings`);
+    }
+    flash(req, r.created || r.reopened
+      ? `Transcript of ${what} is waiting below: ${r.speakers} ${r.speakers === 1 ? 'speaker' : 'speakers'} to name${r.preamble ? `. ${r.preamble} ${r.preamble === 1 ? 'line' : 'lines'} before the first speaker are kept with the original but not read` : ''}.`
+      : `That transcript of ${what} is already waiting below for you to name the speakers.`);
+    res.redirect(`/crm/${r.event.space}/meetings#intake-${r.id}`);
+  } catch (err) {
+    flash(req, err.message, 'bad');
+    back(req, res, `/crm/${req.params.space}/calendar`);
+  }
 });
 
 router.post('/crm/:space/calendar/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -729,9 +753,10 @@ router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
   res.render('crm/meetings', { page: 'meetings', title: 'Meetings', w: wispr.status(space), meetings: meetings.today(space),
     configured: !!process.env.KRISP_WEBHOOK_SECRET,
     held: require('../lib/crm/krisp').list().filter(d => d.status === 'pending').map(d => {
-      let attendees = [];
-      if (d.origin === 'wispr') try { attendees = (JSON.parse(d.raw_json).meeting.attendees || []).map(a => a && a.name).filter(x => typeof x === 'string' && x); } catch { /* shown without them */ }
-      return { ...d, attendees, event: d.occurred_at ? meetings.eventFor(d) : null };
+      let attendees = [], suggest = null;
+      if (['wispr', 'transcript'].includes(d.origin)) try { attendees = (JSON.parse(d.raw_json).meeting.attendees || []).map(a => a && a.name).filter(x => typeof x === 'string' && x); } catch { /* shown without them */ }
+      if (d.origin === 'transcript') try { suggest = JSON.parse(d.raw_json).event.space; } catch { /* no suggestion */ }
+      return { ...d, attendees, suggest, event: d.occurred_at ? meetings.eventFor(d) : null };
     }),
     recordings: meetings.recordings(space), capture: require('../lib/crm/wispr-capture').state(),
   });

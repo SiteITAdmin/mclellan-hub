@@ -206,3 +206,31 @@ Sources are not read again, so no fact or task is duplicated. A corrected task
 gets a new revision, which the existing Google Tasks sync pushes; nothing is sent
 to anyone. Derived text that regenerates on its own — standings, meeting
 preparation, promise action wording — may keep the old label until it is rebuilt.
+
+## Uploaded transcripts (13 November 2026)
+
+A transcript file can be uploaded from a past, timed entry's pop-out on the
+Calendar screen ("Upload transcript"). `lib/crm/transcript-upload.js` turns the
+file into speaker turns and holds it in `krisp_intake` with
+`origin = 'transcript'`, the entry's title, and `occurred_at` set to the entry's
+start, so the released transcript belongs to that entry under the
+closest-start rule. It then waits on Meetings like a Krisp or Wispr recording:
+the entry's space is pre-chosen and names written in the file are pre-filled,
+both changeable. Placeholders (`Speaker 2`) are left blank to be named.
+
+Accepted: `.transcript`, `.txt`, `.md`, `.vtt` (Teams `<v Name>` cues), `.srt`,
+`.json` (a list of `{speaker, text}`-style items), `.csv`, `.docx`, `.pdf`,
+`.html`. Turns are recognised as `Name: words` (an inline label must look like a
+name, every word capitalised, so `So the plan is: we go` stays speech), with or
+without a leading timestamp, or as a heading line `Speaker 1  00:01` /
+`00:01 Speaker 1` followed by the words. Lines before the first speaker (a title
+or date) are kept in the original record but not released. A file with no
+speaker labels, a binary file, a JSON item without a speaker, or more than 50
+speakers is refused with a message on the Calendar screen; nothing is held.
+
+The id is the entry plus the file's hash: uploading the same file again says it
+is already waiting (or already released, with a link to Meetings). Uploading
+again after Ignore reopens it, because that is a deliberate act, unlike a
+repeated webhook delivery. An unreadable copy of the same file added earlier on
+"Add a note" is retired, and that page no longer answers "already here" for a
+readable file whose earlier copy was refused.

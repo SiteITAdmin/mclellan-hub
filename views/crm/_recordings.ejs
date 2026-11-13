@@ -1,4 +1,4 @@
-<% const from = o => o === 'wispr' ? 'Wispr Flow' : o === 'krisp' ? 'Krisp' : o === 'boox' ? 'Boox notebook' : 'Added by hand';
+<% const from = o => o === 'wispr' ? 'Wispr Flow' : o === 'krisp' ? 'Krisp' : o === 'boox' ? 'Boox notebook' : o === 'transcript' ? 'Uploaded transcript' : 'Added by hand';
    const spaceName = s => s === 'work' ? 'Work' : 'Personal';
    const calDate = ts => new Date(ts * 1000).toLocaleDateString('en-CA', { timeZone: 'Europe/Dublin' });
    const placeholder = label => /^(speaker|unknown|unidentified)(\s*\d+)?$/i.test(label.trim()); %>
@@ -7,9 +7,9 @@
 <p class="subline">A recording stays outside Search and the reader until you confirm every speaker and release it to Work or Personal. Unreleased recordings appear in both spaces. Ignore the ones you do not want imported. Krisp intake is <%= configured ? 'configured' : 'not configured' %>.</p>
 <% if (!held.length) { %><div class="empty" style="margin-top:14px">Nothing is waiting.</div><% } %>
 <% for (const d of held) { %>
-<article class="recording"><h3><%= d.title %></h3>
+<article class="recording" id="intake-<%= d.id %>"><h3><%= d.title %></h3>
 <p class="stamp"><%= fmt(d.occurred_at || d.received_at) %> · <%= from(d.origin) %> · <%= d.event ? `In your calendar as ${d.event.title || '(No title)'} (${spaceName(d.event.space)})` : 'No calendar entry at that time' %></p>
-<% if (d.attendees.length) { %><p class="stamp">Wispr lists: <%= d.attendees.join(', ') %></p><% } %>
+<% if (d.attendees.length) { %><p class="stamp"><%= d.origin === 'wispr' ? 'Wispr lists' : 'Invited' %>: <%= d.attendees.join(', ') %></p><% } %>
 <% if (!d.readable) { %><p class="flash bad">Empty or unsupported transcript. Held outside the reader. Inspect the original record or Ignore.</p><% } %>
 <details><summary>Transcript</summary><pre style="white-space:pre-wrap"><%= d.transcript %></pre></details>
 <details><summary>Original <%= from(d.origin) %> record</summary><pre style="white-space:pre-wrap"><%= d.raw_json %></pre></details>
@@ -20,13 +20,13 @@
 <fieldset class="speaker">
 <legend><%= speaker.label %></legend>
 <div class="field"><label for="speaker-<%= d.id %>-<%= i %>">Who is &ldquo;<%= speaker.label %>&rdquo;?</label>
-<input class="input" id="speaker-<%= d.id %>-<%= i %>" name="names" required maxlength="120" autocomplete="off" placeholder="Full name"<% if (d.origin === 'wispr' && !placeholder(speaker.label)) { %> value="<%= speaker.label %>"<% } %>></div>
+<input class="input" id="speaker-<%= d.id %>-<%= i %>" name="names" required maxlength="120" autocomplete="off" placeholder="Full name"<% if (['wispr', 'transcript'].includes(d.origin) && !placeholder(speaker.label)) { %> value="<%= speaker.label %>"<% } %>></div>
 <p class="speaker-said">What <%= speaker.label %> said</p>
 <% for (const preview of speaker.previews) { %><blockquote><%= preview %></blockquote><% } %>
 </fieldset>
 <% }) %>
-<p><%= d.origin === 'wispr' ? 'Wispr’s own names are filled in: correct any that are wrong. A change you make in Wispr reaches this copy while it waits here. ' : 'Confirm every name above. ' %>This releases the attributed transcript to the existing reader for facts and tasks.</p>
-<div class="form-row"><label><input type="radio" name="choice" value="work" required> Work</label> <label><input type="radio" name="choice" value="personal" required> Personal</label>
+<p><%= d.origin === 'wispr' ? 'Wispr’s own names are filled in: correct any that are wrong. A change you make in Wispr reaches this copy while it waits here. ' : d.origin === 'transcript' ? 'Names written in the file are filled in: correct any that are wrong. ' : 'Confirm every name above. ' %>This releases the attributed transcript to the existing reader for facts and tasks.</p>
+<div class="form-row"><label><input type="radio" name="choice" value="work" required<%= d.suggest === 'work' ? ' checked' : '' %>> Work</label> <label><input type="radio" name="choice" value="personal" required<%= d.suggest === 'personal' ? ' checked' : '' %>> Personal</label>
 <button class="btn" type="submit">Release meeting</button></div>
 </form><% } else { %><p class="flash bad"><%= d.review.reason %></p><% } %>
 <form method="post" action="/crm/krisp/<%= d.id %>/classify"><input type="hidden" name="returnSpace" value="<%= space %>"><button class="btn" name="choice" value="ignore">Ignore</button></form>

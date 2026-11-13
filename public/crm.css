@@ -459,6 +459,9 @@ a.cal-item:hover { filter: brightness(.95); }
 .cal-pop-sec li.done a { text-decoration: line-through; color: var(--muted); }
 .cal-pop a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
 .cal-pop-sec li form { margin-left: 6px; }
+.cal-pop-upload { margin-top: 8px; display: grid; gap: 6px; }
+.cal-pop-upload label { display: block; }
+.cal-pop-upload input[type=file] { font-size: 13px; max-width: 100%; }
 .recording { padding: 16px 0; border-top: 1px solid var(--row-edge); }
 .recording:first-of-type { margin-top: 14px; }
 .recording h3 { margin: 0 0 4px; }

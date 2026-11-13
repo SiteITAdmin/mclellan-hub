@@ -55,6 +55,11 @@
     <div class="cal-pop-sec"><h3>Transcript</h3>
       <% if (!d.transcripts.length) { %><p class="cal-pop-none"><%= i.start > Date.now() / 1000 ? 'Not held yet' : 'None yet' %></p><% } %>
       <% if (d.transcripts.length) { %><ul><% for (const t of d.transcripts) { %><li><a href="/crm/<%= t.space %>/sources/<%= t.id %>"><%= t.title %></a> <small><%= fmt(t.occurred_at, 'time') %></small></li><% } %></ul><% } %>
+      <% if (!i.all_day && i.start <= Date.now() / 1000) { %><form class="cal-pop-upload" method="post" action="/crm/<%= space %>/calendar/transcript" enctype="multipart/form-data">
+        <input type="hidden" name="event" value="<%= i.id %>">
+        <label class="cal-pop-none" for="tx-<%= n %>">Upload a transcript of this meeting. It waits on Meetings for you to name the speakers.</label>
+        <div class="form-row"><input id="tx-<%= n %>" type="file" name="file" required accept="<%= locals.transcriptTypes || '' %>"><button class="btn small" type="submit">Upload transcript</button></div>
+      </form><% } %>
     </div>
     <div class="cal-pop-sec"><h3>What happened</h3>
       <% if (!d.happened?.length) { %><p class="cal-pop-none">No transcript facts read yet. Open the transcript for the full record.</p><% } else { %>

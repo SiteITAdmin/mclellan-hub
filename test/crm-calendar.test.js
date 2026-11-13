@@ -279,6 +279,7 @@ test('historical calendar renders click targets, source links and valid pop-out 
   assert.match(html, /data-pop="cal-pop-0"/);
   assert.match(html, /&lt;Review&gt;/);
   assert.doesNotMatch(html, /data-pop="cal-pop--1"/);
+  assert.match(html, /action="\/crm\/work\/calendar\/transcript" enctype="multipart\/form-data">\s*<input type="hidden" name="event" value="history">/);
   for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
 
@@ -308,4 +309,5 @@ test('future all-day appointments stay fixed while timed solo appointments offer
   assert.doesNotMatch(html, /name="event" value="all-day-solo"/);
   assert.match(html, /name="event" value="timed-solo"/);
   assert.equal((html.match(/action="\/crm\/work\/calendar\/flexible"/g) || []).length, 1);
+  assert.doesNotMatch(html, /calendar\/transcript/);
 });
