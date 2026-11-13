@@ -8,6 +8,7 @@
 <section class="grid first"><div class="panel s12"><h2>Could not generate this report</h2><p><%= report.error %></p></div></section>
 <% } else { %>
 <div class="form-row no-print"><button class="btn" onclick="window.print()">Print / Save PDF</button><a class="btn" href="/crm/<%= space %>/reports/<%= report.id %>/download">Download text</a></div>
+<% if (report.error) { %><div class="flash bad no-print">A newer version couldn't be written (<%= report.error.split('\n')[0].slice(0, 200) %>). This is the previous version.</div><% } %>
 <section class="grid first report-body"><article class="panel s12">
 <% if (report.coverage.partialPeriod) { %><p class="subline">Report to date, through <%= report.coverage.generatedDay %>.</p><% } %>
 <% if (report.coverage.includedFacts < report.coverage.matchingFacts) { %><p class="subline">This report covers a selection of available information rather than a complete account of the period.</p><% } %>

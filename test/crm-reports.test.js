@@ -168,3 +168,27 @@ test('recording metadata stays internal while reports and downloads use dated na
  q.reply(answer); assert.equal(reports.collect(rewritten,{jobs:q,t:T+4}).status,'done');
  assert.throws(()=>reports.rewrite(done.id,'personal',{jobs:q,t:T}),/not found/);
 });
+
+test('a failed rewrite keeps the previous report on show, and a later success clears the warning', async () => {
+ const f=fixture(),q=queue();
+ const r=reports.create('work',{kind:'monthly',projectId:f.p.id,anchor:'2026-11-13'},{jobs:q,t:T});
+ const packet=JSON.parse(q.sent[0].payload.userPrompt);
+ const answer=reply(packet.evidence[0].key);
+ answer.sections[0].paragraphs=[{text:'At the meeting on 10 November 2026, access was approved.',kind:'evidence',refs:[packet.evidence[0].key]},{text:'Group names cause confusion.',kind:'analysis',refs:[packet.evidence[0].key]},{text:'Book the call.',kind:'recommendation',refs:[packet.evidence[0].key]}];
+ q.reply(answer); const done=reports.collect(r,{jobs:q,t:T+1});
+ assert.match(reports.text(done),/\nInterpretation: Group names cause confusion\.\n[\s\S]*\nProposed next step: Book the call\./);
+ assert.doesNotMatch(reports.text(done),/analysis:|recommendation:/);
+ const again=reports.rewrite(done.id,'work',{jobs:q,t:T+2});
+ q.job={status:'failed',error:'usage_limit_reached: limit\nmore detail'};
+ const kept=reports.collect(again,{jobs:q,t:T+3});
+ assert.equal(kept.status,'done'); assert.match(kept.error,/usage_limit_reached/);
+ assert.equal(reports.shown(kept).sections[0].paragraphs[0].text,'At the meeting on 10 November 2026, access was approved.');
+ const ejs=require('ejs');
+ const html=await ejs.renderFile(path.join(__dirname,'../views/crm/report.ejs'),{report:reports.shown(kept),space:'work',page:'reports',title:kept.title,flash:null,reviewAll:0,whatsappWaiting:0,icon:require('../lib/crm/icons'),fmt:()=> '13 November'});
+ assert.match(html,/A newer version couldn't be written \(usage_limit_reached: limit\)\. This is the previous version\./);
+ assert.match(html,/access was approved/);
+ const third=reports.rewrite(done.id,'work',{jobs:q,t:T+4});
+ q.reply(answer); assert.equal(reports.collect(third,{jobs:q,t:T+5}).error,'');
+ const fresh=reports.create('work',{kind:'topic',question:'roster access position',anchor:'2026-11-13'},{jobs:q,t:T+6});
+ q.job={status:'failed',error:'boom'}; assert.equal(reports.collect(fresh,{jobs:q,t:T+7}).status,'failed','a first attempt with nothing to show still fails visibly');
+});
