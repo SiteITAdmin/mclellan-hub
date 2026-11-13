@@ -132,7 +132,18 @@ test('the app is given both diaries, task blocks, people, promises and each day\
   await boox.capture(notebook('day'), await pdf(['x']), T);
   read('Jane wants the scope by Friday');
 
-  const out = app.sync({ t: T, app: '2.0.0' });
+  const evidence = sources.admitSource({ space: 'personal', kind: 'note', origin: 'test', externalId: 'passport', title: 'Passport instructions', text: 'Use the online renewal form', occurredAt: T }).source;
+  const help = { gist: 'Renew online', should: { verdict: 'do', text: 'It expires soon', refs: [] },
+    behind: { text: 'Travel is planned', refs: [{ source: evidence.id }] }, options: [], recommend: 'Use the online form', with: [],
+    have: [], steps: [{ text: 'Open the form', refs: [{ source: evidence.id }] }], missing: [], draft: { body: 'Hello passport office', refs: [] } };
+  db.crm().prepare("INSERT INTO task_help(task_id,space,task_print,evidence_print,status,help,tried_at,written_at) VALUES(?,'personal','','','done',?,?,?)").run(task.id, JSON.stringify(help), T, T);
+  const out = app.sync({ t: T, app: '2.1.0' });
+  const guidance = out.taskDetails[task.id].guidance;
+  assert.equal(guidance.help.recommend, 'Use the online form');
+  assert.equal(guidance.help.draft.body, 'Hello passport office');
+  assert.equal(guidance.help.steps[0].sources[0].id, evidence.id);
+  assert.equal(guidance.help.behind.sources[0].title, 'Passport instructions');
+  assert.equal(out.taskDetails[task.id].space, 'personal');
   assert.equal(out.today, TODAY);
   assert.equal(out.days.length, app.BACK_DAYS + app.AHEAD_DAYS);
   assert.equal(out.days[app.BACK_DAYS].date, TODAY);

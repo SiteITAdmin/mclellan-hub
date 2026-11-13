@@ -1,10 +1,18 @@
 # Boox calendar and CRM app
 
-The Android app (`boox-app/`, package `scot.mclellan.boox`, version 2) reads the
+The Android app (`boox-app/`, package `scot.mclellan.boox`, version 2.1) reads the
 same calendar, tasks, promises and source-backed contact summaries as the Hub.
 Calendar shows both spaces, with the last seven days and next fourteen days
 saved on the tablet. It syncs on return to the app and every ten minutes while
 open. Failed syncs keep the last successful snapshot and show its timestamp.
+
+Tap an open task in CRM, a linked promise, or a calendar task block to read
+its guidance: context, options, recommendation, steps, evidence, missing details,
+and draft. The same saved analysis as the Hub is cached for offline reading;
+source buttons open the signed-in Hub in the browser when online. Draft text
+can be selected and copied. Guidance is refreshed by Sync, without re-pairing.
+Version 2.1 requires an app update to display these fields; install over the
+existing app to retain its settings and saved data.
 
 On Calendar, choose a day, then **New Work note** or **New Personal note**.
 Boox Notes opens with the dated name already filled in. If it offers a template,

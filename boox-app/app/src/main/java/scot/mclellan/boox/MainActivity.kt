@@ -164,7 +164,11 @@ class MainActivity : Activity() {
     }
     private fun promises(parent: LinearLayout, title: String, list: JSONArray) {
         parent.addView(text(title, 22, true))
-        lines(parent, list.objects().map { p -> listOf(p.optString("text") + if (p.optString("to").isNotBlank()) " — ${p.optString("to")}" else "", p.optString("when")).filter { it.isNotBlank() }.joinToString("\n") }, "Nothing outstanding.")
+        if (list.length() == 0) lines(parent, emptyList(), "Nothing outstanding.")
+        list.objects().forEach { p ->
+            val value = listOf(p.optString("text") + if (p.optString("to").isNotBlank()) " — ${p.optString("to")}" else "", p.optString("when")).filter { it.isNotBlank() }.joinToString("\n")
+            taskRow(parent, p.optString("taskId"), value)
+        }
     }
     private fun crm() {
         chooseSpace(); heading("${label(space)} at a glance")
@@ -173,9 +177,13 @@ class MainActivity : Activity() {
         promises(content, "You owe", s.array("owe")); rule(content)
         promises(content, "Owed to you", s.array("owed")); rule(content)
         heading("Tasks")
-        lines(content, s.array("tasks").objects().map { task -> listOf(task.optString("title"),
-            if (task.optString("dueLabel").isNotEmpty()) "${if (task.optBoolean("overdue")) "Overdue" else "Due"}: ${task.optString("dueLabel")}" else "",
-            task.optString("planned").let { if (it.isNotBlank()) "Planned: $it" else "" }).filter { it.isNotBlank() }.joinToString("\n") }, "No other open tasks.")
+        val tasks = s.array("tasks").objects()
+        if (tasks.isEmpty()) lines(content, emptyList(), "No other open tasks.")
+        tasks.forEach { task ->
+            taskRow(content, task.optString("id"), listOf(task.optString("title"),
+                if (task.optString("dueLabel").isNotBlank()) "${if (task.optBoolean("overdue")) "Overdue" else "Due"}: ${task.optString("dueLabel")}" else "",
+                task.optString("planned").let { if (it.isNotBlank()) "Planned: $it" else "" }).filter { it.isNotBlank() }.joinToString("\n"))
+        }
         rule(content); heading("Keep in touch")
         lines(content, s.array("drifting").objects().map { "${it.optString("name")}\n${it.optInt("sinceDays")} days since contact" }, "Nobody is overdue for a catch-up.")
         rule(content); heading("Dates to remember")
@@ -204,7 +212,67 @@ class MainActivity : Activity() {
         promises(body, "You owe", p.array("owe")); promises(body, "Owed to you", p.array("owed"))
         dialog(p.optString("name"), body)
     }
+    private fun taskRow(parent: LinearLayout, id: String, value: String) {
+        val available = data?.optJSONObject("taskDetails")?.has(id) == true
+        val view = text(value + if (available) "\nTap for guidance" else "")
+        if (available) {
+            view.isClickable = true; view.isFocusable = true
+            view.setOnClickListener { taskDetail(id, value.substringBefore("\n")) }
+        }
+        parent.addView(view)
+    }
+    private fun taskDetail(id: String, title: String) {
+        val task = data?.optJSONObject("taskDetails")?.optJSONObject(id)
+        val guidance = task?.optJSONObject("guidance")
+        val help = guidance?.optJSONObject("help")
+        val body = column()
+        fun section(name: String, values: List<String>) {
+            if (values.isNotEmpty()) { body.addView(text(name, 22, true)); lines(body, values) }
+        }
+        fun cited(line: JSONObject?) {
+            if (line == null) return
+            if (line.optString("text").isNotBlank()) body.addView(text(line.optString("text")))
+            line.array("sources").objects().forEach { source ->
+                val r = row()
+                r.addView(button("Source: ${source.optString("title")}") {
+                    val uri = android.net.Uri.parse("https://douglas.mclellan.scot/crm/${task?.optString("space")}/sources/${android.net.Uri.encode(source.optString("id"))}")
+                    runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
+                        .onFailure { Toast.makeText(this, "Open the source in the Hub when online.", Toast.LENGTH_LONG).show() }
+                }); body.addView(r)
+            }
+        }
+        fun citedSection(name: String, values: JSONArray) {
+            if (values.length() > 0) { body.addView(text(name, 22, true)); values.objects().forEach { cited(it) } }
+        }
+        if ((guidance?.optLong("writtenAt", 0) ?: 0) > 0) body.addView(text("Written: ${stamp(guidance!!.optLong("writtenAt"))}", 15))
+        if (guidance?.optString("state") == "failed") body.addView(text("Could not write the latest guidance. ${guidance.optString("error")}"))
+        else if (guidance?.optString("state") == "waiting" || guidance?.optBoolean("outdated") == true) body.addView(text("Updated guidance is being prepared."))
+        if (help == null) body.addView(text("No guidance saved yet. Sync again after the Hub has prepared it."))
+        else {
+            section("Help with this", listOf(help.optString("gist")).filter { it.isNotBlank() })
+            val should = help.optJSONObject("should")
+            body.addView(text(when (should?.optString("verdict")) { "do" -> "Worth doing"; "skip" -> "May not be needed"; else -> "Check first" }, 22, true)); cited(should)
+            if (help.optJSONObject("behind")?.optString("text")?.isNotBlank() == true) { body.addView(text("What's really going on", 22, true)); cited(help.optJSONObject("behind")) }
+            citedSection("Options", help.array("options"))
+            section("The Hub would", listOf(help.optString("recommend")).filter { it.isNotBlank() })
+            body.addView(text("This is the Hub's own reading of the context and tools. Check it before relying on it.", 15))
+            citedSection("How to do it", help.array("steps"))
+            body.addView(text("Steps without a source are general know-how.", 15))
+            citedSection("What you already have", help.array("have"))
+            section("Not in the Hub", help.array("missing").strings())
+            help.optJSONObject("draft")?.let { draft ->
+                section("Draft", listOf(draft.optString("to"), draft.optString("subject")).filter { it.isNotBlank() })
+                body.addView(text(draft.optString("body")).apply { setTextIsSelectable(true) })
+                cited(draft)
+                body.addView(text("Nothing is sent for you. Square brackets mark details missing from your records.", 15))
+            }
+            if (help.array("with").length() > 0) body.addView(text("Part of the same job", 22, true))
+            help.array("with").objects().forEach { other -> taskRow(body, other.optString("id"), other.optString("title")) }
+        }
+        dialog(task?.optString("title") ?: title, body)
+    }
     private fun eventDetail(event: JSONObject) {
+        if (event.optString("type") == "task") { taskDetail(event.optString("id"), event.optString("title")); return }
         val body = column()
         event.array("people").strings().forEach { id ->
             val p = data?.optJSONObject("people")?.optJSONObject(id)
@@ -213,7 +281,9 @@ class MainActivity : Activity() {
         lines(body, event.array("guests").strings())
         body.addView(text("Meeting preparation", 22, true)); lines(body, event.array("prep").strings(), "No preparation saved.")
         body.addView(text("What happened", 22, true)); lines(body, event.array("happened").strings(), "No meeting notes read yet.")
-        body.addView(text("Tasks", 22, true)); lines(body, event.array("tasks").objects().map { "${if (it.optBoolean("done")) "Done: " else ""}${it.optString("title")}" }, "No linked tasks.")
+        body.addView(text("Tasks", 22, true))
+        if (event.array("tasks").length() == 0) lines(body, emptyList(), "No linked tasks.")
+        event.array("tasks").objects().forEach { task -> taskRow(body, task.optString("id"), "${if (task.optBoolean("done")) "Done: " else ""}${task.optString("title")}") }
         promises(body, "Promises", event.array("promises"))
         dialog(event.optString("title"), body)
     }
@@ -236,7 +306,7 @@ class MainActivity : Activity() {
         network.execute {
             var receiptError = ""
             runCatching { store.flush() }.onFailure { receiptError = "Note reports still waiting: ${it.message}" }
-            val result = runCatching { store.request("sync?app=2.0.0").also { store.saveCache(it) } }
+            val result = runCatching { store.request("sync?app=2.1.0").also { store.saveCache(it) } }
             main.post {
                 if (isDestroyed) return@post
                 syncing = false
