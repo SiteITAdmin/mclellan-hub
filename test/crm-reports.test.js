@@ -61,7 +61,8 @@ test('project report uses admitted source-backed facts, labels background and cu
  assert.equal(packet.coverage.includedFacts,1); assert.equal(packet.coverage.currentTasks,1);
  assert.equal(packet.coverage.partialPeriod,true);
  const e = packet.evidence.find(e=>e.id===f.atom.id);
- assert.equal(e.sources[0].id,f.source.id);
+ assert.equal(e.sources[0].date,'2026-11-10');
+ assert.equal(JSON.parse(r.evidence).find(e=>e.id===f.atom.id).sources[0].id,f.source.id);
  assert.equal(reports.create('work',input,{jobs:q,t:T+1}).id,r.id); assert.equal(q.sent.length,1);
  q.reply(reply(e.key));
  const done = reports.collect(r,{jobs:q,t:T+60});
@@ -69,7 +70,7 @@ test('project report uses admitted source-backed facts, labels background and cu
  assert.equal(reports.shown(done).sections[0].paragraphs[0].citations[0].sources[0].id,f.source.id);
  db.crm().prepare('UPDATE atoms SET statement=? WHERE id=?').run('Changed later',f.atom.id);
  assert.match(reports.text(done),/Roster access was approved/);
- assert.match(reports.text(done),new RegExp(f.source.id));
+ assert.doesNotMatch(reports.text(done),new RegExp(f.source.id));
  assert.equal(reports.get(r.id,'personal'),null);
 });
 
@@ -107,7 +108,7 @@ test('malformed replies and invented references fail visibly, failed jobs can re
  assert.throws(()=>reports.clean(reply('E1'),[]),/valid evidence/);
 });
 
-test('HTTP report screens enforce auth, space and same-origin writes, render escaped citations and downloadable reports', async () => {
+test('HTTP report screens enforce auth, space and same-origin writes, render escaped narrative and downloadable reports', async () => {
  const f=fixture(),q=queue();
  const r=reports.create('work',{kind:'weekly',projectId:f.p.id,anchor:'2026-11-13'},{jobs:q,t:T});
  const key=JSON.parse(r.evidence)[0].key;
@@ -123,7 +124,7 @@ test('HTTP report screens enforce auth, space and same-origin writes, render esc
   assert.equal((await fetch(base+`/crm/personal/reports/${r.id}`)).status,404);
   assert.equal((await fetch(base+'/crm/work/reports',{method:'POST',headers:{origin:'https://evil.test'}})).status,403);
   const form=await fetch(base+`/crm/work/reports?projectId=${f.p.id}`); assert.equal(form.status,200); assert.match(await form.text(),/Quarterly/);
-  const html=await (await fetch(base+url)).text(); assert.match(html,/&lt;script&gt;/); assert.doesNotMatch(html,/<script>bad/); assert.match(html,/Download text/); assert.match(html,new RegExp(`/crm/work/sources/${f.source.id}`));
+  const html=await (await fetch(base+url)).text(); assert.match(html,/&lt;script&gt;/); assert.doesNotMatch(html,/<script>bad/); assert.match(html,/Download text/); assert.doesNotMatch(html,/\/crm\/work\/(sources|tasks)\//);
   const download=await fetch(base+url+'/download'); assert.match(download.headers.get('content-disposition'),/attachment/); assert.match(await download.text(),/Roster access/);
   const project=await (await fetch(base+`/crm/work/projects/${f.p.id}`)).text(); assert.match(project,/Project reports/);
   const created=await fetch(base+'/crm/work/reports',{method:'POST',redirect:'manual',headers:{origin:base,'content-type':'application/x-www-form-urlencoded'},body:'kind=topic&question=unfindablezebra'}); assert.equal(created.status,302);
@@ -139,4 +140,31 @@ test('unfiled tasks remain candidates for synthesis rather than disappearing fro
  const candidate=JSON.parse(r.evidence).find(e=>e.id===task.id);
  assert.match(candidate.relevance,/candidate only/);
  assert.match(reports.SYSTEM_PROMPT,/may not belong/);
+});
+
+test('recording metadata stays internal while reports and downloads use dated narrative attribution', async () => {
+ const f=fixture(),q=queue();
+ db.crm().prepare("UPDATE sources SET kind='meeting',title='Mobile recording - November 10, 2026 (part 1 of 4)' WHERE id=?").run(f.source.id);
+ const r=reports.create('work',{kind:'monthly',projectId:f.p.id,anchor:'2026-11-13'},{jobs:q,t:T});
+ const packet=JSON.parse(q.sent[0].payload.userPrompt);
+ const source=packet.evidence.find(e=>e.id===f.atom.id).sources[0];
+ assert.deepEqual([source.context,source.date],['Meeting','2026-11-10']);
+ assert.doesNotMatch(q.sent[0].payload.userPrompt,/Mobile recording|part 1 of 4/);
+ assert.match(r.evidence,/Mobile recording/);
+ const answer=reply(packet.evidence[0].key);
+ answer.sections[0].paragraphs[0].text='At the meeting on 10 November 2026, roster access was approved.';
+ q.reply(answer); const done=reports.collect(r,{jobs:q,t:T+1});
+ const out=reports.text(done);
+ assert.match(out,/At the meeting on 10 November 2026/);
+ assert.doesNotMatch(out,/Mobile recording|part 1 of 4|https:\/\/|matching period facts|task candidates/);
+ const ejs=require('ejs');
+ const html=await ejs.renderFile(path.join(__dirname,'../views/crm/report.ejs'),{report:reports.shown(done),space:'work',page:'reports',title:done.title,flash:null,reviewAll:0,whatsappWaiting:0,icon:require('../lib/crm/icons'),fmt:()=> '13 November'});
+ assert.match(html,/At the meeting on 10 November 2026/);
+ assert.doesNotMatch(html,/Mobile recording|part 1 of 4|report-citations|\/crm\/work\/sources\//);
+ const rewritten=reports.rewrite(done.id,'work',{jobs:q,t:T+2});
+ assert.equal(rewritten.id,done.id); assert.equal(rewritten.status,'waiting'); assert.equal(rewritten.evidence,done.evidence);
+ assert.equal(reports.rewrite(done.id,'work',{jobs:q,t:T+3}).job_id,rewritten.job_id);
+ assert.equal(q.sent.length,2);
+ q.reply(answer); assert.equal(reports.collect(rewritten,{jobs:q,t:T+4}).status,'done');
+ assert.throws(()=>reports.rewrite(done.id,'personal',{jobs:q,t:T}),/not found/);
 });
