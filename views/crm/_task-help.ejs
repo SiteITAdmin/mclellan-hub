@@ -1,0 +1,29 @@
+<% if (help) { const h = help.help; const esc = v => String(v).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); const cite = l => (l.sources || []).map(s => `<a href="/crm/${space}/sources/${esc(s.id)}" title="${esc(s.title)}">${s.kind === 'meeting' ? 'Meeting' : s.kind === 'whatsapp' ? 'WhatsApp' : s.kind === 'note' ? 'Note' : s.kind === 'calendar' ? 'Calendar' : s.kind === 'task' ? 'Task' : 'Email'}, ${fmt(s.occurred_at, 'date')}</a>`).join(''); %>
+<section class="grid first" id="help"><div class="panel s12 task-help">
+  <div class="panel-head"><h2>Help with this</h2>
+    <% if (help.writtenAt) { %><span class="chip">Written <%= fmt(help.writtenAt, 'date') %><%= help.state === 'waiting' || help.outdated ? ', being rewritten' : '' %></span><% } %>
+    <% if (help.state !== 'waiting' && help.state !== 'queued') { %><form class="end" method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/help"><button class="btn small">Write it again</button></form><% } %>
+  </div>
+  <% if (help.state === 'failed') { %><div class="task-warning">Couldn't write <%= h ? 'a newer version' : 'this' %>: <%= help.error %>. <%= help.givenUp ? 'It tries again tomorrow.' : 'It tries again within the hour.' %></div><% } %>
+  <% if (!h) { %><% if (help.state !== 'failed') { %><div class="empty"><%= help.state === 'waiting' ? 'The Mac is writing this now.' : 'Waiting its turn. Help is written one task at a time, usually within a few minutes.' %></div><% } %>
+  <% } else { %>
+    <% if (h.gist) { %><p class="help-gist"><%= h.gist %></p><% } %>
+    <% if (h.should.text) { %><p class="help-should <%= h.should.verdict %>"><strong><%= h.should.verdict === 'do' ? 'Worth doing.' : h.should.verdict === 'skip' ? 'May not be needed.' : 'Check first.' %></strong> <%= h.should.text %> <span class="cites"><%- cite(h.should) %></span></p><% } %>
+    <div class="help-cols">
+      <% if (h.steps.length) { %><div><h3>How to do it</h3>
+        <ol class="help-steps"><% for (const l of h.steps) { %><li><%= l.text %> <span class="cites"><%- cite(l) %></span></li><% } %></ol>
+        <p class="subline">Steps with no link are general know-how, not from your records.</p></div><% } %>
+      <% if (h.have.length || h.missing.length) { %><div>
+        <% if (h.have.length) { %><h3>What you already have</h3>
+        <ul class="standing-lines"><% for (const l of h.have) { %><li><%= l.text %><span class="cites"><%- cite(l) %></span></li><% } %></ul><% } %>
+        <% if (h.missing.length) { %><h3>Not in the Hub</h3><ul class="help-missing"><% for (const m of h.missing) { %><li><%= m %></li><% } %></ul><% } %>
+      </div><% } %>
+    </div>
+    <% if (h.draft) { %><div class="help-draft"><h3>Draft<%= h.draft.to ? ` to ${h.draft.to}` : '' %></h3>
+      <% if (h.draft.subject) { %><p class="subline">Subject: <%= h.draft.subject %></p><% } %>
+      <textarea class="textarea" id="help-draft" rows="<%= Math.min(16, Math.max(5, h.draft.body.split('\n').length + 2)) %>" readonly><%= h.draft.body %></textarea>
+      <p><button class="btn small" type="button" onclick="navigator.clipboard.writeText(document.getElementById('help-draft').value).then(() => { this.textContent = 'Copied'; })">Copy draft</button> <span class="cites"><%- cite(h.draft) %></span></p>
+      <p class="subline">Nothing is sent for you. Anything in [square brackets] wasn't in your records.</p></div><% } %>
+  <% } %>
+</div></section>
+<% } %>

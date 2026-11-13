@@ -486,7 +486,7 @@ router.post('/crm/:space/promises/:atomId/:action', spaceParam, requireSameOrigi
 });
 
 function taskForm(req, res, t, error = null) {
-  res.render('crm/task', { page: 'tasks', t, error, choices: tasks.choices(req.params.space), blocks: t.id ? calendar.blocksFor(t.id) : [], title: t.id ? t.title : 'Add a task' });
+  res.render('crm/task', { page: 'tasks', t, error, choices: tasks.choices(req.params.space), blocks: t.id ? calendar.blocksFor(t.id) : [], help: t.id ? require('../lib/crm/task-help').forTask(t.id) : null, title: t.id ? t.title : 'Add a task' });
 }
 
 router.get('/crm/:space/tasks', spaceParam, (req, res) => {
@@ -538,6 +538,11 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
     else if (req.params.action === 'reopen') tasks.edit(t.id, { status: 'needsAction', revision: req.body.revision });
     else if (req.params.action === 'resolve') crm().prepare("UPDATE tasks SET conflict = '' WHERE id = ?").run(t.id);
     else if (req.params.action === 'delete') tasks.edit(t.id, { status: 'deleted', revision: req.body.revision });
+    else if (req.params.action === 'help') {
+      require('../lib/crm/task-help').again(t.id);
+      flash(req, 'The help will be written again, usually within a few minutes.');
+      return res.redirect(`/crm/${t.space}/tasks/${t.id}`);
+    }
     else return res.status(404).send('Not found');
     replanned();
     flash(req, 'Saved. Your calendar has been replanned.');

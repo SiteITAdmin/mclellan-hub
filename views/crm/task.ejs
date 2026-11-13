@@ -4,7 +4,8 @@
 <% if (error) { %><div class="flash bad" role="alert"><%= error %></div><% } %>
 <% if (t.sync_error) { %><div class="flash bad"><%= t.sync_error %></div><% } %>
 <% if (t.conflict) { %><div class="flash bad"><p>Both copies changed. Google’s version was kept; your previous Hub values are saved below. Edit and save to resolve.</p><dl><% for (const [field, values] of Object.entries(JSON.parse(t.conflict))) { %><dt><%= field %></dt><dd>Hub: <%= values.hub ?? '(empty)' %><br>Google: <%= values.google ?? '(empty)' %></dd><% } %></dl><form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/resolve"><button class="btn small">Keep current version</button></form></div><% } %>
-<section class="grid first">
+<%- include('_task-help') %>
+<section class="grid<%= help ? '' : ' first' %>">
   <div class="panel s8">
   <% if (t.status !== 'deleted') { %>
     <form method="post" action="/crm/<%= space %>/tasks<%= t.id ? `/${t.id}/edit` : '' %>" class="list">

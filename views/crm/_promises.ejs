@@ -5,6 +5,7 @@
     <div class="what"><% if (owedToMe && p.who) { %><%= p.person_id ? '' : p.who %><% if (p.person_id) { %><a href="/crm/<%= space %>/people/<%= p.person_id %>"><%= p.person_name %></a><% } %> will <% } %><%= owedToMe ? p.action : p.action.charAt(0).toUpperCase() + p.action.slice(1) %></div>
     <% if (p.looks_done_source_id) { %><div class="looks-done"><strong>Looks done:</strong> “<%= p.looks_done_quote %>” <a href="/crm/<%= space %>/sources/<%= p.looks_done_source_id %>">Read the email</a></div>
     <% } else if (p.quote) { %><div class="quote">“<%= p.quote %>”</div><% } %>
+    <%- include('_help-line', { h: p.help, taskId: p.task_id }) %>
     <div class="meta">
       <% if (!owedToMe && p.who) { %><span>To <% if (p.person_id) { %><a href="/crm/<%= space %>/people/<%= p.person_id %>"><%= p.person_name %></a><% } else { %><%= p.who %><% } %></span><% } %>
       <span class="<%= p.overdue ? 'late' : '' %>"><%= p.due ? `Due ${p.due_label}` : owedToMe ? (p.days === 0 ? 'Since today' : `Waiting ${p.days} ${p.days === 1 ? 'day' : 'days'}`) : (p.days === 0 ? 'Said today' : `Said ${p.days} ${p.days === 1 ? 'day' : 'days'} ago`) %></span>

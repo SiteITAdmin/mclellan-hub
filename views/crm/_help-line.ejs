@@ -1,0 +1,1 @@
+<% if (h) { %><a class="help-line" href="/crm/<%= space %>/tasks/<%= taskId %>#help"><% if (h.verdict !== 'do') { %><span class="cal-tag warn"><%= h.verdict === 'skip' ? 'May not be needed' : 'Check first' %></span> <% } %><% if (h.draft) { %><span class="cal-tag">Draft ready</span> <% } %><%= h.verdict !== 'do' && h.why ? h.why : `Start: ${h.next}` %></a><% } %>

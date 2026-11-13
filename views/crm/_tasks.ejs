@@ -9,6 +9,7 @@
     </form><% } else { %><span aria-hidden="true">—</span><% } %>
     <div class="main"><a class="what" href="/crm/<%= space %>/tasks/<%= task.id %>"><%= task.title %></a>
       <div class="meta"><%= [...task.people, ...task.organisations, ...task.projects].map(x => x.name).join(' · ') || 'No context yet' %></div>
+      <%- include('_help-line', { h: task.help, taskId: task.id }) %>
       <% if (task.sync_error || task.conflict) { %><div class="task-warning"><%= task.sync_error || 'Both copies changed — review the saved versions' %></div><% } %>
     </div>
     <div class="end"><span class="when <%= task.status === 'needsAction' && task.due && task.due < todayDate ? 'late' : '' %>"><%= task.due || 'No due date' %></span><small><%= task.pending ? 'Waiting to sync' : 'Synced' %></small></div>
