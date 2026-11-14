@@ -184,8 +184,9 @@ test('a job is planned as one sitting under its name, and its steps share that b
   const r = roster();
   jobsLib.groupBySource(T);
   const id = jobOf(r.list.id).job_id;
-  crm().prepare("UPDATE task_jobs SET title = 'Stop NCHDs editing the draft rosters' WHERE id = ?").run(id);
   crm().prepare("UPDATE tasks SET minutes = 30 WHERE id = ?").run(r.list.id);
+  assert.equal(jobsLib.blockTitle(tasks.get(r.list.id)), `${r.list.title} (+3 more)`, 'an unread source job is named by its first step');
+  jobsLib.rename(id, 'Stop NCHDs editing the draft rosters');
   const events = [];
   let n = 0;
   const api = { events: {
