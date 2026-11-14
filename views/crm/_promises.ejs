@@ -1,6 +1,13 @@
 <% if (!list.length) { %><div class="empty"><%= none %></div><% } %>
+<% const groups = [], byJob = new Map();
+   for (const p of list) {
+     const job = p.job && p.job.open + p.job.done >= 2 ? p.job : null;
+     if (job && byJob.has(job.id)) { byJob.get(job.id).items.push(p); continue; }
+     const g = { job, items: [p] }; groups.push(g); if (job) byJob.set(job.id, g);
+   } %>
 <div class="promise-list">
-<% for (const p of list) { const owedToMe = p.direction === 'owed_to_me'; %>
+<% for (const g of groups) { %><% if (g.job) { %><div class="job-group"><%- include('_job-head', { job: g.job }) %><div class="promise-list"><% } %>
+<% for (const p of g.items) { const owedToMe = p.direction === 'owed_to_me'; %>
   <div class="promise">
     <div class="what"><% if (owedToMe && p.who) { %><%= p.person_id ? '' : p.who %><% if (p.person_id) { %><a href="/crm/<%= space %>/people/<%= p.person_id %>"><%= p.person_name %></a><% } %> will <% } %><%= owedToMe ? p.action : p.action.charAt(0).toUpperCase() + p.action.slice(1) %></div>
     <% if (p.looks_done_source_id) { %><div class="looks-done"><strong>Looks done:</strong> “<%= p.looks_done_quote %>” <a href="/crm/<%= space %>/sources/<%= p.looks_done_source_id %>">Read the email</a></div>
@@ -25,4 +32,5 @@
     </div>
   </div>
 <% } %>
+<% if (g.job) { %></div></div><% } %><% } %>
 </div>

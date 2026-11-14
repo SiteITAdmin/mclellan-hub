@@ -1,0 +1,5 @@
+<div class="job-head">
+  <a class="what" href="/crm/<%= space %>/jobs/<%= job.id %>"><span class="cal-tag">Job</span> <%= job.title %></a>
+  <div class="meta"><%= job.open %> open<%= job.done ? ` · ${job.done} done` : '' %><% if (job.suggested) { %> · <a href="/crm/<%= space %>/jobs/<%= job.id %>#missing"><%= job.suggested %> missing step<%= job.suggested === 1 ? '' : 's' %> to look at</a><% } %></div>
+  <% if (job.line) { %><a class="help-line" href="/crm/<%= space %>/jobs/<%= job.id %>"><%= job.line %></a><% } %>
+</div>

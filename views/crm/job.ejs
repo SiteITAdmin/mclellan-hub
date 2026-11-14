@@ -1,0 +1,75 @@
+<%- include('_top') %>
+<% const cite = l => (l.sources || []).map(s => `<a href="/crm/${space}/sources/${s.id}" title="${String(s.title).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)}">${s.kind === 'meeting' ? 'Meeting' : s.kind === 'whatsapp' ? 'WhatsApp' : s.kind === 'note' ? 'Note' : s.kind === 'calendar' ? 'Calendar' : 'Email'}, ${fmt(s.occurred_at, 'date')}</a>`).join(''); const h = job.help; %>
+<div class="crumbs"><a href="/crm/<%= space %>/tasks">Tasks</a> / Job</div>
+<div class="title-row"><div><h1><%= job.title %></h1>
+  <p class="subline"><%= space === 'work' ? 'Work' : 'Personal' %> · <%= job.open.length %> open<%= job.done.length ? ` · ${job.done.length} done` : '' %><%= job.made_by === 'source' ? ' · grouped because they came from the same email or meeting' : job.made_by === 'model' ? ' · grouped by the Hub' : '' %></p></div></div>
+
+<section class="grid first"><div class="panel s12 task-help">
+  <div class="panel-head"><h2>What this job is for</h2>
+    <% if (job.writtenAt) { %><span class="chip">Written <%= fmt(job.writtenAt, 'date') %><%= job.state === 'waiting' ? ', being rewritten' : '' %></span><% } %>
+    <% if (job.state === 'done' || job.state === 'failed') { %><form class="end" method="post" action="/crm/<%= space %>/jobs/<%= job.id %>/again"><button class="btn small">Write it again</button></form><% } %>
+  </div>
+  <% if (job.state === 'failed') { %><div class="task-warning">Couldn't write <%= h ? 'a newer version' : 'this' %>: <%= job.error %>. <%= job.givenUp ? 'It tries again tomorrow.' : 'It tries again within the hour.' %></div><% } %>
+  <% if (!h) { %><% if (job.state !== 'failed') { %><div class="empty"><%= job.state === 'waiting' ? 'The Mac is writing this now.' : job.state === 'queued' ? 'Waiting its turn, usually within a few minutes.' : 'Written once each task in the job has its own help.' %></div><% } %>
+  <% } else { %>
+    <% if (job.goal) { %><p class="help-gist"><%= job.goal %></p><% } %>
+    <div class="help-deeper"><h3>What's really going on</h3>
+      <% if (h.behind.text) { %><p><%= h.behind.text %> <span class="cites"><%- cite(h.behind) %></span></p><% } %>
+      <% if (h.recommend) { %><p class="help-recommend"><strong>The Hub would:</strong> <%= h.recommend %></p><% } %>
+      <p class="subline">This is the Hub's own reading of the tasks and where they came from. Check it before relying on it.</p>
+    </div>
+  <% } %>
+</div></section>
+
+<section class="grid">
+  <div class="panel s8">
+    <div class="panel-head"><h2>Steps</h2><span class="chip"><%= h?.order?.length ? 'In the order the Hub would do them' : 'In the order they arrived' %></span></div>
+    <% if (!job.open.length) { %><div class="empty">Every task in this job is done.</div><% } %>
+    <div class="rows">
+    <% for (const t of job.open) { %>
+      <div class="rowcard task-row">
+        <form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/complete"><input type="hidden" name="revision" value="<%= t.revision %>"><input type="hidden" name="back" value="/crm/<%= space %>/jobs/<%= job.id %>"><button class="task-check" aria-label="Complete <%= t.title %>">○</button></form>
+        <div class="main"><a class="what" href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a>
+          <div class="meta"><%= t.job_by === 'douglas' ? 'Added by you' : t.job_by === 'source' ? 'From the same email or meeting' : 'Grouped by the Hub' %></div>
+          <%- include('_help-line', { h: t.help, taskId: t.id }) %>
+        </div>
+        <div class="end"><span class="when"><%= t.due || 'No due date' %></span>
+          <form method="post" action="/crm/<%= space %>/jobs/<%= job.id %>/remove"><input type="hidden" name="task" value="<%= t.id %>"><button class="btn text small">Not part of this job</button></form></div>
+      </div>
+    <% } %>
+    </div>
+    <% if (job.done.length) { %><h3>Done</h3><ul class="job-steps"><% for (const t of job.done) { %><li class="done-step"><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a></li><% } %></ul><% } %>
+
+    <h3 id="missing">Missing steps</h3>
+    <% if (!job.suggested.length) { %><p class="subline"><%= h ? 'The Hub sees nothing missing.' : 'Suggested once the job has been read.' %></p><% } %>
+    <% for (const s of job.suggested) { %><div class="job-suggest">
+      <div class="what"><strong><%= s.text %></strong></div>
+      <% if (s.why) { %><div class="subline"><%= s.why %> <span class="cites"><%- cite(s) %></span></div><% } %>
+      <div class="acts">
+        <form method="post" action="/crm/<%= space %>/jobs/<%= job.id %>/accept"><input type="hidden" name="step" value="<%= s.id %>"><button class="btn small primary">Add as a task</button></form>
+        <form method="post" action="/crm/<%= space %>/jobs/<%= job.id %>/dismiss"><input type="hidden" name="step" value="<%= s.id %>"><button class="btn small">Not needed</button></form>
+      </div></div><% } %>
+    <% if (job.dismissed.length) { %><p class="subline">You said these weren't needed: <%= job.dismissed.map(s => s.text).join('; ') %>.</p><% } %>
+  </div>
+
+  <div class="s4 side-stack">
+    <div class="panel"><div class="panel-head"><h2>Planned for</h2><a class="end" href="/crm/<%= space %>/calendar">Calendar</a></div>
+      <% if (!job.blocks.length) { %><p class="subline"><%= job.open.length ? 'No free time found yet. The calendar is replanned every 5 minutes.' : 'Nothing left to plan.' %></p><% } %>
+      <% for (const b of job.blocks) { %><p><%= fmt(b.start_at) %>–<%= fmt(b.end_at, 'time') %><% if (b.late) { %> <span class="cal-tag warn">after it's due</span><% } %><% if (b.pinned) { %> <span class="cal-tag">time chosen by you</span><% } %></p><% } %>
+      <p class="subline">The open steps are planned as one sitting, as long as all of them together.</p>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Name</h2></div>
+      <form method="post" action="/crm/<%= space %>/jobs/<%= job.id %>/rename" class="list">
+        <div class="field"><label for="job-title">Job name</label><input class="input" id="job-title" name="title" value="<%= job.title %>" maxlength="200" required></div>
+        <div><button class="btn small">Rename</button></div>
+      </form>
+      <p class="subline"><%= job.title_by === 'douglas' ? 'You named this job, so the Hub keeps your name.' : 'Named by the Hub. Once you rename it, the Hub keeps your name.' %></p>
+    </div>
+    <% if (job.removed.length) { %><div class="panel"><div class="panel-head"><h2>Taken out</h2></div>
+      <% for (const r of job.removed) { %><p><a href="/crm/<%= space %>/tasks/<%= r.id %>"><%= r.title %></a><small class="task-via"><%= r.removed_by === 'douglas' ? 'By you' : 'By the Hub: it only shared an email or meeting' %></small></p>
+        <form method="post" action="/crm/<%= space %>/jobs/<%= job.id %>/putback"><input type="hidden" name="task" value="<%= r.id %>"><button class="btn small">Put back</button></form><% } %>
+    </div><% } %>
+    <div class="panel"><div class="panel-head"><h2>Google Tasks</h2></div><p class="subline">Each step stays its own task in Google Tasks. Only the Hub and your calendar show them as one job.</p></div>
+  </div>
+</section>
+<%- include('_bottom') %>

@@ -56,7 +56,7 @@ test('help is written from same-space evidence, keeps only cited lines, and reac
 
   q.reply({ gist: 'Ken wants the empty Visitors group removed.',
     behind: { text: 'Visitors is a built-in site group, not an Entra group.', refs: ['S1', 'nope'] },
-    options: [{ text: 'Delete it as asked.' }, { text: 'Rename it instead.', refs: ['F1'] }], recommend: 'Rename it.', with: ['T1', 'T9', 'T1'],
+    options: [{ text: 'Delete it as asked.' }, { text: 'Rename it instead.', refs: ['F1'] }], recommend: 'Rename it.', job: { id: 'new', title: 'Tidy the NCHD groups', with: ['T1', 'T9', 'T1'] },
     should: { verdict: 'check', text: 'Deleting a default group can break sharing links.', refs: ['S1'] },
     have: [{ text: 'The group has no members.', refs: ['F1'] }, { text: 'Invented claim', refs: [] }, { text: 'Wrong id', refs: ['F9'] }],
     steps: [{ text: 'Open Site settings > People and groups.', refs: [] }, { text: 'Confirm it is empty.', refs: ['F1', 'S1'] }],
@@ -69,7 +69,9 @@ test('help is written from same-space evidence, keeps only cited lines, and reac
   assert.equal(shown.help.behind.sources[0].id, f.s.id);
   assert.equal(shown.help.options.length, 2);
   assert.equal(shown.help.recommend, 'Rename it.');
-  assert.deepEqual(shown.help.with.map(o => o.title), ['Rename NCHD Owner group']);
+  const grouped = db.crm().prepare("SELECT t.title, j.title AS job, t.job_by FROM tasks t JOIN task_jobs j ON j.id = t.job_id ORDER BY t.title").all();
+  assert.deepEqual(grouped, [{ title: 'Delete the NCHD Visitors group if it has no members', job: 'Tidy the NCHD groups', job_by: 'model' }, { title: 'Rename NCHD Owner group', job: 'Tidy the NCHD groups', job_by: 'model' }]);
+  assert.match(prompt, /This task is not part of any job yet\./);
   assert.equal(shown.help.have[0].sources[0].id, f.s.id);
   assert.equal(shown.help.steps.length, 2);
   assert.equal(shown.help.steps[0].sources.length, 0);

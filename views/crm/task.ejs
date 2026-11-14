@@ -32,6 +32,14 @@
       <p class="subline"><%= t.reading === 'done' ? 'Task text has been read.' : 'Task text is waiting to be read.' %></p>
       <a href="/crm/<%= space %>/sources/<%= t.source_id %>">View captured task</a>
     </div>
+    <% if (t.status === 'needsAction') { %><div class="panel"><div class="panel-head"><h2>Job</h2></div>
+      <% if (t.job) { %><p><a href="/crm/<%= space %>/jobs/<%= t.job.id %>"><%= t.job.title %></a><small class="task-via"><%= t.job.open %> open<%= t.job.done ? ` · ${t.job.done} done` : '' %> · <%= t.job_by === 'douglas' ? 'added by you' : t.job_by === 'source' ? 'from the same email or meeting' : 'grouped by the Hub' %></small></p>
+        <form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/job"><input type="hidden" name="job" value=""><button class="btn small">Not part of this job</button></form>
+      <% } else if (jobs.length) { %><form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/job" class="list">
+        <div class="field"><label for="task-job">Part of a bigger piece of work?</label><select class="select" id="task-job" name="job" required><option value="">Choose a job</option><% for (const j of jobs) { %><option value="<%= j.id %>"><%= j.title %></option><% } %></select></div>
+        <div><button class="btn small">Add to the job</button></div></form>
+      <% } else { %><p class="subline">Not part of a job. The Hub groups tasks that serve one goal.</p><% } %>
+    </div><% } %>
     <% if (t.status === 'needsAction') { %><div class="panel"><div class="panel-head"><h2>Planned for</h2><a class="end" href="/crm/<%= space %>/calendar">Calendar</a></div>
       <% if (!blocks.length) { %><p class="subline">No free time found yet. The calendar is replanned every 5 minutes.</p><% } %>
       <% for (const b of blocks) { %><p><%= fmt(b.start_at) %>–<%= fmt(b.end_at, 'time') %><% if (b.late) { %> <span class="cal-tag warn">after it's due</span><% } %><% if (b.pinned) { %> <span class="cal-tag">time chosen by you</span><% } %></p><% } %>

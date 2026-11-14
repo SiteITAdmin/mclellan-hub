@@ -17,6 +17,7 @@ const promises = require('../lib/crm/promises');
 const speakerCorrection = require('../lib/crm/speaker-correction');
 const wispr = require('../lib/crm/wispr');
 const calendar = require('../lib/crm/calendar');
+const taskJobs = require('../lib/crm/task-jobs');
 const planner = require('../lib/crm/planner');
 const { crm } = require('../lib/crm/db');
 
@@ -486,7 +487,7 @@ router.post('/crm/:space/promises/:atomId/:action', spaceParam, requireSameOrigi
 });
 
 function taskForm(req, res, t, error = null) {
-  res.render('crm/task', { page: 'tasks', t, error, choices: tasks.choices(req.params.space), blocks: t.id ? calendar.blocksFor(t.id) : [], help: t.id ? require('../lib/crm/task-help').forTask(t.id) : null, title: t.id ? t.title : 'Add a task' });
+  res.render('crm/task', { page: 'tasks', t, error, choices: tasks.choices(req.params.space), blocks: t.id ? calendar.blocksFor(t.id) : [], help: t.id ? require('../lib/crm/task-help').forTask(t.id) : null, jobs: t.id ? taskJobs.openJobs(req.params.space) : [], title: t.id ? t.title : 'Add a task' });
 }
 
 router.get('/crm/:space/tasks', spaceParam, (req, res) => {
@@ -538,6 +539,12 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
     else if (req.params.action === 'reopen') tasks.edit(t.id, { status: 'needsAction', revision: req.body.revision });
     else if (req.params.action === 'resolve') crm().prepare("UPDATE tasks SET conflict = '' WHERE id = ?").run(t.id);
     else if (req.params.action === 'delete') tasks.edit(t.id, { status: 'deleted', revision: req.body.revision });
+    else if (req.params.action === 'job') {
+      if (req.body.job) { taskJobs.addByHand(t.id, String(req.body.job)); flash(req, 'Added to the job.'); }
+      else if (taskJobs.takeOut(t.id, 'douglas')) flash(req, "Taken out of the job. The Hub won't put it back.");
+      replanned();
+      return res.redirect(`/crm/${t.space}/tasks/${t.id}`);
+    }
     else if (req.params.action === 'help') {
       require('../lib/crm/task-help').again(t.id);
       flash(req, 'The help will be written again, usually within a few minutes.');
@@ -555,6 +562,32 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
   }
   const next = String(req.body.back || '');
   res.redirect(next.startsWith(`/crm/${t.space}/`) && !next.includes('\\') ? next : `/crm/${t.space}/tasks/${t.id}`);
+});
+
+// ── Jobs ───────────────────────────────────────────────────────────────────
+
+router.get('/crm/:space/jobs/:id', spaceParam, (req, res) => {
+  const job = taskJobs.forJob(req.params.id, req.params.space);
+  if (!job) return res.status(404).send('Not found');
+  res.render('crm/job', { page: 'tasks', job, title: job.title });
+});
+
+router.post('/crm/:space/jobs/:id/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { space, id, action } = req.params;
+  const job = taskJobs.get(id);
+  if (!job || job.space !== space) return res.status(404).send('Not found');
+  const member = taskId => { const t = tasks.get(String(taskId || '')); if (!t || t.space !== space) throw new Error('Task not found'); return t; };
+  const step = () => { const s = crm().prepare('SELECT * FROM job_steps WHERE id = ? AND job_id = ?').get(String(req.body.step || ''), id); if (!s) throw new Error('That suggestion has gone'); return s; };
+  try {
+    if (action === 'rename') { taskJobs.rename(id, req.body.title); flash(req, 'Renamed. The Hub keeps your name.'); }
+    else if (action === 'again') { taskJobs.again(id); flash(req, 'It will be written again, usually within a few minutes.'); }
+    else if (action === 'remove') { const t = member(req.body.task); if (t.job_id !== id) throw new Error('That task is not in this job'); taskJobs.takeOut(t.id, 'douglas'); replanned(); flash(req, "Taken out of the job. The Hub won't put it back."); }
+    else if (action === 'putback') { taskJobs.addByHand(member(req.body.task).id, id); replanned(); flash(req, 'Back in the job.'); }
+    else if (action === 'accept') { const t = taskJobs.accept(step().id); replanned(); flash(req, `Added as a task: ${t.title}. It reaches Google at the next sync.`); }
+    else if (action === 'dismiss') { taskJobs.dismiss(step().id); flash(req, "Noted. The Hub won't suggest it again."); }
+    else return res.status(404).send('Not found');
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(`/crm/${space}/jobs/${id}`);
 });
 
 // ── Calendar ───────────────────────────────────────────────────────────────
