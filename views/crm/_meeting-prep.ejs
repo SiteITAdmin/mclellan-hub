@@ -1,11 +1,13 @@
-<% if (meetings.length) { %><section class="grid"><div class="panel s12">
-<div class="panel-head"><h2>Meeting prep</h2></div>
-<% for (const m of meetings) { %><article style="margin:16px 0">
-<h3><%= fmt(m.start_at, 'time') %> · <%= m.title %></h3>
-<p class="stamp"><% for(const p of m.people) { %><a href="/crm/<%= space %>/people/<%= p.id %>"><%= p.name %></a> <% } %></p>
-<% if(m.status==='failed') { %><p class="flash bad"><%= m.error %></p>
-<% } else if(!m.people.length) { %><p class="subline">No known attendees to prepare for.</p>
-<% } else if(m.status!=='done') { %><p class="subline">Preparing from the Hub’s knowledge.</p>
-<% } else if(!m.lines.length) { %><p class="subline">No relevant facts found for this meeting.</p><% } %>
-<% for(const l of m.lines) { %><p><%= l.text %><span class="stamp" style="display:block"><% for(const s of l.sources) { %><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a> <% } %></span></p><% } %>
-</article><% } %></div></section><% } %>
+<% if (meetings.length) { %><section class="grid<%= locals.first ? ' first' : '' %>"><div class="panel s12">
+<div class="panel-head"><h2><%= locals.heading || 'Meeting prep' %></h2><span class="chip"><%= meetings.length %> still to come</span></div>
+<div class="meetings"><% for (const m of meetings) { %><article class="meeting">
+<div class="meeting-time"><%= fmt(m.start_at, 'time') %></div>
+<div class="meeting-body">
+<div class="meeting-head"><h3 class="meeting-title"><%= m.title || 'Untitled calendar entry' %></h3></div>
+<% if (m.people.length) { %><p class="meeting-meta">With <% m.people.forEach((p, i) => { %><%= i ? ', ' : '' %><a href="/crm/<%= space %>/people/<%= p.id %>"><%= p.name %></a><% }) %></p><% } %>
+<% if(m.status==='failed') { %><p class="flash bad meeting-note"><%= m.error %></p>
+<% } else if(!m.people.length) { %><p class="meeting-meta">No known attendees to prepare for.</p>
+<% } else if(m.status!=='done') { %><p class="meeting-meta">Preparing from the Hub’s knowledge.</p>
+<% } else if(!m.lines.length) { %><p class="meeting-meta">No relevant facts found for this meeting.</p><% } %>
+<% if (m.lines.length) { %><div class="meeting-sec"><h4>Worth knowing</h4><ul class="meeting-list prep"><% for(const l of m.lines) { %><li><span><%= l.text %><small><% for(const s of l.sources) { %><a href="/crm/<%= space %>/sources/<%= s.id %>"><%= s.title %></a> <% } %></small></span></li><% } %></ul></div><% } %>
+</div></article><% } %></div></div></section><% } %>

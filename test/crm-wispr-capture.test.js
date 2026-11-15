@@ -102,7 +102,7 @@ test('Wispr meetings are held for speaker review, follow corrections while they 
     const waiting = await page('personal');
     assert.ok(waiting.includes('value="Wayne Polley"') && waiting.includes('value="Ken Murray"'));
     assert.ok(waiting.includes('Christmas oncall rota &lt;script&gt;') && !waiting.includes('rota <script>'));
-    assert.ok(waiting.includes('In your calendar as Christmas oncall rota (Work)'));
+    assert.ok(waiting.includes('<h3 class="meeting-title">Christmas oncall rota</h3>') && waiting.includes('In the calendar</a> (Work)'));
     assert.ok(waiting.includes('Wispr lists: Ken Murray, Douglas McLellan'));
     assert.ok(waiting.includes('1 to release'));
 

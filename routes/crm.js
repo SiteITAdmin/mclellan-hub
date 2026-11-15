@@ -670,7 +670,7 @@ router.post('/crm/:space/calendar/transcript', spaceParam, requireSameOrigin, wr
     flash(req, r.created || r.reopened
       ? `Transcript of ${what} is waiting below: ${r.speakers} ${r.speakers === 1 ? 'speaker' : 'speakers'} to name${r.preamble ? `. ${r.preamble} ${r.preamble === 1 ? 'line' : 'lines'} before the first speaker are kept with the original but not read` : ''}.`
       : `That transcript of ${what} is already waiting below for you to name the speakers.`);
-    res.redirect(`/crm/${r.event.space}/meetings#intake-${r.id}`);
+    res.redirect(`/crm/${r.event.space}/meetings#m-${r.id}`);
   } catch (err) {
     flash(req, err.message, 'bad');
     back(req, res, `/crm/${req.params.space}/calendar`);
@@ -863,10 +863,21 @@ router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
       let attendees = [], suggest = null;
       if (['wispr', 'transcript'].includes(d.origin)) try { attendees = (JSON.parse(d.raw_json).meeting.attendees || []).map(a => a && a.name).filter(x => typeof x === 'string' && x); } catch { /* shown without them */ }
       if (d.origin === 'transcript') try { suggest = JSON.parse(d.raw_json).event.space; } catch { /* no suggestion */ }
-      return { ...d, attendees, suggest, event: d.occurred_at ? meetings.eventFor(d) : null };
+      const event = d.occurred_at ? meetings.eventFor(d) : null;
+      return { ...d, attendees, suggest, event, ...meetings.naming({ key: d.id, recorded: d.title, event, occurred_at: d.occurred_at || d.received_at, names: attendees }) };
     }),
     recordings: meetings.recordings(space), capture: require('../lib/crm/wispr-capture').state(),
+    krispLast: crm().prepare("SELECT max(received_at) t FROM krisp_intake WHERE origin = 'krisp'").get().t,
   });
+});
+
+router.post('/crm/:space/meetings/title', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const key = typeof req.body.key === 'string' ? req.body.key : '';
+  try {
+    const title = require('../lib/crm/meetings').rename(key, !req.body.reset && typeof req.body.title === 'string' ? req.body.title : '');
+    flash(req, title ? `Renamed to “${title}”.` : 'Back to its automatic title.');
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(`/crm/${req.params.space}/meetings#m-${encodeURIComponent(key)}`);
 });
 
 router.post('/crm/:space/meetings/:action', spaceParam, requireSameOrigin, writeLimiter, async (req, res) => {

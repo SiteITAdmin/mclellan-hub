@@ -40,7 +40,7 @@ test('a transcript uploaded from a calendar entry waits on Meetings, then releas
     let r = await upload('ev1', TRANSCRIPT, 'Recording_2026-11-11_14-04-48.transcript');
     assert.equal(r.status, 302);
     const row = db.crm().prepare('SELECT * FROM krisp_intake').get();
-    assert.equal(r.headers.get('location'), `/crm/personal/meetings#intake-${row.id}`);
+    assert.equal(r.headers.get('location'), `/crm/personal/meetings#m-${row.id}`);
     assert.equal(row.origin, 'transcript'); assert.equal(row.status, 'pending'); assert.equal(row.occurred_at, START);
     assert.equal(row.title, 'Synthetic board call'); assert.equal(row.readable, 1);
     assert.match(flashes.pop().text, /2 speakers to name\. 1 line before the first speaker/);
@@ -48,15 +48,15 @@ test('a transcript uploaded from a calendar entry waits on Meetings, then releas
     assert.equal(db.crm().prepare("SELECT count(*) n FROM sources WHERE kind='meeting'").get().n, 0);
 
     r = await upload('ev1', TRANSCRIPT, 'Recording_2026-11-11_14-04-48.transcript');
-    assert.equal(r.headers.get('location'), `/crm/personal/meetings#intake-${row.id}`);
+    assert.equal(r.headers.get('location'), `/crm/personal/meetings#m-${row.id}`);
     assert.match(flashes.pop().text, /already waiting/);
     assert.equal(db.crm().prepare('SELECT count(*) n FROM krisp_intake').get().n, 1);
 
     const html = await (await fetch(`${base}/crm/work/meetings`)).text();
-    assert.ok(html.includes(`id="intake-${row.id}"`));
+    assert.ok(html.includes(`id="m-${row.id}"`));
     assert.ok(html.includes('Uploaded transcript'));
     assert.ok(html.includes('Invited: Ann Example'));
-    assert.ok(html.includes('In your calendar as Synthetic board call (Personal)'));
+    assert.ok(html.includes('<h3 class="meeting-title">Synthetic board call</h3>') && html.includes('In the calendar</a> (Personal)'));
     assert.match(html, /placeholder="Full name" value="Ann Example"/);
     assert.match(html, /Who is &ldquo;Speaker 2&rdquo;\?<\/label>\s*<input[^>]*placeholder="Full name">/);
     assert.match(html, /value="personal" required checked/);

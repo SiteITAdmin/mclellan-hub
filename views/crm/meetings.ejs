@@ -1,14 +1,27 @@
 <%- include('_top') %>
-<% const where = space === 'work' ? 'Work' : 'Personal'; %>
-<div class="title-row"><div><h1>Meetings</h1><p class="subline">Meeting preparation, recordings and transcripts for <%= where %>.</p></div></div>
-<%- include('_meeting-prep', { meetings }) %>
-<p><a class="btn" href="/crm/<%= space %>/note">Add a transcript or meeting note</a></p>
-<%- include('_recordings', { held, recordings, configured }) %>
-<section class="grid">
-  <div class="panel s8">
+<% const where = space === 'work' ? 'Work' : 'Personal';
+   const problems = [];
+   if (!configured) problems.push('Krisp intake is not configured, so Krisp recordings cannot arrive.');
+   if (w.error) problems.push(`Wispr Flow: ${w.error}`);
+   else if (w.authorized && !w.connected) problems.push('Wispr Flow is signed in but the connection needs checking.');
+   if (w.authorized && capture.failed) problems.push(`Fetching meetings from Wispr Flow failed ${fmt(capture.run.last_error_at)}.`); %>
+<div class="title-row"><div><h1>Meetings</h1><p class="subline">What was said in <%= where %>, and what came out of it.</p></div>
+<div class="acts"><a class="btn" href="/crm/<%= space %>/note">Add a transcript or meeting note</a></div></div>
+<% if (problems.length) { %><p class="flash bad meeting-problem"><%= problems.join(' ') %> <a href="#recorders">See the connections below.</a></p><% } %>
+<%- include('_meeting-prep', { meetings, heading: 'Today', first: true }) %>
+<%- include('_recordings', { held, recordings, first: !meetings.length }) %>
+<section class="grid recorders" id="recorders">
+  <h2 class="s12 section-label">Where recordings come from</h2>
+  <div class="panel s6">
+    <div class="panel-head"><h2>Krisp</h2><span class="chip"><%= configured ? 'Configured' : 'Not configured' %></span></div>
+    <p class="subline">Krisp sends each finished recording to the Hub by itself. It waits at the top of this page until you name the speakers and release it.</p>
+    <% if (!configured) { %><p><span class="pill neg">Problem</span> The Hub has no Krisp webhook secret, so it refuses every delivery. Setup is in <code>docs/KRISP-INTAKE.md</code>.</p><% } %>
+    <p class="subline"><%= krispLast ? `Last recording received ${fmt(krispLast)}.` : 'No recording has arrived from Krisp yet.' %></p>
+  </div>
+  <div class="panel s6">
     <div class="panel-head"><h2>Wispr Flow</h2>
-      <% if (w.connected) { %><span class="chip">Connected</span><% } %></div>
-    <p class="subline">One shared Wispr sign-in serves Work and Personal. Disconnecting here disconnects both spaces. Meetings Wispr has finished are fetched every 15 minutes, for the last 7 days, and wait above until you release them.</p>
+      <span class="chip"><%= w.connected ? 'Connected' : w.authorized ? 'Needs checking' : 'Not connected' %></span></div>
+    <p class="subline">One shared Wispr sign-in serves Work and Personal. Finished meetings are fetched every 15 minutes, for the last 7 days, and wait at the top of this page until you release them.</p>
     <% if (!w.authorized) { %>
     <p>Choose “Connect Wispr Flow” below. Wispr opens in this tab: sign in, choose “Allow access”, and it brings you back here.</p>
     <p class="subline">The server address <code>https://api.wisprflow.ai/connect/mcp</code> is for MCP clients. Opening it directly in a browser shows “Method Not Allowed”; that does not mean sign-in has failed.</p>
@@ -16,15 +29,15 @@
     <% } %>
     <% if (w.error) { %><p><span class="pill neg">Problem</span> <%= w.error %></p><% } %>
     <% if (w.authorized) { %>
-      <p><%= w.connected ? 'Connected' : 'Signed in; connection check needed. Sign-in saved' %> <%= fmt(w.connectedAt) %><% if (w.account && (w.account.email || w.account.name)) { %> as <%= w.account.name || '' %> <%= w.account.email ? `(${w.account.email})` : '' %><% } %>.</p>
+      <p class="subline"><%= w.connected ? 'Connected' : 'Signed in; connection check needed. Sign-in saved' %> <%= fmt(w.connectedAt) %><% if (w.account && (w.account.email || w.account.name)) { %> as <%= w.account.name || '' %> <%= w.account.email ? `(${w.account.email})` : '' %><% } %>.</p>
       <% if (capture.failed) { %><p><span class="pill neg">Problem</span> Fetching meetings failed <%= fmt(capture.run.last_error_at) %>: <%= capture.run.last_error %></p>
-      <% } else if (capture.run && capture.run.last_ok) { const c = capture.run.detail || {}; %><p class="subline">Meetings last checked <%= fmt(capture.run.last_ok) %>: Wispr has <%= c.seen || 0 %> from the last 7 days<%= c.notReady ? `, ${c.notReady} not finished yet` : '' %><%= c.held ? `, ${c.held} newly held for you` : '' %><%= c.updated ? `, ${c.updated} updated` : '' %>.</p>
+      <% } else if (capture.run && capture.run.last_ok) { const c = capture.run.detail || {}; %><p class="subline">Last checked <%= fmt(capture.run.last_ok) %>: Wispr has <%= c.seen || 0 %> from the last 7 days<%= c.notReady ? `, ${c.notReady} not finished yet` : '' %><%= c.held ? `, ${c.held} newly held for you` : '' %><%= c.updated ? `, ${c.updated} updated` : '' %>.</p>
       <% } else { %><p class="subline">Meetings have not been checked yet.</p><% } %>
       <div class="decide">
         <form method="post" action="/crm/<%= space %>/meetings/fetch"><button class="btn small" type="submit">Fetch meetings now</button></form>
         <form method="post" action="/crm/<%= space %>/meetings/check"><button class="btn small" type="submit">Check the connection</button></form>
-        <% if (!w.connected) { %><form method="post" action="/crm/<%= space %>/meetings/connect"><button class="btn primary" type="submit">Connect again</button></form><% } %>
-        <form method="post" action="/crm/<%= space %>/meetings/disconnect"><button class="btn text" type="submit">Disconnect shared sign-in</button></form>
+        <% if (!w.connected) { %><form method="post" action="/crm/<%= space %>/meetings/connect"><button class="btn small primary" type="submit">Connect again</button></form><% } %>
+        <form method="post" action="/crm/<%= space %>/meetings/disconnect"><button class="btn small text" type="submit">Disconnect both spaces</button></form>
       </div>
     <% } else { %>
       <p><%= w.pending ? 'Sign-in was started but not finished. Choose Connect to go to Wispr again.' : 'Shared Wispr sign-in is not connected.' %></p>

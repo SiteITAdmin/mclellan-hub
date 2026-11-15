@@ -1,0 +1,8 @@
+<details class="rename"><summary>Rename</summary>
+<form method="post" action="/crm/<%= space %>/meetings/title">
+<input type="hidden" name="key" value="<%= m.key %>">
+<label class="sr-only" for="title-<%= m.key %>">Title for this meeting</label>
+<input class="input" id="title-<%= m.key %>" name="title" maxlength="200" required autocomplete="off" value="<%= m.title %>">
+<button class="btn small primary" type="submit">Save</button>
+<% if (m.by === 'you') { %><button class="btn small" type="submit" name="reset" value="1" formnovalidate>Use <%= m.calendar ? 'the calendar title' : 'the automatic title' %> “<%= m.auto %>”</button><% } %>
+</form></details>
