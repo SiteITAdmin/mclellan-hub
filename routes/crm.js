@@ -496,6 +496,48 @@ router.get('/crm/:space/tasks', spaceParam, (req, res) => {
     sync: require('../lib/crm/runs').all().tasks_sync, title: 'Tasks' });
 });
 
+router.get('/crm/:space/tasks/review', spaceParam, (req, res) => {
+  const review = require('../lib/crm/task-review'), followups = require('../lib/crm/task-followups');
+  const list = review.list(req.params.space);
+  res.render('crm/tasks-review', { page: 'tasks', list, counts: review.counts(list), dates: review.quickDates(),
+    follow: { list: followups.suggested(req.params.space), ...followups.state(req.params.space) }, title: 'Review dates' });
+});
+
+router.post('/crm/:space/tasks/review', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const space = req.params.space;
+  let anchor = String(req.body.task || '');
+  try {
+    flash(req, require('../lib/crm/task-review').act(space, req.body));
+    if (['done', 'drop'].includes(req.body.do)) anchor = String(req.body.next || '');
+    replanned();
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(`/crm/${space}/tasks/review${/^[\w-]+$/.test(anchor) ? `#t-${anchor}` : ''}`);
+});
+
+router.post('/crm/:space/followups/:id/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  const { space, id, action } = req.params;
+  const followups = require('../lib/crm/task-followups');
+  try {
+    if (action === 'again') {
+      const t = tasks.get(id);
+      if (!t || t.space !== space) return res.status(404).send('Not found');
+      followups.again(t.id);
+      flash(req, 'The Hub will look again at what follows, usually within a few minutes.');
+    } else {
+      const s = crm().prepare('SELECT space FROM followup_suggestions WHERE id = ?').get(id);
+      if (!s || s.space !== space) return res.status(404).send('Not found');
+      if (action === 'accept') {
+        const r = followups.accept(id, { due: req.body.due });
+        if (r.task) replanned();
+        flash(req, r.task ? `Added to You owe, and as a task: ${r.task.title}.` : 'Added to Owed to you. The Hub will chase it if nothing arrives.');
+      } else if (action === 'dismiss') { followups.dismiss(id); flash(req, 'Left out.'); }
+      else return res.status(404).send('Not found');
+    }
+  } catch (err) { flash(req, err.message, 'bad'); }
+  const next = String(req.body.back || '');
+  res.redirect(next.startsWith(`/crm/${space}`) && !next.includes('\\') ? next : `/crm/${space}/tasks/review`);
+});
+
 router.get('/crm/:space/tasks/new', spaceParam, (req, res) => {
   taskForm(req, res, { title: '', notes: '', due: '', status: 'needsAction', context: {
     personId: req.query.personId || '', orgId: req.query.orgId || '', projectId: req.query.projectId || '', sourceId: req.query.sourceId || '' } });

@@ -15,7 +15,14 @@
   </div>
 </div>
 
-<section class="grid first" id="promises" aria-label="Promises">
+<% if (d.followups.list.length || d.followups.failed.length) { %>
+<section class="grid first" id="followups" aria-label="Follow-ups"><div class="panel s12">
+  <div class="panel-head"><h2>What follows from what you finished</h2><span class="chip"><%= d.followups.list.length %> to confirm</span><a class="end" href="/crm/<%= space %>/tasks/review">Review dates</a></div>
+  <%- include('_followups', { follow: { ...d.followups, thinking: 0 }, back: `/crm/${space}#followups` }) %>
+</div></section>
+<% } %>
+<% if (d.reviewCounts.undated || d.reviewCounts.late) { %><p><a href="/crm/<%= space %>/tasks/review">Open steps: <%= [d.reviewCounts.late ? `${d.reviewCounts.late} late` : '', d.reviewCounts.undated ? `${d.reviewCounts.undated} with no date` : ''].filter(Boolean).join(', ') %>. Review dates</a></p><% } %>
+<section class="grid <%= d.followups.list.length || d.followups.failed.length ? '' : 'first' %>" id="promises" aria-label="Promises">
   <div class="panel s6">
     <div class="panel-head"><h2>You owe</h2><span class="chip"><%= owe %> open</span><a class="end" href="/crm/<%= space %>/promises">All promises</a></div>
     <%- include('_promises', { list: d.ledger.mine, back: `/crm/${space}`, none: 'Nothing you have promised is open.' }) %>

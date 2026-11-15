@@ -1,0 +1,49 @@
+<%- include('_top') %>
+<% const back = `/crm/${space}/tasks/review`; const label = d => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }); %>
+<div class="crumbs"><a href="/crm/<%= space %>/tasks">Tasks</a> / Review dates</div>
+<div class="title-row"><div><h1>Review dates</h1>
+  <p class="subline">Every open <%= space === 'work' ? 'Work' : 'Personal' %> step: give it a date, tick it off or drop it. When you tick one off, the Hub suggests what follows from it as a promise for you to confirm.</p></div></div>
+
+<section class="grid first"><div class="panel s12" id="followups">
+  <div class="panel-head"><h2>What follows from what you finished</h2><% if (follow.list.length) { %><span class="chip"><%= follow.list.length %> to confirm</span><% } %></div>
+  <%- include('_followups', { follow, back: `${back}#followups` }) %>
+</div></section>
+
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Open steps</h2><span class="chip"><%= counts.open %> open<%= counts.undated ? ` · ${counts.undated} with no date` : '' %><%= counts.late ? ` · ${counts.late} late` : '' %></span></div>
+  <% if (!list.length) { %><div class="empty">Nothing open in <%= space === 'work' ? 'Work' : 'Personal' %>.</div><% } %>
+  <% const groups = [], byJob = new Map();
+     for (const t of list) {
+       const job = t.job && t.job.open + t.job.done >= 2 ? t.job : null;
+       if (job && byJob.has(job.id)) { byJob.get(job.id).items.push(t); continue; }
+       const g = { job, items: [t] }; groups.push(g); if (job) byJob.set(job.id, g);
+     }
+     const order = groups.flatMap(g => g.items.map(t => t.id)); %>
+  <div class="promise-list">
+  <% for (const g of groups) { %><% if (g.job) { %><div class="job-group"><%- include('_job-head', { job: g.job }) %><div class="promise-list"><% } %>
+  <% for (const t of g.items) { const late = t.due && t.due < dates.today; const next = order[order.indexOf(t.id) + 1] || order[order.indexOf(t.id) - 1] || ''; %>
+    <div class="promise review-row" id="t-<%= t.id %>">
+      <div class="what"><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a></div>
+      <div class="meta"><span class="<%= late ? 'late' : '' %>"><%= t.due ? `${late ? 'Was due' : 'Due'} ${label(t.due)}` : 'No date' %></span>
+        <% const ctx = [...t.people, ...t.organisations, ...t.projects].map(x => x.name).join(' · '); if (ctx) { %><span><%= ctx %></span><% } %></div>
+      <%- include('_help-line', { h: t.help, taskId: t.id }) %>
+      <% const hidden = `<input type="hidden" name="task" value="${t.id}"><input type="hidden" name="revision" value="${t.revision}"><input type="hidden" name="next" value="${next}">`; %>
+      <%# Enter submits a form's first button, so each form leads with the safe one. %>
+      <form method="post" action="/crm/<%= space %>/tasks/review" class="acts review-form"><%- hidden %>
+        <input class="input" type="date" name="due" value="<%= t.due || '' %>" aria-label="Due date for <%= t.title %>">
+        <button class="btn small" name="do" value="date">Set date</button>
+        <% for (const [key, text, date] of [['today', 'Today', dates.today], ['tomorrow', 'Tomorrow', dates.tomorrow], ['nextweek', `Next week (${label(dates.nextWeek)})`, dates.nextWeek]].filter(([key, , date]) => key !== 'nextweek' || date !== dates.tomorrow)) { %>
+          <button class="btn small <%= t.due === date ? 'primary' : '' %>" name="do" value="<%= key %>" <%- t.due === date ? 'aria-pressed="true"' : '' %>><%= text %></button><% } %>
+        <% if (t.due) { %><button class="btn small text" name="do" value="clear">No date</button><% } %>
+      </form>
+      <form method="post" action="/crm/<%= space %>/tasks/review" class="acts review-form"><%- hidden %>
+        <input class="input said" name="said" maxlength="500" placeholder="What happened? (optional, helps the follow-up)" aria-label="What happened with <%= t.title %>">
+        <button class="btn small primary" name="do" value="done">Done</button>
+        <button class="btn small text" name="do" value="drop" title="Deletes it here and in Google Tasks">Drop</button>
+      </form>
+    </div>
+  <% } %>
+  <% if (g.job) { %></div></div><% } %><% } %>
+  </div>
+</div></section>
+<%- include('_bottom') %>

@@ -1,0 +1,23 @@
+<% const cap = s => s.charAt(0).toUpperCase() + s.slice(1); %>
+<% if (follow.thinking) { %><p class="subline">The Hub is working out what follows from <%= follow.thinking %> finished <%= follow.thinking === 1 ? 'task' : 'tasks' %>.</p><% } %>
+<% for (const f of follow.failed) { %><div class="task-warning">Couldn't work out what follows from “<%= f.title %>”: <%= f.error %>.
+  <form class="inline" method="post" action="/crm/<%= space %>/followups/<%= f.task_id %>/again"><input type="hidden" name="back" value="<%= back %>"><button class="btn small">Try again</button></form></div><% } %>
+<% if (!follow.list.length && !follow.thinking && !follow.failed.length) { %><div class="empty">Nothing waiting. When you finish a task, what follows from it appears here.</div><% } %>
+<div class="promise-list">
+<% for (const f of follow.list) { %>
+  <div class="promise followup">
+    <div class="what"><% if (f.direction === 'owed_to_me') { %><% if (f.person) { %><a href="/crm/<%= space %>/people/<%= f.person.id %>"><%= f.person.name %></a><% } else { %><%= f.who || 'Someone' %><% } %> will <%= f.action %><% } else { %><%= cap(f.action) %><% if (f.who && !f.action.toLowerCase().includes(f.who.toLowerCase())) { %> (for <%= f.who %>)<% } %><% } %></div>
+    <div class="meta"><span class="cal-tag"><%= f.direction === 'owed_to_me' ? 'Owed to you' : 'You owe' %></span><span>After you finished <a href="/crm/<%= space %>/tasks/<%= f.task_id %>"><%= f.task_title %></a></span></div>
+    <% if (f.why) { %><div class="quote"><%= f.why %></div><% } %>
+    <div class="acts">
+      <form method="post" action="/crm/<%= space %>/followups/<%= f.id %>/accept" class="followup-accept">
+        <input type="hidden" name="back" value="<%= back %>">
+        <label><span class="subline">By</span> <input class="input" type="date" name="due" value="<%= f.due || '' %>" aria-label="Date for <%= f.action %>"></label>
+        <button class="btn small primary"><%= f.direction === 'owed_to_me' ? 'Add to Owed to you' : 'Add to You owe' %></button>
+      </form>
+      <form method="post" action="/crm/<%= space %>/followups/<%= f.id %>/dismiss"><input type="hidden" name="back" value="<%= back %>"><button class="btn small">Not needed</button></form>
+    </div>
+    <div class="meta"><span><%= f.direction === 'owed_to_me' ? (f.chaseNote || '') : 'Also becomes a task, planned into your calendar' %></span></div>
+  </div>
+<% } %>
+</div>

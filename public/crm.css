@@ -611,3 +611,8 @@ details.del .btn { color: var(--negative); border-color: var(--negative); height
 .job-suggest:first-of-type { border-top: 0; }
 .job-suggest .acts { display: flex; gap: 8px; flex-wrap: wrap; }
 .inline-form { display: inline; }
+.review-form, .followup-accept { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
+.review-form .input, .followup-accept .input { height: 30px; padding: 0 10px; font-size: 13px; }
+.review-form .input.said { flex: 1 1 240px; }
+.task-warning form.inline { display: inline; margin-left: 6px; }
+.title-row > .acts { display: flex; gap: 8px; flex-wrap: wrap; }
