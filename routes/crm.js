@@ -417,6 +417,9 @@ router.get('/crm/:space/captured', spaceParam, (req, res) => {
 
 router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
   const s = views.source(req.params.id);
+  // An old link to one part of a transcript leads to the joined transcript.
+  const joined = s ? null : require('../lib/crm/transcript-merge').joinedInto(req.params.id);
+  if (joined) return res.redirect(`/crm/${joined.space}/sources/${joined.id}`);
   if (!s || s.space !== req.params.space) return res.status(404).send('Not found');
   res.render('crm/source', { krispRaw: ['krisp', 'wispr', 'transcript'].includes(s.origin) ? require('../lib/crm/krisp').rawForSource(s) : null, meeting: s.kind === 'meeting' ? require('../lib/crm/meetings').eventFor(s) : null, speakers: speakerCorrection.review(s.id), page: 'captured', s, title: s.title });
 });
