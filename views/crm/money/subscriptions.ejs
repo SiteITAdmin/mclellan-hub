@@ -33,6 +33,14 @@
           <% if (sub.first_seen) { %>· seen since <%= day(sub.first_seen) %><% } %>
         </div>
         <% if (sub.annual_cents) { %><div class="sub-cost">This costs <strong><%= e(sub.annual_cents) %> a year</strong> — about <%= e(sub.daily_cents) %> a day.</div><% } %>
+        <% if (which.some(([a]) => a === 'keep') && sub.status === 'active') { %>
+          <% if (sub.value.rated) { %><div class="sub-value<%= sub.value.poor ? ' poor' : '' %>"><%= sub.value.text %><%= sub.value.stale ? ` That was on ${day(sub.value.on)}: is it still true?` : '' %></div><% } %>
+          <% const useForm = () => { %><form class="sub-use" method="post" action="/crm/personal/money/subscriptions/<%= sub.id %>/use">
+            <span class="sub-use-ask">In the last month, how much did you use it?</span>
+            <% for (const [level, u] of Object.entries(s.USES)) { %><button class="btn small<%= sub.value.level === level ? ' primary' : '' %>" type="submit" name="level" value="<%= level %>"><%= u.label %></button><% } %>
+          </form><% }; %>
+          <% if (sub.value.ask) { useForm(); } else { %><details class="sub-evidence"><summary>Change how much you use it</summary><% useForm(); %></details><% } %>
+        <% } %>
         <% if (sub.still_charging) { %><div class="sub-alarm"><%= sub.status === 'cancelled' ? 'You marked this cancelled, but it charged again' : 'Still charging after you said you wanted to cancel' %>: <%= sub.charged_since.map(c => `${e(c.cents)} on ${day(c.on)}`).join(', ') %>.</div><% } %>
         <% cancelHelp(sub) %>
         <% if (sub.mail.length) { %><details class="sub-evidence"><summary>What your mail says (<%= sub.mail.length %>)</summary>
@@ -54,6 +62,16 @@
   <div class="sub-total"><div class="label">Every year</div><div class="value"><%= e(s.yearly_cents) %></div></div>
   <p class="sub-total-note"><%= s.proven.length %> <%= s.proven.length === 1 ? 'subscription' : 'subscriptions' %> proven by your charges<%= s.yearly_cents ? ` — about ${e(s.daily_cents)} every day` : '' %>.<% if (s.mail_yearly_cents) { %> Plus <%= e(s.mail_yearly_cents) %> a year that is only in your mail.<% } %></p>
 </section>
+
+<% if (s.value.asked) { %>
+<section class="panel sub-worth" aria-label="Are they worth it">
+  <div class="panel-head"><h2>Are they worth it?</h2></div>
+  <% if (s.value.poor.length) { %><p><strong><%= e(s.value.poor_yearly_cents) %> a year</strong> goes on <%= s.value.poor.length === 1 ? 'one you say you hardly use' : `${s.value.poor.length} you say you hardly use` %>: <% s.value.poor.forEach((sub, i) => { %><%= i ? ', ' : '' %><a href="#sub-<%= sub.id %>"><%= sub.merchant %></a><%= sub.annual_cents ? ` (${e(sub.annual_cents)})` : '' %><% }) %>. Cancel <%= s.value.poor.length === 1 ? 'it' : 'them' %>, or say what <%= s.value.poor.length === 1 ? 'it is' : 'they are' %> for.</p><% } %>
+  <% if (s.value.unrated.length) { %><p><%= s.value.unrated.length %> of <%= s.value.asked %> <%= s.value.unrated.length === 1 ? 'has' : 'have' %> no answer yet<%= s.value.unrated_monthly_cents ? ` (${e(s.value.unrated_monthly_cents)} a month)` : '' %>: <% s.value.unrated.forEach((sub, i) => { %><%= i ? ', ' : '' %><a href="#sub-<%= sub.id %>"><%= sub.merchant %></a><% }) %>. One tap on each says how much you used it, and the Hub works out what each use costs.</p>
+  <% } else if (!s.value.poor.length) { %><p>Every subscription has an answer, and none is one you hardly use. You are asked again three months after each answer.</p><% } %>
+  <p class="sub-meta">The Hub cannot see whether a service is used, so this is your own answer. It asks again after three months.</p>
+</section>
+<% } %>
 
 <% if (s.stillCharging.length || s.trials.length || s.renewals.length) { %>
 <section class="sub-alerts" aria-label="Needs you soon">

@@ -1,0 +1,79 @@
+<%- include('../_top') %>
+<% const rate = v.rateLabel, plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`; %>
+<div class="title-row"><div><h1>Prices</h1><p class="subline">What you pay for the same thing, over time and between shops. It is worked out only from the item lines on your own receipts, so it gets sharper with every receipt you add.</p></div></div>
+<%- include('_nav') %>
+<% if (!v.any) { %>
+<section class="grid first"><div class="panel s12"><div class="empty">
+  <% if (!v.receipts.n) { %>No receipts yet. Upload them on the Receipts tab as you get them: each item is tracked here by what it is, its size and the shop.
+  <% } else { %><%= plural(v.receipts.n, 'receipt') %> held, but none has item lines the reader could name yet. Supermarket till receipts work best: they list each item and its price.<% } %>
+</div></div></section>
+<% } else { %>
+
+<section class="grid first"><div class="panel s12">
+  <div class="panel-head"><h2>Why there?</h2><% if (v.asked.length) { %><span class="chip"><%= eur(v.asked_cents) %> over 90 days</span><% } %></div>
+  <p class="subline money-small">Only shops you use: a receipt from one of them shows the same thing for less than the shop you usually buy it in. Say why, and it is not asked again.</p>
+  <% if (!v.asked.length) { %><div class="empty"><%= v.answered.length ? 'Every question here has your answer.' : 'Nothing to ask yet. This needs the same thing on receipts from two shops in the last 4 months.' %></div><% } %>
+  <% for (const c of v.asked) { %>
+  <div class="price-row">
+    <div class="price-what"><strong><%= c.product %>: why <%= c.usual.shop %>?</strong>
+      <span>You buy it at <strong><%= c.usual.shop %></strong> for <%= rate(c.usual.rate, c.family) %> (<%= plural(c.usual.n, 'time') %> in 90 days). Your <strong><%= c.cheapest.shop %></strong> receipt of <%= dayLabel(c.cheapest.day) %> has it for <%= rate(c.cheapest.rate, c.family) %>.<%= c.brands ? ` Different brands: ${c.brands}.` : '' %></span>
+      <form class="price-why" method="post" action="<%= base %>/prices/why">
+        <input type="hidden" name="key" value="<%= c.key %>"><input type="hidden" name="usual" value="<%= c.usual.shop_norm %>"><input type="hidden" name="cheaper" value="<%= c.cheapest.shop_norm %>">
+        <label class="sr-only" for="why-<%= c.key.replace(/[^a-z0-9]+/g, '-') %>">Why do you buy <%= c.product %> at <%= c.usual.shop %>?</label>
+        <input class="input" type="text" id="why-<%= c.key.replace(/[^a-z0-9]+/g, '-') %>" name="reason" maxlength="300" required placeholder="Why, in a line">
+        <button class="btn small" type="submit">That is why</button>
+      </form></div>
+    <div class="price-gap"><span class="pill neg"><%= c.pct %>% more</span><% if (c.over_cents) { %><small><%= eur(c.over_cents) %> over 90 days</small><% } %></div>
+  </div>
+  <% } %>
+  <% if (v.answered.length) { %>
+  <details class="money-receipt-more"><summary>Answered (<%= v.answered.length %>)</summary>
+    <% for (const c of v.answered) { %>
+    <div class="price-row">
+      <div class="price-what"><strong><%= c.product %></strong><span><%= c.usual.shop %> <%= rate(c.usual.rate, c.family) %>, <%= c.cheapest.shop %> <%= rate(c.cheapest.rate, c.family) %> (<%= c.pct %>% more). You said on <%= dayLabel(c.answer.on) %>: “<%= c.answer.reason %>”</span></div>
+      <div class="price-gap"><form class="inline-form" method="post" action="<%= base %>/prices/ask-again"><input type="hidden" name="key" value="<%= c.key %>"><input type="hidden" name="usual" value="<%= c.usual.shop_norm %>"><input type="hidden" name="cheaper" value="<%= c.cheapest.shop_norm %>"><button class="btn text small" type="submit">Ask me again</button></form></div>
+    </div>
+    <% } %>
+  </details>
+  <% } %>
+</div></section>
+
+<section class="grid">
+  <div class="panel s6">
+    <div class="panel-head"><h2>Shop against shop</h2></div>
+    <p class="subline money-small">One of each thing you have bought in both shops, priced at each from your latest receipts.</p>
+    <% if (!v.pairs.length) { %><div class="empty">Nothing yet. This needs at least 3 of the same things bought in two shops.</div><% } %>
+    <% for (const p of v.pairs) { %>
+    <div class="price-row">
+      <div class="price-what"><strong><%= p.dear.shop %> against <%= p.cheap.shop %></strong>
+        <span><%= plural(p.common, 'thing') %> bought in both; <%= p.cheap.wins %> cheaper at <%= p.cheap.shop %>. The same basket: <%= eur(p.dear.cents) %> at <%= p.dear.shop %>, <%= eur(p.cheap.cents) %> at <%= p.cheap.shop %>.</span></div>
+      <div class="price-gap"><span class="pill neg"><%= p.pct %>% more</span><small><%= eur(p.dear.cents - p.cheap.cents) %> a basket</small></div>
+    </div>
+    <% } %>
+  </div>
+  <div class="panel s6">
+    <div class="panel-head"><h2>Prices that moved</h2></div>
+    <p class="subline money-small">The same thing in the same shop, against the time before.</p>
+    <% if (!v.changes.length) { %><div class="empty">Nothing has changed price between your receipts yet.</div><% } %>
+    <% for (const c of v.changes) { %>
+    <div class="price-row">
+      <div class="price-what"><strong><%= c.product %></strong><span><%= c.shop %>: <%= rate(c.from, c.family) %> on <%= dayLabel(c.from_day) %>, <%= rate(c.to, c.family) %> on <%= dayLabel(c.to_day) %>.</span></div>
+      <div class="price-gap"><span class="pill <%= c.up ? 'neg' : 'neutral' %>"><%= c.up ? 'Up' : 'Down' %> <%= c.pct %>%</span></div>
+    </div>
+    <% } %>
+  </div>
+</section>
+
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>What you buy again and again</h2><span class="chip"><%= v.repeats.length %></span></div>
+  <p class="subline money-small">Bought at least twice, biggest spend first. <%= plural(v.lines, 'item line') %> from <%= plural(v.receipts.itemised, 'receipt') %><%= v.once ? `; ${plural(v.once, 'product')} bought once so far` : '' %>.</p>
+  <% if (!v.repeats.length) { %><div class="empty">Nothing bought twice yet.</div><% } %>
+  <% for (const p of v.repeats) { %>
+  <details class="price-product">
+    <summary><span class="price-name"><%= p.product %></span><span class="money-tx-meta"><%= plural(p.buys.length, 'time') %> · <%= p.shops.map(s => `${s.shop} ${rate(s.latest.rate, p.family)}`).join(' · ') %></span><span class="money-amount"><%= eur(p.cents) %></span></summary>
+    <ul class="money-items"><% for (const b of p.history) { %><li><span><%= dayLabel(b.day) %> · <%= b.shop %><small class="money-tx-meta"> <%= [b.brand, v.sizeLabel(b.size, b.unit), b.quantity > 1 ? `× ${b.quantity}` : '', b.description].filter(Boolean).join(' · ') %></small></span><span class="money-amount"><%= eur(b.cents) %><small class="money-tx-meta"> <%= rate(b.rate, p.family) %></small></span></li><% } %></ul>
+  </details>
+  <% } %>
+</div></section>
+<% } %>
+<%- include('../_bottom') %>

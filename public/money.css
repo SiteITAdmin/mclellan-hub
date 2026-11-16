@@ -122,6 +122,24 @@
   .money-receipt-line .money-receipt-acts { grid-column: 1 / -1; }
 }
 /* == end receipts == */
+/* == prices == */
+.price-row { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.price-row:last-of-type { border-bottom: 0; }
+.price-what { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.price-what a { text-decoration: underline; }
+.price-gap { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; text-align: right; }
+.price-gap small { color: var(--muted); font-size: 12px; }
+.price-why { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.price-why .input { flex: 1 1 220px; height: 32px; font-size: 14px; }
+.price-product { border-bottom: 1px solid var(--rule); padding: 8px 0; }
+.price-product summary { display: flex; gap: 10px; align-items: baseline; cursor: pointer; flex-wrap: wrap; }
+.price-product summary .money-amount { margin-left: auto; }
+.price-name { font-weight: 600; }
+@media (max-width: 640px) {
+  .price-row { flex-direction: column; }
+  .price-gap { flex-direction: row; align-items: center; flex-wrap: wrap; text-align: left; }
+}
+/* == end prices == */
 /* == subscriptions == */
 .sub-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); margin: 0 0 var(--gap); }
 .sub-total { background: var(--panel); border-radius: var(--radius-card); padding: 16px 20px; }
@@ -143,6 +161,13 @@
 .sub-name { margin: 0; font-size: 15px; font-weight: 600; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .sub-meta { color: var(--muted); font-size: 13px; }
 .sub-cost { margin-top: 4px; }
+.sub-value { margin-top: 4px; }
+.sub-value.poor { color: var(--negative); font-weight: 500; }
+.sub-use { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.sub-use-ask { flex: 1 1 100%; font-size: 13px; color: var(--muted); }
+.sub-worth { margin: 0 0 var(--gap); }
+.sub-worth p { margin: 0 0 6px; }
+.sub-worth a { text-decoration: underline; }
 .sub-alarm { margin-top: 6px; color: var(--negative); font-weight: 500; }
 .sub-cancel { margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--pill-warning-bg); color: var(--pill-warning-ink); font-size: 13px; }
 .sub-cancel a { text-decoration: underline; }
@@ -216,6 +241,21 @@
 .challenge-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); margin: var(--gap) 0; }
 .challenge-card { background: var(--row); border: 1px solid var(--row-edge); border-radius: var(--radius-card); padding: 18px; min-width: 0; }
 .challenge-card h3 { margin: 4px 0 10px; font-size: 17px; line-height: 24px; font-weight: 600; }
+.challenge-checks { margin: var(--gap) 0; }
+.challenge-checks-head { margin: 0 0 2px; font-size: 18px; font-weight: 600; }
+.challenge-check-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); margin-top: 12px; }
+.challenge-check { background: var(--row); border: 1px solid var(--row-edge); border-radius: var(--radius-card); padding: 18px; min-width: 0; }
+.challenge-check.alarm { box-shadow: inset 4px 0 0 var(--negative); }
+.challenge-check-big { margin: 4px 0 2px; font-family: var(--serif); font-size: 28px; line-height: 34px; }
+.challenge-check-big .challenge-muted { font-family: var(--sans, inherit); }
+.challenge-check > p { margin: 0 0 8px; }
+.challenge-check-line.over { color: var(--negative); }
+.challenge-shops { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 14px; }
+.challenge-shops th, .challenge-shops td { text-align: right; padding: 4px 0 4px 10px; border-bottom: 1px solid var(--rule); font-weight: 400; }
+.challenge-shops th:first-child { text-align: left; padding-left: 0; overflow-wrap: anywhere; }
+.challenge-shops thead th { color: var(--muted); font-size: 12px; }
+.challenge-cap-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0 4px; }
+.challenge-cap-form .input { width: 80px; height: 32px; }
 .challenge-commitments { margin: var(--gap) 0; }
 .challenge-commitment { padding: 12px 14px; background: var(--row); border: 1px solid var(--row-edge); border-radius: var(--radius-row); margin-bottom: 8px; }
 .challenge-commitment.over { border-color: var(--negative); }
@@ -242,7 +282,7 @@
 .challenge-foot a { color: var(--accent); text-decoration: underline; }
 .challenge-dropped ul { margin: 0; padding-left: 18px; }
 @media (max-width: 760px) {
-  .challenge-cards { grid-template-columns: 1fr; }
+  .challenge-cards, .challenge-check-grid { grid-template-columns: 1fr; }
   .challenge-headline { font-size: 23px; line-height: 29px; }
   .challenge-top { padding: 16px; }
   .challenge-top h2 { font-size: 20px; line-height: 27px; }

@@ -51,7 +51,7 @@
   <details class="money-receipt-more">
     <summary><%= x.items.length ? `${x.items.length} ${x.items.length === 1 ? 'item' : 'items'}` : 'Details' %> · correct or delete</summary>
     <% if (x.items.length) { %>
-    <ul class="money-items"><% for (const i of x.items) { %><li><span><%= i.description %><small class="money-tx-meta"> <%= i.category %></small></span><span class="money-amount"><%= eur(i.cents) %></span></li><% } %></ul>
+    <ul class="money-items"><% for (const i of x.items) { %><li><span><%= i.description %><small class="money-tx-meta"> <%= [i.product, i.brand, i.size && !(i.unit === 'each' && i.size === 1) ? `${i.size} ${i.unit}` : '', i.quantity > 1 ? `× ${i.quantity}` : '', i.category].filter(Boolean).join(' · ') %></small></span><span class="money-amount"><%= eur(i.cents) %></span></li><% } %></ul>
     <% } %>
     <form method="post" action="<%= act('save') %>" class="money-edit">
       <div class="field"><label for="rd-<%= x.id %>">Date</label><input class="input" type="date" id="rd-<%= x.id %>" name="date" value="<%= x.bought_on %>" required></div>

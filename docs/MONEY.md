@@ -7,12 +7,12 @@ categorises spending, watches for subscriptions and retailer offers in Personal 
 web for discount codes for what he actually buys, and **challenges** his spending. The aim is
 to reduce spending and question habits, not to report it politely.
 
-Screens: `/crm/personal/money` (Overview + upload), `/transactions`, `/receipts`, `/subscriptions`,
+Screens: `/crm/personal/money` (Overview + upload), `/transactions`, `/receipts`, `/prices`, `/subscriptions`,
 `/offers`, `/challenge`. Work has none of these (404). Nav link shows only in Personal.
 
 ## Architecture
 
-Six modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
+Seven modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
 background work (`tick()`) and Overview card (`summary()`). `index.js` runs them. One job,
 `crm_money_tick` (60 s, `lib/crm/jobs.js`), calls every module's `tick()` through `runs.track`
 under the name `money_<module>`, so a failure is recorded and shown (rule 5). Routes are
@@ -23,6 +23,7 @@ mounted by `routes/money.js`, which has already applied `spaceParam` + Personal-
 |--------|------|-------|
 | `ledger.js` | uploads, transactions, rules, categories, Overview, Transactions screen, image plumbing | Sonnet reads screenshots, PDF pages and CSV lines (`crm_money_read`) |
 | `receipts.js` | receipts (`money_receipts`), matching them to bank lines, the running total of receipts the bank has not shown yet, Receipts screen | Sonnet reads the receipt (`crm_money_read`, its own prompt) |
+| `prices.js` | what the same thing costs between the shops he uses and over time, from receipt item lines; "why there?" and his answers (`money_price_answers`); Prices screen | none |
 | `subscriptions.js` | recurring-charge detection, mail evidence, `money_subscriptions`, Subscriptions screen | Sonnet reads mail (`crm_money_mail`) |
 | `offers.js` | retailer offers found in mail (origin `mail`), the Offers screen (which also lists web codes) | Sonnet (`crm_money_mail`) |
 | `deals.js` | web search for codes for merchants Douglas actually spends with (origin `web`) | Sonnet with web tools (`crm_money_deals`) |
@@ -105,6 +106,43 @@ pages), which is usually days before its bank line reaches an upload.
   Personal Today warns when a receipt is not found or could not be read.
 - Item categories are shown with the receipt but do not yet split the bank line's category in totals.
 
+## Challenging the spending
+
+Agreed 16 Nov 2026: a standing process, not only the weekly reading. Measure (automatic), question (the
+same questions every time), decide (his answer), hold to it (from the ledger), ask again when the answer
+is stale. Nothing in it is a market price check: every comparison is between shops he uses, from his own
+receipts.
+
+- **Coffee** is its own category (`CATEGORIES`). The reader files coffee shops and takeaway coffee
+  there; lines the reader had already put under Eating out were moved once by name (`ledger.splitCoffee`,
+  guarded by setting `money_coffee_split`), leaving anything he or a rule of his had categorised.
+- **Subscriptions: is it worth it?** The Hub cannot see whether a service is used, so it asks: "In the
+  last month, how much did you use it?" (`use_level`: most days, about weekly, once or twice, hardly
+  ever, not at all; `use_at`). From that it works out a cost per use, lists what he says he hardly or
+  never uses with its yearly cost, and asks again after 90 days. Only active subscriptions are asked about.
+- **Standing checks** on the Challenge screen (`insights.checks`, no model) for Coffee, Groceries and
+  Eating out: the last 28 days against the 28 before, the yearly rate, a table by shop over 90 days
+  (times, average each, total), the gap between the dearest and cheapest average visit among shops used
+  more than once, and for Groceries the top-up trips under €15. "Hold me to it" sets a cap for the month
+  (`capCategory`: an ordinary category commitment, judged from the ledger, suggested at a fifth under
+  what he spends now).
+- **Prices** (`prices.js`, /crm/personal/money/prices): the receipt reader names each item line
+  (`product` in plain words, `brand`, `quantity`, `size`, `unit`), and is given the product names
+  already in use so the same thing is written the same way. Items are compared per kilo, per litre or
+  each (`product|family` key), all worked out from `money_receipts.items` on every view; there is no
+  items table. Shown: **Why there?** (the shop he buys it in most in 120 days against a shop whose
+  latest receipt has it at least 5% cheaper, with what those purchases cost above that price over 90
+  days); **Shop against shop** (one of each thing bought in both, needs 3 in common); **Prices that
+  moved** (same shop, same brand, 2% or more); and what he buys again and again with its history. Lines
+  more than 2.5 times apart are taken to be different things and not compared. He answers "why there?"
+  in a line (`money_price_answers`, one per product and pair of shops); an answered question is not
+  asked again, on screen or in the challenge, until he presses "Ask me again".
+- **The weekly challenge** is given all of it as numbered statistics (`by_shop`, `top_ups`,
+  `subscription_value`, `subscription_unrated`, `cheaper_elsewhere`, `shop_basket`, `price_rise`) and
+  is told to ask why he buys something where his own receipts show it dearer. A new answer on use, or
+  a change in the price findings, counts as something new to read.
+- Not done: correcting a product name by hand; items do not split a bank line's category.
+
 ## Rules that apply to every module
 
 - **Personal only.** Only read `sources` with `space = 'personal'`. No money data is ever written to
@@ -141,7 +179,7 @@ pages), which is usually days before its bank line reaches an upload.
   by `pragma table_info`).
 - `amount_cents` is negative for money out. Spending totals use `kind='spend' AND status!='ignored'`
   (`SPEND_SQL`); transfers and income never count.
-- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|transactions|receipts|subscriptions|offers|challenge>`,
+- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|transactions|receipts|prices|subscriptions|offers|challenge>`,
   and `<%- include('_nav') %>` from `views/crm/money/_nav.ejs` (include path `money/_nav` from `views/crm/`).
   Styles go in your own marked section of `public/money.css`.
 - Tests: `test/crm-money-<module>.test.js`, node:test, temp `CRM_DB_PATH`/`HUB_DB_PATH`, `HUB_DISABLE_JOBS=1`

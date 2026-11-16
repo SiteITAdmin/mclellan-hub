@@ -60,6 +60,50 @@
   </section>
 <% } %>
 
+<% if (v.checks.length || v.standing.length) { %>
+  <section class="challenge-checks" aria-label="Standing checks">
+    <h2 class="challenge-checks-head">Standing checks</h2>
+    <p class="challenge-muted">The same questions every time, from your bank lines and receipts. No guesswork: where it goes, what a visit costs, and what the habit costs in a year.</p>
+    <div class="challenge-check-grid">
+    <% for (const s of v.standing) { %>
+      <article class="challenge-check<%= s.alarm ? ' alarm' : '' %>">
+        <div class="challenge-kicker"><%= s.name %></div>
+        <p class="challenge-check-big"><%= s.big %></p>
+        <p class="challenge-muted"><%= s.sub %></p>
+        <% for (const line of s.lines) { %><p class="challenge-check-line"><%= line %></p><% } %>
+        <a class="btn small" href="<%= s.href %>"><%= s.act %></a>
+      </article>
+    <% } %>
+    <% for (const c of v.checks) { %>
+      <article class="challenge-check" id="check-<%= c.norm.replace(/[^a-z]+/g, '-') %>">
+        <div class="challenge-kicker"><%= c.name %> · last 28 days to <%= dayLabel(c.as_of) %></div>
+        <p class="challenge-check-big"><%= eur(c.l28.cents) %> <span class="challenge-muted">on <%= c.l28.n %> <%= c.l28.n === 1 ? 'purchase' : 'purchases' %></span></p>
+        <p class="challenge-muted"><% if (c.yearly) { %>At that rate <strong><%= euros(c.yearly) %> a year</strong>.<% } %><% if (c.p28) { %> The 28 days before: <%= eur(c.p28.cents) %> on <%= c.p28.n %>.<% } %></p>
+        <% if (c.shops.length) { %>
+        <table class="challenge-shops"><caption class="sr-only"><%= c.name %> by shop over <%= c.days %> days</caption>
+          <thead><tr><th scope="col">Where, <%= c.days %> days</th><th scope="col">Times</th><th scope="col">Each</th><th scope="col">Total</th></tr></thead>
+          <tbody><% for (const s of c.shops) { %><tr><th scope="row"><%= s.name %></th><td><%= s.n %></td><td><%= eur(s.avg) %></td><td><%= eur(s.cents) %></td></tr><% } %></tbody>
+        </table>
+        <% if (c.more) { %><p class="challenge-muted">And <%= c.more %> more <%= c.more === 1 ? 'place' : 'places' %>.</p><% } %>
+        <% } %>
+        <% if (c.spread) { %><p class="challenge-check-line">A visit to <strong><%= c.spread.high.name %></strong> costs <%= eur(c.spread.high.avg - c.spread.low.avg) %> more than one to <%= c.spread.low.name %> (<%= eur(c.spread.high.avg) %> against <%= eur(c.spread.low.avg) %>). What do you get for it?</p><% } %>
+        <% if (c.topups) { %><p class="challenge-check-line"><%= c.topups.n %> top-up trips under <%= eur(c.topups.limit) %> added <%= eur(c.topups.cents) %> in <%= c.days %> days. Which of them could have waited for the main shop?</p><% } %>
+        <% if (c.commitment) { const p = c.commitment.progress; %>
+          <p class="challenge-check-line<%= p.over ? ' over' : '' %>">Your cap this month: <%= eur(p.spent) %> of <%= eur(p.cap) %>, <strong><%= p.text %></strong>.</p>
+        <% } else { %>
+          <form class="challenge-cap-form" method="post" action="<%= action %>/cap"><input type="hidden" name="category" value="<%= c.name %>">
+            <label for="cap-<%= c.norm.replace(/[^a-z]+/g, '-') %>">Cap <%= c.name %> this month at €</label>
+            <input class="input" type="text" inputmode="decimal" id="cap-<%= c.norm.replace(/[^a-z]+/g, '-') %>" name="cap" value="<%= c.suggested_cap_cents ? (c.suggested_cap_cents / 100).toFixed(0) : '' %>" required>
+            <button class="btn small" type="submit">Hold me to it</button>
+          </form>
+          <p class="challenge-muted">You spend about <%= eur(c.monthly) %> a month on it now.</p>
+        <% } %>
+      </article>
+    <% } %>
+    </div>
+  </section>
+<% } %>
+
 <% if (v.commitments.active.length || v.commitments.recent.length) { %>
   <section class="panel challenge-commitments">
     <div class="panel-head"><h2>What you said you’d do</h2><span class="chip"><%= v.commitments.active.length %> active</span></div>
