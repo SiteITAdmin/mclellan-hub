@@ -1,0 +1,20 @@
+<%- include('../_top') %>
+<div class="title-row"><div><h1>Transactions</h1><p class="subline">Every row read from your screenshots. Open one to correct it.</p></div></div>
+<%- include('_nav') %>
+<section class="grid first"><div class="panel s12">
+  <form method="get" action="<%= base %>/transactions" class="form-row money-filter">
+    <div class="field"><label for="f-month">Month</label><select class="select" id="f-month" name="month"><option value="all">All months</option><% for (const m of months) { %><option value="<%= m.month %>" <%= m.month === filter.month ? 'selected' : '' %>><%= m.label %></option><% } %></select></div>
+    <div class="field"><label for="f-category">Category</label><select class="select" id="f-category" name="category"><option value="">All</option><% for (const c of CATEGORIES) { %><option <%= c === filter.category ? 'selected' : '' %>><%= c %></option><% } %></select></div>
+    <div class="field"><label for="f-account">Account</label><select class="select" id="f-account" name="account"><option value="">All</option><% for (const a of accounts) { %><option <%= a === filter.account ? 'selected' : '' %>><%= a %></option><% } %></select></div>
+    <div class="field"><label for="f-status">Show</label><select class="select" id="f-status" name="status"><% for (const [v, name] of [['', 'Everything counted'], ['new', 'Unchecked'], ['confirmed', 'Confirmed'], ['ignored', 'Deleted']]) { %><option value="<%= v %>" <%= v === filter.status ? 'selected' : '' %>><%= name %></option><% } %></select></div>
+    <div class="field money-search"><label for="f-q">Search</label><input class="input" type="search" id="f-q" name="q" value="<%= filter.q %>" maxlength="80" placeholder="Merchant, description or note"></div>
+    <button class="btn" type="submit">Show</button>
+  </form>
+</div></section>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2><%= totals.n %> <%= totals.n === 1 ? 'row' : 'rows' %></h2><span class="chip"><%= filter.status === 'ignored' ? 'deleted rows count for nothing' : `${eur(totals.spend)} spent${totals.income ? ` · ${eur(totals.income)} in` : ''}` %></span></div>
+  <% if (!rows.length) { %><div class="empty"><%= months.length ? 'Nothing matches. Change the filter above.' : 'No transactions yet. Upload a banking screenshot on the Overview.' %></div><% } %>
+  <%- include('_review', { rows, back }) %>
+  <% if (totals.n > rows.length) { %><p class="subline money-small">Showing the first <%= rows.length %> of <%= totals.n %>. The totals above cover all of them; narrow the filter to see the rest.</p><% } %>
+</div></section>
+<%- include('../_bottom') %>

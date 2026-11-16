@@ -1,0 +1,117 @@
+<%- include('../_top') %>
+<%
+  const e = s.eur;
+  const cadenceWord = { weekly: 'a week', fortnightly: 'a fortnight', monthly: 'a month', quarterly: 'a quarter', yearly: 'a year' };
+  const day = d => d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—';
+  const actions = (sub, which) => { %>
+    <div class="sub-actions">
+      <% for (const [action, label] of which) { %>
+        <form class="inline-form" method="post" action="/crm/personal/money/subscriptions/<%= sub.id %>/<%= action %>"><button class="btn <%= action === 'cancel' ? 'primary' : '' %> small" type="submit"><%= label %></button></form>
+      <% } %>
+    </div>
+<% };
+  const cancelHelp = sub => { %>
+    <% if (sub.status === 'to_cancel') { %>
+      <div class="sub-cancel">You want to cancel this. The Hub won't do it for you:
+        <% if (sub.cancel_url) { %><a href="<%= sub.cancel_url %>" target="_blank" rel="noopener noreferrer nofollow">open the cancel page from their email</a><% } else { %>search “<%= sub.merchant %> cancel subscription”, or look in their app under account or billing<% } %>, then press Cancelled.</div>
+    <% } %>
+<% };
+  const row = (sub, which) => { %>
+    <article class="sub-row<%= sub.still_charging ? ' alarm' : '' %>" id="sub-<%= sub.id %>">
+      <div class="sub-main">
+        <h3 class="sub-name"><%= sub.merchant %>
+          <% if (sub.status === 'to_cancel') { %><span class="pill warn">To cancel</span><% } %>
+          <% if (sub.rise) { %><span class="pill neg" title="<%= sub.rise.from === 'mail' ? 'From a price-change email' : 'From your charges' %>">Price up <%= e(sub.rise.from_cents) %> → <%= e(sub.rise.to_cents) %></span><% } %>
+          <% if (sub.trial_soon) { %><span class="pill neg">Trial ends <%= day(sub.trial_ends) %></span><% } %>
+          <% if (sub.origin === 'mail') { %><span class="pill neutral">Mail only</span><% } %>
+          <% if (sub.mail_cancelled_on && sub.status !== 'cancelled') { %><span class="pill neutral">Mail says cancelled <%= day(sub.mail_cancelled_on) %></span><% } %>
+        </h3>
+        <div class="sub-meta">
+          <%= sub.amount_cents ? `${e(sub.amount_cents)} ${cadenceWord[sub.cadence] || ''}`.trim() : 'Amount not known' %>
+          · last charge <%= day(sub.last_charge_on) %>
+          <% if (sub.next_due) { %>· next due about <%= day(sub.next_due) %><% } %>
+          <% if (sub.first_seen) { %>· seen since <%= day(sub.first_seen) %><% } %>
+        </div>
+        <% if (sub.annual_cents) { %><div class="sub-cost">This costs <strong><%= e(sub.annual_cents) %> a year</strong> — about <%= e(sub.daily_cents) %> a day.</div><% } %>
+        <% if (sub.still_charging) { %><div class="sub-alarm"><%= sub.status === 'cancelled' ? 'You marked this cancelled, but it charged again' : 'Still charging after you said you wanted to cancel' %>: <%= sub.charged_since.map(c => `${e(c.cents)} on ${day(c.on)}`).join(', ') %>.</div><% } %>
+        <% cancelHelp(sub) %>
+        <% if (sub.mail.length) { %><details class="sub-evidence"><summary>What your mail says (<%= sub.mail.length %>)</summary>
+          <% for (const m of sub.mail.slice(-4).reverse()) { %><p>“<%= m.quote %>” <span class="sub-meta"><%= day(m.on) %> · <a href="/crm/personal/sources/<%= m.source_id %>">open the email</a></span></p><% } %>
+        </details><% } %>
+      </div>
+      <% actions(sub, which) %>
+    </article>
+<% }; %>
+<div class="title-row"><div><h1>Money</h1><p class="subline">Subscriptions found in your transactions and your Personal mail. The Hub never cancels anything; it tells you, and links out.</p></div></div>
+<%- include('_nav') %>
+
+<% for (const p of s.problems) { %>
+  <div class="flash bad" role="alert"><%= p.text %> <% if (p.retry) { %><form class="inline-form" method="post" action="<%= p.retry %>"><button class="btn small" type="submit">Try again</button></form><% } %></div>
+<% } %>
+
+<section class="sub-totals" aria-label="What subscriptions cost">
+  <div class="sub-total"><div class="label">Every month</div><div class="value"><%= e(s.monthly_cents) %></div></div>
+  <div class="sub-total"><div class="label">Every year</div><div class="value"><%= e(s.yearly_cents) %></div></div>
+  <p class="sub-total-note"><%= s.proven.length %> <%= s.proven.length === 1 ? 'subscription' : 'subscriptions' %> proven by your charges<%= s.yearly_cents ? ` — about ${e(s.daily_cents)} every day` : '' %>.<% if (s.mail_yearly_cents) { %> Plus <%= e(s.mail_yearly_cents) %> a year that is only in your mail.<% } %></p>
+</section>
+
+<% if (s.stillCharging.length || s.trials.length || s.renewals.length) { %>
+<section class="sub-alerts" aria-label="Needs you soon">
+  <% for (const sub of s.stillCharging) { %><p class="sub-alert bad"><strong><%= sub.merchant %></strong> <%= sub.status === 'cancelled' ? 'charged again after you marked it cancelled' : 'is still charging after you said you wanted to cancel' %> (<%= sub.charged_since.length %> <%= sub.charged_since.length === 1 ? 'charge' : 'charges' %>, last <%= day(sub.charged_since[sub.charged_since.length - 1].on) %>).</p><% } %>
+  <% for (const sub of s.trials) { %><p class="sub-alert warn"><strong><%= sub.merchant %></strong> free trial ends <%= day(sub.trial_ends) %>. Cancel before then if you don't want to pay.</p><% } %>
+  <% for (const sub of s.renewals) { %><p class="sub-alert"><strong><%= sub.merchant %></strong> renews about <%= day(sub.next_due) %><%= sub.amount_cents ? ` for ${e(sub.amount_cents)}` : '' %>.</p><% } %>
+</section>
+<% } %>
+
+<% if (s.overlaps.length) { %>
+<section class="panel sub-overlaps"><div class="panel-head"><h2>Paying twice for the same thing?</h2></div>
+  <% for (const o of s.overlaps) { %><p>You pay for <%= o.members.length %> <%= o.name %>: <%= o.members.map(m => m.merchant).join(', ') %><%= o.annual_cents ? ` — ${e(o.annual_cents)} a year together` : '' %>. Do you use all of them?</p><% } %>
+</section>
+<% } %>
+
+<section class="sub-list" aria-label="Subscriptions">
+  <h2 class="sub-heading">Your subscriptions, most expensive first</h2>
+  <% if (!s.proven.length) { %><div class="empty"><%= s.ledger.end ? 'No charges repeat on a regular cadence in the transactions you have uploaded.' : 'No transactions uploaded yet. Upload screenshots of your banking app on the Overview, and anything that charges you regularly shows up here.' %></div><% } %>
+  <% for (const sub of s.proven) row(sub, [['keep', 'Keep'], ['cancel', 'I want to cancel this'], ['cancelled', 'Cancelled'], ['dismiss', 'Not a subscription']]); %>
+</section>
+
+<% if (s.mailOnly.length) { %>
+<section class="sub-list" aria-label="Only in your mail">
+  <h2 class="sub-heading">In your mail but not in the transactions you've uploaded</h2>
+  <p class="subline">Your mail mentions these, but no matching charges are in your uploaded transactions<%= s.ledger.start ? ` (${day(s.ledger.start)} to ${day(s.ledger.end)})` : '' %>. They may be paid from another account or card, or ended.</p>
+  <% for (const sub of s.mailOnly) row(sub, [['keep', 'Keep'], ['cancel', 'I want to cancel this'], ['cancelled', 'Cancelled'], ['dismiss', 'Not a subscription']]); %>
+</section>
+<% } %>
+
+<% if (s.watching.length) { %>
+<section class="sub-list" aria-label="Watching">
+  <h2 class="sub-heading">Watching: one charge so far</h2>
+  <p class="subline">Filed under Subscriptions but charged only once in what you've uploaded. One charge doesn't make a subscription; a second one will.</p>
+  <% for (const sub of s.watching) row(sub, [['cancel', 'I want to cancel this'], ['dismiss', 'Not a subscription']]); %>
+</section>
+<% } %>
+
+<% if (s.stopped.length) { %>
+<section class="sub-list" aria-label="Seems to have stopped">
+  <h2 class="sub-heading">Seems to have stopped</h2>
+  <p class="subline">No charge for well over its usual gap, up to the last day your uploaded transactions cover. Not counted in the totals.</p>
+  <% for (const sub of s.stopped) row(sub, [['cancelled', 'Cancelled'], ['dismiss', 'Not a subscription']]); %>
+</section>
+<% } %>
+
+<% if (s.decided.length) { %>
+<details class="sub-decided"><summary>Cancelled and not subscriptions (<%= s.decided.length %>)</summary>
+  <% for (const sub of s.decided) { %>
+    <div class="sub-decided-row"><span><strong><%= sub.merchant %></strong> · <%= sub.status === 'cancelled' ? 'cancelled' : 'not a subscription' %><%= sub.annual_cents && sub.status === 'cancelled' ? ` · saves about ${e(sub.annual_cents)} a year` : '' %></span>
+      <form class="inline-form" method="post" action="/crm/personal/money/subscriptions/<%= sub.id %>/keep"><button class="btn text small" type="submit"><%= sub.status === 'dismissed' ? 'It is a subscription' : 'Still have it' %></button></form></div>
+  <% } %>
+</details>
+<% } %>
+
+<section class="panel sub-mail"><div class="panel-head"><h2>Reading your mail</h2></div>
+  <p>Personal mail from the last <%= s.mail.windowDays %> days that mentions receipts, renewals, trials or plans is read for subscriptions. Reading it creates no facts and releases nothing.
+    <%= s.mail.read %> read<%= s.mail.waiting ? `; ${s.mail.waiting} still to read, a few at a time` : '' %><%= s.mail.inFlight ? '; a batch is with the Mac now' : '' %>.</p>
+  <% if (!s.mail.oldestMail) { %><p class="sub-warn">No Personal mail has been captured yet, so nothing in your mail can be checked.</p>
+  <% } else if (s.mail.shortOfWindow) { %><p class="sub-warn">Captured Personal mail only goes back to <%= day(s.mail.shortOfWindow) %>. A yearly renewal from before then won't be found in mail.</p><% } %>
+</section>
+<%- include('../_bottom') %>

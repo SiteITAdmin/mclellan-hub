@@ -720,6 +720,8 @@ router.get('/crm/:space/reports/:id/download', spaceParam, (req,res) => {
   res.attachment(`report-${report.date_to}.txt`).type('text/plain').send(reports.text(report));
 });
 
+require('./money')(router, { spaceParam, requireSameOrigin, writeLimiter, flash, back });
+
 router.get('/crm/:space/projects', spaceParam, (req, res) => {
   res.render('crm/projects', { page: 'projects', list: views.projects(req.params.space), unfiled: require('../lib/crm/facts').unfiled(req.params.space, { limit: 0 }).total, title: 'Projects' });
 });

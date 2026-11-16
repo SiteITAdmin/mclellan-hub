@@ -1,0 +1,35 @@
+<%# Transaction rows, each opening into its own edit form. Pass `rows` and `back` (where to return after saving). %>
+<div class="money-rows">
+<% for (const r of rows) { %>
+  <details class="money-tx<%= r.unsure ? ' is-unsure' : '' %><%= r.status === 'ignored' ? ' is-ignored' : '' %>" id="tx-<%= r.id %>" <%= r.unsure && r.status === 'new' ? 'open' : '' %>>
+    <summary>
+      <span class="money-tx-date"><%= dayLabel(r.posted_on) %></span>
+      <span class="money-tx-what"><span class="money-tx-name"><%= r.merchant || r.description %></span><span class="money-tx-meta"><%= r.kind === 'transfer' ? 'Transfer, not counted' : r.kind === 'income' ? 'Income' : r.category %><%= r.account ? ` · ${r.account}` : '' %><%= r.note ? ` · ${r.note}` : '' %></span></span>
+      <span class="money-tx-end">
+        <% if (r.status === 'ignored') { %><span class="pill neutral">Deleted</span><% } else if (r.unsure) { %><span class="pill warn">Reader unsure</span><% } else if (r.status === 'new') { %><span class="pill neutral">Unchecked</span><% } %>
+        <span class="money-amount<%= r.amount_cents > 0 ? ' is-in' : '' %>"><%= eur(r.amount_cents, { sign: true }) %></span>
+      </span>
+    </summary>
+    <% if (r.unsure) { %><p class="money-why">The reader was not sure of this line<%= r.why_unsure ? `: ${r.why_unsure}` : '' %>. Check it against the screenshot.</p><% } %>
+    <p class="money-shown">On the screenshot: <%= r.description %></p>
+    <form method="post" action="<%= base %>/transactions/<%= r.id %>" class="money-edit">
+      <input type="hidden" name="back" value="<%= back %>">
+      <div class="field"><label for="d-<%= r.id %>">Date</label><input class="input" type="date" id="d-<%= r.id %>" name="date" value="<%= r.posted_on %>" required></div>
+      <div class="field"><label for="a-<%= r.id %>">Amount (minus for money out)</label><input class="input" type="text" inputmode="decimal" id="a-<%= r.id %>" name="amount" value="<%= (r.amount_cents / 100).toFixed(2) %>" required></div>
+      <div class="field wide"><label for="t-<%= r.id %>">Description</label><input class="input" type="text" id="t-<%= r.id %>" name="description" value="<%= r.description %>" maxlength="200" required></div>
+      <div class="field"><label for="m-<%= r.id %>">Merchant</label><input class="input" type="text" id="m-<%= r.id %>" name="merchant" value="<%= r.merchant %>" maxlength="120"></div>
+      <div class="field"><label for="c-<%= r.id %>">Category</label><select class="select" id="c-<%= r.id %>" name="category"><% for (const c of CATEGORIES) { %><option <%= c === r.category ? 'selected' : '' %>><%= c %></option><% } %></select></div>
+      <div class="field"><label for="k-<%= r.id %>">Kind</label><select class="select" id="k-<%= r.id %>" name="kind"><% for (const [k, name] of [['spend', 'Spending'], ['income', 'Income'], ['transfer', 'Transfer between my own accounts']]) { %><option value="<%= k %>" <%= k === r.kind ? 'selected' : '' %>><%= name %></option><% } %></select></div>
+      <div class="field wide"><label for="n-<%= r.id %>">Note</label><input class="input" type="text" id="n-<%= r.id %>" name="note" value="<%= r.note %>" maxlength="500"></div>
+      <label class="money-always wide"><input type="checkbox" name="always" value="1" checked> If I change the category or kind, always do this for <strong><%= r.merchant || r.description %></strong></label>
+      <div class="money-edit-acts wide">
+        <button class="btn primary small" type="submit" name="action" value="save"><%= r.status === 'new' ? 'Save and confirm' : 'Save' %></button>
+        <% if (r.status === 'new') { %><button class="btn small" type="submit" name="action" value="confirm" formnovalidate>It is right as read</button><% } %>
+        <% if (r.status === 'ignored') { %><button class="btn small" type="submit" name="action" value="restore" formnovalidate>Put back</button>
+        <% } else { %><button class="btn text small money-del" type="submit" name="action" value="ignore" formnovalidate>Delete</button><% } %>
+        <span class="money-by"><%= r.category_by === 'you' ? 'Category set by you' : r.category_by === 'rule' ? 'Category from your rule' : 'Category guessed by the reader' %></span>
+      </div>
+    </form>
+  </details>
+<% } %>
+</div>

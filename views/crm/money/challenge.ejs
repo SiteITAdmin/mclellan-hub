@@ -1,0 +1,128 @@
+<%- include('../_top') %>
+<%
+  const v = view, r = v.reading, action = '/crm/personal/money/challenge';
+  const prize = c => c.saving_cents_per_month ? `About ${euros(c.saving_cents_per_month)} a month${c.capped ? ' (capped at what you spend there)' : ''}` : '';
+  const buttons = c => { %>
+    <div class="challenge-buttons">
+      <form class="inline-form" method="post" action="<%= action %>/commit"><input type="hidden" name="insight" value="<%= r.id %>"><input type="hidden" name="key" value="<%= c.key %>"><button class="btn primary small" type="submit">I’ll do this</button></form>
+      <form class="inline-form" method="post" action="<%= action %>/snooze"><input type="hidden" name="insight" value="<%= r.id %>"><input type="hidden" name="key" value="<%= c.key %>"><button class="btn small" type="submit">Not now</button></form>
+      <details class="challenge-wrong"><summary class="btn text small">That’s wrong</summary>
+        <form method="post" action="<%= action %>/wrong"><input type="hidden" name="insight" value="<%= r.id %>"><input type="hidden" name="key" value="<%= c.key %>">
+          <label class="sr-only" for="wrong-<%= c.key %>">What is wrong with it?</label><input class="input" id="wrong-<%= c.key %>" name="reason" maxlength="200" required placeholder="What is wrong, in a line">
+          <button class="btn small" type="submit">Don’t raise it again</button></form>
+      </details>
+    </div>
+  <% };
+  const worked = c => { %>
+    <details class="challenge-worked"><summary>How this was worked out</summary>
+      <ul><% for (const s of c.stats) { %><li><span class="challenge-ref"><%= s.id %></span> <%= s.text %></li><% } %></ul>
+      <% if (c.saving_basis) { %><p>Prize: <%= c.saving_basis %><%= c.capped ? ' The figure sent was more than you spend there, so it was capped.' : '' %></p><% } %>
+    </details>
+  <% };
+  const body = c => { %>
+    <% if (c.observation) { %><p class="challenge-observation"><%= c.observation %></p><% } %>
+    <% if (prize(c)) { %><p class="challenge-prize"><%= prize(c) %></p><% } %>
+    <% if (c.action) { %><p class="challenge-action"><strong>Next step:</strong> <%= c.action %><% if (c.target) { %> <span class="challenge-cap">Cap: <%= c.target.name %> under <%= eur(c.target.monthly_cap_cents) %> a month (now <%= eur(c.target.current_cents) %>).</span><% } %></p><% } %>
+    <% buttons(c); worked(c); %>
+  <% };
+%>
+<div class="title-row"><div><h1>Money</h1><p class="subline">Your own numbers, asked back at you. Nothing here is bought, cancelled or sent.</p></div>
+  <% if (v.coverage.ok && !v.working) { %><form method="post" action="<%= action %>/refresh"><button class="btn" type="submit"><%= v.failed ? 'Try again' : r ? 'Challenge me again' : 'Challenge me' %></button></form><% } %>
+</div>
+<%- include('_nav') %>
+
+<% if (trouble) { %><p class="flash bad" role="alert"><%= trouble %></p><% } %>
+<% if (v.failed) { %><p class="flash bad" role="alert">The last challenge could not be written: <%= v.failed.error %>. <%= r ? 'The one below is the last that worked.' : '' %> Press Try again.</p><% } %>
+<% if (v.working) { %><p class="flash" role="status">A new challenge is being written on the Mac<%= v.working.attempts > 1 ? ` (try ${v.working.attempts} of 3)` : '' %>. It appears here in a few minutes; nothing to press.</p><% } %>
+
+<% if (!r && !v.coverage.ok) { %>
+  <section class="panel challenge-empty">
+    <h2>Not enough to challenge yet</h2>
+    <% for (const line of v.coverage.missing) { %><p><%= line %></p><% } %>
+    <p class="subline">No guess is made before then. <a href="/crm/personal/money">Upload statements on Overview</a>.</p>
+  </section>
+<% } else if (!r && !v.working && !v.failed) { %>
+  <section class="panel challenge-empty"><h2>No challenge yet</h2><p>There is enough to work with. The first one is written within a minute or two of the data arriving.</p></section>
+<% } %>
+
+<% if (r) { %>
+  <section class="challenge-lead">
+    <% if (r.body.headline) { %><p class="challenge-headline"><%= r.body.headline %></p><% } %>
+    <% if (v.top) { %>
+      <article class="challenge-top" aria-labelledby="challenge-top-q">
+        <div class="challenge-kicker">The one that matters · <%= v.top.title %></div>
+        <h2 id="challenge-top-q"><%= v.top.question %></h2>
+        <% body(v.top); %>
+      </article>
+    <% } else { %>
+      <div class="empty"><%= r.body.challenges.length ? 'You have answered every challenge in this reading. The next one comes on Monday, or sooner when new statements arrive.' : 'This reading found nothing worth challenging.' %></div>
+    <% } %>
+  </section>
+<% } %>
+
+<% if (v.commitments.active.length || v.commitments.recent.length) { %>
+  <section class="panel challenge-commitments">
+    <div class="panel-head"><h2>What you said you’d do</h2><span class="chip"><%= v.commitments.active.length %> active</span></div>
+    <% for (const c of v.commitments.active) { const p = c.progress; %>
+      <div class="challenge-commitment <%= p.over ? 'over' : '' %>">
+        <div class="challenge-commitment-head">
+          <div><strong><%= p.capless ? c.title : `${c.name} under ${eur(c.monthly_cap_cents)}` %></strong><% if (!p.capless) { %> <span class="challenge-muted"><%= c.title %></span><% } %></div>
+          <div class="challenge-buttons">
+            <% if (p.capless) { %><form class="inline-form" method="post" action="<%= action %>/commitment/<%= c.id %>"><input type="hidden" name="action" value="done"><button class="btn small" type="submit">Done</button></form><% } %>
+            <form class="inline-form" method="post" action="<%= action %>/commitment/<%= c.id %>"><input type="hidden" name="action" value="drop"><button class="btn text small" type="submit">Drop</button></form>
+          </div>
+        </div>
+        <% if (p.capless) { %>
+          <p class="challenge-muted"><%= c.action || p.text %></p>
+        <% } else { %>
+          <progress class="challenge-bar" max="<%= p.cap %>" value="<%= Math.min(p.spent, p.cap) %>" aria-label="<%= p.spoken %>"></progress>
+          <p class="challenge-progress"><span><%= eur(p.spent) %> of <%= eur(p.cap) %></span> <strong><%= p.text %></strong><% if (c.baseline_cents) { %> <span class="challenge-muted">Usually <%= eur(c.baseline_cents) %> a month.</span><% } %></p>
+          <% if (p.waiting || p.stale) { %><p class="challenge-muted"><%= p.waiting || p.stale %></p><% } %>
+        <% } %>
+      </div>
+    <% } %>
+    <% for (const c of v.commitments.recent) { %>
+      <p class="challenge-closed"><span class="challenge-tag <%= c.status %>"><%= { kept: 'Kept', broken: 'Broken', dropped: 'Not judged' }[c.status] %></span> <strong><%= c.name || c.title %></strong> <%= c.note %></p>
+    <% } %>
+  </section>
+<% } %>
+
+<% if (r && v.others.length) { %>
+  <section class="challenge-cards" aria-label="Other challenges">
+    <% for (const c of v.others) { %>
+      <article class="challenge-card">
+        <div class="challenge-kicker"><%= c.title %></div>
+        <h3><%= c.question %></h3>
+        <% body(c); %>
+      </article>
+    <% } %>
+  </section>
+<% } %>
+
+<% if (r && (v.habits.length || v.wins.length)) { %>
+  <section class="grid">
+    <% if (v.habits.length) { %><div class="panel <%= v.wins.length ? 's6' : 's12' %>"><div class="panel-head"><h2>Habits</h2></div>
+      <ul class="challenge-lines"><% for (const h of v.habits) { %><li><%= h.text %> <span class="challenge-ref"><%= h.evidence.join(', ') %></span></li><% } %></ul></div><% } %>
+    <% if (v.wins.length) { %><div class="panel <%= v.habits.length ? 's6' : 's12' %>"><div class="panel-head"><h2>What got better</h2></div>
+      <ul class="challenge-lines"><% for (const w of v.wins) { %><li><%= w.text %> <span class="challenge-ref"><%= w.evidence.join(', ') %></span></li><% } %></ul></div><% } %>
+  </section>
+<% } %>
+
+<% if (r) { %>
+  <footer class="challenge-foot">
+    <p>Written <%= stamp(r.model_receipt.completed_at || r.created_at) %> by <%= [r.model_receipt.runner, r.model_receipt.model].filter(Boolean).join(' / ') || 'the model' %><%= r.model_receipt.fallbackFrom ? `, standing in for ${r.model_receipt.fallbackFrom}` : '' %>, from <%= r.tx_count %> purchases between <%= dayLabel(r.period_from) %> and <%= dayLabel(r.period_to) %>. The sums are the Hub’s; the model chose what to ask.</p>
+    <% if (r.packet.unchecked) { %><p><%= r.packet.unchecked %> of those rows had not been checked by you, so their categories were the reader’s guess. <a href="/crm/personal/money/transactions">Check them</a>.</p><% } %>
+    <% if (v.newer) { %><p><%= v.newer %> newer <%= v.newer === 1 ? 'purchase is' : 'purchases are' %> not in this reading yet.</p><% } %>
+    <% if (!v.coverage.ok) { %><p><% for (const line of v.coverage.missing) { %><%= line %> <% } %>No new reading is written until then.</p><% } %>
+    <% if (v.habits.length || v.wins.length) { %>
+      <details class="challenge-worked"><summary>Numbers behind the habits and what got better</summary>
+        <ul><% for (const s of [...new Map([...v.habits, ...v.wins].flatMap(i => i.stats).map(s => [s.id, s])).values()]) { %><li><span class="challenge-ref"><%= s.id %></span> <%= s.text %></li><% } %></ul>
+      </details>
+    <% } %>
+    <% if (r.body.dropped.length) { %>
+      <div class="challenge-dropped"><p>Left out of this reading, because it failed a check:</p>
+        <ul><% for (const d of r.body.dropped) { %><li><%= d.what %>: <%= d.why %>.</li><% } %></ul></div>
+    <% } %>
+  </footer>
+<% } %>
+<%- include('../_bottom') %>

@@ -1,0 +1,64 @@
+<%- include('../_top') %>
+<%
+  const e = o.eur;
+  const day = d => d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '';
+  const until = x => x.valid_until ? (x.days_left === 0 ? 'ends today' : x.days_left === 1 ? 'ends tomorrow' : `until ${day(x.valid_until)}${x.days_left <= 7 ? ` (${x.days_left} days left)` : ''}`) : 'no end date given';
+  const card = x => { %>
+    <article class="offer-row<%= x.days_left !== null && x.days_left <= 3 ? ' soon' : '' %>" id="offer-<%= x.id %>">
+      <div class="offer-main">
+        <h3 class="offer-title"><span class="offer-merchant"><%= x.merchant %></span> · <%= x.title || 'Discount code' %>
+          <% if (x.origin === 'web') { %><span class="pill warn">Found on the web — not tested</span><% } else { %><span class="pill neutral">From your mail</span><% } %>
+          <% if (x.status === 'saved') { %><span class="pill neutral">Saved</span><% } %>
+        </h3>
+        <% if (x.code) { %><div class="offer-code">Code <code><%= x.code %></code></div><% } %>
+        <% if (x.detail) { %><div class="offer-detail"><%= x.detail %></div><% } %>
+        <div class="offer-meta"><span class="<%= x.days_left !== null && x.days_left <= 3 ? 'late' : '' %>"><%= until(x) %></span> · <%= x.relevance %></div>
+        <div class="offer-meta">
+          <% if (x.origin === 'mail') { %>“<%= x.evidence.quote %>” <% if (x.source_id) { %>· <a href="/crm/personal/sources/<%= x.source_id %>">open the email</a><% } %><% } else { %>
+            <% if (x.evidence.quote) { %>“<%= x.evidence.quote %>” · <% } %>source <%= x.host || 'unknown' %><% if (x.evidence.checked_at) { %> · looked at <%= String(x.evidence.checked_at).slice(0, 10) %><% } %>
+          <% } %>
+          <% if (x.link) { %> · <a href="<%= x.link %>" target="_blank" rel="noopener noreferrer nofollow"><%= x.link %></a><% } %>
+        </div>
+      </div>
+      <div class="offer-actions">
+        <% if (x.status !== 'saved') { %><form class="inline-form" method="post" action="/crm/personal/money/offers/<%= x.id %>/save"><button class="btn small" type="submit">Save</button></form><% } %>
+        <form class="inline-form offer-used" method="post" action="/crm/personal/money/offers/<%= x.id %>/use"><label class="sr-only" for="saved-<%= x.id %>">Saved about €</label><input class="input" id="saved-<%= x.id %>" name="saved" inputmode="decimal" placeholder="saved €"><button class="btn small" type="submit">Used</button></form>
+        <form class="inline-form" method="post" action="/crm/personal/money/offers/<%= x.id %>/dismiss"><button class="btn text small" type="submit">Dismiss</button></form>
+      </div>
+    </article>
+<% }; %>
+<div class="title-row"><div><h1>Money</h1><p class="subline">Offers in your Personal mail and codes found on the web, weighed against what you actually spend. An offer only saves money where you'd have spent anyway.</p></div></div>
+<%- include('_nav') %>
+
+<% if (dealsStatus) { %><%- include('_deals', { deals: dealsStatus }) %><% } %>
+
+<% for (const p of o.problems) { %>
+  <div class="flash bad" role="alert"><%= p.text %> <% if (p.retry) { %><form class="inline-form" method="post" action="<%= p.retry %>"><button class="btn small" type="submit">Try again</button></form><% } %></div>
+<% } %>
+
+<section class="offer-list" aria-label="Offers at shops you use">
+  <h2 class="offer-heading">At shops you already use</h2>
+  <% if (!o.hasLedger) { %><div class="empty">No transactions uploaded yet, so the Hub can't tell which shops you use. Upload banking screenshots on the Overview.</div>
+  <% } else if (!o.useful.length) { %><div class="empty">No current offers from shops you've spent at in the last 180 days.</div><% } %>
+  <% for (const x of o.useful) card(x); %>
+</section>
+
+<% if (o.temptation.length) { %>
+<details class="offer-temptation"><summary>Not shops you use — ignore unless you need something (<%= o.temptation.length %>)</summary>
+  <p class="subline">You haven't spent at these in the last 180 days<%= o.hasLedger ? '' : ' (or no transactions are uploaded yet)' %>. A discount on something you weren't going to buy is spending, not saving.</p>
+  <% for (const x of o.temptation) card(x); %>
+</details>
+<% } %>
+
+<% if (o.used.length) { %>
+<section class="panel offer-used-list"><div class="panel-head"><h2>Used</h2><span class="chip"><%= o.used.length %></span><% if (o.saved_cents) { %><span class="end">about <%= e(o.saved_cents) %> saved</span><% } %></div>
+  <% for (const x of o.used) { %><p><strong><%= x.merchant %></strong> · <%= x.title %><%= x.saved_cents ? ` · saved about ${e(x.saved_cents)}` : '' %></p><% } %>
+</section>
+<% } %>
+
+<section class="panel offer-mail"><div class="panel-head"><h2>Reading your mail</h2></div>
+  <p>Personal mail from the last <%= o.mail.windowDays %> days that mentions a discount, code, voucher or sale is read for offers. Reading it creates no facts and releases nothing.
+    <%= o.mail.read %> read<%= o.mail.waiting ? `; ${o.mail.waiting} still to read, a few at a time` : '' %><%= o.mail.inFlight ? '; a batch is with the Mac now' : '' %>.<% if (o.dismissed) { %> <%= o.dismissed %> dismissed.<% } %></p>
+  <% if (!o.mail.oldestMail) { %><p class="sub-warn">No Personal mail has been captured yet.</p><% } %>
+</section>
+<%- include('../_bottom') %>

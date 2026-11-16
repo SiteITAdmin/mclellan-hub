@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/crm.css">
+  <% if (page === 'money') { %><link rel="stylesheet" href="/money.css"><% } %>
   <link rel="manifest" href="/crm.webmanifest">
   <meta name="theme-color" content="#f5f2ec">
 </head>
@@ -30,6 +31,7 @@
     ${nav(`/crm/${base}/captured`, 'captured', 'Captured', 'captured')}
     ${nav(`/crm/${base}/meetings`, 'meeting', 'Meetings', 'meetings')}
     ${nav(`/crm/${base}/search`, 'search', 'Search', 'search')}
+    ${base === 'personal' ? nav('/crm/personal/money', 'note', 'Money', 'money') : ''}
     <div class="nav-group">Both spaces</div>
     ${nav('/crm/review', 'review', 'Who is this?', 'review', reviewAll ? `<span class="count">${reviewAll}<span class="sr-only"> waiting</span></span>` : '')}
     ${nav('/crm/messages', 'note', 'iMessage', 'messages')}

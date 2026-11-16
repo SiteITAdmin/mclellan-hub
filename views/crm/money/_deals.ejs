@@ -1,0 +1,21 @@
+<%# Web code search status for the Offers screen. Pass `deals` = require('lib/crm/money/deals').status(). %>
+<%
+  const day = ts => ts ? new Date(ts * 1000).toLocaleDateString('en-IE', { timeZone: 'Europe/Dublin', weekday: 'short', day: 'numeric', month: 'short' }) : '';
+  const when = ts => ts ? `${day(ts)} ${new Date(ts * 1000).toLocaleTimeString('en-GB', { timeZone: 'Europe/Dublin', hour: '2-digit', minute: '2-digit' })}` : '';
+%>
+<div class="panel s12 deals-panel">
+  <div class="panel-head"><h2>Searching the web for codes</h2>
+    <span class="end"><%= deals.inFlight ? 'Searching now' : deals.lastRunAt ? `Last search ${when(deals.lastRunAt)}` : 'Not searched yet' %><%= !deals.inFlight && deals.nextRunAt ? ` · next ${when(deals.nextRunAt)}` : '' %></span></div>
+  <p class="deals-note">Codes and offers found on the web are not tested. Try them at checkout.</p>
+  <% if (deals.error) { %><div class="deals-error" role="alert"><%= deals.error %></div><% } %>
+  <% if (deals.inFlight) { %><div class="deals-line"><span class="what">Searching <%= deals.searching.join(', ') %></span><span class="meta">Results arrive when the Mac finishes.</span></div><% } %>
+  <% if (!deals.merchants.length) { %><div class="empty">No spending to search for yet. Shops appear here once bank screenshots have been read.</div><% } %>
+  <% for (const m of deals.merchants) { %>
+    <div class="deals-line<%= m.error ? ' bad' : '' %>"><span class="what"><%= m.merchant %></span>
+      <span class="meta"><% if (m.error) { %>Search failed: <%= m.error %><% } else if (!m.lastSearchedAt) { %>Not searched yet<% } else { %>Searched <%= day(m.lastSearchedAt) %>, <%= m.found ? `${m.found} found` : 'nothing found' %><%= m.dropped ? ` · ${m.dropped} dropped as unverifiable` : '' %><% } %></span></div>
+  <% } %>
+  <form class="inline-form deals-search" method="post" action="/crm/personal/money/deals/search">
+    <button class="btn small" type="submit" <%- deals.inFlight || deals.manualAt ? 'disabled' : '' %>>Search now</button>
+    <% if (deals.manualAt && !deals.inFlight) { %><span class="meta">Available again at <%= when(deals.manualAt).split(' ').pop() %></span><% } %>
+  </form>
+</div>
