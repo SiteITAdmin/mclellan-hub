@@ -10,8 +10,8 @@
         <span class="money-amount<%= r.amount_cents > 0 ? ' is-in' : '' %>"><%= eur(r.amount_cents, { sign: true }) %></span>
       </span>
     </summary>
-    <% if (r.unsure) { %><p class="money-why">The reader was not sure of this line<%= r.why_unsure ? `: ${r.why_unsure}` : '' %>. Check it against the screenshot.</p><% } %>
-    <p class="money-shown">On the screenshot: <%= r.description %></p>
+    <% if (r.unsure) { %><p class="money-why">The reader was not sure of this line<%= r.why_unsure ? `: ${r.why_unsure}` : '' %>. Check it against what was uploaded.</p><% } %>
+    <p class="money-shown">As read: <%= r.description %></p>
     <form method="post" action="<%= base %>/transactions/<%= r.id %>" class="money-edit">
       <input type="hidden" name="back" value="<%= back %>">
       <div class="field"><label for="d-<%= r.id %>">Date</label><input class="input" type="date" id="d-<%= r.id %>" name="date" value="<%= r.posted_on %>" required></div>

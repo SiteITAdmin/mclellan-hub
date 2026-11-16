@@ -1,5 +1,5 @@
 <%- include('../_top') %>
-<div class="title-row"><div><h1>Money</h1><p class="subline">Personal only. Built from the banking screenshots you upload: no bank is connected, and nothing here is bought, cancelled or sent.</p></div></div>
+<div class="title-row"><div><h1>Money</h1><p class="subline">Personal only. Built from the banking screenshots, statements and exports you upload: no bank is connected, and nothing here is bought, cancelled or sent.</p></div></div>
 <%- include('_nav') %>
 <% if (problems.length) { %>
 <div class="status-list money-problems" role="alert">
@@ -11,8 +11,8 @@
 
 <section class="grid <%= problems.length ? '' : 'first' %>">
   <div class="panel <%= o.hasData ? 's6' : 's12' %>">
-    <div class="panel-head"><h2>Upload screenshots</h2><% if (o.waiting) { %><span class="chip"><%= o.waiting %> being read</span><% } %></div>
-    <% if (!o.hasData) { %><div class="empty money-start"><strong>Nothing to show yet.</strong> Start with a screenshot of each account’s transaction list for the last month or two: scroll, screenshot, scroll, screenshot. Overlaps are fine; the same line is only counted once. The Mac reads each one in a few minutes, and the rows then wait below for you to check against the picture.</div><% } %>
+    <div class="panel-head"><h2>Upload</h2><% if (o.waiting) { %><span class="chip"><%= o.waiting %> being read</span><% } %></div>
+    <% if (!o.hasData) { %><div class="empty money-start"><strong>Nothing to show yet.</strong> Start with a screenshot of each account’s transaction list for the last month or two: scroll, screenshot, scroll, screenshot. Or upload the account’s PDF statement or CSV export. Overlaps are fine; the same line is only counted once. The Mac reads each one in a few minutes, and the rows then wait below for you to check against the file.</div><% } %>
     <%- include('_upload', { accounts: o.accounts, limits }) %>
   </div>
   <% if (o.hasData) { const diff = o.month.total_cents - o.lastMonthSameDays.total_cents; %>
@@ -25,7 +25,7 @@
       <% } else if (diff < 0) { %><strong><%= eur(-diff) %> less</strong> than the first <%= o.dayOfMonth %> <%= o.dayOfMonth === 1 ? 'day' : 'days' %> of <%= o.lastMonthName %> (<%= eur(o.lastMonthSameDays.total_cents) %>).
       <% } else { %>The same as the first <%= o.dayOfMonth %> <%= o.dayOfMonth === 1 ? 'day' : 'days' %> of <%= o.lastMonthName %>.<% } %>
     </p>
-    <p class="subline money-small"><%= o.month.count %> <%= o.month.count === 1 ? 'payment' : 'payments' %> counted. Transfers between your own accounts and income are left out.<% if (o.unchecked) { %> <a href="#check"><%= o.unchecked %> <%= o.unchecked === 1 ? 'row is' : 'rows are' %> unchecked</a>: counted, but not yet compared with the screenshot.<% } %> Only what you have uploaded is here, so a missing screenshot is missing spending.</p>
+    <p class="subline money-small"><%= o.month.count %> <%= o.month.count === 1 ? 'payment' : 'payments' %> counted. Transfers between your own accounts and income are left out.<% if (o.unchecked) { %> <a href="#check"><%= o.unchecked %> <%= o.unchecked === 1 ? 'row is' : 'rows are' %> unchecked</a>: counted, but not yet compared with what was uploaded.<% } %> Only what you have uploaded is here, so a missing upload is missing spending.</p>
   </div>
   <% } %>
 </section>
@@ -33,17 +33,18 @@
 <% if (o.toCheck.length) { %>
 <section class="grid" id="check" aria-label="To check"><div class="panel s12">
   <div class="panel-head"><h2>To check</h2><span class="chip"><%= checking %> <%= checking === 1 ? 'row' : 'rows' %></span></div>
-  <p class="subline money-small">Compare each list with its screenshot. These rows already count in the totals; confirming them says the reader got them right.</p>
+  <p class="subline money-small">Compare each list with the screenshot, page or lines it came from. These rows already count in the totals; confirming them says the reader got them right.</p>
   <% for (const g of o.toCheck) { const unsure = g.rows.filter(r => r.unsure).length; %>
   <div class="money-check">
     <div class="money-shot">
-      <% if (g.upload?.has_image) { %><a href="<%= base %>/uploads/<%= g.upload.id %>/image" target="_blank" rel="noopener"><img src="<%= base %>/uploads/<%= g.upload.id %>/image" alt="The screenshot these rows were read from" loading="lazy"></a>
-      <% } else { %><div class="empty"><%= g.upload ? 'The picture is no longer held (it is removed 30 days after reading).' : 'The screenshot these rows came from was deleted.' %></div><% } %>
+      <% if (g.upload?.has_image && g.upload.source === 'screenshot') { %><a href="<%= base %>/uploads/<%= g.upload.id %>/image" target="_blank" rel="noopener"><img src="<%= base %>/uploads/<%= g.upload.id %>/image" alt="The screenshot these rows were read from" loading="lazy"></a>
+      <% } else if (g.upload?.has_image) { %><a class="money-file" href="<%= base %>/uploads/<%= g.upload.id %>/image" target="_blank" rel="noopener"><strong><%= g.upload.filename || (g.upload.source === 'csv' ? 'CSV export' : 'PDF statement') %></strong><span><%= g.upload.part %></span><span>Open <%= g.upload.source === 'csv' ? 'these lines' : 'this page' %></span></a>
+      <% } else { %><div class="empty"><%= g.upload ? 'The file is no longer held (it is removed 30 days after reading).' : 'The upload these rows came from was deleted.' %></div><% } %>
     </div>
     <div class="money-check-rows">
       <div class="money-check-head">
         <div><strong><%= g.upload?.account || g.rows[0].account || 'No account name' %></strong><% if (g.upload) { %><span class="money-tx-meta"> · uploaded <%= fmt(g.upload.created_at) %><%= g.upload.read_by ? ` · read by ${g.upload.read_by}` : '' %></span><% } %></div>
-        <% if (g.upload && g.rows.length > unsure) { %><form class="inline-form" method="post" action="<%= base %>/uploads/<%= g.upload.id %>/confirm"><input type="hidden" name="back" value="<%= base %>#check"><button class="btn primary small" type="submit">These match the screenshot</button></form><% } %>
+        <% if (g.upload && g.rows.length > unsure) { %><form class="inline-form" method="post" action="<%= base %>/uploads/<%= g.upload.id %>/confirm"><input type="hidden" name="back" value="<%= base %>#check"><button class="btn primary small" type="submit">These match the <%= g.upload.source === 'csv' ? 'file' : g.upload.source === 'pdf' ? 'page' : 'screenshot' %></button></form><% } %>
       </div>
       <% if (unsure) { %><p class="money-why"><%= unsure %> <%= unsure === 1 ? 'row is' : 'rows are' %> marked: the reader was not sure of <%= unsure === 1 ? 'it' : 'them' %>. The button above leaves <%= unsure === 1 ? 'that one' : 'those' %> for you to check one at a time.</p><% } %>
       <% if (g.upload?.note) { %><p class="subline money-small"><%= g.upload.note %></p><% } %>
@@ -58,7 +59,7 @@
 <section class="grid">
   <div class="panel s8">
     <div class="panel-head"><h2>Where <%= o.monthName %> went</h2></div>
-    <% if (!o.categories.length) { %><div class="empty">No spending is held for <%= o.monthName %> yet. Upload this month’s screenshots.</div><% } %>
+    <% if (!o.categories.length) { %><div class="empty">No spending is held for <%= o.monthName %> yet. Upload this month’s screenshots or statement.</div><% } %>
     <div class="money-bars">
     <% for (const c of o.categories) { %>
       <a class="money-bar" href="<%= base %>/transactions?month=<%= o.today.slice(0, 7) %>&amp;category=<%= encodeURIComponent(c.category) %>">
@@ -108,14 +109,14 @@
 
 <% if (o.uploads.length) { %>
 <section class="grid"><details class="panel s12" <%= o.uploads.some(u => u.status === 'failed') ? 'open' : '' %>>
-  <summary>Screenshots (<%= o.uploads.length %>)</summary>
+  <summary>Uploads (<%= o.uploads.length %>)</summary>
   <% for (const u of o.uploads) { %>
   <div class="vendor-line">
     <div class="main">
       <div class="what"><%= u.account || 'No account name' %> <span class="pill <%= u.status === 'failed' ? 'neg' : u.status === 'empty' ? 'warn' : 'neutral' %>"><%= state[u.status] %></span></div>
-      <div class="meta">Uploaded <%= fmt(u.created_at) %><%= u.filename ? ` · ${u.filename}` : '' %>
+      <div class="meta">Uploaded <%= fmt(u.created_at) %><%= u.filename ? ` · ${u.filename}` : '' %><%= u.part ? `, ${u.part}` : '' %>
         <% if (u.status === 'done') { %> · <%= u.found %> <%= u.found === 1 ? 'line' : 'lines' %> read, <%= u.added %> new<%= u.period_from ? ` · ${dayLabel(u.period_from)} to ${dayLabel(u.period_to)}` : '' %><% } %>
-        <%= u.read_by ? ` · read by ${u.read_by}` : '' %><%= u.attempts && ['pending', 'queued'].includes(u.status) ? ` · try ${u.attempts + 1}` : '' %><%= u.has_image ? '' : ' · picture removed' %></div>
+        <%= u.read_by ? ` · read by ${u.read_by}` : '' %><%= u.attempts && ['pending', 'queued'].includes(u.status) ? ` · try ${u.attempts + 1}` : '' %><%= u.has_image ? '' : ' · file removed' %></div>
       <% if (u.error) { %><div class="meta <%= u.status === 'failed' ? 'money-err' : '' %>"><%= u.error %></div><% } %>
       <% if (u.note) { %><div class="meta"><%= u.note %></div><% } %>
     </div>

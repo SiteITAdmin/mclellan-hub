@@ -133,8 +133,8 @@ test('a failed, lost, late or garbled reading is tried again at most three times
   q.jobs[q.sent[0].jobId] = { status: 'failed', error: 'claude/sonnet: usage_limit_reached; then codex: capacity' };
   await ledger.tick({ jobs: q, t: T });
   assert.deepEqual([uploadRow(failed).status, uploadRow(failed).error], ['failed', 'claude/sonnet: usage_limit_reached; then codex: capacity']);
-  assert.match(ledger.problems()[0].text, /1 screenshot could not be read: claude\/sonnet: usage_limit_reached/);
-  assert.deepEqual(ledger.health(), [{ level: 'warn', text: '1 banking screenshot could not be read', href: '/crm/personal/money' }]);
+  assert.match(ledger.problems()[0].text, /1 upload could not be read: claude\/sonnet: usage_limit_reached/);
+  assert.deepEqual(ledger.health(), [{ level: 'warn', text: '1 banking upload could not be read', href: '/crm/personal/money' }]);
   assert.ok(ledger.health().every(h => h.level !== 'bad'), 'the morning email repeats bad lines, and money must not be in it');
 
   const lost = ledger.addUpload({ buffer: png(2), account: 'A' }, T).id;
@@ -147,7 +147,7 @@ test('a failed, lost, late or garbled reading is tried again at most three times
     keys.push(q.sent.at(-1).dedupeKey);
   }
   assert.deepEqual(keys, [`money:${lost}:0`, `money:${lost}:1`, `money:${lost}:2`]);
-  assert.match(ledger.problems().map(p => p.text).join(' '), /1 screenshot had to be sent for reading again/);
+  assert.match(ledger.problems().map(p => p.text).join(' '), /1 upload had to be sent for reading again/);
   delete q.jobs[q.sent.at(-1).jobId];
   const sentBefore = q.sent.length;
   await ledger.tick({ jobs: q, t: T });
@@ -210,7 +210,7 @@ test('the picture goes 30 days after reading, and leaves the queue as soon as th
   assert.throws(() => jobs.enqueue({ feature: 'crm_atomise', dedupeKey: 'big', payload: { userPrompt: 'x'.repeat(1_600_000) } }), /max 1\.5MB/);
   assert.throws(() => jobs.enqueue({ feature: 'crm_money_read', dedupeKey: 'bigger', payload: { userPrompt: 'x'.repeat(4_600_000) } }), /max 4\.5MB/);
   assert.throws(() => require('../lib/model').enqueueModelJob({ feature: 'crm_atomise', dedupeKey: 'x', documents: [{ type: 'image', mime: 'image/png', data: 'AAAA' }] }), /Attachments are only enabled/);
-  assert.throws(() => require('../lib/model').enqueueModelJob({ feature: 'crm_money_read', dedupeKey: 'x', documents: [{ data: 'JVBERi0=' }] }), /Attachments are only enabled/);
+  assert.throws(() => require('../lib/model').enqueueModelJob({ feature: 'crm_atomise', dedupeKey: 'x', documents: [{ type: 'document', data: 'JVBERi0=' }] }), /Attachments are only enabled/);
 
   const claimed = jobs.claim({ workerId: 'test' }).jobs[0];
   assert.equal(claimed.payload.documents[0].data.length, big.toString('base64').length);
@@ -323,7 +323,7 @@ test('the reader commands: Claude gets an image block, ChatGPT an image file, Gr
 
   let ran = false; const spy = script('spy', `require('fs').writeFileSync('${path.join(tmp, 'ran')}','1')`);
   await assert.rejects(run(spy, spy, spy, { documents: [{ type: 'image', mime: 'image/png', data: Buffer.from('not a png at all').toString('base64') }] }), /Invalid or oversized screenshot/);
-  await assert.rejects(run(spy, spy, spy, { documents: [{ data: Buffer.from('%PDF-1.7\nsynthetic').toString('base64') }] }), /cannot take this kind of attachment/);
+  await assert.rejects(agent.runSubscriptionText({ feature: 'crm_atomise', systemPrompt: '', userPrompt: '', force: true, config: { ...resolveFeatureRunner('crm_atomise'), feature: 'crm_atomise' }, documents: [{ data: Buffer.from('%PDF-1.7\nsynthetic').toString('base64') }] }), /cannot take this kind of attachment/);
   await assert.rejects(agent.runSubscriptionText({ feature: 'crm_boox_read', systemPrompt: '', userPrompt: '', force: true, config: { ...resolveFeatureRunner('crm_boox_read'), feature: 'crm_boox_read' }, documents }), /cannot take this kind of attachment/);
   ran = fs.existsSync(path.join(tmp, 'ran'));
   assert.equal(ran, false, 'a bad attachment stops before any model is started');
@@ -360,7 +360,7 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     let page = await get('/crm/personal/money');
     assert.equal(page.status, 200);
     assert.match(page.html, /Nothing to show yet\./); assert.match(page.html, /a screenshot of each account’s transaction list for the last month or two/);
-    assert.match(page.html, /name="images" accept="image\/png,image\/jpeg,image\/webp" multiple/); assert.match(page.html, /<datalist id="money-accounts">/);
+    assert.match(page.html, /name="images" accept="image\/png,image\/jpeg,image\/webp,application\/pdf,\.pdf,text\/csv,\.csv" multiple/); assert.match(page.html, /<datalist id="money-accounts">/);
     assert.match(page.html, /href="\/crm\/personal\/money" aria-current="page"/); assert.match(page.html, /href="\/money\.css"/);
     assert.doesNotMatch(page.html, /To check|Where .* went/);
     assert.doesNotMatch((await get('/crm/work')).html, /\/crm\/personal\/money/, 'Work has no way in');
@@ -369,13 +369,13 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     assert.deepEqual([r.status, r.headers.get('location')], [302, '/crm/personal/money']);
     let said = flashes.pop();
     assert.equal(said.level, 'bad');
-    assert.match(said.text, /2 screenshots uploaded\. The Mac is reading them/); assert.match(said.text, /one-again\.png was already uploaded on/); assert.match(said.text, /notes\.txt is not a PNG, JPEG or WebP picture/);
+    assert.match(said.text, /2 files uploaded\. The Mac is reading them;/); assert.match(said.text, /one-again\.png was already uploaded on/); assert.match(said.text, /notes\.txt is not a screenshot \(PNG, JPEG or WebP\), a PDF statement or a CSV export/);
     const [one, two] = db.crm().prepare('SELECT * FROM money_uploads ORDER BY rowid').all();
     assert.deepEqual([one.status, two.status, one.account, one.filename], ['queued', 'queued', 'Test current', 'one.png']);
     const hub = require('../lib/db').hub();
     assert.equal(hub.prepare("SELECT COUNT(*) n FROM subscription_agent_jobs WHERE feature = 'crm_money_read' AND status = 'pending'").get().n, 2, 'sent at once, without waiting for the Mac');
     r = await send(Array.from({ length: 7 }, (_, n) => [`many-${n}.png`, png(60 + n)]));
-    assert.match(flashes.pop().text, /at most 6 screenshots at a time\. Nothing was uploaded/);
+    assert.match(flashes.pop().text, /at most 6 files at a time\. Nothing was uploaded/);
     assert.equal(db.crm().prepare('SELECT COUNT(*) n FROM money_uploads').get().n, 2);
     r = await fetch(`${base}/crm/personal/money/upload`, { method: 'POST', redirect: 'manual', headers: { Origin: 'https://evil.example' }, body: new FormData() });
     assert.equal(r.status, 403);
@@ -399,7 +399,7 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     assert.match(page.html, /5 rows are unchecked/);
     assert.match(page.html, /<span class="money-bar-label">Groceries<\/span>[\s\S]*?style="width:100%"[\s\S]*?€42\.10<small>64% · 1<\/small>/);
     assert.match(page.html, /Top merchants this month[\s\S]*Tesco[\s\S]*€42\.10[\s\S]*Netflix/); assert.match(page.html, /Last six months/); assert.match(page.html, /always do this for <strong>Tesco<\/strong>/);
-    assert.match(page.html, /Screenshots \(2\)/); assert.match(page.html, /4 lines read, 4 new/);
+    assert.match(page.html, /Uploads \(2\)/); assert.match(page.html, /4 lines read, 4 new/);
     assert.match((await get('/crm/personal')).html, /href="\/crm\/personal\/money">5 transactions waiting for you to check/);
     assert.doesNotMatch((await get('/crm/work')).html, /transactions waiting/);
 
@@ -442,7 +442,7 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     hub.prepare("UPDATE subscription_agent_jobs SET status = 'failed', error = 'every model lane was down' WHERE 0").run();
     db.crm().prepare("UPDATE money_uploads SET status = 'failed', error = 'every model lane was down' WHERE id = ?").run(two.id);
     page = await get('/crm/personal/money');
-    assert.match(page.html, /class="status-item bad"><strong>Ledger:<\/strong> 1 screenshot could not be read: every model lane was down/);
+    assert.match(page.html, /class="status-item bad"><strong>Ledger:<\/strong> 1 upload could not be read: every model lane was down/);
     assert.match(page.html, /<details class="panel s12" open>/); assert.match(page.html, /Read again/);
     r = await post(`/crm/personal/money/uploads/${two.id}/retry`, {});
     assert.match(flashes.pop().text, /read again/); assert.equal(uploadRow(two.id).status, 'queued');
@@ -459,6 +459,6 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     assert.equal((await get(`/crm/personal/money/uploads/${id}/image`)).status, 200);
     await ledger.tick();
     assert.equal((await get(`/crm/personal/money/uploads/${id}/image`)).status, 404, 'gone once purged');
-    assert.match((await get('/crm/personal/money')).html, /picture removed/);
+    assert.match((await get('/crm/personal/money')).html, /file removed/);
   } finally { server.close(); stranger.close(); }
 });

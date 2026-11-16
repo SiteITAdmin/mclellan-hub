@@ -1,7 +1,8 @@
 # Personal money
 
 Agreed 15 Nov 2026 (Douglas): a Personal-only tracker for his finances. Irish banks have no
-open link to trackers, so the data comes in as **screenshots of banking apps**. The tool
+open link to trackers, so the data comes in as **screenshots of banking apps**, and (added
+16 Nov) **PDF statements and CSV exports** from the same banks. The tool
 categorises spending, watches for subscriptions and retailer offers in Personal mail, looks the
 web for discount codes for what he actually buys, and **challenges** his spending. The aim is
 to reduce spending and question habits, not to report it politely.
@@ -20,7 +21,7 @@ mounted by `routes/money.js`, which has already applied `spaceParam` + Personal-
 
 | Module | Owns | Model |
 |--------|------|-------|
-| `ledger.js` | uploads, transactions, rules, categories, Overview, Transactions screen, image plumbing | Sonnet reads screenshots (`crm_money_read`) |
+| `ledger.js` | uploads, transactions, rules, categories, Overview, Transactions screen, image plumbing | Sonnet reads screenshots, PDF pages and CSV lines (`crm_money_read`) |
 | `subscriptions.js` | recurring-charge detection, mail evidence, `money_subscriptions`, Subscriptions screen | Sonnet reads mail (`crm_money_mail`) |
 | `offers.js` | retailer offers found in mail (origin `mail`), the Offers screen (which also lists web codes) | Sonnet (`crm_money_mail`) |
 | `deals.js` | web search for codes for merchants Douglas actually spends with (origin `web`) | Sonnet with web tools (`crm_money_deals`) |
@@ -31,6 +32,32 @@ Model calls go `lib/model.js enqueueModelJob` → VPS queue → Mac worker → r
 tick via `subscription-agent-jobs.getJob` (see `lib/crm/boox.js` and `lib/crm/ask.js` for the pattern;
 never block a request waiting for the Mac). Chain is Claude → ChatGPT → Grok, except `crm_money_deals`,
 which falls straight to Grok because ChatGPT's lane has no web and would invent codes.
+
+## PDF statements and CSV exports
+
+`files.js` cuts a file into parts and `ledger.js` stores one `money_uploads` row per part (`source`
+`pdf`/`csv`, `part` "page 2 of 5" / "lines 81–160 of 412", `file_sha256` tying the parts together,
+`text` the page's text or the CSV lines). Each part is read like a screenshot, with the same prompt
+and checks:
+
+- **PDF:** split with pdf-lib into one-page PDFs (at most 30 pages). The page's text comes from unpdf
+  and is laid out by position, so a figure stays under its "Paid out" or "Paid in" heading. The reader
+  gets the page as a PDF document plus that text. If ChatGPT or Grok stand in, the Mac renders the page
+  with Poppler. A page with text but no amounts (terms and conditions) is marked empty and not sent. A
+  statement that opens without a password but cannot be split goes as text only. A password-protected
+  one is refused.
+- **CSV:** cut into runs of up to 80 lines or 12,000 characters, each under the header row. The bank's
+  preamble above the header is dropped. The reader works out the columns from the header; nothing
+  parses bank-specific formats. Sent as text, with no attachment, so every lane can read it.
+- **Checked against the file:** every amount the reader returns for a PDF page or CSV part must
+  appear in that part's text, written in some way a bank writes amounts. If it doesn't, the row is
+  kept but marked unsure, for Douglas to check on its own.
+- **Overlaps:** lines on other pages or parts of the same file never count as already held. Across
+  kinds of upload (a screenshot and a statement word the same payment differently), a line matches
+  one already held on the same account, day and amount when the merchant names match. Those lines are
+  not added again, and the upload's note says how many were matched.
+- The text is removed from the queue's packet when the job ends, and from `money_uploads` after 30
+  days, along with the picture or page.
 
 ## Rules that apply to every module
 
@@ -54,8 +81,9 @@ which falls straight to Grok because ChatGPT's lane has no web and would invent 
   a retry control.
 - **Derive, don't duplicate.** Subscriptions, offers and findings are derived from transactions and mail;
   Douglas's own decisions (category corrections, "not a subscription", "dismiss") are never overwritten.
-- **Screenshots are sensitive.** Only the extracted rows are kept long term; `money_uploads.image` is set
-  to NULL 30 days after reading. Image bytes are only ever served to the signed-in admin.
+- **Uploads are sensitive.** Only the extracted rows are kept long term; `money_uploads.image` and `.text`
+  are set to NULL 30 days after reading. They are only ever served to the signed-in admin (CSV text as
+  sandboxed plain text).
 
 ## Shared contracts
 

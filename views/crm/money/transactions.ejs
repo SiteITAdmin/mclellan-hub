@@ -1,5 +1,5 @@
 <%- include('../_top') %>
-<div class="title-row"><div><h1>Transactions</h1><p class="subline">Every row read from your screenshots. Open one to correct it.</p></div></div>
+<div class="title-row"><div><h1>Transactions</h1><p class="subline">Every row read from your uploads. Open one to correct it.</p></div></div>
 <%- include('_nav') %>
 <section class="grid first"><div class="panel s12">
   <form method="get" action="<%= base %>/transactions" class="form-row money-filter">
@@ -13,7 +13,7 @@
 </div></section>
 <section class="grid"><div class="panel s12">
   <div class="panel-head"><h2><%= totals.n %> <%= totals.n === 1 ? 'row' : 'rows' %></h2><span class="chip"><%= filter.status === 'ignored' ? 'deleted rows count for nothing' : `${eur(totals.spend)} spent${totals.income ? ` · ${eur(totals.income)} in` : ''}` %></span></div>
-  <% if (!rows.length) { %><div class="empty"><%= months.length ? 'Nothing matches. Change the filter above.' : 'No transactions yet. Upload a banking screenshot on the Overview.' %></div><% } %>
+  <% if (!rows.length) { %><div class="empty"><%= months.length ? 'Nothing matches. Change the filter above.' : 'No transactions yet. Upload a banking screenshot, statement or export on the Overview.' %></div><% } %>
   <%- include('_review', { rows, back }) %>
   <% if (totals.n > rows.length) { %><p class="subline money-small">Showing the first <%= rows.length %> of <%= totals.n %>. The totals above cover all of them; narrow the filter to see the rest.</p><% } %>
 </div></section>
