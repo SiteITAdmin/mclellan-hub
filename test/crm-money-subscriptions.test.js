@@ -237,3 +237,9 @@ test('rent, a loan and regular shop visits are not subscriptions; a small monthl
   subs.derive();
   assert.equal(row('Tesco Mobile').origin, 'both');
 });
+
+test('a quote that runs across reply-quoted lines is still the mail\'s own words', () => {
+  const text = 'On 14 Nov, Support wrote:\r\n>>\r\n>> I am trying to use my Revolut Ultra plan subscription but I fear I have\r\n>> been set up before and its not working.';
+  assert.ok(subs.quoteIn('I am trying to use my Revolut Ultra plan subscription but I fear I have been set up before and its not working.', text));
+  assert.equal(subs.quoteIn('I cancelled my Revolut Ultra plan', text), null);
+});
