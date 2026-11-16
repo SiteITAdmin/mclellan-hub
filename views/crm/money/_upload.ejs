@@ -1,26 +1,39 @@
-<%# The upload card. Pass `accounts` (names used before) and `limits` ({ files, readBytes }). %>
-<form method="post" action="<%= base %>/upload" enctype="multipart/form-data" class="money-upload" id="money-upload">
-  <label class="money-drop" id="money-drop" for="money-files">
+<%# The upload card. Pass `limits` ({ files, readBytes }), and either `accounts` (names used before) for bank uploads or `kind: 'receipt'` for receipts. %>
+<% const receipt = locals.kind === 'receipt', p = receipt ? 'receipt' : 'money'; %>
+<form method="post" action="<%= receipt ? `${base}/receipts/upload` : `${base}/upload` %>" enctype="multipart/form-data" class="money-upload" id="<%= p %>-upload">
+  <label class="money-drop" id="<%= p %>-drop" for="<%= p %>-files">
+    <% if (receipt) { %>
+    <strong>Take a photo of a receipt, or drop one here</strong>
+    <span>Up to <%= limits.files %> at a time. Photos (PNG or JPEG) or emailed receipts as PDF. Upload them when you get them: each waits here until its bank line arrives.</span>
+    <% } else { %>
     <strong>Drop banking screenshots, PDF statements or CSV exports here, or tap to choose</strong>
     <span>Up to <%= limits.files %> at a time, all from the same account. Screenshots (PNG or JPEG), PDF statements up to 30 pages, CSV exports.</span>
-    <span class="money-picked" id="money-picked" aria-live="polite"></span>
+    <% } %>
+    <span class="money-picked" id="<%= p %>-picked" aria-live="polite"></span>
   </label>
-  <input class="sr-only" type="file" id="money-files" name="images" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf,text/csv,.csv" multiple required>
+  <input class="sr-only" type="file" id="<%= p %>-files" name="<%= receipt ? 'receipts' : 'images' %>" accept="<%= receipt ? 'image/*,application/pdf,.pdf' : 'image/png,image/jpeg,image/webp,application/pdf,.pdf,text/csv,.csv' %>" multiple required>
   <div class="form-row">
+    <% if (!receipt) { %>
     <div class="field money-account"><label for="money-account">Account</label>
       <input class="input" type="text" id="money-account" name="account" list="money-accounts" maxlength="60" placeholder="e.g. AIB current, Revolut, Credit union" autocomplete="off" required>
       <datalist id="money-accounts"><% for (const a of accounts) { %><option value="<%= a %>"></option><% } %></datalist></div>
-    <button class="btn primary" type="submit" id="money-send">Upload and read</button>
+    <% } %>
+    <button class="btn primary" type="submit" id="<%= p %>-send"><%= receipt ? 'Upload receipts' : 'Upload and read' %></button>
   </div>
+  <% if (receipt) { %>
+  <p class="subline money-small">A receipt never adds to spending: the bank line is what counts, and the receipt sits beside it. The photo is deleted 30 days after it is read; what was read from it is kept.</p>
+  <% } else { %>
   <p class="subline money-small">Use the same account name every time: it is how the same line on two overlapping uploads is recognised and counted once. The file is deleted 30 days after it is read; only the rows are kept.</p>
+  <% } %>
 </form>
 <script>
 (() => {
-  const form = document.getElementById('money-upload'), input = document.getElementById('money-files'), drop = document.getElementById('money-drop');
-  const picked = document.getElementById('money-picked'), send = document.getElementById('money-send');
+  const p = <%- JSON.stringify(p) %>;
+  const form = document.getElementById(`${p}-upload`), input = document.getElementById(`${p}-files`), drop = document.getElementById(`${p}-drop`);
+  const picked = document.getElementById(`${p}-picked`), send = document.getElementById(`${p}-send`);
   const MAX_SIDE = 2400, TARGET = 2250000, MAX_FILES = <%= limits.files %>;
   const show = () => { const n = input.files.length; picked.textContent = n ? `${n} ${n === 1 ? 'file' : 'files'} chosen` : ''; };
-  const wanted = f => f.type.startsWith('image/') || /\.(pdf|csv)$/i.test(f.name) || ['application/pdf', 'text/csv'].includes(f.type);
+  const wanted = f => f.type.startsWith('image/') || /\.(pdf<%= receipt ? '' : '|csv' %>)$/i.test(f.name) || [<%- receipt ? "'application/pdf'" : "'application/pdf', 'text/csv'" %>].includes(f.type);
   input.addEventListener('change', show);
   for (const type of ['dragenter', 'dragover']) drop.addEventListener(type, e => { e.preventDefault(); drop.classList.add('is-over'); });
   for (const type of ['dragleave', 'drop']) drop.addEventListener(type, e => { e.preventDefault(); drop.classList.remove('is-over'); });
@@ -30,10 +43,10 @@
   });
 
   const blobFrom = (canvas, quality) => new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
-  // Phone screenshots are several megabytes; the reader takes about three. Shrink to 2400px on the long side, then lower the JPEG quality until it fits.
-  // PDFs and CSVs go up as they are: the Hub splits them.
+  // Phone photos are several megabytes, and iPhones may send HEIC; the reader takes about three megabytes of PNG, JPEG or WebP.
+  // Shrink to 2400px on the long side as a JPEG, then lower the quality until it fits. PDFs and CSVs go up as they are.
   async function shrink(file) {
-    if (!file.type.startsWith('image/') || (file.size <= TARGET && file.type !== 'image/webp')) return file;
+    if (!file.type.startsWith('image/') || (file.size <= TARGET && ['image/png', 'image/jpeg'].includes(file.type))) return file;
     const bitmap = await createImageBitmap(file);
     const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');

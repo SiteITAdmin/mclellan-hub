@@ -1,0 +1,86 @@
+<%- include('../_top') %>
+<% const s = r.s, month = new Date(`${s.today.slice(0, 7)}-01T12:00:00Z`).toLocaleDateString('en-IE', { month: 'long', timeZone: 'UTC' }); %>
+<div class="title-row"><div><h1>Receipts</h1><p class="subline">The bank's lines are what counts. A receipt waits here until its bank line arrives in an upload, then sits beside it, so nothing is counted twice.</p></div></div>
+<%- include('_nav') %>
+<% if (problems.length) { %>
+<div class="status-list money-problems" role="alert"><% for (const p of problems) { %><div class="status-item bad"><%= p.text %></div><% } %></div>
+<% } %>
+
+<section class="grid <%= problems.length ? '' : 'first' %>">
+  <div class="panel s6">
+    <div class="panel-head"><h2>Upload</h2></div>
+    <%- include('_upload', { kind: 'receipt', limits }) %>
+  </div>
+  <div class="panel s6" aria-label="Where it stands">
+    <div class="panel-head"><h2>Waiting for the bank</h2><% if (s.waitingCount) { %><span class="chip"><%= s.waitingCount %> <%= s.waitingCount === 1 ? 'receipt' : 'receipts' %></span><% } %></div>
+    <p class="money-big"><%= eur(s.waitingTotal) %></p>
+    <p class="money-compare">
+      <% if (!s.waitingCount) { %>Every receipt is matched, marked as cash or set aside.
+      <% } else { %><%= s.expectedCount %> not on a bank upload yet<%= s.expectedCount ? ` (${eur(s.expectedTotal)})` : '' %><% if (s.missingCount) { %>; <strong class="money-up"><%= s.missingCount %> not found</strong> though your uploads cover <%= s.missingCount === 1 ? 'its day' : 'their days' %> (<%= eur(s.missingTotal) %>)<% } %>.<% } %>
+      <% if (s.otherCurrency) { %> <%= s.otherCurrency %> in another currency <%= s.otherCurrency === 1 ? 'is' : 'are' %> not in the total.<% } %>
+    </p>
+    <dl class="money-standing">
+      <div><dt>Bank, <%= month %> so far</dt><dd><%= eur(s.month.bank) %></dd></div>
+      <div><dt>…of which has a receipt</dt><dd><%= eur(s.month.backed) %><small><%= s.month.backedCount %> <%= s.month.backedCount === 1 ? 'line' : 'lines' %></small></dd></div>
+      <% if (s.month.comingCount) { %><div><dt>With receipts not on the bank yet</dt><dd>about <%= eur(s.month.likely) %><small>+<%= eur(s.month.coming) %></small></dd></div><% } %>
+      <% if (s.month.cashCount) { %><div><dt>Cash receipts</dt><dd><%= eur(s.month.cash) %><small>already counted as cash taken out</small></dd></div><% } %>
+    </dl>
+    <% if (s.accounts.length) { %>
+    <p class="subline money-small">Bank lines held up to: <%= s.accounts.map(a => `${a.account} ${dayLabel(a.through)}${a.active ? '' : ' (not waited on)'}`).join(' · ') %>. A receipt is "not found" once every account uploaded in the last 60 days is held <%= r.after %> days past it.</p>
+    <% } else { %><p class="subline money-small">No bank lines are held yet, so every receipt waits. Upload statements or screenshots on the Overview.</p><% } %>
+  </div>
+</section>
+
+<% if (r.reading.length) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Being read</h2></div>
+  <% const state = { pending: 'Waiting its turn', queued: 'Being read', failed: 'Could not be read', empty: 'Not a receipt' }; %>
+  <% for (const u of r.reading) { %>
+  <div class="vendor-line">
+    <div class="main">
+      <div class="what"><%= u.filename || 'Receipt' %> <span class="pill <%= u.status === 'failed' ? 'neg' : u.status === 'empty' ? 'warn' : 'neutral' %>"><%= state[u.status] %></span></div>
+      <div class="meta">Uploaded <%= fmt(u.created_at) %><%= u.attempts && ['pending', 'queued'].includes(u.status) ? ` · try ${u.attempts + 1}` : '' %></div>
+      <% if (u.error) { %><div class="meta <%= u.status === 'failed' ? 'money-err' : '' %>"><%= u.error %></div><% } %>
+    </div>
+    <% if (u.has_image) { %><a class="btn text small" href="<%= base %>/uploads/<%= u.id %>/image" target="_blank" rel="noopener">View</a><% } %>
+    <% if (u.has_image && !['pending', 'queued'].includes(u.status)) { %><form class="inline-form" method="post" action="<%= base %>/uploads/<%= u.id %>/retry"><input type="hidden" name="back" value="<%= base %>/receipts"><button class="btn small" type="submit">Read again</button></form><% } %>
+    <form class="inline-form" method="post" action="<%= base %>/uploads/<%= u.id %>/delete"><input type="hidden" name="back" value="<%= base %>/receipts"><button class="btn text small money-del" type="submit">Delete</button></form>
+  </div>
+  <% } %>
+</div></section>
+<% } %>
+
+<% if (r.check.length) { %>
+<section class="grid" id="check"><div class="panel s12">
+  <div class="panel-head"><h2>Check these</h2><span class="chip"><%= r.check.length %></span></div>
+  <p class="subline money-small">Receipts with a possible bank line to confirm, a reading the reader was unsure of, or no bank line found.</p>
+  <div class="money-receipts"><% for (const x of r.check) { %><%- include('_receipt', { x }) %><% } %></div>
+</div></section>
+<% } %>
+
+<% if (r.waiting.length) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Not on a bank upload yet</h2><span class="chip"><%= eur(s.expectedTotal) %></span></div>
+  <p class="subline money-small">Matched by the Hub as soon as an upload holds a line with the same amount and shop.</p>
+  <div class="money-receipts"><% for (const x of r.waiting) { %><%- include('_receipt', { x }) %><% } %></div>
+</div></section>
+<% } %>
+
+<% if (r.matched.length) { %>
+<section class="grid"><details class="panel s12" open>
+  <summary>Matched (latest <%= r.matched.length %>)</summary>
+  <div class="money-receipts"><% for (const x of r.matched) { %><%- include('_receipt', { x }) %><% } %></div>
+</details></section>
+<% } %>
+
+<% if (r.aside.length) { %>
+<section class="grid"><details class="panel s12">
+  <summary>Cash and set aside (<%= r.aside.length %>)</summary>
+  <div class="money-receipts"><% for (const x of r.aside) { %><%- include('_receipt', { x }) %><% } %></div>
+</details></section>
+<% } %>
+
+<% if (!s.any) { %>
+<section class="grid"><div class="panel s12"><div class="empty">No receipts yet. Photograph one when you get it; it waits here until the bank line arrives, and the total above shows what the bank has not caught up with.</div></div></section>
+<% } %>
+<%- include('../_bottom') %>

@@ -7,12 +7,12 @@ categorises spending, watches for subscriptions and retailer offers in Personal 
 web for discount codes for what he actually buys, and **challenges** his spending. The aim is
 to reduce spending and question habits, not to report it politely.
 
-Screens: `/crm/personal/money` (Overview + upload), `/transactions`, `/subscriptions`,
+Screens: `/crm/personal/money` (Overview + upload), `/transactions`, `/receipts`, `/subscriptions`,
 `/offers`, `/challenge`. Work has none of these (404). Nav link shows only in Personal.
 
 ## Architecture
 
-Five modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
+Six modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
 background work (`tick()`) and Overview card (`summary()`). `index.js` runs them. One job,
 `crm_money_tick` (60 s, `lib/crm/jobs.js`), calls every module's `tick()` through `runs.track`
 under the name `money_<module>`, so a failure is recorded and shown (rule 5). Routes are
@@ -22,6 +22,7 @@ mounted by `routes/money.js`, which has already applied `spaceParam` + Personal-
 | Module | Owns | Model |
 |--------|------|-------|
 | `ledger.js` | uploads, transactions, rules, categories, Overview, Transactions screen, image plumbing | Sonnet reads screenshots, PDF pages and CSV lines (`crm_money_read`) |
+| `receipts.js` | receipts (`money_receipts`), matching them to bank lines, the running total of receipts the bank has not shown yet, Receipts screen | Sonnet reads the receipt (`crm_money_read`, its own prompt) |
 | `subscriptions.js` | recurring-charge detection, mail evidence, `money_subscriptions`, Subscriptions screen | Sonnet reads mail (`crm_money_mail`) |
 | `offers.js` | retailer offers found in mail (origin `mail`), the Offers screen (which also lists web codes) | Sonnet (`crm_money_mail`) |
 | `deals.js` | web search for codes for merchants Douglas actually spends with (origin `web`) | Sonnet with web tools (`crm_money_deals`) |
@@ -53,11 +54,43 @@ and checks:
   appear in that part's text, written in some way a bank writes amounts. If it doesn't, the row is
   kept but marked unsure, for Douglas to check on its own.
 - **Overlaps:** lines on other pages or parts of the same file never count as already held. Across
-  kinds of upload (a screenshot and a statement word the same payment differently), a line matches
-  one already held on the same account, day and amount when the merchant names match. Those lines are
-  not added again, and the upload's note says how many were matched.
+  kinds of upload (a screenshot and a statement word the same payment differently, and an app dates a
+  card payment on the day it was made while a statement may date it when it settled), a line matches
+  one already held on the same account and amount, within 4 days (nearest first), when the merchant
+  names match. Those lines are not added again, and the upload's note says how many were matched.
+  `money_line_claims` records which file each held line was paired with, so another page of the same
+  file cannot pair with it a second time.
 - The text is removed from the queue's packet when the job ends, and from `money_uploads` after 30
   days, along with the picture or page.
+
+## Receipts
+
+Agreed 16 Nov 2026. Douglas uploads a receipt when he gets it (photo, or an emailed PDF of up to 4
+pages), which is usually days before its bank line reaches an upload.
+
+- **A receipt never counts as spending.** The bank line is the fact; the receipt only sits beside it.
+  Nothing in `money_receipts` is read by the totals, the challenge or any other module.
+- **Reading:** a `money_uploads` row with `source = 'receipt'`, sent through `crm_money_read` with the
+  receipt prompt (shop, date, total paid, tip, currency, card or cash, last four card digits, items with
+  categories). The reply keeps the shared `readable` / `transactions` shape (with `transactions` empty)
+  so the Mac worker's existing check accepts it. A PDF receipt's total must appear in its text, or the
+  receipt is marked unsure. No date printed: the upload day is used and the receipt is marked.
+- **Matching** (`reconcile`, every tick and after each reading): matched on its own only when a bank line
+  has the exact amount, the shop names agree, and it is dated from 1 day before to 6 days after the
+  purchase, nearest on or after first. Anything looser is offered as "Is this it?" (same amount but a
+  different name; same shop with the bank up to 25% higher, a tip; same shop in another currency). He
+  can say No (never offered again), match by hand from nearby lines, unmatch (that line is never matched
+  to it again), mark it paid in cash, or set it aside. A deleted bank line frees its receipt. His
+  decisions (`decided_by = 'you'`) survive reading the receipt again.
+- **Cash:** an ATM withdrawal already counts as spending (category Cash), so a cash receipt is never
+  added again; it only shows what the cash went on. A receipt printed "cash" is set to cash on reading.
+- **The running total:** waiting receipts are a running total of spending the bank has not shown yet.
+  A waiting receipt is "not found" once every account with lines in the last 60 days is held to 6 days
+  past its purchase; until then it is "not on a bank upload yet". The Receipts screen shows the bank's
+  figure for the month, how much of it has a receipt, the waiting total, and "about €X" for the month
+  with this month's waiting receipts added. The Overview repeats that line under the month's total.
+  Personal Today warns when a receipt is not found or could not be read.
+- Item categories are shown with the receipt but do not yet split the bank line's category in totals.
 
 ## Rules that apply to every module
 
@@ -95,7 +128,7 @@ and checks:
   by `pragma table_info`).
 - `amount_cents` is negative for money out. Spending totals use `kind='spend' AND status!='ignored'`
   (`SPEND_SQL`); transfers and income never count.
-- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|transactions|subscriptions|offers|challenge>`,
+- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|transactions|receipts|subscriptions|offers|challenge>`,
   and `<%- include('_nav') %>` from `views/crm/money/_nav.ejs` (include path `money/_nav` from `views/crm/`).
   Styles go in your own marked section of `public/money.css`.
 - Tests: `test/crm-money-<module>.test.js`, node:test, temp `CRM_DB_PATH`/`HUB_DB_PATH`, `HUB_DISABLE_JOBS=1`

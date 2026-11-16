@@ -1,0 +1,66 @@
+<%# One receipt card. Pass `x` (a receipt from receipts.screen()). %>
+<% const back = `${base}/receipts#receipt-${x.id}`, act = a => `${base}/receipts/${x.id}/${a}`; %>
+<div class="money-receipt<%= x.missing ? ' is-missing' : '' %>" id="receipt-<%= x.id %>">
+  <div class="money-receipt-head">
+    <% if (x.upload?.has_image) { %><a class="money-receipt-thumb" href="<%= base %>/uploads/<%= x.upload_id %>/image" target="_blank" rel="noopener"><% if (x.upload.mime === 'application/pdf') { %><span>PDF</span><% } else { %><img src="<%= base %>/uploads/<%= x.upload_id %>/image" alt="The receipt" loading="lazy"><% } %></a><% } %>
+    <div class="money-receipt-what">
+      <strong><%= x.shop || 'Shop not read' %></strong>
+      <span class="money-tx-meta"><%= dayLabel(x.bought_on) %><%= x.paid_by === 'cash' ? ' · paid in cash' : x.paid_by === 'card' ? ` · card${x.card_last4 ? ` ending ${x.card_last4}` : ''}` : '' %><%= x.tip_cents ? ` · includes a ${eur(x.tip_cents)} tip` : '' %><%= x.upload?.read_by ? ` · read by ${x.upload.read_by}` : '' %></span>
+    </div>
+    <span class="money-amount<%= x.amount_cents > 0 ? ' is-in' : '' %>"><%= x.currency === 'EUR' ? eur(x.amount_cents, { sign: true }) : `${x.amount_cents > 0 ? '+' : '-'}${(Math.abs(x.amount_cents) / 100).toFixed(2)} ${x.currency}` %><%= x.amount_cents > 0 ? ' refund' : '' %></span>
+  </div>
+  <% if (x.unsure) { %><p class="money-why">The reader was not sure of this receipt<%= x.why_unsure ? `: ${x.why_unsure}` : '' %>. Check it against the photo, and correct it below.</p><% } %>
+  <% if (x.upload?.note) { %><p class="subline money-small"><%= x.upload.note %></p><% } %>
+
+  <% if (x.status === 'matched' && x.line) { %>
+  <div class="money-receipt-line"><span>Bank line</span><span><%= dayLabel(x.line.posted_on) %> · <%= x.line.account || 'No account name' %> · <%= x.line.description %></span><span class="money-amount"><%= eur(x.line.amount_cents, { sign: true }) %></span></div>
+  <p class="subline money-small"><%= x.decided_by === 'you' ? 'Matched by you.' : 'Matched by the Hub: same amount and shop.' %><%= x.line.amount_cents !== x.amount_cents ? ` The bank took ${eur(x.amount_cents - x.line.amount_cents)} more than the receipt shows; the bank's figure is the one counted.` : '' %></p>
+  <form class="inline-form" method="post" action="<%= act('unmatch') %>"><button class="btn small" type="submit">Not this line</button></form>
+  <% } else if (x.status === 'cash') { %>
+  <p class="subline money-small">Paid in cash. Not added to spending: cash counts when it is taken out.</p>
+  <form class="inline-form" method="post" action="<%= act('waiting') %>"><button class="btn small" type="submit">It was not cash</button></form>
+  <% } else if (x.status === 'dismissed') { %>
+  <p class="subline money-small">Set aside: not in the running total.</p>
+  <form class="inline-form" method="post" action="<%= act('waiting') %>"><button class="btn small" type="submit">Wait for its bank line again</button></form>
+  <% } else { %>
+    <% if (x.missing) { %><p class="money-why">Not found. Your bank uploads are held past <%= dayLabel(x.bought_on) %> plus the days a payment takes to arrive, and no line matches it exactly. It may have been paid in cash, from an account you have not uploaded, or the bank names the shop differently.</p><% } %>
+    <% for (const sug of x.suggestions || []) { %>
+    <div class="money-receipt-line is-suggested">
+      <span>Is this it?</span>
+      <span><%= dayLabel(sug.posted_on) %> · <%= sug.account || 'No account name' %> · <%= sug.description %><small><%= sug.why %></small></span>
+      <span class="money-amount"><%= eur(sug.amount_cents, { sign: true }) %></span>
+      <span class="money-receipt-acts">
+        <form class="inline-form" method="post" action="<%= act('match') %>"><input type="hidden" name="transaction_id" value="<%= sug.id %>"><button class="btn primary small" type="submit">Yes</button></form>
+        <form class="inline-form" method="post" action="<%= act('reject') %>"><input type="hidden" name="transaction_id" value="<%= sug.id %>"><button class="btn small" type="submit">No</button></form>
+      </span>
+    </div>
+    <% } %>
+    <div class="money-receipt-acts">
+      <% if ((x.pickable || []).length) { %>
+      <form class="money-pick" method="post" action="<%= act('match') %>">
+        <label class="sr-only" for="pick-<%= x.id %>">Bank line for this receipt</label>
+        <select class="select" id="pick-<%= x.id %>" name="transaction_id" required><option value="">Match to a bank line…</option><% for (const l of x.pickable) { %><option value="<%= l.id %>"><%= dayLabel(l.posted_on) %> · <%= eur(l.amount_cents) %> · <%= l.merchant || l.description %><%= l.account ? ` (${l.account})` : '' %></option><% } %></select>
+        <button class="btn small" type="submit">Match</button>
+      </form>
+      <% } %>
+      <form class="inline-form" method="post" action="<%= act('cash') %>"><button class="btn small" type="submit">Paid in cash</button></form>
+      <form class="inline-form" method="post" action="<%= act('dismiss') %>"><button class="btn text small" type="submit">Set aside</button></form>
+    </div>
+  <% } %>
+
+  <details class="money-receipt-more">
+    <summary><%= x.items.length ? `${x.items.length} ${x.items.length === 1 ? 'item' : 'items'}` : 'Details' %> · correct or delete</summary>
+    <% if (x.items.length) { %>
+    <ul class="money-items"><% for (const i of x.items) { %><li><span><%= i.description %><small class="money-tx-meta"> <%= i.category %></small></span><span class="money-amount"><%= eur(i.cents) %></span></li><% } %></ul>
+    <% } %>
+    <form method="post" action="<%= act('save') %>" class="money-edit">
+      <div class="field"><label for="rd-<%= x.id %>">Date</label><input class="input" type="date" id="rd-<%= x.id %>" name="date" value="<%= x.bought_on %>" required></div>
+      <div class="field"><label for="rt-<%= x.id %>">Total paid<%= x.amount_cents > 0 ? ' (refund)' : '' %></label><input class="input" type="text" inputmode="decimal" id="rt-<%= x.id %>" name="total" value="<%= (Math.abs(x.amount_cents) / 100).toFixed(2) %>" required></div>
+      <div class="field wide"><label for="rs-<%= x.id %>">Shop</label><input class="input" type="text" id="rs-<%= x.id %>" name="shop" value="<%= x.shop %>" maxlength="120"></div>
+      <div class="money-edit-acts wide">
+        <button class="btn primary small" type="submit">Save</button>
+        <button class="btn text small money-del" type="submit" formaction="<%= act('delete') %>" formnovalidate>Delete receipt</button>
+      </div>
+    </form>
+  </details>
+</div>

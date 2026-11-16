@@ -26,6 +26,7 @@
       <% } else { %>The same as the first <%= o.dayOfMonth %> <%= o.dayOfMonth === 1 ? 'day' : 'days' %> of <%= o.lastMonthName %>.<% } %>
     </p>
     <p class="subline money-small"><%= o.month.count %> <%= o.month.count === 1 ? 'payment' : 'payments' %> counted. Transfers between your own accounts and income are left out.<% if (o.unchecked) { %> <a href="#check"><%= o.unchecked %> <%= o.unchecked === 1 ? 'row is' : 'rows are' %> unchecked</a>: counted, but not yet compared with what was uploaded.<% } %> Only what you have uploaded is here, so a missing upload is missing spending.</p>
+    <% const rc = o.receipts; if (rc.month.comingCount || rc.missingCount) { %><p class="subline money-small money-receipts-line"><% if (rc.month.comingCount) { %><a href="<%= base %>/receipts"><%= rc.month.comingCount %> <%= rc.month.comingCount === 1 ? 'receipt' : 'receipts' %> (<%= eur(rc.month.coming) %>)</a> from this month <%= rc.month.comingCount === 1 ? 'is' : 'are' %> not on a bank upload yet: with <%= rc.month.comingCount === 1 ? 'it' : 'them' %>, <%= o.monthName %> so far is about <strong><%= eur(rc.month.likely) %></strong>.<% } %><% if (rc.missingCount) { %> <a href="<%= base %>/receipts#check"><%= rc.missingCount %> <%= rc.missingCount === 1 ? 'receipt was' : 'receipts were' %> not found</a> on the bank uploads.<% } %></p><% } %>
   </div>
   <% } %>
 </section>
