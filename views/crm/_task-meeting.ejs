@@ -8,7 +8,7 @@
   <% if (t.origin !== 'meeting') { %>
   <form method="post" action="<%= post %>" class="acts review-form"><%- hid %>
     <% if (meetingChoices.length) { %><select class="select" name="event" required aria-label="Meeting that <%= t.title %> waits for"><option value="">Wait for a meeting…</option><% for (const e of meetingChoices) { %><option value="<%= e.id %>"><%= e.label %></option><% } %></select>
-    <button class="btn small" name="do" value="link">Due after this meeting</button><% } else { %><span class="subline">No meetings in your calendar for the next 14 days.</span><% } %>
+    <button class="btn small" name="do" value="link">Due after this meeting</button><% } else { %><span class="subline">No meetings in your calendar for the next 30 days.</span><% } %>
   </form>
   <form method="post" action="<%= post %>" class="acts review-form"><%- hid %>
     <% if (!m) { %><button class="btn small text" name="do" value="hold" title="Holds it out of your calendar and adds a task to arrange the meeting">Needs a meeting that isn't booked yet</button>

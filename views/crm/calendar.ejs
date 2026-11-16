@@ -133,7 +133,7 @@
       <div class="panel-head"><h2>Needs a look</h2></div>
       <% if (!state.late.length && !state.unplanned.length) { %><div class="empty">Every open task fits before it is due.</div><% } %>
       <% for (const t of state.late) { %><p><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a><small class="task-via">Due <%= t.due %>, but the first free time ends <%= fmt(t.ends) %></small></p><% } %>
-      <% for (const t of state.unplanned) { %><p><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a><small class="task-via">No free time in the next 14 days</small></p><% } %>
+      <% for (const t of state.unplanned) { %><p><a href="/crm/<%= space %>/tasks/<%= t.id %>"><%= t.title %></a><small class="task-via">No free time in the next 30 days</small></p><% } %>
     </div>
     <div class="panel" id="boox-notes">
       <div class="panel-head"><h2>Boox notes</h2></div>
