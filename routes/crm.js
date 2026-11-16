@@ -490,7 +490,7 @@ router.post('/crm/:space/promises/:atomId/:action', spaceParam, requireSameOrigi
 });
 
 function taskForm(req, res, t, error = null) {
-  res.render('crm/task', { page: 'tasks', t, error, choices: tasks.choices(req.params.space), blocks: t.id ? calendar.blocksFor(t.id) : [], help: t.id ? require('../lib/crm/task-help').forTask(t.id) : null, jobs: t.id ? taskJobs.openJobs(req.params.space) : [], title: t.id ? t.title : 'Add a task' });
+  res.render('crm/task', { page: 'tasks', t, error, meetingChoices: t.id ? require('../lib/crm/task-meetings').upcoming(req.params.space) : [], choices: tasks.choices(req.params.space), blocks: t.id ? calendar.blocksFor(t.id) : [], help: t.id ? require('../lib/crm/task-help').forTask(t.id) : null, jobs: t.id ? taskJobs.openJobs(req.params.space) : [], title: t.id ? t.title : 'Add a task' });
 }
 
 router.get('/crm/:space/tasks', spaceParam, (req, res) => {
@@ -502,7 +502,7 @@ router.get('/crm/:space/tasks', spaceParam, (req, res) => {
 router.get('/crm/:space/tasks/review', spaceParam, (req, res) => {
   const review = require('../lib/crm/task-review'), followups = require('../lib/crm/task-followups');
   const list = review.list(req.params.space);
-  res.render('crm/tasks-review', { page: 'tasks', list, counts: review.counts(list), dates: review.quickDates(),
+  res.render('crm/tasks-review', { page: 'tasks', list, meetingChoices: require('../lib/crm/task-meetings').upcoming(req.params.space), counts: review.counts(list), dates: review.quickDates(),
     follow: { list: followups.suggested(req.params.space), ...followups.state(req.params.space) }, title: 'Review dates' });
 });
 
@@ -585,6 +585,20 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
     else if (req.params.action === 'reopen') tasks.edit(t.id, { status: 'needsAction', revision: req.body.revision });
     else if (req.params.action === 'resolve') crm().prepare("UPDATE tasks SET conflict = '' WHERE id = ?").run(t.id);
     else if (req.params.action === 'delete') tasks.edit(t.id, { status: 'deleted', revision: req.body.revision });
+    else if (req.params.action === 'meeting') {
+      const waits = require('../lib/crm/task-meetings');
+      if (req.body.do === 'link') {
+        const r = waits.link(t.id, req.body.event);
+        flash(req, `${r.linked > 1 ? `${r.linked} tasks now wait` : 'This now waits'} for “${r.event.title}” (${waits.when(r.event.start_at)}): due ${require('../lib/crm/task-review').label(r.due)}, and not planned before it ends.${r.arranged ? ' The task to arrange the meeting is ticked off.' : ''}`);
+      } else if (req.body.do === 'hold') {
+        const a = waits.hold(t.id);
+        flash(req, `Held until a meeting is booked. Added: “${a.title}”. Link the meeting here once it is in your calendar.`);
+      } else if (req.body.do === 'release') { waits.release(t.id); flash(req, 'It no longer waits for a meeting. The due date is left as it is.'); }
+      else return res.status(404).send('Not found');
+      replanned();
+      const to = String(req.body.back || '');
+      return res.redirect(to.startsWith(`/crm/${t.space}/`) && !to.includes('\\') ? to : `/crm/${t.space}/tasks/${t.id}`);
+    }
     else if (req.params.action === 'job') {
       if (req.body.job) { taskJobs.addByHand(t.id, String(req.body.job)); flash(req, 'Added to the job.'); }
       else if (taskJobs.takeOut(t.id, 'douglas')) flash(req, "Taken out of the job. The Hub won't put it back.");

@@ -42,6 +42,7 @@
         <button class="btn small primary" name="do" value="done">Done</button>
         <button class="btn small text" name="do" value="drop" title="Deletes it here and in Google Tasks">Drop</button>
       </form>
+      <%- include('_task-meeting', { t, meetingChoices, back: `/crm/${space}/tasks/review#t-${t.id}` }) %>
     </div>
   <% } %>
   <% if (g.job) { %></div></div><% } %><% } %>

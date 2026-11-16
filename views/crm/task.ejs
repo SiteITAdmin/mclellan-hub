@@ -41,8 +41,11 @@
         <div><button class="btn small">Add to the job</button></div></form>
       <% } else { %><p class="subline">Not part of a job. The Hub groups tasks that serve one goal.</p><% } %>
     </div><% } %>
+    <% if (t.status === 'needsAction') { %><div class="panel" id="meeting"><div class="panel-head"><h2>Waiting for a meeting?</h2></div>
+      <%- include('_task-meeting', { t, meetingChoices, back: `/crm/${space}/tasks/${t.id}#meeting` }) %>
+    </div><% } %>
     <% if (t.status === 'needsAction') { %><div class="panel"><div class="panel-head"><h2>Planned for</h2><a class="end" href="/crm/<%= space %>/calendar">Calendar</a></div>
-      <% if (!blocks.length) { %><p class="subline">No free time found yet. The calendar is replanned every 5 minutes.</p><% } %>
+      <% if (!blocks.length) { %><p class="subline"><%= t.meeting?.state === 'needs' ? 'Not planned until it is linked to a booked meeting.' : 'No free time found yet. The calendar is replanned every 5 minutes.' %></p><% } %>
       <% for (const b of blocks) { %><p><%= fmt(b.start_at) %>–<%= fmt(b.end_at, 'time') %><% if (b.late) { %> <span class="cal-tag warn">after it's due</span><% } %><% if (b.pinned) { %> <span class="cal-tag">time chosen by you</span><% } %></p><% } %>
       <% if (blocks.some(b => b.pinned)) { %><form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/unpin"><button class="btn small">Let the Hub choose the time</button></form><% } %>
       <p class="subline">It moves by itself as your diary changes. Drag it in Google Calendar to keep it at a time you choose.</p>

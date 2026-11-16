@@ -246,7 +246,7 @@ test('lists show a job once with its steps, and the job and task pages render', 
 
   const t = tasks.detail(tasks.get(r.owner.id));
   const taskPage = ejs.render(fs.readFileSync(path.join(views, 'task.ejs'), 'utf8').replace(/<%- include\('_(top|bottom)'\) %>/g, ''),
-    { ...locals, t, error: null, choices: tasks.choices('work'), blocks: [], help: help.forTask(t.id), jobs: jobsLib.openJobs('work') }, { filename: path.join(views, 'task.ejs') });
+    { ...locals, t, error: null, choices: tasks.choices('work'), blocks: [], help: help.forTask(t.id), jobs: jobsLib.openJobs('work'), meetingChoices: [] }, { filename: path.join(views, 'task.ejs') });
   assert.match(taskPage, new RegExp(`href="/crm/work/jobs/${id}">Stop NCHDs editing the draft rosters</a>`));
 });
 

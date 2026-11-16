@@ -21,6 +21,7 @@
   <%- include('_followups', { follow: { ...d.followups, thinking: 0 }, back: `/crm/${space}#followups` }) %>
 </div></section>
 <% } %>
+<% if (d.needMeeting.length) { %><p><a href="/crm/<%= space %>/tasks/review#t-<%= d.needMeeting[0].id %>"><%= d.needMeeting.length %> <%= d.needMeeting.length === 1 ? 'task needs' : 'tasks need' %> a meeting booked first<%= d.needMeeting.some(w => w.lost) ? ' (a linked meeting has gone from your calendar)' : '' %>: <%= d.needMeeting.slice(0, 3).map(w => w.title).join('; ') %></a></p><% } %>
 <% if (d.reviewCounts.undated || d.reviewCounts.late) { %><p><a href="/crm/<%= space %>/tasks/review">Open steps: <%= [d.reviewCounts.late ? `${d.reviewCounts.late} late` : '', d.reviewCounts.undated ? `${d.reviewCounts.undated} with no date` : ''].filter(Boolean).join(', ') %>. Review dates</a></p><% } %>
 <section class="grid <%= d.followups.list.length || d.followups.failed.length ? '' : 'first' %>" id="promises" aria-label="Promises">
   <div class="panel s6">

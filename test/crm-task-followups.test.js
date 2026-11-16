@@ -224,7 +224,7 @@ test('the review page and Today render the steps, the dates and the follow-ups',
   const views = path.join(__dirname, '../views/crm');
   const render = (file, locals) => ejs.render(fs.readFileSync(path.join(views, file), 'utf8').replace(/<%- include\('_(top|bottom)'\) %>/g, ''), { space: 'work', fmt: String, ago: () => 'now', ...locals }, { filename: path.join(views, file) });
   const list = review.list('work');
-  const page = render('tasks-review.ejs', { list, counts: review.counts(list), dates: review.quickDates(), follow: { list: followups.suggested('work'), ...followups.state('work') } });
+  const page = render('tasks-review.ejs', { list, counts: review.counts(list), dates: review.quickDates(), meetingChoices: [], follow: { list: followups.suggested('work'), ...followups.state('work') } });
   assert.match(page, /2 open · 2 with no date/);
   assert.match(page, new RegExp(`id="t-${draft.id}"`));
   assert.match(page, /Mary Byrne will decide on the quote/);

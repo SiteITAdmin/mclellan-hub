@@ -670,3 +670,5 @@ details.del .btn { color: var(--negative); border-color: var(--negative); height
 .review-form .input.said { flex: 1 1 240px; }
 .task-warning form.inline { display: inline; margin-left: 6px; }
 .title-row > .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.meeting-wait { margin: 0; font-size: 13px; }
+.review-form .select { height: 30px; font-size: 13px; max-width: 100%; min-width: 0; flex: 0 1 340px; }
