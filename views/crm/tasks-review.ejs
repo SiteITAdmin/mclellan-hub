@@ -27,6 +27,7 @@
       <div class="meta"><span class="<%= late ? 'late' : '' %>"><%= t.due ? `${late ? 'Was due' : 'Due'} ${label(t.due)}` : 'No date' %></span>
         <% const ctx = [...t.people, ...t.organisations, ...t.projects].map(x => x.name).join(' · '); if (ctx) { %><span><%= ctx %></span><% } %></div>
       <%- include('_help-line', { h: t.help, taskId: t.id }) %>
+<%- include('_task-email-evidence', { t }) %>
       <% const hidden = `<input type="hidden" name="task" value="${t.id}"><input type="hidden" name="revision" value="${t.revision}"><input type="hidden" name="next" value="${next}">`; %>
       <%# Enter submits a form's first button, so each form leads with the safe one. %>
       <form method="post" action="/crm/<%= space %>/tasks/review" class="acts review-form"><%- hidden %>

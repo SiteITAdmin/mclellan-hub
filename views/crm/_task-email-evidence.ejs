@@ -1,0 +1,12 @@
+<% for (const e of t.emailEvidence || []) { %>
+<div class="looks-done">
+  <strong><%= e.verdict === 'done' ? 'Email showed this was done:' : 'Looks done — please check:' %></strong>
+  “<%= e.quote %>” <a href="/crm/<%= space %>/sources/<%= e.source_id %>">Read the email</a>
+  <% if (e.verdict === 'likely' && t.status === 'needsAction') { %>
+  <div class="acts">
+    <form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/complete"><input type="hidden" name="revision" value="<%= t.revision %>"><button class="btn small">Yes, it's done</button></form>
+    <form method="post" action="/crm/<%= space %>/tasks/<%= t.id %>/reject-email"><input type="hidden" name="source" value="<%= e.source_id %>"><button class="btn small">Not done yet</button></form>
+  </div>
+  <% } %>
+</div>
+<% } %>

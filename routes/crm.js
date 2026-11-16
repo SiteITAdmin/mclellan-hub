@@ -580,6 +580,7 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
   try {
     if (req.params.action === 'edit') { tasks.edit(t.id, { ...req.body, context: req.body }); tasks.setMinutes(t.id, req.body.minutes); }
     else if (req.params.action === 'unpin') calendar.unpin(t.id);
+    else if (req.params.action === 'reject-email') require('../lib/crm/task-email-evidence').reject(t.id, String(req.body.source || ''));
     else if (req.params.action === 'complete') tasks.edit(t.id, { status: 'completed', revision: req.body.revision });
     else if (req.params.action === 'reopen') tasks.edit(t.id, { status: 'needsAction', revision: req.body.revision });
     else if (req.params.action === 'resolve') crm().prepare("UPDATE tasks SET conflict = '' WHERE id = ?").run(t.id);

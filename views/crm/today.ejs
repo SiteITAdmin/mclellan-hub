@@ -28,8 +28,8 @@
     <%- include('_promises', { list: d.ledger.mine, back: `/crm/${space}`, none: 'Nothing you have promised is open.' }) %>
   </div>
   <div class="panel s6">
-    <div class="panel-head"><h2>Owed to you</h2><span class="chip"><%= owed %> open</span></div>
-    <%- include('_promises', { list: d.ledger.owed, back: `/crm/${space}`, none: 'Nobody owes you anything right now.' }) %>
+    <div class="panel-head"><h2>Waiting for others</h2><span class="chip"><%= owed %> open</span></div>
+    <%- include('_promises', { list: d.ledger.owed, back: `/crm/${space}`, none: 'No requests or promises outstanding.' }) %>
   </div>
 </section>
 
