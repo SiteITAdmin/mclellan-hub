@@ -263,3 +263,47 @@ test('the screens: Receipts with its running total and a suggestion, the Overvie
     assert.deepEqual([all().length, db.crm().prepare("SELECT COUNT(*) n FROM money_uploads WHERE source = 'receipt'").get().n], [0, 0]);
   } finally { server.close(); }
 });
+
+test('a pocket in another currency is counted in euro at the rate of his own exchanges, and is not added again by a later statement', async () => {
+  const q = fakeQueue(), X = { kind: 'transfer' };
+  // The pound page is read before the euro page that holds the other side of each exchange.
+  await bank(q, [
+    line(day(-9), 'Exchanged to GBP', 50, { ...X, currency: 'GBP' }), line(day(-8), 'Co-op', -5.55, { currency: 'GBP' }), line(day(-8), 'Greggs', -2.7, { currency: 'gbp' }),
+    line(day(-3), 'Exchanged to EUR', -0.05, { ...X, currency: 'GBP' }), line(day(-3), 'Exchanged to EUR', -40, { ...X, currency: 'GBP' }), line(day(-2), 'Post Office', -10, { currency: 'GBP' }),
+    line(day(-2), 'Openrouter', -9.59, { currency: 'USD' }),
+  ], 1, 'Revolut');
+  let rows = txs();
+  assert.ok(rows.every(r => r.currency !== 'EUR' && r.fx_cents === r.amount_cents), 'nothing is converted before a rate is known');
+  assert.match(rows.find(r => r.description === 'Co-op').why_unsure, /Amount is in GBP and no exchange on this account shows a rate/);
+
+  await bank(q, [line(day(-9), 'Exchanged to GBP', -57.92, X), line(day(-3), 'Exchanged to EUR', 46.09, X), line(day(-3), 'Exchanged to EUR', 0.05, X), line(day(-1), 'Tesco', -12)], 2, 'Revolut');
+  await ledger.tick({ jobs: q, t: T });
+  rows = txs();
+  const by = d => rows.filter(r => r.description === d).map(r => [r.amount_cents, r.currency, r.fx_cents]);
+  assert.deepEqual(by('Exchanged to GBP'), [[5792, 'EUR', 5000], [-5792, 'EUR', null]], 'an exchange takes its own euro figure');
+  assert.deepEqual(by('Exchanged to EUR'), [[-5, 'EUR', -5], [-4609, 'EUR', -4000], [4609, 'EUR', null], [5, 'EUR', null]], 'two exchanges on one day pair by size');
+  assert.deepEqual(by('Co-op'), [[Math.round(-555 * 5792 / 5000), 'EUR', -555]], 'a purchase takes the nearest exchange rate');
+  assert.deepEqual([rows.find(r => r.description === 'Co-op').unsure, rows.find(r => r.description === 'Co-op').why_unsure], [0, ''], 'the "no rate yet" flag goes once there is a rate');
+  assert.deepEqual(by('Post Office'), [[Math.round(-1000 * 4609 / 4000), 'EUR', -1000]], 'the rate from a five cent exchange is not used');
+  assert.deepEqual(by('Openrouter'), [[-959, 'USD', -959]], 'a currency with no exchange stays as read, and says so');
+  assert.match(rows.find(r => r.description === 'Openrouter').why_unsure, /Amount is in USD/);
+
+  const before = rows.length;
+  await bank(q, [line(day(-8), 'Co-op', -5.55, { currency: 'GBP' }), line(day(-2), 'Post Office', -10, { currency: 'GBP' })], 3, 'Revolut');
+  assert.equal(txs().length, before, 'the same pound lines on a later statement are recognised by the figure the bank showed');
+
+  const coop = txs().find(r => r.description === 'Co-op');
+  ledger.updateTx(coop.id, { category: 'Groceries' }, T);
+  assert.equal(ledger.dupKey('Revolut', coop.posted_on, -555, 'Co-op'), txs().find(r => r.id === coop.id).dup_key, 'correcting a converted line keeps it recognisable');
+  const usd = txs().find(r => r.description === 'Openrouter');
+  ledger.updateTx(usd.id, { amount: '-8.24' }, T);
+  const typed = txs().find(r => r.id === usd.id);
+  assert.deepEqual([typed.amount_cents, typed.currency], [-824, 'EUR'], 'an amount he types is euro');
+  assert.equal((await ledger.tick({ jobs: q, t: T })).fx, undefined, 'nothing is left to convert');
+});
+
+test('a pound or dollar figure in a statement passes the check against the file text', () => {
+  const files = require('../lib/crm/money/files');
+  const held = files.amountsIn('Mar 14, 2026  Co-op  £5.55  £10.45\nApr 23  Openrouter  $9.59  1,234.50GBP');
+  assert.ok(held.has(555) && held.has(959) && held.has(123450));
+});

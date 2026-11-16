@@ -4,7 +4,7 @@
   <details class="money-tx<%= r.unsure ? ' is-unsure' : '' %><%= r.status === 'ignored' ? ' is-ignored' : '' %>" id="tx-<%= r.id %>" <%= r.unsure && r.status === 'new' ? 'open' : '' %>>
     <summary>
       <span class="money-tx-date"><%= dayLabel(r.posted_on) %></span>
-      <span class="money-tx-what"><span class="money-tx-name"><%= r.merchant || r.description %></span><span class="money-tx-meta"><%= r.kind === 'transfer' ? 'Transfer, not counted' : r.kind === 'income' ? 'Income' : r.category %><%= r.account ? ` · ${r.account}` : '' %><%= r.note ? ` · ${r.note}` : '' %></span></span>
+      <span class="money-tx-what"><span class="money-tx-name"><%= r.merchant || r.description %></span><span class="money-tx-meta"><%= r.kind === 'transfer' ? 'Transfer, not counted' : r.kind === 'income' ? 'Income' : r.category %><%= r.account ? ` · ${r.account}` : '' %><%= r.fx_cents != null ? ` · ${(Math.abs(r.fx_cents) / 100).toFixed(2)} ${r.fx_currency}${r.currency === 'EUR' ? ' in euro' : ' not yet in euro'}` : '' %><%= r.note ? ` · ${r.note}` : '' %></span></span>
       <span class="money-tx-end">
         <% if (r.status === 'ignored') { %><span class="pill neutral">Deleted</span><% } else if (r.unsure) { %><span class="pill warn">Reader unsure</span><% } else if (r.status === 'new') { %><span class="pill neutral">Unchecked</span><% } %>
         <span class="money-amount<%= r.amount_cents > 0 ? ' is-in' : '' %>"><%= eur(r.amount_cents, { sign: true }) %></span>

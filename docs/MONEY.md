@@ -63,6 +63,19 @@ and checks:
 - The text is removed from the queue's packet when the job ends, and from `money_uploads` after 30
   days, along with the picture or page.
 
+## Other currencies
+
+A pocket held in another currency (a "GBP Statement" section of a Revolut statement) is read in that
+currency: the reader returns `currency` per row. The line keeps the bank's own figure in `fx_cents` /
+`fx_currency`, and `dup_key` stays on that figure so a later statement recognises it. `convertForeign`
+(every ledger tick) then sets `amount_cents` in euro at the rate Douglas himself got, taken from his
+exchanges on that account: an exchange shows on both sides ("Exchanged to GBP" is -€57.92 on the euro
+side and +£50.00 on the pound side; same day, same words, opposite sign, both transfers; several on one
+day pair by size). An exchange takes its own euro figure; every other line takes the nearest exchange's
+rate in that currency (exchanges under 5.00 are used only when there is nothing larger). With no
+exchange to go by, the line counts at face value and is marked for him to correct. An amount he types
+is always euro. A card payment abroad from the euro account is already in euro and is not touched.
+
 ## Receipts
 
 Agreed 16 Nov 2026. Douglas uploads a receipt when he gets it (photo, or an emailed PDF of up to 4
