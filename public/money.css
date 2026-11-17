@@ -122,6 +122,27 @@
   .money-receipt-line .money-receipt-acts { grid-column: 1 / -1; }
 }
 /* == end receipts == */
+/* == budget == */
+.budget-of { font-family: var(--sans, inherit); font-size: 16px; color: var(--muted); }
+.challenge-bar.budget-over::-webkit-progress-value { background: var(--negative); }
+.challenge-bar.budget-over::-moz-progress-bar { background: var(--negative); }
+.budget-money { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 8px; }
+.budget-money .field { flex: 1 1 140px; }
+.budget-line { padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.budget-line:last-child { border-bottom: 0; }
+.budget-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.budget-name { font-weight: 600; text-decoration: none; color: var(--text); }
+.budget-figures { margin-left: auto; color: var(--muted); }
+.budget-figures strong { color: var(--text); }
+.budget-line .challenge-bar { margin: 8px 0 6px; }
+.budget-note, .budget-basis, .budget-link { margin: 4px 0 0; font-size: 14px; }
+.budget-basis { color: var(--muted); font-size: 13px; }
+.budget-link a { text-decoration: none; color: var(--text); }
+.budget-link a:hover { text-decoration: underline; }
+.budget-link.bad a { color: var(--negative); }
+.budget-line.is-over .budget-figures strong { color: var(--negative); }
+@media (max-width: 640px) { .budget-figures { margin-left: 0; flex: 1 1 100%; order: 3; } }
+/* == end budget == */
 /* == prices == */
 .price-row { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--rule); }
 .price-row:last-of-type { border-bottom: 0; }

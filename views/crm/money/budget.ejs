@@ -1,0 +1,106 @@
+<%- include('../_top') %>
+<% const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`, slug = c => c.toLowerCase().replace(/[^a-z]+/g, '-');
+   const how = { history: 'The Hub’s figure', you: 'Your own figure', kept: 'Carried from a cap you kept', cap: 'Your cap' }; %>
+<div class="title-row"><div><h1>Budget</h1><p class="subline">A plan for the month, and where your bank lines stand against it. A cap you take on in a challenge becomes the plan for that line; what you set yourself stands until you change it.</p></div></div>
+<%- include('_nav') %>
+
+<% if (!v.any) { %>
+<section class="grid first"><div class="panel s12"><div class="empty">Nothing to plan from yet. Upload bank statements or screenshots on the Overview, and the plan is drawn up from what you actually spend.</div></div></section>
+<% } else { %>
+
+<section class="grid first">
+  <div class="panel s6" aria-label="The month so far">
+    <div class="panel-head"><h2><%= v.name %></h2><% if (!v.current) { %><a class="btn text small" href="<%= base %>/budget">Back to this month</a><% } else if (v.over.length) { %><span class="pill neg"><%= v.over.length %> over plan</span><% } %></div>
+    <% if (v.rows.length) { %>
+    <p class="money-big"><%= eur(v.total.spent) %> <span class="budget-of">of <%= eur(v.total.planned) %> planned</span></p>
+    <progress class="challenge-bar<%= v.total.left < 0 ? ' budget-over' : '' %>" max="100" value="<%= v.total.pct %>" aria-label="<%= eur(v.total.spent) %> of <%= eur(v.total.planned) %> spent"></progress>
+    <p class="money-compare"><strong class="<%= v.total.left < 0 ? 'money-up' : '' %>"><%= v.total.left < 0 ? `${eur(-v.total.left)} over the plan` : `${eur(v.total.left)} left` %></strong><% if (v.current) { %><%= v.days_left ? `, ${plural(v.days_left, 'day')} to go` : ', last day' %>.<% } else { %>.<% } %>
+      <% if (v.total.projected !== null) { %> Going on as you are, the month ends at <strong><%= eur(v.total.projected) %></strong>: <%= eur(Math.abs(v.total.projected - v.total.planned)) %> <%= v.total.projected > v.total.planned ? 'over' : 'under' %> the plan.<% } %></p>
+    <% } else { %>
+    <p class="money-big"><%= eur(v.total.spent) %></p>
+    <p class="money-compare">No plan was held for <%= v.name %>, so this is only what was spent.</p>
+    <% } %>
+    <% if (v.current) { %><p class="subline money-small">
+      <%= v.newest ? `Counted to ${dayLabel(v.newest)}, the newest bank line.` : '' %><%= v.stale ? ' That is more than 3 days ago: upload newer statements and this catches up.' : '' %>
+      <% if (v.total.waiting) { %> Another <%= eur(v.total.waiting) %> is on <a href="<%= base %>/receipts">receipts the bank has not shown yet</a>.<% } %>
+    </p><% } %>
+  </div>
+  <div class="panel s6" aria-label="Pay and savings">
+    <div class="panel-head"><h2>Pay and putting away</h2></div>
+    <% if (v.money.income) { %>
+      <p class="money-compare">Take-home <%= eur(v.money.income) %><%= v.money.savings ? `, less ${eur(v.money.savings)} to put away,` : '' %> less the <%= eur(v.total.planned) %> planned:
+        <strong class="<%= v.money.free < 0 ? 'money-up' : '' %>"><%= v.money.free < 0 ? `${eur(-v.money.free)} more planned than you have` : `${eur(v.money.free)} not given a job` %></strong>.</p>
+      <% if (v.money.heading !== null) { %><p class="money-compare">Going on as you are, <strong class="<%= v.money.heading < v.money.savings ? 'money-up' : '' %>"><%= v.money.heading < 0 ? `you spend ${eur(-v.money.heading)} more than you take home` : `${eur(v.money.heading)} is left at month end` %></strong><%= v.money.savings ? ` against the ${eur(v.money.savings)} you meant to put away` : '' %>.</p><% } %>
+    <% } else { %><p class="money-compare">Tell it your monthly take-home pay and it shows whether the plan fits inside it, and what is left to put away. Optional: the lines work without it.</p><% } %>
+    <% if (v.current) { %>
+    <form method="post" action="<%= base %>/budget/money" class="budget-money">
+      <div class="field"><label for="b-income">Take-home a month (€)</label><input class="input" type="text" inputmode="decimal" id="b-income" name="income" value="<%= v.money.income ? (v.money.income / 100).toFixed(0) : '' %>"></div>
+      <div class="field"><label for="b-savings">To put away a month (€)</label><input class="input" type="text" inputmode="decimal" id="b-savings" name="savings" value="<%= v.money.savings ? (v.money.savings / 100).toFixed(0) : '' %>"></div>
+      <button class="btn small" type="submit">Save</button>
+    </form>
+    <% } %>
+  </div>
+</section>
+
+<% if (v.rows.length) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>The plan, line by line</h2><span class="chip"><%= v.rows.length %></span></div>
+  <% if (v.current) { %><p class="subline money-small">Lines over plan come first, then those running ahead of it. <%= v.history_months.length ? `The Hub’s figures are your own average over ${plural(v.history_months.length, 'whole month')}, rounded up to €5.` : 'No whole month of bank lines is held yet, so the Hub’s figures come from the last 28 days.' %> Bills are judged against the plan, not the calendar.</p><% } %>
+  <% for (const r of v.rows) { %>
+  <div class="budget-line is-<%= r.state %>" id="line-<%= slug(r.category) %>">
+    <div class="budget-head">
+      <a class="budget-name" href="<%= base %>/transactions?month=<%= v.month %>&amp;category=<%= encodeURIComponent(r.category) %>"><%= r.category %></a>
+      <span class="budget-figures"><strong><%= eur(r.spent) %></strong> of <%= eur(r.planned_cents) %></span>
+      <% if (r.state === 'over') { %><span class="pill neg">Over by <%= eur(-r.left) %></span>
+      <% } else if (r.state === 'ahead') { %><span class="pill warn">Running ahead</span>
+      <% } else if (r.state === 'bill') { %><span class="pill neutral"><%= r.left ? `${eur(r.left)} to come` : 'Paid' %></span>
+      <% } else { %><span class="pill neutral"><%= eur(r.left) %> <%= v.current ? 'left' : 'under' %></span><% } %>
+    </div>
+    <progress class="challenge-bar<%= r.state === 'over' ? ' budget-over' : '' %>" max="100" value="<%= r.pct %>" aria-label="<%= r.category %>: <%= eur(r.spent) %> of <%= eur(r.planned_cents) %>"></progress>
+    <% if (r.state === 'ahead') { %><p class="budget-note">At this pace it ends the month at <strong><%= eur(r.projected) %></strong>, <%= eur(r.projected - r.planned_cents) %> over. <%= eur(r.left) %> has to last <%= plural(v.days_left, 'day') %>.</p><% } %>
+    <% if (r.waiting) { %><p class="budget-note">Plus <%= eur(r.waiting) %> on receipts the bank has not shown yet.</p><% } %>
+    <p class="budget-basis"><%= how[r.source] %><%= r.basis ? `: ${r.basis}` : '' %>.</p>
+    <% for (const l of r.links) { %><p class="budget-link<%= l.bad ? ' bad' : '' %>"><span class="challenge-ref"><%= { agreed: 'Agreed', said: 'You said', open: 'Open' }[l.kind] %></span> <a href="<%= l.href %>"><%= l.text %></a></p><% } %>
+    <% if (r.again) { %>
+    <form class="challenge-cap-form" method="post" action="<%= base %>/challenge/cap"><input type="hidden" name="category" value="<%= r.category %>"><input type="hidden" name="cap" value="<%= (r.again.cap_cents / 100).toFixed(2) %>">
+      <span>Last month’s cap of <%= eur(r.again.cap_cents) %> was broken. <%= r.again.note %></span><button class="btn small" type="submit">Hold me to <%= eur(r.again.cap_cents) %> again</button></form>
+    <% } %>
+    <% if (v.current) { %>
+    <details class="money-receipt-more"><summary>Change the plan for <%= r.category %></summary>
+      <form class="challenge-cap-form" method="post" action="<%= base %>/budget/line"><input type="hidden" name="category" value="<%= r.category %>">
+        <label for="plan-<%= slug(r.category) %>">Plan a month, €</label><input class="input" type="text" inputmode="decimal" id="plan-<%= slug(r.category) %>" name="amount" value="<%= (r.base_cents / 100).toFixed(0) %>" required>
+        <button class="btn small" type="submit">Save</button>
+      </form>
+      <% if (r.source === 'cap') { %><p class="budget-basis">Your cap of <%= eur(r.planned_cents) %> is what counts this month. A figure saved here applies once the cap ends.</p><% } %>
+      <% if (r.base_source !== 'history') { %><form class="inline-form" method="post" action="<%= base %>/budget/reset"><input type="hidden" name="category" value="<%= r.category %>"><button class="btn text small" type="submit"><%= r.suggestion ? `Use the Hub’s figure (${eur(r.suggestion.cents)})` : 'Take it out of the plan' %></button></form><% } %>
+    </details>
+    <% } %>
+  </div>
+  <% } %>
+</div></section>
+<% } %>
+
+<% if (v.unplanned.length) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Spent, but not in the plan</h2><span class="chip"><%= eur(v.unplanned.reduce((n, r) => n + r.spent, 0)) %></span></div>
+  <% for (const r of v.unplanned) { %>
+  <div class="budget-line is-over">
+    <div class="budget-head"><a class="budget-name" href="<%= base %>/transactions?month=<%= v.month %>&amp;category=<%= encodeURIComponent(r.category) %>"><%= r.category %></a><span class="budget-figures"><strong><%= eur(r.spent) %></strong> on <%= plural(r.n, 'purchase') %></span></div>
+    <% if (v.current) { %><form class="challenge-cap-form" method="post" action="<%= base %>/budget/line"><input type="hidden" name="category" value="<%= r.category %>">
+      <label for="plan-<%= slug(r.category) %>">Plan a month, €</label><input class="input" type="text" inputmode="decimal" id="plan-<%= slug(r.category) %>" name="amount" value="<%= Math.ceil(r.spent / 500) * 5 %>" required><button class="btn small" type="submit">Add to the plan</button></form><% } %>
+  </div>
+  <% } %>
+</div></section>
+<% } %>
+
+<% if (v.history.length) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Earlier months</h2></div>
+  <table class="challenge-shops"><thead><tr><th scope="col">Month</th><th scope="col">Planned</th><th scope="col">Spent</th><th scope="col">Against the plan</th></tr></thead>
+    <tbody><% for (const h of v.history) { %><tr><th scope="row"><a href="<%= base %>/budget?month=<%= h.month %>"><%= h.name %></a></th><td><%= h.planned === null ? 'No plan' : eur(h.planned) %></td><td><%= eur(h.spent) %></td>
+      <td><%= h.planned === null ? '' : h.spent > h.planned ? `${eur(h.spent - h.planned)} over` : `${eur(h.planned - h.spent)} under` %><%= h.over.length ? ` · over on ${h.over.join(', ')}` : '' %></td></tr><% } %></tbody>
+  </table>
+</div></section>
+<% } %>
+<% } %>
+<%- include('../_bottom') %>

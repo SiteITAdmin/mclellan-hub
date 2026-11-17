@@ -7,12 +7,12 @@ categorises spending, watches for subscriptions and retailer offers in Personal 
 web for discount codes for what he actually buys, and **challenges** his spending. The aim is
 to reduce spending and question habits, not to report it politely.
 
-Screens: `/crm/personal/money` (Overview + upload), `/transactions`, `/receipts`, `/prices`, `/subscriptions`,
+Screens: `/crm/personal/money` (Overview + upload), `/budget`, `/transactions`, `/receipts`, `/prices`, `/subscriptions`,
 `/offers`, `/challenge`. Work has none of these (404). Nav link shows only in Personal.
 
 ## Architecture
 
-Seven modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
+Eight modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
 background work (`tick()`) and Overview card (`summary()`). `index.js` runs them. One job,
 `crm_money_tick` (60 s, `lib/crm/jobs.js`), calls every module's `tick()` through `runs.track`
 under the name `money_<module>`, so a failure is recorded and shown (rule 5). Routes are
@@ -24,6 +24,7 @@ mounted by `routes/money.js`, which has already applied `spaceParam` + Personal-
 | `ledger.js` | uploads, transactions, rules, categories, Overview, Transactions screen, image plumbing | Sonnet reads screenshots, PDF pages and CSV lines (`crm_money_read`) |
 | `receipts.js` | receipts (`money_receipts`), matching them to bank lines, the running total of receipts the bank has not shown yet, Receipts screen | Sonnet reads the receipt (`crm_money_read`, its own prompt) |
 | `prices.js` | what the same thing costs between the shops he uses and over time, from receipt item lines; "why there?" and his answers (`money_price_answers`); Prices screen | none |
+| `budget.js` | the month's plan line by line (`money_budgets`), spend against it, how it follows his agreements, Budget screen | none |
 | `subscriptions.js` | recurring-charge detection, mail evidence, `money_subscriptions`, Subscriptions screen | Sonnet reads mail (`crm_money_mail`) |
 | `offers.js` | retailer offers found in mail (origin `mail`), the Offers screen (which also lists web codes) | Sonnet (`crm_money_mail`) |
 | `deals.js` | web search for codes for merchants Douglas actually spends with (origin `web`) | Sonnet with web tools (`crm_money_deals`) |
@@ -143,6 +144,37 @@ receipts.
   a change in the price findings, counts as something new to read.
 - Not done: correcting a product name by hand; items do not split a bank line's category.
 
+## Budget
+
+Agreed 17 Nov 2026. A plan for each calendar month, one line per category, and where the bank lines
+stand against it. There is no chat: the budget follows the questions, answers and agreements that
+already exist in Money. No model is involved; `budget.tick` only makes sure the month's plan exists.
+
+- **Where a line's figure comes from** (`base_*`): the Hub's figure is his own average over the last
+  three whole months held (statements start by the 5th and reach within 3 days of the month's end),
+  rounded up to €5; with no whole month, the last 28 days scaled to a month. A figure he types is his
+  own and carries into every later month until he changes it or takes the Hub's figure back.
+- **How it follows his agreements** (`apply`, on every view and tick of the current month):
+  a category cap for the month (from a challenge's "I'll do this" or a standing check's "Hold me to
+  it") is the plan for that line while it runs (`source = 'cap'`); dropped, the line goes back to its
+  base. A cap he kept is next month's plan (`'kept'`). A cap he broke is put to him again on the line.
+  A subscription he marks cancelled comes off any line still averaged from months that include it.
+- **What sits on each line** (`linksFor`): his agreements with their progress, what he said was wrong
+  and why, what he said "not now" to, open challenges aimed at that category or at a merchant filed
+  under it, subscriptions on his cancel list, ones he says he hardly uses, ones not yet rated, and
+  "why there?" questions and answers on Groceries. Each links to where it is answered.
+- **Judging a line:** over (spent more than planned); running ahead (not a bill, at least 5 days of
+  the month held and 2 purchases, and on course for more than 15% over); bills (Home & utilities,
+  Insurance, Subscriptions, Fees & interest) are judged against the plan only. The pace runs to the
+  newest bank line, not to today. Receipts the bank has not shown yet are listed beside the line they
+  mostly belong to, never added to it. Spending in a category with no line shows as "not in the plan".
+- **Pay and putting away** (optional, settings `money_budget_income_cents` / `_savings_cents`):
+  take-home less savings less the plan is what has no job; take-home less the month as it is going is
+  what would be left.
+- A month that has ended is never rewritten. Months before the first plan show spend only.
+- **The weekly challenge** is given `budget` and `budget_line` statistics and told to hold him to the
+  plan, saying whether it was a cap, his own figure or only his average.
+
 ## Rules that apply to every module
 
 - **Personal only.** Only read `sources` with `space = 'personal'`. No money data is ever written to
@@ -179,7 +211,7 @@ receipts.
   by `pragma table_info`).
 - `amount_cents` is negative for money out. Spending totals use `kind='spend' AND status!='ignored'`
   (`SPEND_SQL`); transfers and income never count.
-- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|transactions|receipts|prices|subscriptions|offers|challenge>`,
+- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|budget|transactions|receipts|prices|subscriptions|offers|challenge>`,
   and `<%- include('_nav') %>` from `views/crm/money/_nav.ejs` (include path `money/_nav` from `views/crm/`).
   Styles go in your own marked section of `public/money.css`.
 - Tests: `test/crm-money-<module>.test.js`, node:test, temp `CRM_DB_PATH`/`HUB_DB_PATH`, `HUB_DISABLE_JOBS=1`
