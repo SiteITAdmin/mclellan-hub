@@ -1,0 +1,71 @@
+<%- include('_top') %>
+<% const nice = d => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { weekday: 'long', day: 'numeric', month: 'long' }); %>
+<% const short = d => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { day: 'numeric', month: 'short' }); %>
+<% const KIND = { feature: 'New feature', change: 'Change', retirement: 'Being retired', security: 'Security', licensing: 'Licensing', guidance: 'Guidance', regulation: 'Regulation', analysis: 'Analysis' }; %>
+<div class="title-row"><div><h1>Work briefing</h1>
+  <p class="subline"><%= nice(day) %>. Public news on the subjects your work is about, found on the web by the Mac.</p></div>
+  <% if (isToday && !(b && b.running)) { %><form method="post" action="/crm/work/briefing/write" class="no-print"><button class="btn" type="submit"><%= b ? 'Write it again' : 'Write today\'s now' %></button></form><% } %>
+</div>
+
+<% if (!b) { %>
+<section class="grid first"><div class="panel s12"><div class="empty"><%= isToday ? 'Today\'s briefing has not been written yet. It is written on working mornings from 06:00, and not started after 14:00.' : 'No briefing was written for this day.' %></div></div></section>
+<% } else { %>
+<% if (b.running) { %>
+<meta http-equiv="refresh" content="20">
+<section class="grid first"><div class="panel s12" role="status"><h2><%= b.status === 'themes' ? 'Choosing today\'s themes from your work' : `Searching the web: ${b.searchedCount} of ${b.themes.length} themes done` %></h2>
+  <p><%= b.slow ? 'This is taking longer than usual. It is still waiting for the Mac worker.' : 'This page refreshes by itself.' %><% if (b.error) { %> <%= b.error %><% } %></p></div></section>
+<% } else if (b.status === 'failed') { %>
+<section class="grid first"><div class="panel s12"><h2>This briefing couldn't be written</h2><p><%= b.error %></p></div></section>
+<% } else if (b.error) { %><div class="flash bad">Part of this briefing is missing. <%= b.error %></div><% } %>
+
+<% if (b.status === 'done' && !b.themes.length) { %>
+<section class="grid first"><div class="panel s12"><div class="empty">Nothing in your work pointed to a public subject worth searching today. Follow a theme below to have it searched every day.</div></div></section>
+<% } else if (b.status === 'done' && !b.items.length) { %>
+<section class="grid first"><div class="panel s12"><div class="empty">Nothing new was published in the last week on today's <%= b.themes.length %> <%= b.themes.length === 1 ? 'theme' : 'themes' %> that you haven't already been shown.</div></div></section>
+<% } %>
+
+<% let first = !b.running && b.status === 'done' && !b.error && b.items.length; %>
+<% for (const th of b.themes) { %>
+<section class="grid <%= first ? 'first' : '' %>"><% first = false; %><article class="panel s12 briefing-theme">
+  <div class="panel-head"><h2><%= th.name %></h2><span class="chip"><%= !th.searched ? 'not searched yet' : th.items.length ? `${th.items.length} new` : 'nothing new' %><%= th.followed ? ' · you follow this' : '' %></span>
+    <% if (!th.muted) { %><form class="end inline-form no-print" method="post" action="/crm/work/briefing/mute"><input type="hidden" name="name" value="<%= th.name %>"><button class="btn text small" type="submit" title="Never put this theme in a briefing again">Not relevant</button></form><% } else { %><span class="end">turned off</span><% } %>
+  </div>
+  <% if (th.why || th.links.length) { %><p class="briefing-why"><strong>Why you:</strong> <%= th.why %>
+    <% for (const l of th.links) { %> <a class="tag" href="<%= l.href %>" title="<%= l.label %>"><%= l.type %>: <%= l.label.length > 48 ? l.label.slice(0, 47) + '…' : l.label %></a><% } %></p><% } %>
+  <% for (const i of th.items) { %>
+  <div class="briefing-item">
+    <h3><a href="<%= i.url %>" target="_blank" rel="noopener noreferrer"><%= i.headline %></a></h3>
+    <p class="meta"><span class="pill <%= i.kind === 'security' || i.kind === 'retirement' ? 'warn' : 'neutral' %>"><%= KIND[i.kind] || 'Change' %></span> <%= i.source %> · <%= short(i.published) %><% if (i.confidence === 'low') { %> · <span title="Not from the vendor or a well-known publication">weaker source</span><% } %></p>
+    <% if (i.summary) { %><p><%= i.summary %></p><% } %>
+    <% if (i.action) { %><p><strong>To check:</strong> <%= i.action %></p><% } %>
+    <blockquote>“<%= i.quote %>”</blockquote>
+  </div>
+  <% } %>
+  <% if (th.searched && !th.items.length && th.note) { %><p class="meta"><%= th.note %></p><% } %>
+</article></section>
+<% } %>
+
+<% if (b.themes.length || b.dropped.length) { %>
+<details class="briefing-how"><summary>How this was put together</summary>
+  <p>The themes were chosen from your Work projects, open tasks, diary, email subjects and the last week's facts. Only each theme's name and search words were sent to the web search: <%= b.themes.map(th => `“${th.query}”`).join(', ') || 'none' %>. Each item was found by the model on the page it links to and has not been checked beyond its link, date and quote; open the source before acting on it.<% if (b.model) { %> Written by <%= b.model %>.<% } %></p>
+  <% if (b.dropped.length) { %><p>Left out (<%= b.dropped.length %>):</p><ul><% for (const x of b.dropped) { %><li><%= [x.theme, x.headline].filter(Boolean).join(': ') || 'An item' %>: <%= x.reason %></li><% } %></ul><% } %>
+</details>
+<% } %>
+<% } %>
+
+<section class="grid no-print"><div class="panel s6">
+  <div class="panel-head"><h2>Your themes</h2></div>
+  <form method="post" action="/crm/work/briefing/follow" class="form-row"><input class="input" name="name" maxlength="80" required placeholder="Follow a theme every day, e.g. Microsoft Entra ID" aria-label="Theme to follow"><button class="btn" type="submit">Follow</button></form>
+  <% if (!prefs.followed.length && !prefs.muted.length) { %><p class="meta">You haven't set any. The Hub picks each day's themes from your work.</p><% } %>
+  <div class="topics-list">
+  <% for (const r of [...prefs.followed, ...prefs.muted]) { %><div class="topic-row"><span><%= r.name %></span><span class="n"><%= r.state === 'followed' ? 'followed' : 'turned off' %><form class="inline-form" method="post" action="/crm/work/briefing/forget"><input type="hidden" name="norm" value="<%= r.norm %>"><button class="btn text small" type="submit">Undo</button></form></span></div><% } %>
+  </div>
+</div>
+<div class="panel s6">
+  <div class="panel-head"><h2>Earlier briefings</h2></div>
+  <% if (!recent.length) { %><div class="empty">None yet.</div><% } %>
+  <div class="topics-list">
+  <% for (const r of recent) { %><a class="topic-row <%= r.day === day ? 'current' : '' %>" href="/crm/work/briefing/<%= r.day %>"><span><%= nice(r.day) %></span><span class="n"><%= r.status === 'failed' ? 'failed' : r.status !== 'done' ? 'being written' : `${r.count} ${r.count === 1 ? 'item' : 'items'}` %></span></a><% } %>
+  </div>
+</div></section>
+<%- include('_bottom') %>

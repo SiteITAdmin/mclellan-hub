@@ -1,0 +1,10 @@
+<% if (briefing && (briefing.today || briefing.headlines.length)) { const bt = briefing.today; %>
+<section class="grid" id="briefing" aria-label="Work briefing"><div class="panel s12">
+  <div class="panel-head"><h2>News for your work</h2><span class="chip"><%= bt.running ? 'being written' : bt.status === 'failed' ? 'failed' : `${bt.items.length} new on ${bt.themes.length} ${bt.themes.length === 1 ? 'theme' : 'themes'}` %></span><a class="end" href="/crm/work/briefing">Full briefing</a></div>
+  <% if (bt.status === 'failed') { %><div class="empty">Today's briefing couldn't be written: <%= bt.error %></div>
+  <% } else if (!briefing.headlines.length) { %><div class="empty"><%= bt.running ? 'The Mac is searching. It appears here when it finishes.' : 'Nothing new today on the subjects your work is about.' %></div><% } %>
+  <div class="list">
+  <% for (const h of briefing.headlines) { %><div class="briefing-line"><a href="<%= h.url %>" target="_blank" rel="noopener noreferrer"><%= h.headline %></a><span class="meta"><%= h.themeName %> · <%= h.source %></span></div><% } %>
+  </div>
+</div></section>
+<% } %>

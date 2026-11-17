@@ -737,6 +737,25 @@ router.get('/crm/:space/reports/:id/download', spaceParam, (req,res) => {
 
 require('./money')(router, { spaceParam, requireSameOrigin, writeLimiter, flash, back });
 
+const briefing = require('../lib/crm/briefing');
+const workOnly = (req, res, next) => (req.params.space === 'work' ? next() : res.status(404).send('Not found'));
+router.get('/crm/:space/briefing/:day?', spaceParam, workOnly, (req, res) => {
+  const today = planner.local(Math.floor(Date.now() / 1000)).date;
+  const day = req.params.day || today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(404).send('Not found');
+  res.render('crm/briefing', { page: 'briefing', title: 'Work briefing', b: briefing.shown(briefing.get(day)), day, isToday: day === today, recent: briefing.recent(), prefs: briefing.prefs() });
+});
+router.post('/crm/:space/briefing/:action', spaceParam, workOnly, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    if (req.params.action === 'write') { briefing.writeNow(); flash(req, 'Writing today\'s briefing. It appears here when the Mac finishes.'); }
+    else if (req.params.action === 'follow') flash(req, `Following ${briefing.follow(req.body.name)}. It is searched from the next briefing.`);
+    else if (req.params.action === 'mute') flash(req, `${briefing.mute(req.body.name)} won't be in a briefing again.`);
+    else if (req.params.action === 'forget') { briefing.forget(req.body.norm); flash(req, 'Removed. The Hub decides on that theme by itself again.'); }
+    else return res.status(404).send('Not found');
+  } catch (err) { flash(req, err.message, 'bad'); }
+  back(req, res, '/crm/work/briefing');
+});
+
 router.get('/crm/:space/projects', spaceParam, (req, res) => {
   res.render('crm/projects', { page: 'projects', list: views.projects(req.params.space), unfiled: require('../lib/crm/facts').unfiled(req.params.space, { limit: 0 }).total, title: 'Projects' });
 });

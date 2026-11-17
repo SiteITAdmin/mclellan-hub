@@ -672,3 +672,20 @@ details.del .btn { color: var(--negative); border-color: var(--negative); height
 .title-row > .acts { display: flex; gap: 8px; flex-wrap: wrap; }
 .meeting-wait { margin: 0; font-size: 13px; }
 .review-form .select { height: 30px; font-size: 13px; max-width: 100%; min-width: 0; flex: 0 1 340px; }
+
+/* Work briefing */
+.briefing-why { margin: 0 0 14px; font-size: 14px; line-height: 22px; max-width: 78ch; }
+.briefing-why .tag { margin: 2px 2px 2px 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.briefing-why a.tag:hover { border-color: var(--accent); color: var(--text); }
+.briefing-item { padding: 14px 0 4px; border-top: 1px solid var(--row-edge); max-width: 78ch; }
+.briefing-item h3 { margin: 0 0 6px; font-size: 16px; line-height: 22px; font-weight: 600; }
+.briefing-item h3 a { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.briefing-item p { margin: 0 0 8px; font-size: 14px; line-height: 22px; }
+.briefing-item .meta, .briefing-theme > .meta { color: var(--muted); font-size: 13px; }
+.briefing-item blockquote { margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--row-edge); color: var(--muted); font-size: 13px; line-height: 20px; }
+.briefing-how { margin: 18px 0; font-size: 13px; line-height: 20px; color: var(--muted); max-width: 78ch; }
+.briefing-how summary { cursor: pointer; }
+.briefing-line { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; padding: 8px 12px; border-radius: var(--radius-row); background: var(--row); border: 1px solid var(--row-edge); }
+.briefing-line a { font-weight: 500; }
+.briefing-line a:hover { text-decoration: underline; }
+.briefing-line .meta { color: var(--muted); font-size: 13px; }
