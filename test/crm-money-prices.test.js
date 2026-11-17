@@ -159,7 +159,7 @@ test('standing checks: by shop, what a visit costs, top-up trips, and a cap he s
   assert.deepEqual(checks[1].topups, { n: 3, cents: 2250, limit: 1500 });
 
   assert.throws(() => insights.capCategory('Coffee', 'lots', { t: T }), /Write the cap as euro/);
-  assert.throws(() => insights.capCategory('Travel', '40', { t: T }), /no spending of that kind/);
+  assert.throws(() => insights.capCategory('Sweets', '40', { t: T }), /Choose a kind of spending/);
   const c = insights.capCategory('Coffee', '€40', { t: T });
   assert.deepEqual([c.scope, c.name, c.norm, c.monthly_cap_cents, c.month, c.status], ['category', 'Coffee', 'coffee', 4000, '2026-11', 'active']);
   assert.throws(() => insights.capCategory('Coffee', '30', { t: T }), /already have a cap on Coffee/);

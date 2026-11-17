@@ -7,12 +7,12 @@ categorises spending, watches for subscriptions and retailer offers in Personal 
 web for discount codes for what he actually buys, and **challenges** his spending. The aim is
 to reduce spending and question habits, not to report it politely.
 
-Screens: `/crm/personal/money` (Overview + upload), `/budget`, `/transactions`, `/receipts`, `/prices`, `/subscriptions`,
+Screens: `/crm/personal/money` (Overview + upload), `/budget`, `/transactions`, `/categories`, `/receipts`, `/prices`, `/subscriptions`,
 `/offers`, `/challenge`. Work has none of these (404). Nav link shows only in Personal.
 
 ## Architecture
 
-Eight modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
+Nine modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
 background work (`tick()`) and Overview card (`summary()`). `index.js` runs them. One job,
 `crm_money_tick` (60 s, `lib/crm/jobs.js`), calls every module's `tick()` through `runs.track`
 under the name `money_<module>`, so a failure is recorded and shown (rule 5). Routes are
@@ -24,6 +24,7 @@ mounted by `routes/money.js`, which has already applied `spaceParam` + Personal-
 | `ledger.js` | uploads, transactions, rules, categories, Overview, Transactions screen, image plumbing | Sonnet reads screenshots, PDF pages and CSV lines (`crm_money_read`) |
 | `receipts.js` | receipts (`money_receipts`), matching them to bank lines, the running total of receipts the bank has not shown yet, Receipts screen | Sonnet reads the receipt (`crm_money_read`, its own prompt) |
 | `prices.js` | what the same thing costs between the shops he uses and over time, from receipt item lines; "why there?" and his answers (`money_price_answers`); Prices screen | none |
+| `categories.js` | categories Douglas adds (`money_categories`), moving shops into one, Categories screen | none |
 | `budget.js` | the month's plan line by line (`money_budgets`), spend against it, how it follows his agreements, Budget screen | none |
 | `subscriptions.js` | recurring-charge detection, mail evidence, `money_subscriptions`, Subscriptions screen | Sonnet reads mail (`crm_money_mail`) |
 | `offers.js` | retailer offers found in mail (origin `mail`), the Offers screen (which also lists web codes) | Sonnet (`crm_money_mail`) |
@@ -144,6 +145,20 @@ receipts.
   a change in the price findings, counts as something new to read.
 - Not done: correcting a product name by hand; items do not split a bank line's category.
 
+## Categories
+
+Agreed 17 Nov 2026. The built-in list (`CATEGORIES` in `common.js`) stays; Douglas adds his own on
+/crm/personal/money/categories (name, his own line on what goes in it, and whether it is a bill paid
+in one go). `categories()` returns the built-ins with his own just before Other, read afresh each call,
+and every module uses it: the bank-line and receipt readers are told about his categories in the user
+prompt (with his description) and may return them; category pickers, the Transactions filter and
+corrections accept them; the budget proposes, plans and judges them (`billCategories()` makes a bill of
+his judged against the plan only, and leaves it out of the challenge's weekday habits); the challenge's
+category statistics include them; any category, his own included, can be capped. "Move shops into it"
+writes his ordinary merchant rules (`ledger.setRule`), so past lines move (not ones he set by hand) and
+new lines follow. Removing one sends its lines to Other, deletes its rules, this month's budget line and
+any active cap on it; past months' plans keep the name. Renaming is not built.
+
 ## Budget
 
 Agreed 17 Nov 2026. A plan for each calendar month, one line per category, and where the bank lines
@@ -203,7 +218,7 @@ already exist in Money. No model is involved; `budget.tick` only makes sure the 
 
 ## Shared contracts
 
-- `lib/crm/money/common.js`: `CATEGORIES`, `KINDS`, `normMerchant`, `eur`, `dublinDay`, `addDays`, `SPEND_SQL`.
+- `lib/crm/money/common.js`: `CATEGORIES` (the built-ins), `categories()` (with his own; use this), `billCategories()`, `KINDS`, `normMerchant`, `eur`, `dublinDay`, `addDays`, `SPEND_SQL`.
 - Tables in `ledger.js` (`money_uploads`, `money_transactions`, `money_rules`) and `offers.js`
   (`money_offers`) are fixed contracts: other modules may read them and, where stated, write to them, but
   do not change their columns without the owning module. Other modules' own tables are defined in their own
@@ -211,7 +226,7 @@ already exist in Money. No model is involved; `budget.tick` only makes sure the 
   by `pragma table_info`).
 - `amount_cents` is negative for money out. Spending totals use `kind='spend' AND status!='ignored'`
   (`SPEND_SQL`); transfers and income never count.
-- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|budget|transactions|receipts|prices|subscriptions|offers|challenge>`,
+- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|budget|transactions|categories|receipts|prices|subscriptions|offers|challenge>`,
   and `<%- include('_nav') %>` from `views/crm/money/_nav.ejs` (include path `money/_nav` from `views/crm/`).
   Styles go in your own marked section of `public/money.css`.
 - Tests: `test/crm-money-<module>.test.js`, node:test, temp `CRM_DB_PATH`/`HUB_DB_PATH`, `HUB_DISABLE_JOBS=1`

@@ -1,6 +1,6 @@
-<%# Sub-navigation shared by every Money screen. Pass `tab`: overview | budget | transactions | receipts | prices | subscriptions | offers | challenge. %>
+<%# Sub-navigation shared by every Money screen. Pass `tab`: overview | budget | transactions | categories | receipts | prices | subscriptions | offers | challenge. %>
 <nav class="money-nav" aria-label="Money">
-  <% [['overview','Overview','/crm/personal/money'],['budget','Budget','/crm/personal/money/budget'],['transactions','Transactions','/crm/personal/money/transactions'],['receipts','Receipts','/crm/personal/money/receipts'],['prices','Prices','/crm/personal/money/prices'],['subscriptions','Subscriptions','/crm/personal/money/subscriptions'],['offers','Offers & codes','/crm/personal/money/offers'],['challenge','Challenge','/crm/personal/money/challenge']].forEach(([key,label,href]) => { %>
+  <% [['overview','Overview','/crm/personal/money'],['budget','Budget','/crm/personal/money/budget'],['transactions','Transactions','/crm/personal/money/transactions'],['categories','Categories','/crm/personal/money/categories'],['receipts','Receipts','/crm/personal/money/receipts'],['prices','Prices','/crm/personal/money/prices'],['subscriptions','Subscriptions','/crm/personal/money/subscriptions'],['offers','Offers & codes','/crm/personal/money/offers'],['challenge','Challenge','/crm/personal/money/challenge']].forEach(([key,label,href]) => { %>
     <a href="<%= href %>" <%- tab === key ? 'aria-current="page"' : '' %>><%= label %></a>
   <% }) %>
 </nav>

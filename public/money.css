@@ -142,6 +142,8 @@
 .budget-link.bad a { color: var(--negative); }
 .budget-line.is-over .budget-figures strong { color: var(--negative); }
 @media (max-width: 640px) { .budget-figures { margin-left: 0; flex: 1 1 100%; order: 3; } }
+.cat-shops { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; margin: 8px 0; font-size: 14px; }
+.cat-shops label { display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
 /* == end budget == */
 /* == prices == */
 .price-row { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--rule); }

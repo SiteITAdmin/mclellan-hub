@@ -80,6 +80,18 @@
 </div></section>
 <% } %>
 
+<% if (v.current && v.categories.length) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Add a line</h2></div>
+  <form class="challenge-cap-form" method="post" action="<%= base %>/budget/line">
+    <label for="b-add-cat" class="sr-only">Category</label><select class="select" id="b-add-cat" name="category"><% for (const c of v.categories) { %><option><%= c %></option><% } %></select>
+    <label for="b-add-amount">a month, €</label><input class="input" type="text" inputmode="decimal" id="b-add-amount" name="amount" required>
+    <button class="btn small" type="submit">Add to the plan</button>
+  </form>
+  <p class="subline money-small">Need a category that is not in the list? <a href="<%= base %>/categories">Add one on Categories</a>; it appears here at once.</p>
+</div></section>
+<% } %>
+
 <% if (v.unplanned.length) { %>
 <section class="grid"><div class="panel s12">
   <div class="panel-head"><h2>Spent, but not in the plan</h2><span class="chip"><%= eur(v.unplanned.reduce((n, r) => n + r.spent, 0)) %></span></div>

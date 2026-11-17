@@ -1,0 +1,56 @@
+<%- include('../_top') %>
+<% const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`, slug = n => `cat-${String(n).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`; %>
+<div class="title-row"><div><h1>Categories</h1><p class="subline">The kinds of spending Money sorts your lines into. A category you add here is in every list at once: the readers use it for new bank lines and receipts, and it shows on Transactions, the Budget and the Challenge.</p></div></div>
+<%- include('_nav') %>
+
+<section class="grid first">
+  <div class="panel s6">
+    <div class="panel-head"><h2>Add a category</h2></div>
+    <form method="post" action="<%= base %>/categories/add" class="money-edit">
+      <div class="field wide"><label for="cat-name">Name</label><input class="input" type="text" id="cat-name" name="name" maxlength="30" required placeholder="e.g. Kids, Car loan, Pets"></div>
+      <div class="field wide"><label for="cat-about">What goes in it <span class="money-tx-meta">(the readers go by this)</span></label><input class="input" type="text" id="cat-about" name="about" maxlength="200" placeholder="e.g. school costs, clubs and clothes for the children"></div>
+      <label class="money-always wide"><input type="checkbox" name="bill" value="1"> It is a bill paid in one go each month (a loan, a fee, a standing order)</label>
+      <div class="money-edit-acts wide"><button class="btn primary small" type="submit">Add</button></div>
+    </form>
+    <p class="subline money-small">Lines already read stay where they are until you move their shops in, below. You can add up to <%= v.max %> of your own.</p>
+  </div>
+  <div class="panel s6">
+    <div class="panel-head"><h2>Built in</h2><span class="chip"><%= v.builtIn.length %></span></div>
+    <p class="subline money-small">These stay. Spending in the last <%= v.days %> days:</p>
+    <table class="challenge-shops"><tbody><% for (const c of v.builtIn) { %><tr><th scope="row"><a href="<%= base %>/transactions?month=all&amp;category=<%= encodeURIComponent(c.name) %>"><%= c.name %></a></th><td><%= c.n ? plural(c.n, 'line') : '' %></td><td><%= c.n ? eur(c.cents) : '' %></td></tr><% } %></tbody></table>
+  </div>
+</section>
+
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Yours</h2><span class="chip"><%= v.own.length %></span></div>
+  <% if (!v.own.length) { %><div class="empty">None yet. Add one above.</div><% } %>
+  <% for (const c of v.own) { %>
+  <div class="budget-line" id="<%= slug(c.name) %>">
+    <div class="budget-head"><a class="budget-name" href="<%= base %>/transactions?month=all&amp;category=<%= encodeURIComponent(c.name) %>"><%= c.name %></a>
+      <% if (c.bill) { %><span class="pill neutral">Bill</span><% } %>
+      <span class="budget-figures"><%= c.n ? `${plural(c.n, 'line')}, ${eur(c.cents)} in ${v.days} days` : 'No lines yet' %><%= c.rules ? ` · ${plural(c.rules, 'shop')} always go here` : '' %></span></div>
+    <p class="budget-basis"><%= c.about || 'No description: the readers have only the name to go by.' %></p>
+    <details class="money-receipt-more"><summary>Move shops into <%= c.name %></summary>
+      <% const choices = v.shops.filter(s => s.category !== c.name); %>
+      <% if (!choices.length) { %><p class="budget-basis">No other shops in the last 180 days.</p><% } else { %>
+      <form method="post" action="<%= base %>/categories/shops"><input type="hidden" name="name" value="<%= c.name %>">
+        <div class="cat-shops"><% for (const s of choices) { %><label><input type="checkbox" name="shop" value="<%= s.norm %>"> <%= s.merchant %> <span class="money-tx-meta"><%= s.category %> · <%= eur(s.cents) %></span></label><% } %></div>
+        <button class="btn small" type="submit">Move the ticked shops</button>
+        <p class="budget-basis">Their past lines move too, except ones you set by hand, and new lines from them follow. The same as “always do this” on a transaction.</p>
+      </form><% } %>
+    </details>
+    <details class="money-receipt-more"><summary>Change or remove</summary>
+      <form method="post" action="<%= base %>/categories/save" class="money-edit"><input type="hidden" name="name" value="<%= c.name %>">
+        <div class="field wide"><label for="about-<%= slug(c.name) %>">What goes in it</label><input class="input" type="text" id="about-<%= slug(c.name) %>" name="about" maxlength="200" value="<%= c.about %>"></div>
+        <label class="money-always wide"><input type="checkbox" name="bill" value="1" <%= c.bill ? 'checked' : '' %>> A bill paid in one go each month</label>
+        <div class="money-edit-acts wide">
+          <button class="btn small" type="submit">Save</button>
+          <button class="btn text small money-del" type="submit" formaction="<%= base %>/categories/remove">Remove <%= c.name %></button>
+        </div>
+      </form>
+      <p class="budget-basis">Removing it moves its lines to Other and drops its budget line and any cap on it this month.</p>
+    </details>
+  </div>
+  <% } %>
+</div></section>
+<%- include('../_bottom') %>
