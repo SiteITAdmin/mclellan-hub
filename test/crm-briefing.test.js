@@ -98,12 +98,12 @@ test('themes: a followed theme is searched even when the reader leaves it out', 
   assert.deepEqual(kept.map(k => k.name).sort(), ['Microsoft Purview', 'SharePoint Online']);
 });
 
-test('items: need a real page, a quote, a date inside the week, and must be new', () => {
+test('items: need a real page, a quote, a date inside 30 days, and must be new', () => {
   const batch = [{ norm: 'sharepoint online', name: 'SharePoint Online' }];
   const { kept, dropped } = briefing.validate({ items: [
     item(),
     item({ headline: 'Same page again' }),
-    item({ headline: 'Old news', source_url: 'https://example.com/old', published: '2026-11-01' }),
+    item({ headline: 'Old news', source_url: 'https://example.com/old', published: '2026-10-10' }),
     item({ headline: 'Tomorrowland', source_url: 'https://example.com/future', published: '2026-12-25' }),
     item({ headline: 'No date', source_url: 'https://example.com/nodate', published: '' }),
     item({ headline: 'No quote', source_url: 'https://example.com/noquote', quote: 'short' }),
@@ -115,7 +115,7 @@ test('items: need a real page, a quote, a date inside the week, and must be new'
   assert.deepEqual(kept.map(k => k.headline), ['SharePoint Migration Tool adds incremental sync']);
   const why = Object.fromEntries(dropped.map(d => [d.headline, d.reason]));
   assert.equal(why['Same page again'], 'already reported');
-  assert.match(why['Old news'], /older than 7 days/);
+  assert.match(why['Old news'], /older than 30 days/);
   assert.match(why.Tomorrowland, /future/);
   assert.match(why['No date'], /publication date/);
   assert.match(why['No quote'], /quote/);
@@ -144,7 +144,7 @@ test('a morning end to end: themes, two search jobs, nothing private in the sear
   for (const secret of ['Aoife', 'Brennan', 'Northside', 'Departments', 'data transfer', 'pr1', 't1']) assert.ok(!sent.includes(secret), `${secret} must not reach the web step`);
   const asked = JSON.parse(search1.payload.userPrompt);
   assert.equal(asked.themes.length, 4);
-  assert.equal(asked.since, '2026-11-10');
+  assert.equal(asked.since, '2026-10-18');
 
   jobs.finish('job2', { items: [item(), item({ headline: 'Sharing links default changes', source_url: 'https://learn.microsoft.com/sharing-default', published: '2026-11-16', kind: 'change' }),
     item({ theme: 'SQL Server Extended Security Updates', headline: 'ESU year two pricing published', source_url: 'https://learn.microsoft.com/esu', kind: 'licensing' })],

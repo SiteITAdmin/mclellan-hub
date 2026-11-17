@@ -21,7 +21,7 @@
 <% if (b.status === 'done' && !b.themes.length) { %>
 <section class="grid first"><div class="panel s12"><div class="empty">Nothing in your work pointed to a public subject worth searching today. Follow a theme below to have it searched every day.</div></div></section>
 <% } else if (b.status === 'done' && !b.items.length) { %>
-<section class="grid first"><div class="panel s12"><div class="empty">Nothing new was published in the last week on today's <%= b.themes.length %> <%= b.themes.length === 1 ? 'theme' : 'themes' %> that you haven't already been shown.</div></div></section>
+<section class="grid first"><div class="panel s12"><div class="empty">Nothing was published in the last 30 days on today's <%= b.themes.length %> <%= b.themes.length === 1 ? 'theme' : 'themes' %> that you haven't already been shown.</div></div></section>
 <% } %>
 
 <% let first = !b.running && b.status === 'done' && !b.error && b.items.length; %>
