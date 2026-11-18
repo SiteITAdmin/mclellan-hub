@@ -1,0 +1,25 @@
+<% if (entries.length) { %>
+  <ul class="house-events">
+    <% for (const e of entries) { %>
+      <% const property = propertiesById.get(e.property_id); %>
+      <li class="house-event">
+        <div>
+          <% if (typeof readOnly !== 'undefined' && readOnly) { %><strong class="house-event-title"><%= e.title %></strong>
+          <% } else { %><a class="house-event-title" href="<%= entryUrl(e.id) %>?from=<%= screen %>"><%= e.title %></a><% } %>
+          <p class="house-meta">
+            <%= [kinds[e.kind], property?.title, e.day ? entryDate(e.day) : (e.gmail_id ? fmt(e.occurred_at) : ''), e.time, e.person].filter(Boolean).join(' · ') %>
+          </p>
+          <% if (e.details) { %><p class="house-detail"><%= e.details %></p><% } %>
+          <% if (e.gmail_id && (typeof readOnly === 'undefined' || !readOnly)) { %><a class="house-source" href="<%= gmailUrl(e.gmail_id) %>" target="_blank" rel="noopener noreferrer"><%- icon.email %> Source email</a><% } %>
+        </div>
+        <div class="house-event-side">
+          <% if (e.amount != null) { %><strong><%= cost(e.amount) %></strong><% } %>
+          <% if (e.status) { %><span class="house-status" data-status="<%= e.status %>"><%= label(e.status) %></span><% } %>
+          <% if (e.superseded_at) { %><span class="house-status" data-status="expired">Superseded</span><% } %>
+        </div>
+      </li>
+    <% } %>
+  </ul>
+<% } else { %>
+  <p class="house-empty"><%= emptyText %></p>
+<% } %>

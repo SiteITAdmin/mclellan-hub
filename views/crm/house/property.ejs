@@ -1,0 +1,36 @@
+<% const p = property, related = events.filter(e => e.property_id === p.id), old = archived.filter(e => e.property_id === p.id); %>
+<section class="house-section" aria-labelledby="house-property-heading">
+  <a class="house-inline" href="<%= base %>/properties">← All properties</a>
+  <header class="house-section-head house-record-head">
+    <div>
+      <h2 id="house-property-heading"><%= p.title %></h2>
+      <% if (p.address && p.address !== p.title) { %><p class="house-meta"><%= p.address %></p><% } %>
+    </div>
+    <div class="house-actions">
+      <% if (linkUrl(p.url)) { %><a class="btn" href="<%= linkUrl(p.url) %>" target="_blank" rel="noopener noreferrer">Open listing</a><% } %>
+      <a class="btn" href="<%= propertyUrl(p.id) %>/edit">Edit property</a>
+    </div>
+  </header>
+  <dl class="house-property-facts">
+    <div><dt>Asking price</dt><dd><%= cost(p.asking_price) %></dd></div>
+    <div><dt>Bedrooms</dt><dd><%= p.beds === 0 ? 'Studio' : p.beds ?? '—' %></dd></div>
+    <div><dt>Floor area</dt><dd><%= p.area == null ? '—' : `${p.area} m²` %></dd></div>
+    <div><dt>Stage</dt><dd><span class="house-status" data-status="<%= p.status %>"><%= stages[p.status] || label(p.status) %></span></dd></div>
+  </dl>
+  <% if (p.notes) { %><p class="house-detail"><%= p.notes %></p><% } %>
+  <div class="house-actions house-property-actions">
+    <a class="btn primary" href="<%= newEntry({ property_id: p.id, kind: 'viewing', from: 'property' }) %>"><%- icon.calendar %> Add viewing</a>
+    <a class="btn" href="<%= newEntry({ property_id: p.id, kind: 'offer', from: 'property' }) %>"><%- icon.plus %> Record offer</a>
+    <a class="btn" href="<%= newEntry({ property_id: p.id, kind: 'note', from: 'property' }) %>"><%- icon.note %> Add note</a>
+  </div>
+</section>
+
+<section class="house-section">
+  <header class="house-section-head"><h2>Property activity</h2></header>
+  <%- include('_events', { entries: related, emptyText: 'Viewings, offers and confirmed emails for this property will appear here.' }) %>
+  <% if (old.length) { %>
+    <details class="house-aging"><summary>Superseded updates</summary>
+      <%- include('_events', { entries: old, emptyText: '' }) %>
+    </details>
+  <% } %>
+</section>

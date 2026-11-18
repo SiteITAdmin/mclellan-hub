@@ -1,0 +1,31 @@
+<div class="house-pair">
+  <section class="house-section" aria-labelledby="house-viewings-heading">
+    <header class="house-section-head">
+      <h2 id="house-viewings-heading">Upcoming viewings</h2>
+      <a class="btn small" href="<%= newEntry({ kind: 'viewing', from: 'viewings' }) %>"><%- icon.plus %> Add viewing</a>
+    </header>
+    <p class="house-meta house-section-note">Viewing times are local to Ireland.</p>
+    <%- include('_events', { entries: upcoming, emptyText: 'No upcoming viewings.' }) %>
+    <% const undated = viewings.filter(e => !e.day && !['completed', 'cancelled', 'declined', 'withdrawn', 'expired'].includes(e.status)); %>
+    <% if (undated.length) { %>
+      <h3>Dates to arrange</h3>
+      <%- include('_events', { entries: undated, emptyText: '' }) %>
+    <% } %>
+  </section>
+
+  <section class="house-section" id="offers" aria-labelledby="house-offers-heading">
+    <header class="house-section-head">
+      <h2 id="house-offers-heading">Offers</h2>
+      <a class="btn small" href="<%= newEntry({ kind: 'offer', from: 'viewings' }) %>"><%- icon.plus %> Record offer</a>
+    </header>
+    <%- include('_events', { entries: offers, emptyText: 'No offers recorded.' }) %>
+  </section>
+</div>
+
+<% const history = [...viewings.filter(e => !upcoming.includes(e) && (e.day || ['completed', 'cancelled', 'declined', 'withdrawn', 'expired'].includes(e.status))), ...archived.filter(e => ['viewing', 'offer'].includes(e.kind))]; %>
+<% if (history.length) { %>
+  <section class="house-section">
+    <header class="house-section-head"><h2>Viewing and offer history</h2></header>
+    <%- include('_events', { entries: history.sort((a, b) => byDay(b, a)), emptyText: '' }) %>
+  </section>
+<% } %>

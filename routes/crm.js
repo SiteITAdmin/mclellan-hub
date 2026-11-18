@@ -736,6 +736,7 @@ router.get('/crm/:space/reports/:id/download', spaceParam, (req,res) => {
 });
 
 require('./money')(router, { spaceParam, requireSameOrigin, writeLimiter, flash, back });
+require('./house')(router, { spaceParam, requireSameOrigin, writeLimiter, flash, back });
 
 const briefing = require('../lib/crm/briefing');
 const workOnly = (req, res, next) => (req.params.space === 'work' ? next() : res.status(404).send('Not found'));

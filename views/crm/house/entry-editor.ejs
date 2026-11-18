@@ -1,0 +1,43 @@
+<section class="house-section house-editor">
+  <a class="house-inline" href="<%= cancel %>">← Back to tracker</a>
+  <header class="house-section-head house-record-head">
+    <h2><%= record.superseded_at ? 'Superseded update' : record.id ? 'Edit entry' : `Add ${kinds[record.kind]?.toLowerCase() || 'entry'}` %></h2>
+  </header>
+  <% if (record.superseded_at) { %>
+    <%- include('_events', { entries: [record], emptyText: '', readOnly: true }) %>
+  <% } else { %>
+    <form class="house-fields" method="post" action="<%= record.id ? entryUrl(record.id) : `${base}/entry` %>">
+      <% if (from) { %><input type="hidden" name="from" value="<%= from %>"><% } %>
+      <label class="house-field-wide">Title <input class="input" type="text" name="title" value="<%= record.title || '' %>" maxlength="240" required></label>
+      <label>Type <select class="input" name="kind" required>
+        <% for (const [value, name] of Object.entries(kinds)) { %><option value="<%= value %>" <% if (value === record.kind) { %>selected<% } %>><%= name %></option><% } %>
+      </select></label>
+      <label>Status <select class="input" name="status">
+        <% for (const status of statuses) { %><option value="<%= status %>" <% if (status === (record.status || 'pending')) { %>selected<% } %>><%= label(status) %></option><% } %>
+      </select></label>
+      <% if (properties.length) { %>
+        <label class="house-field-wide">Property
+          <select class="input" name="property_id">
+            <option value="">No property selected</option>
+            <% for (const p of properties) { %><option value="<%= p.id %>" <% if (record.property_id === p.id) { %>selected<% } %>><%= p.title %></option><% } %>
+          </select>
+        </label>
+      <% } %>
+      <label>Date <input class="input" type="date" name="day" value="<%= record.day || '' %>"></label>
+      <label>Time in Ireland <input class="input" type="time" name="time" value="<%= record.time || '' %>"></label>
+      <label>Amount (€) <input class="input" type="number" name="amount" value="<%= record.amount ?? '' %>" min="0" max="100000000" step="1" inputmode="numeric"></label>
+      <label>Person or organisation <input class="input" type="text" name="person" value="<%= record.person || '' %>" maxlength="240"></label>
+      <label class="house-field-wide">Details <textarea class="textarea" name="details" rows="5" maxlength="6000"><%= record.details || '' %></textarea></label>
+      <div class="house-actions house-field-wide">
+        <button class="btn primary" type="submit">Save entry</button>
+        <a class="btn text" href="<%= cancel %>">Cancel</a>
+      </div>
+    </form>
+  <% } %>
+  <% if (record.gmail_id) { %>
+    <div class="house-entry-source">
+      <% if (record.quote) { %><blockquote><%= record.quote %></blockquote><% } %>
+      <a class="house-source" href="<%= gmailUrl(record.gmail_id) %>" target="_blank" rel="noopener noreferrer"><%- icon.email %> Source email · <%= fmt(record.occurred_at) %></a>
+    </div>
+  <% } %>
+</section>

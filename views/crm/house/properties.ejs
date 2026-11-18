@@ -1,0 +1,84 @@
+<section class="house-section" aria-labelledby="house-properties-heading">
+  <header class="house-section-head">
+    <h2 id="house-properties-heading">Properties</h2>
+    <span class="house-meta"><%= visibleProperties.length %> shown</span>
+  </header>
+  <form class="house-filters" method="get" action="<%= base %>/properties" role="search" aria-label="Filter properties">
+    <label>Search <input type="search" class="input" name="q" value="<%= search %>" placeholder="Address or area"></label>
+    <label>Stage <select class="input" name="stage">
+      <option value="">All stages</option>
+      <% for (const [value, name] of Object.entries(stages)) { %><option value="<%= value %>" <% if (value === stage) { %>selected<% } %>><%= name %></option><% } %>
+    </select></label>
+    <button class="btn" type="submit">Filter</button>
+    <% if (stage || search) { %><a class="house-inline" href="<%= base %>/properties">Clear filters</a><% } %>
+  </form>
+
+  <% if (!properties.length) { %>
+    <div class="house-empty house-empty-card">
+      <p>Save a property by hand or review a Daft alert imported from Gmail.</p>
+      <a class="btn" href="<%= base %>/mail">Review mail</a>
+    </div>
+  <% } else if (!visibleProperties.length) { %>
+    <p class="house-empty">No properties match these filters.</p>
+  <% } else { %>
+    <form method="get" action="<%= base %>/properties#compare">
+      <input type="hidden" name="q" value="<%= search %>">
+      <input type="hidden" name="stage" value="<%= stage %>">
+      <% if (visibleProperties.length > 1) { %>
+        <div class="house-compare-controls">
+          <p class="house-meta">Select two to four properties to compare.</p>
+          <button class="btn" type="submit">Compare selected</button>
+        </div>
+      <% } %>
+      <div class="house-property-grid">
+        <% for (const p of visibleProperties) { %>
+          <article class="house-property-card">
+            <div class="house-property-status">
+              <span class="house-status" data-status="<%= p.status %>"><%= stages[p.status] || label(p.status) %></span>
+              <% if (visibleProperties.length > 1) { %>
+                <label class="house-check"><input type="checkbox" name="compare" value="<%= p.id %>" <% if (comparison.some(c => c.id === p.id)) { %>checked<% } %>> Compare<span class="sr-only"> <%= p.title %></span></label>
+              <% } %>
+            </div>
+            <h3><a href="<%= propertyUrl(p.id) %>"><%= p.title %></a></h3>
+            <% if (p.address && p.address !== p.title) { %><p class="house-meta"><%= p.address %></p><% } %>
+            <div class="house-property-price">
+              <strong><%= p.asking_price == null ? 'Price not recorded' : cost(p.asking_price) %></strong>
+              <span class="house-meta"><%= [p.beds == null ? '' : p.beds === 0 ? 'Studio' : `${p.beds} bed`, p.area == null ? '' : `${p.area} m²`].filter(Boolean).join(' · ') %></span>
+            </div>
+          </article>
+        <% } %>
+      </div>
+    </form>
+  <% } %>
+</section>
+
+<% if (comparison.length) { %>
+<section class="house-section" id="compare" aria-labelledby="house-compare-heading">
+  <header class="house-section-head"><h2 id="house-compare-heading">Property comparison</h2></header>
+  <% if (comparison.length === 1) { %>
+    <p class="house-empty">Select at least one more property to compare.</p>
+  <% } else if (comparison.length > 4) { %>
+    <p class="house-empty">Choose no more than four properties to compare.</p>
+  <% } else { %>
+    <div class="house-table-scroll" tabindex="0" role="region" aria-label="Scrollable property comparison">
+      <table class="house-table">
+        <thead><tr><th scope="col">Detail</th><% for (const p of comparison) { %><th scope="col"><a href="<%= propertyUrl(p.id) %>"><%= p.title %></a></th><% } %></tr></thead>
+        <tbody>
+        <% for (const [name, value] of [
+          ['Asking price', p => cost(p.asking_price)],
+          ['Address', p => p.address],
+          ['Bedrooms', p => p.beds === 0 ? 'Studio' : p.beds],
+          ['Floor area', p => p.area == null ? null : `${p.area} m²`],
+          ['Stage', p => stages[p.status]],
+          ['Next viewing', p => { const e = upcoming.find(v => v.property_id === p.id); return e ? [entryDate(e.day), e.time].filter(Boolean).join(' · ') : null; }],
+          ['Latest offer', p => { const e = offers.find(v => v.property_id === p.id); return e ? [e.amount != null ? cost(e.amount) : '', label(e.status)].filter(Boolean).join(' · ') : null; }],
+          ['Notes', p => p.notes],
+        ]) { %>
+          <tr><th scope="row"><%= name %></th><% for (const p of comparison) { %><td><%= value(p) || '—' %></td><% } %></tr>
+        <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<% } %>

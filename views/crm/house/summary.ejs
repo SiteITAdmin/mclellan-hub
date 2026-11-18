@@ -1,0 +1,58 @@
+<%
+  const mortgage = events.find(e => e.kind === 'mortgage');
+  const solicitor = events.find(e => e.kind === 'legal');
+  const activeOffers = offers.filter(e => ['submitted', 'in_progress', 'pending'].includes(e.status));
+%>
+<div class="house-overview">
+  <section class="house-section house-next" aria-labelledby="house-next-heading">
+    <header class="house-section-head">
+      <h2 id="house-next-heading">Coming up</h2>
+      <a class="house-inline" href="<%= base %>/viewings-offers">Viewings &amp; offers</a>
+    </header>
+    <%- include('_events', { entries: nextActions.slice(0, 6), emptyText: 'No upcoming dates. Add a viewing or put a date on a purchase step.' }) %>
+  </section>
+  <a class="house-summary-stat" href="<%= base %>/properties">
+    <span>Active properties</span><strong><%= activeProperties.length %></strong>
+    <small><%= activeProperties.filter(p => p.status === 'shortlisted').length %> shortlisted</small>
+  </a>
+  <a class="house-summary-stat" href="<%= base %>/viewings-offers#offers">
+    <span>Open offers</span><strong><%= activeOffers.length %></strong>
+    <small><%= offers.length %> recorded</small>
+  </a>
+  <a class="house-summary-stat" href="<%= base %>/mail">
+    <span>Mail to review</span><strong><%= suggestions.length %></strong>
+    <small><%= scan.error || mail.failed ? 'Mail needs attention' : 'Daft alerts & correspondence' %></small>
+  </a>
+</div>
+
+<% if (overdue.length) { %>
+  <section class="house-section" aria-labelledby="house-overdue-heading">
+    <header class="house-section-head"><h2 id="house-overdue-heading">Overdue purchase steps</h2></header>
+    <%- include('_events', { entries: overdue, emptyText: '' }) %>
+  </section>
+<% } %>
+
+<section class="house-section" aria-labelledby="house-progress-heading">
+  <header class="house-section-head">
+    <h2 id="house-progress-heading">Purchase progress</h2>
+    <a class="house-inline" href="<%= base %>/purchase">Purchase plan</a>
+  </header>
+  <div class="house-pair">
+    <% for (const [heading, latest, kind] of [['Mortgage', mortgage, 'mortgage'], ['Solicitor', solicitor, 'legal']]) { %>
+      <div class="house-progress">
+        <h3><%= heading %></h3>
+        <% if (latest) { %>
+          <%- include('_events', { entries: [latest], emptyText: '' }) %>
+        <% } else { %>
+          <p class="house-empty">No <%= heading.toLowerCase() %> entries yet.</p>
+        <% } %>
+        <a class="house-inline" href="<%= newEntry({ kind, from: 'summary' }) %>"><%- icon.plus %> Record <%= heading.toLowerCase() %> update</a>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<section class="house-section" aria-labelledby="house-recent-heading">
+  <header class="house-section-head"><h2 id="house-recent-heading">Recent activity</h2></header>
+  <%- include('_events', { entries: events.slice(0, 8), emptyText: 'Your saved entries and confirmed email updates will appear here.' }) %>
+</section>

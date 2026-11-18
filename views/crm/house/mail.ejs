@@ -1,0 +1,118 @@
+<section class="house-section" aria-labelledby="house-mail-heading">
+  <header class="house-section-head">
+    <h2 id="house-mail-heading">Gmail monitoring</h2>
+    <form method="post" action="<%= base %>/mail/scan">
+      <button class="btn" type="submit" <% if (scan.requestedAt) { %>disabled<% } %>><%= scan.requestedAt ? 'Scan requested' : 'Request scan' %></button>
+    </form>
+  </header>
+  <p class="house-section-note">The Hub checks your Gmail for Daft sale alerts and house-buying correspondence. Confirm an update to add it to your tracker.</p>
+  <dl class="house-property-facts house-mail-stats">
+    <div><dt>Last successful scan</dt><dd><%= scan.lastSuccessAt ? fmt(scan.lastSuccessAt) : 'Waiting for first scan' %></dd></div>
+    <div><dt>Captured in last scan</dt><dd><%= scan.at ? scan.captured : '—' %></dd></div>
+    <div><dt>Waiting to be read</dt><dd><%= mail.waiting + mail.reading %></dd></div>
+    <div><dt>Updates to review</dt><dd><%= suggestions.length %></dd></div>
+  </dl>
+  <% if (scan.at || mail.read || mail.unreadable || mail.stale) { %>
+    <p class="house-meta">
+      <%= [
+        scan.at ? `Last attempt ${fmt(scan.at)}` : null,
+        mail.read ? `${mail.read} read` : null,
+        mail.unreadable ? `${mail.unreadable} unreadable` : null,
+        mail.stale ? `${mail.stale} expired from the queue` : null,
+        scan.failed ? `${scan.failed} could not be fetched` : null,
+        scan.deferred || scan.more ? 'More Gmail results to scan' : null,
+      ].filter(Boolean).join(' · ') %>
+    </p>
+  <% } %>
+  <% if (scan.error || mail.error || mail.failed) { %>
+    <div class="house-mail-error" role="status">
+      <div>
+        <% if (scan.error) { %><p><%= scan.error %></p><% } %>
+        <% if (mail.error || mail.failed) { %><p><%= mail.error || `${mail.failed} emails could not be read.` %></p><% } %>
+      </div>
+      <% if (mail.failed) { %>
+        <form method="post" action="<%= base %>/mail/retry"><button class="btn" type="submit">Retry failed emails</button></form>
+      <% } %>
+    </div>
+  <% } %>
+  <% if (mail.attention?.length) { %>
+    <details class="house-aging">
+      <summary>Messages to check in Gmail</summary>
+      <ul class="house-events">
+        <% for (const m of mail.attention) { %>
+          <li class="house-event">
+            <div>
+              <a class="house-event-title" target="_blank" rel="noopener noreferrer" href="<%= gmailUrl(m.gmail_id) %>"><%= m.subject || 'Open email' %></a>
+              <p class="house-meta"><%= fmt(m.occurred_at) %> · <%= m.error || 'No readable email text was available.' %></p>
+            </div>
+          </li>
+        <% } %>
+      </ul>
+    </details>
+  <% } %>
+</section>
+
+<section class="house-section" aria-labelledby="house-review-heading">
+  <header class="house-section-head"><h2 id="house-review-heading">Review updates</h2></header>
+  <% if (!suggestions.length) { %><p class="house-empty">No email updates waiting for review.</p><% } %>
+  <div class="house-review-list">
+    <% for (const s of suggestions) { %>
+      <% const listing = s.listing, target = propertiesById.get(s.property_id), replaces = events.find(e => e.id === s.replaces_id); %>
+      <article class="house-review-card">
+        <div class="house-review-heading">
+          <div>
+            <p class="house-context"><%= kinds[s.kind] %></p>
+            <h3><%= s.title %></h3>
+          </div>
+          <% if (s.status) { %><span class="house-status" data-status="<%= s.status %>"><%= label(s.status) %></span><% } %>
+        </div>
+        <% if (listing) { %>
+          <p class="house-detail">
+            <strong><%= listing.address || listing.title %></strong>
+            <%= [listing.asking_price == null ? '' : cost(listing.asking_price), listing.beds == null ? '' : listing.beds === 0 ? 'Studio' : `${listing.beds} bed`, listing.area == null ? '' : `${listing.area} m²`].filter(Boolean).join(' · ') %>
+          </p>
+          <% if (linkUrl(listing.url)) { %><a class="house-inline" href="<%= linkUrl(listing.url) %>" target="_blank" rel="noopener noreferrer">Open listing</a><% } %>
+        <% } %>
+        <% if (s.day || s.time || s.amount != null || s.person) { %>
+          <p class="house-meta"><%= [s.day && entryDate(s.day), s.time, s.amount != null && cost(s.amount), s.person].filter(Boolean).join(' · ') %></p>
+        <% } %>
+        <% if (s.details) { %><p class="house-detail"><%= s.details %></p><% } %>
+        <% if (s.quote) { %><blockquote><%= s.quote %></blockquote><% } %>
+        <% if (s.gmail_id) { %>
+          <a class="house-source" href="<%= gmailUrl(s.gmail_id) %>" target="_blank" rel="noopener noreferrer"><%- icon.email %> <%= s.source_direction === 'sent' ? 'Sent' : 'Received' %> email · <%= fmt(s.occurred_at) %></a>
+        <% } %>
+        <div class="house-review-actions">
+          <form method="post" class="house-review-confirm" action="<%= base %>/mail/<%= encodeURIComponent(s.id) %>/accept">
+            <% if (properties.length) { %>
+              <label>Property
+                <select class="input" name="property_id">
+                  <% if (s.kind !== 'listing') { %>
+                    <option value="none">No property selected</option>
+                  <% } else if (!target) { %>
+                    <option value="">Save as new property</option>
+                  <% } %>
+                  <% for (const p of properties) { %><option value="<%= p.id %>" <% if (p.id === target?.id) { %>selected<% } %>><%= p.title %></option><% } %>
+                </select>
+              </label>
+            <% } %>
+            <% if (replaces) { %>
+              <label class="house-check house-replaces"><input name="replace_id" type="checkbox" value="<%= replaces.id %>">
+                Supersede “<%= replaces.title %>”<%= replaces.day ? ` (${entryDate(replaces.day)}${replaces.time ? ` at ${replaces.time}` : ''})` : '' %>
+              </label>
+            <% } %>
+            <button class="btn primary" type="submit"><%= listing && s.kind === 'listing' ? 'Save listing update' : 'Confirm update' %></button>
+          </form>
+          <form action="<%= base %>/mail/<%= encodeURIComponent(s.id) %>/dismiss" method="post"><button class="btn text" type="submit" aria-label="Dismiss <%= s.title %>">Dismiss</button></form>
+        </div>
+      </article>
+    <% } %>
+  </div>
+</section>
+
+<% const confirmedMail = [...events, ...archived].filter(e => e.gmail_id).sort((a, b) => b.occurred_at - a.occurred_at); %>
+<% if (confirmedMail.length) { %>
+  <section class="house-section">
+    <header class="house-section-head"><h2>Confirmed email updates</h2></header>
+    <%- include('_events', { entries: confirmedMail, emptyText: '' }) %>
+  </section>
+<% } %>

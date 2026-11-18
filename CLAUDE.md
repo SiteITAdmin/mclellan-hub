@@ -53,6 +53,17 @@ without requiring Douglas to trigger it manually. When in doubt, do the work.
 
 ## Rebuilding
 
+House hunting lives at `/crm/personal/house` and is linked from the Hub and Personal
+navigation. It keeps saved properties, the purchase plan, viewing dates, offers and
+confirmed email updates. The `crm_house_tick` job searches the owner's Gmail for
+Daft sale alerts, purchase correspondence, saved addresses and follow-ups in
+relevant threads. The initial search covers 30 days and then runs about every
+15 minutes with bounded catch-up. The Mac reads one email at a time through
+`crm_house_mail`. Verified excerpts become suggestions with links to Gmail.
+Accepting a suggestion can save a property, update its asking price or supersede
+an older viewing or other entry. Source text is dropped after reading or after
+14 days while waiting or failed. Review, scan status and retry are on Mail review.
+
 Douglas is choosing new functions one at a time. **Do not add a feature he has
 not agreed to**, and do not restore Version Old code wholesale: lift only the
 specific idea, re-implemented small. If a new function needs a table, a job, or

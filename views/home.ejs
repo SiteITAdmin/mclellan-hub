@@ -22,6 +22,7 @@
   const shortcuts = s => [
     pill(`/crm/${s}/calendar`, 'calendar', 'Calendar'), pill(`/crm/${s}/meetings`, 'meeting', 'Meetings'), pill(`/crm/${s}/tasks`, 'tasks', 'Tasks'), pill(`/crm/${s}/people`, 'people', 'People'),
     pill(`/crm/${s}/projects`, 'projects', 'Projects'), pill(`/crm/${s}/search`, 'search', 'Search'), pill(`/crm/${s}/note`, 'plus', 'Add a note'),
+    ...(s === 'personal' ? [pill('/crm/personal/house', 'projects', 'House hunting')] : []),
   ].join('');
   const row = (href, ic, name, what) => `<li><a href="${href}">${icon[ic]}<span class="name">${name}</span><span class="what">${what}</span></a></li>`;
 %>

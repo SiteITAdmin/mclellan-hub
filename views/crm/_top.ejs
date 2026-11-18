@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/crm.css">
   <% if (page === 'money') { %><link rel="stylesheet" href="/money.css"><% } %>
+  <% if (page === 'house') { %><link rel="stylesheet" href="/house.css"><% } %>
   <link rel="manifest" href="/crm.webmanifest">
   <meta name="theme-color" content="#f5f2ec">
 </head>
@@ -33,6 +34,7 @@
     ${nav(`/crm/${base}/meetings`, 'meeting', 'Meetings', 'meetings')}
     ${nav(`/crm/${base}/search`, 'search', 'Search', 'search')}
     ${base === 'personal' ? nav('/crm/personal/money', 'note', 'Money', 'money') : ''}
+    ${base === 'personal' ? nav('/crm/personal/house', 'projects', 'House hunting', 'house') : ''}
     <div class="nav-group">Both spaces</div>
     ${nav('/crm/review', 'review', 'Who is this?', 'review', reviewAll ? `<span class="count">${reviewAll}<span class="sr-only"> waiting</span></span>` : '')}
     ${nav('/crm/messages', 'note', 'iMessage', 'messages')}

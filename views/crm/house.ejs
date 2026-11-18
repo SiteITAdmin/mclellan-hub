@@ -1,0 +1,32 @@
+<%- include('_top') %>
+<div class="house">
+  <header class="house-hero">
+    <div>
+      <p class="house-context">Personal</p>
+      <h1>House hunting</h1>
+    </div>
+    <div class="house-actions">
+      <a class="btn" href="<%= newEntry({ from: screen === 'purchase' || screen === 'viewings' ? screen : 'summary' }) %>"><%- icon.plus %> Add an entry</a>
+      <a class="btn primary" href="<%= base %>/properties/new"><%- icon.plus %> Add a property</a>
+    </div>
+  </header>
+
+  <nav class="house-tabs" aria-label="House hunting">
+    <% const tab = screen.startsWith('propert') ? 'properties' : screen; %>
+    <% for (const [key, href, name] of tabs) { %>
+      <a href="<%= href %>" <% if (key === tab) { %>aria-current="page"<% } %>><%= name %>
+        <% if (key === 'mail' && suggestions.length) { %><span class="house-tab-count"><%= suggestions.length %><span class="sr-only"> to review</span></span><% } %>
+      </a>
+    <% } %>
+  </nav>
+
+  <% if (screen === 'summary') { %><%- include('house/summary') %><% } %>
+  <% if (screen === 'properties') { %><%- include('house/properties') %><% } %>
+  <% if (screen === 'property') { %><%- include('house/property') %><% } %>
+  <% if (screen === 'viewings') { %><%- include('house/viewings') %><% } %>
+  <% if (screen === 'purchase') { %><%- include('house/purchase') %><% } %>
+  <% if (screen === 'mail') { %><%- include('house/mail') %><% } %>
+  <% if (screen === 'property-editor') { %><%- include('house/property-editor') %><% } %>
+  <% if (screen === 'entry-editor') { %><%- include('house/entry-editor') %><% } %>
+</div>
+<%- include('_bottom') %>

@@ -1,0 +1,22 @@
+<section class="house-section house-editor">
+  <a class="house-inline" href="<%= record.id ? propertyUrl(record.id) : `${base}/properties` %>">← <%= record.id ? 'Back to property' : 'All properties' %></a>
+  <header class="house-section-head house-record-head"><h2><%= record.id ? 'Edit property' : 'Add a property' %></h2></header>
+  <form class="house-fields" method="post" action="<%= record.id ? propertyUrl(record.id) : `${base}/properties` %>">
+    <label>Property name <input class="input" type="text" name="title" value="<%= record.title || '' %>" maxlength="240" placeholder="e.g. 14 Main Street"></label>
+    <label>Address <input class="input" type="text" name="address" value="<%= record.address || '' %>" maxlength="300"></label>
+    <label class="house-field-wide">Listing link <input class="input" type="url" name="url" value="<%= record.url || '' %>" maxlength="2000" placeholder="https://www.daft.ie/…"></label>
+    <label>Asking price (€) <input class="input" type="number" name="asking_price" value="<%= record.asking_price ?? '' %>" min="0" max="100000000" step="1" inputmode="numeric"></label>
+    <label>Stage
+      <select class="input" name="status">
+        <% for (const [value, name] of Object.entries(stages)) { %><option value="<%= value %>" <% if (value === (record.status || 'researching')) { %>selected<% } %>><%= name %></option><% } %>
+      </select>
+    </label>
+    <label>Bedrooms <input class="input" type="number" name="beds" value="<%= record.beds ?? '' %>" min="0" max="100" step="1" inputmode="numeric"></label>
+    <label>Floor area (m²) <input class="input" type="number" name="area" value="<%= record.area ?? '' %>" min="0" max="100000" step="any" inputmode="decimal"></label>
+    <label class="house-field-wide">Notes <textarea class="textarea" name="notes" rows="5" maxlength="10000"><%= record.notes || '' %></textarea></label>
+    <div class="house-actions house-field-wide">
+      <button class="btn primary" type="submit">Save property</button>
+      <a class="btn text" href="<%= record.id ? propertyUrl(record.id) : `${base}/properties` %>">Cancel</a>
+    </div>
+  </form>
+</section>

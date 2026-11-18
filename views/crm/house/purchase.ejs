@@ -1,0 +1,41 @@
+<% const groups = [
+  ['Mortgage', 'mortgage', 'Record applications, approval in principle, lender contact and expiry dates.'],
+  ['Solicitor', 'legal', 'Record quotes, your instruction to a solicitor and legal deadlines.'],
+  ['Purchase milestones & tasks', 'milestone', 'Keep track of the survey, valuation, contracts and closing.'],
+]; %>
+<div class="house-pair">
+  <% for (const [heading, kind, help] of groups) { %>
+    <section class="house-section">
+      <header class="house-section-head">
+        <h2><%= heading %></h2>
+        <a class="btn small" href="<%= newEntry({ kind, from: 'purchase' }) %>"><%- icon.plus %> Add entry</a>
+      </header>
+      <% const matches = e => e.kind === kind || (kind === 'milestone' && e.kind === 'task'); %>
+      <%- include('_events', { entries: events.filter(matches), emptyText: help }) %>
+      <% if (archived.some(matches)) { %>
+        <details class="house-aging"><summary>Superseded updates</summary>
+          <%- include('_events', { entries: archived.filter(matches), emptyText: '' }) %>
+        </details>
+      <% } %>
+    </section>
+  <% } %>
+  <section class="house-section">
+    <header class="house-section-head">
+      <h2>Common steps</h2>
+      <a class="btn small" href="<%= newEntry({ kind: 'task', from: 'purchase' }) %>"><%- icon.plus %> Add task</a>
+    </header>
+    <ul class="house-steps">
+      <% for (const step of checklist) { %>
+        <% const e = events.find(e => e.kind === step.kind && e.title === step.title); %>
+        <li>
+          <%= step.title %>
+          <% if (e) { %>
+            <a class="house-status" data-status="<%= e.status %>" href="<%= entryUrl(e.id) %>?from=purchase"><%= label(e.status) %></a>
+          <% } else { %>
+            <a class="house-inline" href="<%= newEntry({ ...step, from: 'purchase' }) %>" aria-label="Track <%= step.title %>">Track step</a>
+          <% } %>
+        </li>
+      <% } %>
+    </ul>
+  </section>
+</div>
