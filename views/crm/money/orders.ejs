@@ -1,0 +1,43 @@
+<%- include('../_top') %>
+<%
+  const day = d => d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '';
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
+  const when = t => t ? new Date(t * 1000).toLocaleString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' }) : '';
+  const reading = v.mails.waiting + v.mails.queued;
+%>
+<div class="title-row"><div><h1>Orders</h1><p class="subline">Receipts and order confirmations found in douglas@mclellan.scot, looked for once a day. Each is kept with its shop, day and total, ready to be matched to a card payment. They are not spending: the bank's lines are what count.</p></div></div>
+<%- include('_nav') %>
+<% for (const p of v.problems) { %>
+<div class="flash bad" role="alert"><%= p.text %> <% if (p.retry) { %><form class="inline-form" method="post" action="<%= p.retry %>"><button class="btn small" type="submit">Try again</button></form><% } %></div>
+<% } %>
+
+<section class="grid first">
+  <div class="panel s12" aria-label="The daily search">
+    <div class="panel-head"><h2>Your email</h2><% if (reading) { %><span class="chip"><%= plural(reading, 'mail') %> being read</span><% } %></div>
+    <p class="money-compare">
+      <% if (v.last) { %>Last searched <%= when(v.last.at) %>: <%= plural(v.last.listed, 'mail') %> looked like receipts, <%= v.last.fetched %> new<%= v.last.failed ? `, ${v.last.failed} could not be fetched` : '' %><%= v.last.left ? `, ${v.last.left} left for tomorrow` : '' %>.
+      <% } else { %>Not searched yet. The first search looks back <%= v.windowDays %> days.<% } %>
+      <% if (v.pending) { %> Next search: today from <%= v.scanHour %>:00.<% } else { %> Next search: tomorrow from <%= v.scanHour %>:00.<% } %>
+    </p>
+    <form class="inline-form" method="post" action="<%= base %>/orders/scan"><button class="btn small" type="submit">Search now</button></form>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="panel s12">
+    <div class="panel-head"><h2>Found</h2><% if (v.open.length) { %><span class="chip"><%= plural(v.open.length, 'order') %></span><% } %></div>
+    <% if (!v.open.length) { %><div class="empty"><%= v.last ? 'Nothing found yet.' : 'Nothing yet.' %><%= reading ? ' Mail is still being read.' : '' %></div><% } %>
+    <% for (const o of v.orders) { %>
+    <div class="price-row order-row<%= o.status === 'cancelled' ? ' order-cancelled' : '' %>" id="order-<%= o.id %>">
+      <div class="price-what">
+        <strong><%= o.merchant %> · <%= day(o.ordered_on) %><% if (o.status === 'cancelled') { %> <span class="pill neutral">Cancelled</span><% } else if (o.kind === 'receipt') { %> <span class="pill neutral">Receipt</span><% } %></strong>
+        <% if (o.items.length) { %><span><%= o.items.slice(0, 3).map(i => (i.quantity > 1 ? `${i.quantity} × ` : '') + (i.name.length > 90 ? `${i.name.slice(0, 87)}…` : i.name)).join('; ') %><%= o.items.length > 3 ? `; and ${o.items.length - 3} more` : '' %></span><% } %>
+        <span class="money-small"><%= o.order_ref ? `Order ${o.order_ref}` : '' %><%= o.order_ref && o.payment ? ' · ' : '' %><%= o.payment %><% if (o.link) { %><%= o.order_ref || o.payment ? ' · ' : '' %><a href="<%= o.link %>" target="_blank" rel="noopener noreferrer">open the email</a><% } %></span>
+      </div>
+      <div class="price-gap"><span class="money-amount"><%= o.shown %></span>
+        <% if (o.status === 'open') { %><form class="inline-form" method="post" action="<%= base %>/orders/dismiss"><input type="hidden" name="id" value="<%= o.id %>"><button class="btn text small" type="submit">Not an order</button></form><% } %>
+      </div>
+    </div>
+    <% } %>
+  </div>
+</section>

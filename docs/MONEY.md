@@ -12,7 +12,7 @@ Screens: `/crm/personal/money` (Overview + upload), `/budget`, `/transactions`, 
 
 ## Architecture
 
-Nine modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
+Ten modules in `lib/crm/money/`, each owning its tables (`SCHEMA`), routes (`mount(router, h)`),
 background work (`tick()`) and Overview card (`summary()`). `index.js` runs them. One job,
 `crm_money_tick` (60 s, `lib/crm/jobs.js`), calls every module's `tick()` through `runs.track`
 under the name `money_<module>`, so a failure is recorded and shown (rule 5). Routes are
@@ -190,16 +190,50 @@ already exist in Money. No model is involved; `budget.tick` only makes sure the 
 - **The weekly challenge** is given `budget` and `budget_line` statistics and told to hold him to the
   plan, saying whether it was a cap, his own figure or only his average.
 
+## Orders from email
+
+Asked for 18 Nov 2026: once a day, scan douglas@mclellan.scot for receipts and order confirmations, so each
+can be matched to a card payment later. `orders.js`, tables `money_order_mails`, `money_order_batches`,
+`money_orders`, screen /crm/personal/money/orders (tab Orders).
+
+- **Why it asks Gmail itself.** The Gmail capture (`lib/crm/gmail.js`) stores only mail from people Douglas
+  knows, so Amazon and every other shop never reach `sources`, and money never goes into `sources` anyway.
+  The search is `category:purchases`, receipt/order words in the subject, and "order total", "total paid"
+  and similar in the body (Amazon's "Ordered: ‘…’" mails say none of those in the subject). Sent mail and
+  mail from himself are left out. Read-only, the Hub's existing token.
+- **Once a day.** The module's tick (inside `crm_money_tick`, run name `money_orders`) searches once per
+  Dublin day, from 06:00, and again 30 minutes after a failure (a failure shows on the Money screen). The
+  first search looks back 90 days; later ones start from the last successful search less 2 days. A message
+  already held is never fetched again. At most 300 new mails are fetched per search; the rest wait for
+  the next day. "Search now" on the screen brings the next tick forward.
+- **Reading.** New mail waits in `money_order_mails` and goes to the Mac reader (`crm_money_mail`, Sonnet,
+  8 mails to a batch, one batch in flight, 4 an hour). Mail not read within 14 days is dropped, not caught
+  up on. The mail text is removed once read (and from the job queue's packet), and in any case after 30 days.
+- **What is kept, and how it is checked.** Shop, order number, the day it was placed, the total and its
+  currency, the items, how it was paid, and the quote. The total must be in the mail's own text, as a
+  number; the currency must appear as a code or symbol; the quote, order number, payment line and each item
+  name must be found in the mail. A failing figure drops the finding. Where a mail shows two currencies
+  (Amazon.co.uk: the item in GBP, "Total" in EUR) the total is the one labelled Total, because that is
+  what the card is charged. The same order seen again (dispatch notice, receipt) is not added twice, keyed
+  by shop and order number (else shop, day, total and currency); a receipt firms up an order; a
+  cancellation marks it cancelled. "Not an order" sets one aside for good.
+- **Never counted.** An order is not spending. Matching to bank lines is not built: the table carries what
+  that needs (shop name normalised as the ledger does, day, total, currency, payment line).
+- Bump `VERSION` in `orders.js` when the prompt changes.
+
 ## Rules that apply to every module
 
 - **Personal only.** Only read `sources` with `space = 'personal'`. No money data is ever written to
   `sources`, `atoms` or any knowledge table, and none reaches Work screens, reports, search or the digest.
 - **Privacy to outside services.** The web search sends merchant names and product categories only: no
   amounts, account names, balances, dates of birth, addresses or Douglas's name or email.
-- **Mail already captured is the only mail access.** No new Gmail scope. Read `sources` rows
+- **Mail already captured is the only mail access, except `orders.js`.** No new Gmail scope. Read `sources` rows
   (`kind='email'`, any `atomise_status` including `held`/`ignored`: this reading creates no facts and
   does not release anything for the knowledge reader). If captured mail does not reach back far enough
-  to judge something, say so on screen instead of guessing.
+  to judge something, say so on screen instead of guessing. `orders.js` is the one exception: the Hub's
+  Gmail capture keeps only mail from people Douglas knows, so a shop's receipt is never in `sources`.
+  It searches douglas@mclellan.scot itself (read-only, the Hub's existing Gmail token) and keeps the
+  mail in its own tables, never in `sources`.
 - **Nothing is invented.** A subscription needs ≥ 2 matching charges or a mail that says so; an offer
   needs the mail's own words; a web code needs a source URL and the quoted text where it appeared, and is
   shown as *found, not tested*. Never claim a code works. Nothing is bought, cancelled, emailed or sent
@@ -226,7 +260,7 @@ already exist in Money. No model is involved; `budget.tick` only makes sure the 
   by `pragma table_info`).
 - `amount_cents` is negative for money out. Spending totals use `kind='spend' AND status!='ignored'`
   (`SPEND_SQL`); transfers and income never count.
-- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|budget|transactions|categories|receipts|prices|subscriptions|offers|challenge>`,
+- Views: `views/crm/money/*.ejs`, rendered with `page: 'money'`, `tab: <overview|budget|transactions|categories|receipts|orders|prices|subscriptions|offers|challenge>`,
   and `<%- include('_nav') %>` from `views/crm/money/_nav.ejs` (include path `money/_nav` from `views/crm/`).
   Styles go in your own marked section of `public/money.css`.
 - Tests: `test/crm-money-<module>.test.js`, node:test, temp `CRM_DB_PATH`/`HUB_DB_PATH`, `HUB_DISABLE_JOBS=1`

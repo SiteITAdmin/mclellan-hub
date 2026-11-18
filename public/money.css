@@ -311,3 +311,7 @@
   .challenge-top h2 { font-size: 20px; line-height: 27px; }
 }
 /* == end insights == */
+/* == orders == */
+.order-cancelled { opacity: .6; }
+.order-cancelled .money-amount { text-decoration: line-through; }
+/* == end orders == */
