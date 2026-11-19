@@ -114,6 +114,22 @@ test('active addresses and Eircodes can make a terse new agent thread a search c
   assert.doesNotMatch(gmail.queries[0].q, /Pine Road/);
 });
 
+test('the expanded Sent search revisits the previous 30 days once and keeps held IDs deduplicated', async () => {
+  db.setSetting('house_mail_cursor', T - 60);
+  db.setSetting('house_mail_scan', JSON.stringify({ at: T - 60, lastSuccessAt: T - 60 }));
+  db.crm().prepare('INSERT INTO house_mail (gmail_id, occurred_at, captured_at) VALUES (?, ?, ?)').run('held', T - 120, T - 60);
+  const sent = message('new', { label: 'SENT', subject: 'Request for a quote', text: 'I am buying a home and need your help with the legal work.' });
+  const gmail = fakeGmail({ messages: [message('held'), sent] });
+  const scan = await mail.tickScan({ gmail, t: T });
+  assert.equal(scan.captured, 1);
+  assert.match(gmail.queries[0].q, new RegExp(`after:${T - 30 * 86400} `));
+  assert.match(gmail.queries[0].q, /\(in:sent \{[^}]*"buying a home"/);
+  assert.deepEqual(gmail.gets, ['new']);
+  assert.equal(await mail.tickScan({ gmail, t: T + 60 }), null);
+  await mail.tickScan({ gmail, t: T + 900 });
+  assert.match(gmail.queries[1].q, new RegExp(`after:${T - 3600} `));
+});
+
 test('Gmail page token is saved with its time window and transient fetch failures retry without refetching good mail', async () => {
   const one = message('one', { text: 'Mortgage application accepted.' });
   const two = message('two', { text: 'Mortgage valuation received.' });

@@ -136,6 +136,64 @@ test('one alert can suggest multiple houses, with source verification and an exp
   assert.equal(queue.getJob(job.id).result, null);
 });
 
+test('outbound solicitor outreach is found as a request and a later reply sees the pending thread context', async () => {
+  const contact = 'Avery Quinn <avery@example.ie>';
+  const owner = 'Douglas <douglas@mclellan.scot>';
+  const request = 'We’re buying an apartment and would like a quote for handling the legal work.';
+  const confirmation = 'We confirm that we have been instructed and will act for you.';
+  const threadId = 'legal-thread';
+  const intro = { id: 'outreach', threadId };
+  const reply = { id: 'engagement', threadId };
+  const unrelated = { id: 'unrelated', threadId: 'unrelated-thread' };
+  const messages = [intro];
+  const fetched = [];
+  const gmail = { users: { messages: {
+    async list({ q }) {
+      if (!q.includes('from:daft.ie')) return { data: { messages } };
+      const findsOutreach = /\(in:sent \{[^}]*"buying an apartment"/.test(q) && !q.includes('-in:sent');
+      return { data: { messages: findsOutreach ? [intro] : [] } };
+    },
+    async get({ id }) {
+      fetched.push(id);
+      const sent = id === intro.id;
+      const body = sent ? request : `${confirmation}\n\nOn Wednesday, Douglas wrote:\n${request}`;
+      return { data: {
+        id, threadId, internalDate: String((sent ? T : T + 900) * 1000), labelIds: [sent ? 'SENT' : 'INBOX'],
+        payload: {
+          headers: [
+            { name: 'From', value: sent ? owner : contact }, { name: 'To', value: sent ? contact : owner },
+            { name: 'Subject', value: sent ? 'Could you send me a quote?' : 'Re: Could you send me a quote?' },
+          ],
+          mimeType: 'text/plain', body: { data: Buffer.from(body).toString('base64url') },
+        },
+      } };
+    },
+  } } };
+  assert.equal((await mail.scan({ gmail, t: T })).captured, 1);
+  const jobs = fakeJobs();
+  await house.readTick({ jobs, t: T + 60 });
+  const prompt = jobs.last().payload;
+  const packet = JSON.parse(prompt.userPrompt);
+  assert.equal(packet.message.direction, 'sent');
+  assert.equal(packet.message.recipients, contact);
+  assert.match(prompt.systemPrompt, /first outreach[^.]*status requested/i);
+  assert.match(prompt.systemPrompt, /appointed only when engagement is confirmed/i);
+  jobs.finish([{ kind: 'legal', title: 'Solicitor quote requested', status: 'requested', person: 'Avery Quinn', quote: request }]);
+  await house.readTick({ jobs, t: T + 120 });
+  assert.deepEqual(house.dashboard().suggestions.map(item => [item.status, item.source_direction]), [['requested', 'sent']]);
+
+  messages.push(reply, unrelated);
+  assert.equal((await mail.scan({ gmail, t: T + 900 })).captured, 1);
+  assert.deepEqual(fetched, [intro.id, reply.id]);
+  await house.readTick({ jobs, t: T + 960 });
+  const followup = JSON.parse(jobs.last().payload.userPrompt);
+  assert.equal(followup.message.body, confirmation);
+  assert.deepEqual(followup.earlier_thread_findings.map(item => [item.state, item.status, item.quote]), [['suggested', 'requested', request]]);
+  jobs.finish([{ kind: 'legal', title: 'Solicitor engagement confirmed', status: 'appointed', person: 'Avery Quinn', quote: confirmation }]);
+  await house.readTick({ jobs, t: T + 1020 });
+  assert.deepEqual(house.dashboard().suggestions.map(item => [item.gmail_id, item.status]), [[reply.id, 'appointed'], [intro.id, 'requested']]);
+});
+
 test('an alert seen again leaves one property while a changed asking price remains reviewable', async () => {
   house.saveProperty({ title: '6 Rowan Grove, Bray', url: ROWAN, asking_price: '410000', status: 'shortlisted' });
   const jobs = fakeJobs();

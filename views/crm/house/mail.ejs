@@ -5,7 +5,7 @@
       <button class="btn" type="submit" <% if (scan.requestedAt) { %>disabled<% } %>><%= scan.requestedAt ? 'Scan requested' : 'Request scan' %></button>
     </form>
   </header>
-  <p class="house-section-note">The Hub checks your Gmail for Daft sale alerts and house-buying correspondence. Confirm an update to add it to your tracker.</p>
+  <p class="house-section-note">The Hub checks incoming and sent Gmail for house-buying correspondence, including Daft alerts, replies and first emails to solicitors. Confirm an update to add it to your tracker.</p>
   <dl class="house-property-facts house-mail-stats">
     <div><dt>Last successful scan</dt><dd><%= scan.lastSuccessAt ? fmt(scan.lastSuccessAt) : 'Waiting for first scan' %></dd></div>
     <div><dt>Captured in last scan</dt><dd><%= scan.at ? scan.captured : '—' %></dd></div>

@@ -58,7 +58,8 @@ navigation. It keeps saved properties, the purchase plan, viewing dates, offers 
 confirmed email updates. The `crm_house_tick` job searches the owner's Gmail for
 Daft sale alerts, purchase correspondence, saved addresses and follow-ups in
 relevant threads. The initial search covers 30 days and then runs about every
-15 minutes with bounded catch-up. The Mac reads one email at a time through
+15 minutes with bounded catch-up. Sent mail includes first enquiries to
+solicitors and replies in known house-hunting threads. The Mac reads one email at a time through
 `crm_house_mail`. Verified excerpts become suggestions with links to Gmail.
 Accepting a suggestion can save a property, update its asking price or supersede
 an older viewing or other entry. Source text is dropped after reading or after
