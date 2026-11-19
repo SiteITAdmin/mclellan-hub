@@ -1,6 +1,8 @@
 'use strict';
 
 const house = require('../lib/crm/house');
+const valuation = require('../lib/crm/house/valuation');
+const { counties } = require('../lib/crm/house/sales-register');
 
 const BASE = '/crm/personal/house';
 const tabs = [
@@ -96,12 +98,13 @@ module.exports = function mountHouse(router, { spaceParam, requireSameOrigin, wr
   router.get(prefix, (req, res) => show(res, 'summary'));
   router.get(`${prefix}/properties`, (req, res) => show(res, 'properties', model('properties', req.query)));
   router.get(`${prefix}/properties/new`, (req, res) => show(res, 'property-editor', { ...model('property-editor'), record: {} }));
-  router.get(`${prefix}/properties/:id`, (req, res) => {
+  function showProperty(req, res, locals = {}) {
     const data = model('property');
     const property = data.propertiesById.get(req.params.id);
     if (!property) return res.status(404).send('Property not found');
-    show(res, 'property', { ...data, property });
-  });
+    show(res, 'property', { ...data, property, valuation: valuation.get(property), manualComps: valuation.listComparables(property), counties, ...locals });
+  }
+  router.get(`${prefix}/properties/:id`, (req, res) => showProperty(req, res));
   router.get(`${prefix}/properties/:id/edit`, (req, res) => {
     const data = model('property-editor');
     const record = data.propertiesById.get(req.params.id);
@@ -135,8 +138,8 @@ module.exports = function mountHouse(router, { spaceParam, requireSameOrigin, wr
   });
 
   function post(path, handler, failed) {
-    router.post(`${prefix}${path}`, requireSameOrigin, writeLimiter, (req, res) => {
-      try { handler(req, res); }
+    router.post(`${prefix}${path}`, requireSameOrigin, writeLimiter, async (req, res) => {
+      try { await handler(req, res); }
       catch (err) { failed(req, res, err.message); }
     });
   }
@@ -152,6 +155,35 @@ module.exports = function mountHouse(router, { spaceParam, requireSameOrigin, wr
   }
   post('/properties', saveProperty, propertyFailure);
   post('/properties/:id', saveProperty, propertyFailure);
+
+  function comparablePost(path, action) {
+    post(`/properties/:id/${path}`, async (req, res) => {
+      const property = house.dashboard().properties.find(p => p.id === req.params.id);
+      if (!property) return res.status(404).send('Property not found');
+      const message = await action(property, req);
+      if (message) flash(req, message);
+      res.redirect(`${propertyUrl(property.id)}#sold-price-estimate`);
+    }, (req, res, message) => {
+      showProperty(req, res.status(400), {
+        valuationError: message,
+        ...(path === 'comparables' ? { comparableForm: req.body } : {}),
+      });
+    });
+  }
+
+  comparablePost('valuation', async (property, req) => {
+    const result = await valuation.refresh(property, { county: req.body.county, locality: req.body.locality });
+    if (['unavailable', 'needs_location'].includes(result.status)) throw new Error(result.reason);
+    return 'Comparable sales refreshed.';
+  });
+  comparablePost('comparables', (property, req) => {
+    valuation.addComparable(property, req.body);
+    return 'Daft sale added.';
+  });
+  comparablePost('comparables/:compId/remove', (property, req) => {
+    valuation.removeComparable(property, req.params.compId);
+    return 'Daft sale removed.';
+  });
 
   const entryFailure = (req, res, message) => {
     const data = model('entry-editor');

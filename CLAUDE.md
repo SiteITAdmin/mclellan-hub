@@ -64,6 +64,12 @@ solicitors and replies in known house-hunting threads. The Mac reads one email a
 Accepting a suggestion can save a property, update its asking price or supersede
 an older viewing or other entry. Source text is dropped after reading or after
 14 days while waiting or failed. Review, scan status and retry are on Mail review.
+The property detail page estimates a sale range from recent comparable transactions
+in the official Residential Property Price Register. The on-demand fetch sends only
+county and year. It prefers the same estate or street, excludes new builds and
+non-market transactions from the register sample, and requires three distinct sales.
+Each estimate keeps its evidence and source date. Daft Sold links and prices can be
+saved by hand to compare asking and final prices without scraping Daft.
 
 Douglas is choosing new functions one at a time. **Do not add a feature he has
 not agreed to**, and do not restore Version Old code wholesale: lift only the
