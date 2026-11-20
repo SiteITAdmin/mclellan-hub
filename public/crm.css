@@ -691,23 +691,41 @@ details.del .btn { color: var(--negative); border-color: var(--negative); height
 .briefing-line .meta { color: var(--muted); font-size: 13px; }
 
 /* ---------- standalone tool shell (/money, /house) ---------- */
-.tool-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.tool-shell { min-height: 100vh; display: flex; flex-direction: column; overflow-x: clip; }
 .tool-bar {
-  position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 4;
   padding: 12px 24px; background: var(--ground); border-bottom: 1px solid var(--border);
 }
-.tool-bar .brand { padding: 0; }
-.tool-links { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+.tool-bar-in {
+  width: 100%; max-width: 1100px; margin: 0 auto;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.tool-brand, .tool-bar .brand {
+  display: inline-flex; align-items: center; gap: 8px; padding: 0;
+  font-weight: 600; font-size: 15px; white-space: nowrap; flex: none;
+}
+.tool-brand svg { flex: none; }
+.tool-links {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-left: auto;
+  min-width: 0;
+}
 .tool-links a {
-  height: 30px; padding: 0 11px; border-radius: 999px; display: inline-flex; align-items: center;
-  color: var(--muted); font-size: 13px; font-weight: 500;
+  min-height: 30px; padding: 5px 11px; border-radius: 999px; display: inline-flex; align-items: center;
+  color: var(--muted); font-size: 13px; font-weight: 500; white-space: nowrap; flex: none; line-height: 1.2;
 }
 .tool-links a:hover { color: var(--text); background: var(--panel); }
 .tool-links a[aria-current="page"] { background: var(--active); color: var(--text); }
-.tool-shell .canvas { padding-top: 36px; }
+.tool-canvas, .tool-shell .canvas { padding: 28px 24px 64px; min-width: 0; }
 @media (max-width: 760px) {
-  .tool-bar { padding: 10px 16px; gap: 8px; }
-  .tool-links { margin-left: 0; width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .tool-bar { padding: 10px 14px; }
+  .tool-bar-in { gap: 8px; }
+  .tool-links {
+    margin-left: 0; width: 100%; overflow-x: auto; flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 2px;
+  }
+  .tool-links::-webkit-scrollbar { display: none; }
+  .tool-canvas, .tool-shell .canvas { padding: 16px 12px 48px; }
+  .input, .select, .textarea { font-size: 16px; }
 }
 
 /* ---------- Today action strip & collapsible details ---------- */

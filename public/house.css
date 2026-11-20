@@ -333,7 +333,7 @@ a.house-event-title:hover { color: var(--house-accent); text-decoration: underli
   border: 1px solid var(--house-border);
   border-radius: 12px;
 }
-.house-property-facts div { padding: 11px 13px; background: var(--house-paper); }
+.house-property-facts div { padding: 11px 13px; background: var(--house-paper); min-width: 0; }
 .house-property-facts dt { color: var(--house-quiet); font-size: .82rem; }
 .house-property-facts dd { margin: 4px 0 0; font-weight: 600; font-size: .98rem; }
 .house-property-actions { margin-top: 15px; }
@@ -449,6 +449,8 @@ a.house-event-title:hover { color: var(--house-accent); text-decoration: underli
   border-radius: 12px;
   background: var(--house-paper);
 }
+.house-valuation-summary > * { min-width: 0; }
+.house-valuation-trio { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); align-items: start; }
 .house-valuation-range {
   margin: 5px 0;
   font: 400 clamp(1.85rem, 4vw, 2.85rem)/1.08 var(--serif);
@@ -481,14 +483,7 @@ a.house-event-title:hover { color: var(--house-accent); text-decoration: underli
 .house-valuation-table .house-event-links .house-source { display: inline; margin-top: 0; }
 .house-valuation-manual { padding-top: 12px; border-top: 1px solid var(--house-border); }
 .house-valuation-manual .house-fields { max-width: 680px; }
-@media (max-width: 550px) {
-  .house-valuation-summary { grid-template-columns: 1fr; }
-  .house-valuation-mid { padding: 8px 0 0; border: 0; border-top: 1px solid var(--house-border); }
-  .house-valuation-filter label { flex: 1 1 100%; }
-  .house-valuation-filter label:nth-child(2) { flex-basis: 100%; max-width: none; }
-}
 
-.house-valuation-trio { grid-template-columns: minmax(0, 1.35fr) repeat(auto-fit, minmax(165px, 1fr)); }
 .house-gap-box {
   margin: 12px 0;
   padding: 12px 15px;
@@ -529,4 +524,47 @@ a.house-event-title:hover { color: var(--house-accent); text-decoration: underli
 .house-num-filter { width: 125px; }
 .house-photo-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 12px; }
 .house-photo-checks h4 { margin: 0 0 4px; font-size: .88rem; color: var(--house-accent); }
-@media (max-width: 720px) { .house-photo-checks { grid-template-columns: 1fr; } }
+
+@media (max-width: 720px) {
+  .house-photo-checks { grid-template-columns: 1fr; }
+  .house-valuation-summary,
+  .house-valuation-trio { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .house-valuation-mid { padding: 10px 0 0; border-left: 0; border-top: 1px solid var(--house-border); }
+}
+@media (max-width: 600px) {
+  .house-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 16px;
+    padding: 0 4px;
+    margin: 12px 0 18px;
+  }
+  .house-tabs::-webkit-scrollbar { display: none; }
+  .house-tabs a { flex: none; padding: 8px 2px 10px; }
+  .house-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    align-items: end;
+  }
+  .house-filters .input,
+  .house-num-filter { width: 100%; }
+  .house-filters label:first-child,
+  .house-filters label:last-of-type:nth-child(2),
+  .house-filters > a { grid-column: 1 / -1; }
+  .house-filters button[type="submit"] { grid-column: 1 / -1; width: 100%; }
+  .house-valuation-filter label:nth-child(2) { max-width: none; grid-column: 1 / -1; }
+  .house-table-scroll { -webkit-overflow-scrolling: touch; }
+  .house-table th:first-child { position: static; }
+  .house .btn {
+    max-width: 100%;
+    height: auto;
+    min-height: var(--control-height);
+    padding: 8px 14px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+  }
+}
