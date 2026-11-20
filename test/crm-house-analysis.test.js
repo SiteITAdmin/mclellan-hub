@@ -633,3 +633,51 @@ test('auctioneer / estate agent tracking builds asking-vs-sold margin patterns a
     server.close();
   }
 });
+
+test('existing crm.db without seller columns migrates cleanly on startup', () => {
+  const Database = require('better-sqlite3');
+  const oldPath = path.join(dir, 'legacy-pre-seller.db');
+  const seed = new Database(oldPath);
+  seed.exec(`
+    CREATE TABLE house_properties (
+      id TEXT PRIMARY KEY, title TEXT NOT NULL, address TEXT NOT NULL DEFAULT '',
+      url TEXT NOT NULL DEFAULT '', daft_id TEXT UNIQUE, asking_price INTEGER,
+      beds INTEGER, area REAL, status TEXT NOT NULL DEFAULT 'researching',
+      notes TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE house_daft_sold (
+      source_id TEXT PRIMARY KEY, county TEXT NOT NULL DEFAULT '', locality TEXT NOT NULL DEFAULT '',
+      address TEXT NOT NULL, day TEXT NOT NULL, sold INTEGER NOT NULL, asking INTEGER,
+      beds INTEGER, baths INTEGER, area REAL, property_type TEXT NOT NULL DEFAULT '',
+      ber TEXT NOT NULL DEFAULT '', lat REAL, lng REAL, url TEXT NOT NULL, fetched_at INTEGER NOT NULL
+    );
+    CREATE TABLE house_listing_analysis (
+      property_id TEXT PRIMARY KEY, url TEXT NOT NULL DEFAULT '', fetched_at INTEGER NOT NULL DEFAULT 0,
+      property_type TEXT NOT NULL DEFAULT '', ber TEXT NOT NULL DEFAULT '', baths INTEGER,
+      selling_type TEXT NOT NULL DEFAULT '', date_of_construction TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '', features_json TEXT NOT NULL DEFAULT '[]',
+      facilities_json TEXT NOT NULL DEFAULT '[]', signals_json TEXT NOT NULL DEFAULT '[]',
+      heating_text TEXT NOT NULL DEFAULT '', images_json TEXT NOT NULL DEFAULT '[]',
+      photo_status TEXT NOT NULL DEFAULT 'idle', photo_job_id TEXT, photo_queued_at INTEGER,
+      photo_result_json TEXT, photo_error TEXT NOT NULL DEFAULT '', photo_model TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  seed.close();
+
+  const prev = process.env.CRM_DB_PATH;
+  try {
+    crmDb._reset();
+    process.env.CRM_DB_PATH = oldPath;
+    const migrated = crmDb.crm();
+    const cols = migrated.prepare('PRAGMA table_info(house_daft_sold)').all().map(c => c.name);
+    assert.ok(cols.includes('seller_key'));
+    assert.ok(cols.includes('seller_agency'));
+    const propCols = migrated.prepare('PRAGMA table_info(house_properties)').all().map(c => c.name);
+    assert.ok(propCols.includes('baths'));
+    assert.ok(propCols.includes('seller_agency'));
+  } finally {
+    crmDb._reset();
+    process.env.CRM_DB_PATH = prev;
+  }
+});
