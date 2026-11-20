@@ -84,21 +84,27 @@ function listingLabel(value) {
   return 'Open listing ↗';
 }
 
+function streetViewPanoUrl(lat, lng) {
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+}
+
 function streetViewUrl(target) {
   if (!target) return '';
-  const rawLat = target.lat ?? target.listing_lat;
-  const rawLng = target.lng ?? target.listing_lng;
+  const rawLat = target.listing_lat ?? target.lat;
+  const rawLng = target.listing_lng ?? target.lng;
   if (rawLat != null && rawLng != null && rawLat !== '' && rawLng !== '') {
     const lat = Number(rawLat);
     const lng = Number(rawLng);
     if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
-      return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+      return streetViewPanoUrl(lat, lng);
     }
   }
   const raw = String(target.address || target.title || '').trim();
   if (!raw) return '';
-  const query = /\bireland\b/i.test(raw) ? raw : `${raw}, Ireland`;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  const qs = new URLSearchParams();
+  if (target.id && typeof target.id === 'string' && !target.source_id) qs.set('id', target.id);
+  qs.set('q', raw);
+  return `${BASE}/streetview?${qs}`;
 }
 
 function newEntry(query = {}) {
@@ -172,6 +178,22 @@ function show(res, screen, data = model(screen)) {
 }
 
 router.get(BASE, (req, res) => show(res, 'summary'));
+router.get(`${BASE}/streetview`, async (req, res) => {
+  const id = typeof req.query.id === 'string' ? req.query.id.trim() : '';
+  const prop = id ? house.dashboard().properties.find(p => p.id === id) : null;
+  if (prop && prop.listing_lat != null && prop.listing_lng != null) {
+    return res.redirect(streetViewPanoUrl(prop.listing_lat, prop.listing_lng));
+  }
+  const address = String((prop && (prop.address || prop.title)) || (typeof req.query.q === 'string' ? req.query.q : '')).trim().slice(0, 300);
+  if (!address) return res.redirect(`${BASE}/properties`);
+  const hit = await house.geocodeAddress(address);
+  if (hit) {
+    if (prop) house.saveCoordinates(prop.id, hit.lat, hit.lng);
+    return res.redirect(streetViewPanoUrl(hit.lat, hit.lng));
+  }
+  const query = /\bireland\b/i.test(address) ? address : `${address}, Ireland`;
+  res.redirect(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`);
+});
 router.get(`${BASE}/properties`, (req, res) => show(res, 'properties', model('properties', req.query)));
 router.get(`${BASE}/properties/new`, (req, res) => show(res, 'property-editor', { ...model('property-editor'), record: {} }));
 function showProperty(req, res, locals = {}) {

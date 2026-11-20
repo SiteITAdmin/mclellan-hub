@@ -277,12 +277,31 @@ test('listing inspection + multi-image photo heating analysis runs through model
     const html = await (await fetch(`${base}/house/properties/${prop.id}`)).text();
     assert.match(html, /View on Daft ↗/);
     assert.match(html, /Street View ↗/);
-    assert.match(html, /google\.com\/maps\/search\/\?api=1&amp;query=.*Santry/);
+    assert.match(html, new RegExp(`/house/streetview\\?id=${prop.id}&amp;q=.*Santry`));
     assert.match(html, /Vacant Home \/ Derelict Grant/);
     assert.match(html, /Gas central heating likely/);
     assert.match(html, /White wall-mounted gas boiler/);
     assert.match(html, /1 bathroom\/shower \+ WC\/cloakroom only/);
     assert.match(html, /Downstairs WC/);
+
+    // Once coordinates are saved, Street View links directly to the Google Street View panorama
+    house.saveCoordinates(prop.id, 53.3951, -6.2452);
+    const panoHtml = await (await fetch(`${base}/house/properties/${prop.id}`)).text();
+    assert.match(panoHtml, /google\.com\/maps\/@\?api=1&amp;map_action=pano&amp;viewpoint=53\.3951,-6\.2452/);
+
+    // /house/streetview redirects straight to the saved panorama
+    const svRes = await fetch(`${base}/house/streetview?id=${prop.id}`, { redirect: 'manual' });
+    assert.equal(svRes.status, 302);
+    assert.equal(svRes.headers.get('location'), 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=53.3951,-6.2452');
+
+    // Geocoder strips leading Apt/No prefixes on retry and returns lat/lng
+    const geo = await house.geocodeAddress('Apt 2, Millrace Park, Saggart, Co. Dublin', {
+      fetcher: async url => ({
+        ok: true,
+        json: async () => url.includes('Apt') ? [] : [{ lat: '53.2809463', lon: '-6.4527956' }],
+      }),
+    });
+    assert.deepEqual(geo, { lat: 53.2809463, lng: -6.4527956 });
 
     // Filter by price range + minBeds + minBaths
     const filteredHtml = await (await fetch(`${base}/house/properties?minPrice=250000&maxPrice=400000&minBeds=3&minBaths=2`)).text();
