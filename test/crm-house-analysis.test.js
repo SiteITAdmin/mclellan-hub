@@ -130,12 +130,13 @@ test('Daft Sold parsing, similarity matching, 3 estimates (€/m², asking-trend
   assert.equal(apt3.count, 2);
 });
 
-test('keyword detector catches Vacant Home Grant, refurbishment, AMV, management fees, BER, and heating text', () => {
+test('keyword detector catches Vacant Home Grant, refurbishment, AMV, management fees, BER, heating, and 2nd-bath WC warning', () => {
   const { signals, heating } = daft.extractSignals({
     title: '12 Old Lane, Bray',
+    baths: 2,
     ber: 'F',
     selling_type: 'Online Auction',
-    features: ['May qualify for Vacant Property Refurbishment Grant', 'Gas fired central heating', 'Chain-free'],
+    features: ['May qualify for Vacant Property Refurbishment Grant', 'Gas fired central heating', 'Chain-free', 'Downstairs guest WC'],
     facilities: ['Parking'],
     description: 'Advised Minimum Value €260,000. In need of modernisation throughout. Annual management fee is €2,950.',
   });
@@ -147,6 +148,7 @@ test('keyword detector catches Vacant Home Grant, refurbishment, AMV, management
   assert.ok(keys.includes('management_fee'));
   assert.ok(keys.includes('ber_low'));
   assert.ok(keys.includes('chain_free'));
+  assert.ok(keys.includes('bathroom_wc_only'), 'flags when 2-bath listing mentions guest WC with no en-suite/shower room');
   assert.equal(heating.kind, 'gas');
   assert.ok(signals.every(s => s.quote && s.note));
 });
@@ -219,6 +221,15 @@ test('listing inspection + multi-image photo heating analysis runs through model
         { photo: 1, room: 'Kitchen', observation: 'White wall-mounted gas boiler with copper pipework beside upper press' },
         { photo: 2, room: 'Living room', observation: 'Double-panel plumbed wet radiator with TRV beneath window' },
       ],
+      bathroom_verdict: 'one_full_plus_wc',
+      bathroom_confidence: 'high',
+      full_bathrooms_visible: 1,
+      wc_only_visible: 1,
+      bathroom_summary: 'Advertised as 2 bathrooms, but photos show 1 main bathroom with bath/shower and 1 toilet-only downstairs WC.',
+      bathroom_evidence: [
+        { photo: 1, room: 'Main bathroom', has_bath_or_shower: true, observation: 'Bath with overhead shower and glass screen' },
+        { photo: 2, room: 'Downstairs WC', has_bath_or_shower: false, observation: 'Toilet and small handbasin only, no shower or bath' },
+      ],
       condition: 'good',
       condition_summary: 'Clean, bright interiors with modern kitchen units and double glazing.',
       notes: ['No obvious damp or structural issues visible in the photos.'],
@@ -229,9 +240,30 @@ test('listing inspection + multi-image photo heating analysis runs through model
   const collected = listing.get(updatedProp, { jobs: subJobs, t: T + 15 });
   assert.equal(collected.photo_status, 'done');
   assert.equal(collected.photo_result.heating_verdict, 'gas_likely');
-  assert.equal(collected.photo_result.heating_evidence.length, 2);
+  assert.equal(collected.photo_result.bathroom_verdict, 'one_full_plus_wc');
+  assert.equal(collected.photo_result.full_bathrooms_visible, 1);
+  assert.equal(collected.photo_result.wc_only_visible, 1);
+  assert.equal(house.dashboard().properties.find(x => x.id === prop.id).baths, 2);
 
-  // Verify HTTP rendering of property detail (with keywords + photo findings) & Area History tab
+  // Add a second smaller/dearer property to test price/beds/baths filters on /house/properties
+  house.saveProperty({
+    title: 'Small Studio Flat',
+    address: '10 Small St, Dublin 1',
+    asking_price: '210000',
+    beds: '1',
+    baths: '1',
+    status: 'researching',
+  });
+  house.saveProperty({
+    title: 'Big Detached House',
+    address: '50 Grand Ave, Bray',
+    asking_price: '650000',
+    beds: '4',
+    baths: '3',
+    status: 'shortlisted',
+  });
+
+  // Verify HTTP rendering of property detail (keywords + heating + bathroom verdict) & filters on /house/properties
   const app = express();
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, '..', 'views'));
@@ -246,6 +278,19 @@ test('listing inspection + multi-image photo heating analysis runs through model
     assert.match(html, /Vacant Home \/ Derelict Grant/);
     assert.match(html, /Gas central heating likely/);
     assert.match(html, /White wall-mounted gas boiler/);
+    assert.match(html, /1 bathroom\/shower \+ WC\/cloakroom only/);
+    assert.match(html, /Downstairs WC/);
+
+    // Filter by price range + minBeds + minBaths
+    const filteredHtml = await (await fetch(`${base}/house/properties?minPrice=250000&maxPrice=400000&minBeds=3&minBaths=2`)).text();
+    assert.match(filteredHtml, /Apartment 2, The Kilmore, Santry/);
+    assert.doesNotMatch(filteredHtml, /Small Studio Flat/);
+    assert.doesNotMatch(filteredHtml, /Big Detached House/);
+
+    const bath3Html = await (await fetch(`${base}/house/properties?minBaths=3`)).text();
+    assert.match(bath3Html, /Big Detached House/);
+    assert.doesNotMatch(bath3Html, /Apartment 2, The Kilmore, Santry/);
+
     const histRes = await fetch(`${base}/house/history`);
     assert.equal(histRes.status, 200);
     assert.match(await histRes.text(), /Area sold history/);

@@ -14,6 +14,7 @@
   <dl class="house-property-facts">
     <div><dt>Asking price</dt><dd><%= cost(p.asking_price) %></dd></div>
     <div><dt>Bedrooms</dt><dd><%= p.beds === 0 ? 'Studio' : p.beds ?? '—' %></dd></div>
+    <div><dt>Bathrooms</dt><dd><%= p.baths ?? '—' %></dd></div>
     <div><dt>Floor area</dt><dd><%= p.area == null ? '—' : `${p.area} m²` %></dd></div>
     <div><dt>Stage</dt><dd><span class="house-status" data-status="<%= p.status %>"><%= stages[p.status] || label(p.status) %></span></dd></div>
   </dl>

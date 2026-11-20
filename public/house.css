@@ -317,7 +317,7 @@ a.house-event-title:hover { color: var(--house-accent); text-decoration: underli
 .house-property-price { margin-top: 12px; }
 .house-property-facts {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
   gap: 1px;
   margin: 16px 0;
   background: var(--house-border);
@@ -516,3 +516,7 @@ a.house-event-title:hover { color: var(--house-accent); text-decoration: underli
 .house-photo-result p { margin: 8px 0 0; }
 .house-evidence-list { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: .9rem; }
 .house-area-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.house-num-filter { width: 125px; }
+.house-photo-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 12px; }
+.house-photo-checks h4 { margin: 0 0 4px; font-size: .88rem; color: var(--house-accent); }
+@media (max-width: 720px) { .house-photo-checks { grid-template-columns: 1fr; } }

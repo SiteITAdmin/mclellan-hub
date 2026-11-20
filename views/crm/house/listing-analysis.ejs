@@ -9,18 +9,24 @@
     electric_visible: { text: 'Electric heaters visible', tone: 'warn' },
     unclear: { text: 'Heating unclear from photos', tone: 'neutral' },
   };
+  const BATH_VERDICT = {
+    two_plus_full: { text: '2+ real bathrooms/shower rooms confirmed', tone: 'good' },
+    one_full_plus_wc: { text: '1 bathroom/shower + WC/cloakroom only', tone: 'warn' },
+    one_full_only: { text: 'Only 1 bathroom/shower room seen', tone: 'neutral' },
+    unclear: { text: 'Bathrooms unclear from photos', tone: 'neutral' },
+  };
   const COND_LABEL = { turnkey: 'Turnkey', good: 'Good', dated: 'Dated', needs_work: 'Needs work', unclear: 'Unclear' };
 %>
 <section class="house-section" id="listing-analysis" aria-labelledby="house-listing-heading"<% if (a?.photo_status === 'waiting') { %> data-poll-interval="5000"<% } %>>
   <header class="house-section-head">
     <div>
-      <h2 id="house-listing-heading">Listing keywords &amp; photo check</h2>
-      <p class="house-meta">Flags price-moving keywords (Vacant Home Grant, refurbishment, auction/AMV, management fees, BER) and inspects photos for gas boilers or plumbed wet radiators.</p>
+      <h2 id="house-listing-heading">Daft listing keywords &amp; photo check</h2>
+      <p class="house-meta">Automatically reads the Daft.ie listing and up to 12 of its photos — flags price-moving keywords (Vacant Home Grant, refurbishment, AMV, management fees, BER), checks for gas boilers / plumbed wet radiators, and verifies whether “2 bathrooms” means two real bath/shower rooms rather than a bathroom + toilet-only WC.</p>
     </div>
     <% if (hasDaftListing) { %>
       <div class="house-actions">
         <form method="post" action="<%= propertyPath %>/inspect#listing-analysis">
-          <button class="btn <%= a ? '' : 'primary' %>" type="submit"><%= a ? 'Re-check listing & photos' : 'Inspect listing & photos' %></button>
+          <button class="btn <%= a ? '' : 'primary' %>" type="submit"><%= a ? 'Re-check Daft listing & photos' : 'Inspect Daft listing & photos' %></button>
         </form>
         <form method="post" action="<%= propertyPath %>/inspect#listing-analysis">
           <input type="hidden" name="photos" value="0">
@@ -37,8 +43,8 @@
   <% if (a?.photo_status === 'waiting') { %>
     <noscript><meta http-equiv="refresh" content="6"></noscript>
     <div class="house-gap-box" role="status">
-      <span class="house-context">Inspecting photos</span>
-      <p>The worker is checking up to 8 listing photos for boilers, plumbed radiators, electric heaters and visible condition. This section updates automatically.</p>
+      <span class="house-context">Inspecting Daft listing photos</span>
+      <p>The worker is inspecting up to 12 photos pulled from the Daft listing for boilers, plumbed radiators, real bathrooms vs WC-only cloakrooms, and visible condition. This section updates automatically.</p>
     </div>
   <% } %>
 
@@ -46,7 +52,7 @@
     <dl class="house-property-facts">
       <div><dt>Property type</dt><dd><%= a.property_type || '—' %></dd></div>
       <div><dt>BER</dt><dd><%= a.ber || '—' %></dd></div>
-      <div><dt>Bathrooms</dt><dd><%= a.baths ?? '—' %></dd></div>
+      <div><dt>Advertised baths</dt><dd><%= a.baths ?? '—' %></dd></div>
       <div><dt>Heating (text)</dt><dd><%= a.heating?.kind === 'gas' ? 'Gas (listed)' : a.heating?.kind === 'electric' ? 'Electric (listed)' : a.heating?.kind === 'oil' ? 'Oil (listed)' : a.heating?.kind === 'heat_pump' ? 'Heat pump (listed)' : a.heating?.kind === 'district' ? 'District (listed)' : 'Not stated' %></dd></div>
     </dl>
 
@@ -68,43 +74,71 @@
       <p class="house-meta">No special price-discount keywords (such as Vacant Home Grant, auction/AMV, cash-only or refurbishment needed) were found in the listing text.</p>
     <% } %>
   <% } else if (!a) { %>
-    <p class="house-empty"><%= hasDaftListing ? 'Click "Inspect listing & photos" to extract price-factor keywords and check the listing photos for gas central heating / wet radiators.' : 'Add a Daft.ie for-sale link on this property, or upload photos below to check heating and condition.' %></p>
+    <p class="house-empty"><%= hasDaftListing ? 'Click "Inspect Daft listing & photos" to pull the listing text and photos straight from Daft.ie — checks keywords, gas heating / wet radiators, and full bathrooms vs WC-only cloakrooms.' : 'Add a Daft.ie for-sale link on this property so the Hub can pull its photos automatically, or upload viewing photos below.' %></p>
   <% } %>
 
-  <% if (a?.photo_status === 'done' && a.photo_result) { const pr = a.photo_result; const vInfo = VERDICT_LABEL[pr.heating_verdict] || VERDICT_LABEL.unclear; %>
+  <% if (a?.photo_status === 'done' && a.photo_result) {
+       const pr = a.photo_result;
+       const vInfo = VERDICT_LABEL[pr.heating_verdict] || VERDICT_LABEL.unclear;
+       const bInfo = BATH_VERDICT[pr.bathroom_verdict] || BATH_VERDICT.unclear; %>
     <div class="house-photo-result">
       <header class="house-section-head">
         <h3>Photo inspection</h3>
-        <span class="house-status" data-status="<%= vInfo.tone === 'good' ? 'approved' : vInfo.tone === 'warn' ? 'declined' : 'pending' %>"><%= vInfo.text %> (<%= pr.heating_confidence %> confidence)</span>
+        <div class="house-actions">
+          <span class="house-status" data-status="<%= vInfo.tone === 'good' ? 'approved' : vInfo.tone === 'warn' ? 'declined' : 'pending' %>"><%= vInfo.text %> (<%= pr.heating_confidence %>)</span>
+          <span class="house-status" data-status="<%= bInfo.tone === 'good' ? 'approved' : bInfo.tone === 'warn' ? 'declined' : 'pending' %>"><%= bInfo.text %> (<%= pr.bathroom_confidence %>)</span>
+        </div>
       </header>
-      <% if (pr.heating_summary) { %><p><strong>Heating:</strong> <%= pr.heating_summary %></p><% } %>
-      <% if (pr.heating_evidence && pr.heating_evidence.length) { %>
-        <ul class="house-evidence-list">
-          <% for (const ev of pr.heating_evidence) { %>
-            <li><strong><%= [ev.photo ? `Photo ${ev.photo}` : '', ev.room].filter(Boolean).join(' · ') || 'Observed' %>:</strong> <%= ev.observation %></li>
+
+      <div class="house-photo-checks">
+        <div>
+          <h4>Heating (boiler &amp; radiators)</h4>
+          <% if (pr.heating_summary) { %><p><%= pr.heating_summary %></p><% } %>
+          <% if (pr.heating_evidence && pr.heating_evidence.length) { %>
+            <ul class="house-evidence-list">
+              <% for (const ev of pr.heating_evidence) { %>
+                <li><strong><%= [ev.photo ? `Photo ${ev.photo}` : '', ev.room].filter(Boolean).join(' · ') || 'Observed' %>:</strong> <%= ev.observation %></li>
+              <% } %>
+            </ul>
           <% } %>
-        </ul>
-      <% } %>
+        </div>
+
+        <div>
+          <h4>Bathrooms (bath/shower vs WC)</h4>
+          <% if (pr.full_bathrooms_visible != null || pr.wc_only_visible != null) { %>
+            <p class="house-meta">Seen in photos: <strong><%= pr.full_bathrooms_visible ?? '?' %></strong> full bathroom/shower room<%= pr.full_bathrooms_visible === 1 ? '' : 's' %> · <strong><%= pr.wc_only_visible ?? '?' %></strong> WC/cloakroom only</p>
+          <% } %>
+          <% if (pr.bathroom_summary) { %><p><%= pr.bathroom_summary %></p><% } %>
+          <% if (pr.bathroom_evidence && pr.bathroom_evidence.length) { %>
+            <ul class="house-evidence-list">
+              <% for (const ev of pr.bathroom_evidence) { %>
+                <li><strong><%= [ev.photo ? `Photo ${ev.photo}` : '', ev.room].filter(Boolean).join(' · ') || 'Observed' %></strong> (<%= ev.has_bath_or_shower ? 'bath/shower' : 'WC only' %>): <%= ev.observation %></li>
+              <% } %>
+            </ul>
+          <% } %>
+        </div>
+      </div>
+
       <% if (pr.condition_summary) { %>
-        <p><strong>Visible condition (<%= COND_LABEL[pr.condition] || 'Unclear' %>):</strong> <%= pr.condition_summary %></p>
+        <p style="margin-top:12px"><strong>Visible condition (<%= COND_LABEL[pr.condition] || 'Unclear' %>):</strong> <%= pr.condition_summary %></p>
       <% } %>
       <% if (pr.notes && pr.notes.length) { %>
         <ul class="house-evidence-list">
           <% for (const n of pr.notes) { %><li><%= n %></li><% } %>
         </ul>
       <% } %>
-      <% if (a.photo_model) { %><p class="house-meta">Checked by <%= a.photo_model %> · <%= a.images?.length ? `${Math.min(8, a.images.length)} of ${a.images.length} listing photos inspected` : 'Uploaded photos inspected' %>.</p><% } %>
+      <% if (a.photo_model) { %><p class="house-meta">Checked by <%= a.photo_model %> · <%= a.images?.length ? `${Math.min(12, a.images.length)} of ${a.images.length} Daft listing photos inspected` : 'Uploaded photos inspected' %>.</p><% } %>
     </div>
   <% } else if (a?.photo_status === 'failed' || a?.photo_status === 'no_photos') { %>
     <p class="house-valuation-error" style="margin-top:12px"><%= a.photo_error || 'Could not analyse photos.' %></p>
   <% } %>
 
   <details class="house-aging house-valuation-manual">
-    <summary>Upload photos to check heating &amp; condition</summary>
-    <p class="house-meta">Upload up to 8 JPEG, PNG or WebP photos (from a viewing or another site) to check for a gas boiler, plumbed wet radiators, or electric heaters.</p>
+    <summary>Or upload your own viewing photos (optional)</summary>
+    <p class="house-meta">Only needed if a property isn't on Daft or you took your own viewing photos (up to 12 JPEG, PNG or WebP images).</p>
     <form class="house-filters" method="post" action="<%= propertyPath %>/photos#listing-analysis" enctype="multipart/form-data">
-      <label>Photos (max 8) <input class="input" type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple required></label>
-      <button class="btn primary" type="submit">Analyse photos</button>
+      <label>Photos (max 12) <input class="input" type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple required></label>
+      <button class="btn primary" type="submit">Analyse uploaded photos</button>
     </form>
   </details>
 </section>

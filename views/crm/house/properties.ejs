@@ -1,3 +1,15 @@
+<%
+  const hasFilters = Boolean(stage || search || minPrice != null || maxPrice != null || minBeds != null || minBaths != null);
+  const BATH_BADGE = {
+    two_plus_full: { text: '2+ full baths', status: 'approved' },
+    one_full_plus_wc: { text: '1 bath + WC only', status: 'declined' },
+  };
+  const HEAT_BADGE = {
+    gas_likely: { text: 'Gas likely', status: 'approved' },
+    wet_radiators_visible: { text: 'Wet radiators', status: 'approved' },
+    electric_visible: { text: 'Electric heating', status: 'declined' },
+  };
+%>
 <section class="house-section" aria-labelledby="house-properties-heading">
   <header class="house-section-head">
     <h2 id="house-properties-heading">Properties</h2>
@@ -9,8 +21,18 @@
       <option value="">All stages</option>
       <% for (const [value, name] of Object.entries(stages)) { %><option value="<%= value %>" <% if (value === stage) { %>selected<% } %>><%= name %></option><% } %>
     </select></label>
+    <label>Min price (€) <input type="number" class="input house-num-filter" name="minPrice" value="<%= minPrice ?? '' %>" min="0" step="5000" inputmode="numeric" placeholder="e.g. 250000"></label>
+    <label>Max price (€) <input type="number" class="input house-num-filter" name="maxPrice" value="<%= maxPrice ?? '' %>" min="0" step="5000" inputmode="numeric" placeholder="e.g. 450000"></label>
+    <label>Bedrooms <select class="input" name="minBeds">
+      <option value="">Any</option>
+      <% for (const n of [1, 2, 3, 4, 5]) { %><option value="<%= n %>" <% if (minBeds === n) { %>selected<% } %>><%= n %>+ bed</option><% } %>
+    </select></label>
+    <label>Bathrooms <select class="input" name="minBaths">
+      <option value="">Any</option>
+      <% for (const n of [1, 2, 3, 4]) { %><option value="<%= n %>" <% if (minBaths === n) { %>selected<% } %>><%= n %>+ bath</option><% } %>
+    </select></label>
     <button class="btn" type="submit">Filter</button>
-    <% if (stage || search) { %><a class="house-inline" href="<%= base %>/properties">Clear filters</a><% } %>
+    <% if (hasFilters) { %><a class="house-inline" href="<%= base %>/properties">Clear filters</a><% } %>
   </form>
 
   <% if (!properties.length) { %>
@@ -24,6 +46,10 @@
     <form method="get" action="<%= base %>/properties#compare">
       <input type="hidden" name="q" value="<%= search %>">
       <input type="hidden" name="stage" value="<%= stage %>">
+      <% if (minPrice != null) { %><input type="hidden" name="minPrice" value="<%= minPrice %>"><% } %>
+      <% if (maxPrice != null) { %><input type="hidden" name="maxPrice" value="<%= maxPrice %>"><% } %>
+      <% if (minBeds != null) { %><input type="hidden" name="minBeds" value="<%= minBeds %>"><% } %>
+      <% if (minBaths != null) { %><input type="hidden" name="minBaths" value="<%= minBaths %>"><% } %>
       <% if (visibleProperties.length > 1) { %>
         <div class="house-compare-controls">
           <p class="house-meta">Select two to four properties to compare.</p>
@@ -31,7 +57,7 @@
         </div>
       <% } %>
       <div class="house-property-grid">
-        <% for (const p of visibleProperties) { %>
+        <% for (const p of visibleProperties) { const hb = HEAT_BADGE[p.heating_verdict]; const bb = BATH_BADGE[p.bathroom_verdict]; %>
           <article class="house-property-card">
             <div class="house-property-status">
               <span class="house-status" data-status="<%= p.status %>"><%= stages[p.status] || label(p.status) %></span>
@@ -43,8 +69,14 @@
             <% if (p.address && p.address !== p.title) { %><p class="house-meta"><%= p.address %></p><% } %>
             <div class="house-property-price">
               <strong><%= p.asking_price == null ? 'Price not recorded' : cost(p.asking_price) %></strong>
-              <span class="house-meta"><%= [p.beds == null ? '' : p.beds === 0 ? 'Studio' : `${p.beds} bed`, p.area == null ? '' : `${p.area} m²`].filter(Boolean).join(' · ') %></span>
+              <span class="house-meta"><%= [p.beds == null ? '' : p.beds === 0 ? 'Studio' : `${p.beds} bed`, p.baths == null ? '' : `${p.baths} bath`, p.area == null ? '' : `${p.area} m²`].filter(Boolean).join(' · ') %></span>
             </div>
+            <% if (hb || bb) { %>
+              <div class="house-area-pills">
+                <% if (hb) { %><span class="house-status" data-status="<%= hb.status %>"><%= hb.text %></span><% } %>
+                <% if (bb) { %><span class="house-status" data-status="<%= bb.status %>"><%= bb.text %></span><% } %>
+              </div>
+            <% } %>
           </article>
         <% } %>
       </div>
@@ -68,6 +100,7 @@
           ['Asking price', p => cost(p.asking_price)],
           ['Address', p => p.address],
           ['Bedrooms', p => p.beds === 0 ? 'Studio' : p.beds],
+          ['Bathrooms', p => p.baths],
           ['Floor area', p => p.area == null ? null : `${p.area} m²`],
           ['Stage', p => stages[p.status]],
           ['Next viewing', p => { const e = upcoming.find(v => v.property_id === p.id); return e ? [entryDate(e.day), e.time].filter(Boolean).join(' · ') : null; }],

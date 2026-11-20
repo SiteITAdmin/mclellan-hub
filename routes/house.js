@@ -14,7 +14,7 @@ const { counties } = require('../lib/crm/house/sales-register');
 
 const router = express.Router();
 const writeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 300, keyPrefix: 'house-write' });
-const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_400_000, files: 8 } });
+const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_400_000, files: 12 } });
 
 const BASE = '/house';
 const tabs = [
@@ -106,14 +106,26 @@ function model(screen, filter = {}) {
   const nextActions = [...upcoming, ...deadlines.filter(future)].sort(byDay);
   const stage = typeof filter.stage === 'string' && Object.hasOwn(data.stages, filter.stage) ? filter.stage : '';
   const search = typeof filter.q === 'string' ? filter.q.trim().slice(0, 200) : '';
-  const visibleProperties = data.properties.filter(p =>
-    (!stage || p.status === stage) && (!search || [p.title, p.address, p.area].filter(Boolean).join(' ').toLowerCase().includes(search.toLowerCase())));
+  const parseFilterInt = val => (typeof val === 'string' && /^\d+$/.test(val.trim()) ? Number(val.trim()) : null);
+  const minPrice = parseFilterInt(filter.minPrice);
+  const maxPrice = parseFilterInt(filter.maxPrice);
+  const minBeds = parseFilterInt(filter.minBeds);
+  const minBaths = parseFilterInt(filter.minBaths);
+  const visibleProperties = data.properties.filter(p => {
+    if (stage && p.status !== stage) return false;
+    if (search && ![p.title, p.address, p.area].filter(Boolean).join(' ').toLowerCase().includes(search.toLowerCase())) return false;
+    if (minPrice != null && (p.asking_price == null || p.asking_price < minPrice)) return false;
+    if (maxPrice != null && (p.asking_price == null || p.asking_price > maxPrice)) return false;
+    if (minBeds != null && (p.beds == null || p.beds < minBeds)) return false;
+    if (minBaths != null && (p.baths == null || p.baths < minBaths)) return false;
+    return true;
+  });
   const comparisonIds = [...new Set([filter.compare].flat().filter(id => propertiesById.has(id)))];
   const comparison = comparisonIds.map(id => propertiesById.get(id));
 
   return {
     ...data, screen, tabs, base: BASE, today, propertiesById, events, archived, activeProperties, viewings, upcoming, offers,
-    nextActions, overdue, checklist, stage, search, visibleProperties, comparison, cost, label, entryDate, gmailUrl: house.getGmailUrl, propertyUrl,
+    nextActions, overdue, checklist, stage, search, minPrice, maxPrice, minBeds, minBaths, visibleProperties, comparison, cost, label, entryDate, gmailUrl: house.getGmailUrl, propertyUrl,
     entryUrl, linkUrl, newEntry, byDay,
   };
 }
@@ -276,9 +288,9 @@ post('/properties/:id/inspect', async (req, res) => {
 });
 
 router.post(`${BASE}/properties/:id/photos`, requireSameOrigin, writeLimiter, (req, res, next) => {
-  photoUpload.array('photos', 8)(req, res, err => {
+  photoUpload.array('photos', 12)(req, res, err => {
     if (!err) return next();
-    const msg = err.code === 'LIMIT_FILE_SIZE' ? 'Each photo must be under 2.4 MB.' : 'Choose up to 8 JPEG, PNG or WebP photos.';
+    const msg = err.code === 'LIMIT_FILE_SIZE' ? 'Each photo must be under 2.4 MB.' : 'Choose up to 12 JPEG, PNG or WebP photos.';
     showProperty(req, res.status(400), { listingError: msg });
   });
 }, (req, res) => {

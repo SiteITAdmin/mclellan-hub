@@ -12,6 +12,7 @@
       </select>
     </label>
     <label>Bedrooms <input class="input" type="number" name="beds" value="<%= record.beds ?? '' %>" min="0" max="100" step="1" inputmode="numeric"></label>
+    <label>Bathrooms <input class="input" type="number" name="baths" value="<%= record.baths ?? '' %>" min="0" max="100" step="1" inputmode="numeric"></label>
     <label>Floor area (m²) <input class="input" type="number" name="area" value="<%= record.area ?? '' %>" min="0" max="100000" step="any" inputmode="decimal"></label>
     <label class="house-field-wide">Notes <textarea class="textarea" name="notes" rows="5" maxlength="10000"><%= record.notes || '' %></textarea></label>
     <div class="house-actions house-field-wide">
