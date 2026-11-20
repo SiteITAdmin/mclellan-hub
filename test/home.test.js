@@ -46,6 +46,8 @@ test('every link on the landing page opens a real screen', async () => {
     const links = [...new Set([...body.matchAll(/<a href="([^"]+)"/g)].map(m => m[1]))];
     for (const want of ['/crm/work', '/crm/personal', '/flights', '/money', '/house', '/crm/review', '/crm/vendors', '/crm/work/calendar', '/crm/work/meetings', '/crm/personal/meetings', '/crm/personal/note', '/admin', '/', '/models'])
       assert.ok(links.includes(want), `links to ${want}`);
+    assert.ok(body.indexOf('data-space="house"') < body.indexOf('data-space="money"'), 'House hunting sits above Money');
+    assert.ok(body.indexOf('data-space="money"') < body.indexOf('data-space="flights"'), 'Money sits above Flights');
     // The public site and its editor are served by other routers with their own tests.
     const elsewhere = ['/', '/admin', '/chat'];
     const outside = links.filter(h => !h.startsWith('/'));

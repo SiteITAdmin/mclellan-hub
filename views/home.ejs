@@ -14,10 +14,12 @@
 <body>
 <%
   // One circle of a door's drawing, with a CRM icon centred in it.
-  const node = (x, y, r, ic, core) => `<circle cx="${x}" cy="${y}" r="${r}" class="${core ? 'core' : 'sat'}"/>`
-    + icon[ic].replace('width="16" height="16"', `x="${x - r / 2}" y="${y - r / 2}" width="${r}" height="${r}" class="${core ? 'core-ic' : 'sat-ic'}"`);
-  const link = (a, b) => `<path class="link" d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}"/>`;
-  const art = (nodes, links) => `<svg class="door-art" viewBox="0 0 500 180" aria-hidden="true">${links.map(([a, b]) => link(nodes[a], nodes[b])).join('')}${nodes.map((n, i) => node(n[0], n[1], n[2], n[3], i === 0)).join('')}</svg>`;
+  const node = (x, y, r, ic, core, i) => `<g class="${core ? 'core-node' : 'sat-node'}" style="--i:${i}"><circle cx="${x}" cy="${y}" r="${r}" class="${core ? 'core' : 'sat'}"/>`
+    + icon[ic].replace('width="16" height="16"', `x="${x - r / 2}" y="${y - r / 2}" width="${r}" height="${r}" class="${core ? 'core-ic' : 'sat-ic'}"`)
+    + '</g>';
+  const link = (a, b, i) => `<path class="link" pathLength="100" style="--i:${i}" d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}"/>`;
+  const pulse = (pts, i) => `<circle class="pulse" r="4" style="--i:${i};--path:path('M${pts.map(p => `${p[0]} ${p[1]}`).join('L')}')"/>`;
+  const art = (nodes, links, pulses = []) => `<svg class="door-art" viewBox="0 0 500 180" aria-hidden="true">${links.map(([a, b], i) => link(nodes[a], nodes[b], i)).join('')}${pulses.map((ids, i) => pulse(ids.map(id => nodes[id]), i)).join('')}${nodes.map((n, i) => node(n[0], n[1], n[2], n[3], i === 0, i)).join('')}</svg>`;
   const pill = (href, ic, label) => `<a href="${href}">${icon[ic]}${label}</a>`;
   const shortcuts = s => [
     pill(`/crm/${s}/calendar`, 'calendar', 'Calendar'), pill(`/crm/${s}/meetings`, 'meeting', 'Meetings'), pill(`/crm/${s}/tasks`, 'tasks', 'Tasks'), pill(`/crm/${s}/people`, 'people', 'People'),
@@ -38,19 +40,64 @@
   <section class="doors" aria-label="CRM">
     <article class="door" data-space="work">
       <%- art([[118, 92, 38, 'people'], [232, 44, 24, 'email'], [250, 130, 24, 'calendar'], [342, 78, 22, 'meeting'], [362, 150, 18, 'org'], [440, 106, 20, 'tasks']],
-              [[0, 1], [0, 2], [1, 3], [2, 3], [2, 4], [3, 5]]) %>
+              [[0, 1], [0, 2], [1, 3], [2, 3], [2, 4], [3, 5]],
+              [[5, 3, 1, 0], [4, 2, 0]]) %>
       <h2><a href="/crm/work">Work</a></h2>
       <p>Outlook mail, meetings and tasks from your job, and the people in them.</p>
       <nav class="door-links" aria-label="Work shortcuts"><%- shortcuts('work') %></nav>
     </article>
     <article class="door" data-space="personal">
       <%- art([[382, 90, 38, 'people'], [264, 48, 24, 'email'], [252, 134, 24, 'whatsapp'], [160, 82, 22, 'note'], [138, 152, 18, 'calendar'], [62, 112, 20, 'captured']],
-              [[0, 1], [0, 2], [1, 3], [2, 3], [2, 4], [3, 5]]) %>
+              [[0, 1], [0, 2], [1, 3], [2, 3], [2, 4], [3, 5]],
+              [[5, 3, 1, 0], [4, 2, 0]]) %>
       <h2><a href="/crm/personal">Personal</a></h2>
       <p>Gmail, WhatsApp and iMessage: family, home and everyone outside work.</p>
       <nav class="door-links" aria-label="Personal shortcuts"><%- shortcuts('personal') %></nav>
     </article>
   </section>
+
+  <article class="feature" data-space="house">
+    <div>
+      <h2><a href="/house">House hunting</a></h2>
+      <p>Saved properties, comparables from the Property Price Register, viewings, offers and solicitor progress.</p>
+    </div>
+    <svg class="house-art" viewBox="0 0 640 200" aria-hidden="true">
+      <path class="house-ground" d="M70 164H570"/>
+      <path class="house-body" d="M140 94L240 34L340 94V164H140Z"/>
+      <path class="house-roof" pathLength="100" d="M124 102L240 32L356 102"/>
+      <rect class="house-door" x="218" y="114" width="44" height="50" rx="4"/>
+      <rect class="house-win" x="164" y="106" width="32" height="28" rx="4"/>
+      <rect class="house-win" x="284" y="106" width="32" height="28" rx="4"/>
+      <path class="house-pin-stem" pathLength="100" d="M436 88V154"/>
+      <g class="house-pin-head">
+        <path class="house-pin" d="M470 54a34 34 0 1 1-68 0a34 34 0 1 1 68 0z"/>
+        <path class="house-pin-mark" pathLength="100" d="M422 55l10 10l18-20"/>
+      </g>
+    </svg>
+  </article>
+
+  <article class="feature" data-space="money">
+    <div>
+      <h2><a href="/money">Money</a></h2>
+      <p>Your spending, receipts, orders, budget and subscriptions. See where your money goes and challenge habits.</p>
+    </div>
+    <svg class="money-art" viewBox="0 0 640 200" aria-hidden="true">
+      <path class="money-link" d="M150 100H490"/>
+      <rect class="money-paper" x="90" y="55" width="160" height="100" rx="14"/>
+      <path class="money-line" d="M90 85H250M114 126H146M162 126H186"/>
+      <g class="money-receipt">
+        <path class="money-paper" d="M405 30H505V170L495 163L485 170L475 163L465 170L455 163L445 170L435 163L425 170L415 163L405 170Z"/>
+        <path class="money-line money-receipt-line" pathLength="100" style="--i:0" d="M427 60H483"/>
+        <path class="money-line money-receipt-line" pathLength="100" style="--i:1" d="M427 80H470"/>
+        <path class="money-line money-receipt-line" pathLength="100" style="--i:2" d="M427 100H483"/>
+        <path class="money-line money-receipt-line" pathLength="100" style="--i:3" d="M427 133H450"/>
+      </g>
+      <g class="money-coin-group">
+        <circle class="money-coin" cx="330" cy="105" r="42"/>
+        <path class="money-euro" d="M345 85A24 24 0 1 0 345 125M305 99H336M305 111H332"/>
+      </g>
+    </svg>
+  </article>
 
   <article class="feature" data-space="flights">
     <div>
@@ -67,40 +114,6 @@
       <g class="plane" transform="translate(350 39) rotate(-7)">
         <path d="M-11 0l-3-5h3l4 3.5h7L-5-11h3.5L6-1.5h5a3 1.5 0 0 1 0 3H6L-1.5 11H-5l5-9.5h-7L-11 5h-3z"/>
       </g>
-    </svg>
-  </article>
-
-  <article class="feature" data-space="money">
-    <div>
-      <h2><a href="/money">Money</a></h2>
-      <p>Your spending, receipts, orders, budget and subscriptions. See where your money goes and challenge habits.</p>
-    </div>
-    <svg class="money-art" viewBox="0 0 640 200" aria-hidden="true">
-      <path class="money-link" d="M150 100H490"/>
-      <rect class="money-paper" x="90" y="55" width="160" height="100" rx="14"/>
-      <path class="money-line" d="M90 85H250M114 126H146M162 126H186"/>
-      <path class="money-paper" d="M405 30H505V170L495 163L485 170L475 163L465 170L455 163L445 170L435 163L425 170L415 163L405 170Z"/>
-      <path class="money-line" d="M427 60H483M427 80H470M427 100H483M427 133H450"/>
-      <circle class="money-coin" cx="330" cy="105" r="42"/>
-      <path class="money-euro" d="M345 85A24 24 0 1 0 345 125M305 99H336M305 111H332"/>
-    </svg>
-  </article>
-
-  <article class="feature" data-space="house">
-    <div>
-      <h2><a href="/house">House hunting</a></h2>
-      <p>Saved properties, comparables from the Property Price Register, viewings, offers and solicitor progress.</p>
-    </div>
-    <svg class="house-art" viewBox="0 0 640 200" aria-hidden="true">
-      <path class="house-ground" d="M70 164H570"/>
-      <path class="house-body" d="M140 94L240 34L340 94V164H140Z"/>
-      <path class="house-roof" d="M124 102L240 32L356 102"/>
-      <rect class="house-door" x="218" y="114" width="44" height="50" rx="4"/>
-      <rect class="house-win" x="164" y="106" width="32" height="28" rx="4"/>
-      <rect class="house-win" x="284" y="106" width="32" height="28" rx="4"/>
-      <path class="house-pin" d="M470 54a34 34 0 1 1-68 0a34 34 0 1 1 68 0z"/>
-      <path class="house-pin-stem" d="M436 88V154"/>
-      <path class="house-pin-mark" d="M422 55l10 10l18-20"/>
     </svg>
   </article>
 
