@@ -472,11 +472,13 @@ a.house-event-title:hover { color: var(--house-accent); text-decoration: underli
 }
 .house-valuation-filter { margin-top: 16px; }
 .house-valuation-filter label:nth-child(2) { flex: 1 1 200px; max-width: 320px; }
-.house-valuation-comps { margin-top: 12px; }
+.house-valuation-comps { margin-top: 16px; }
+.house-valuation-comps-body { margin-top: 10px; }
 .house-valuation-gap { margin: 0 0 9px; }
 .house-valuation-table th:first-child { min-width: 155px; max-width: 310px; }
 .house-valuation-table td:nth-child(n+2):nth-child(-n+5) { white-space: nowrap; }
 .house-valuation-table .house-source { display: block; margin-top: 4px; }
+.house-valuation-table .house-event-links .house-source { display: inline; margin-top: 0; }
 .house-valuation-manual { padding-top: 12px; border-top: 1px solid var(--house-border); }
 .house-valuation-manual .house-fields { max-width: 680px; }
 @media (max-width: 550px) {

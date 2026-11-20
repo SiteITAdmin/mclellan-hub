@@ -99,55 +99,54 @@
   </form>
 
   <% if (comparableCount) { %>
-    <div class="house-valuation-comps">
-      <header class="house-section-head">
-        <h3>Comparable sales</h3>
-        <span class="house-meta"><%= comparableCount %> shown<% if (v.outliersRemoved) { %> · <%= v.outliersRemoved %> outlier<%= v.outliersRemoved === 1 ? '' : 's' %> excluded<% } %></span>
-      </header>
-      <% if (Number.isFinite(v.medianGap) && v.pairCount >= 3) { %>
-        <p class="house-valuation-gap">
-          The median sale was <strong><%= gapText(v.medianGap).toLowerCase() %></strong> across <%= v.pairCount %> comparables with both an advertised asking price and a recorded sale price.
-        </p>
-      <% } else { %>
-        <p class="house-meta house-valuation-gap">The median sold-versus-asking gap needs at least three comparable sales with both prices<%= v.pairCount ? ` (${v.pairCount} so far)` : '' %>.</p>
-      <% } %>
-      <div class="house-table-scroll" tabindex="0" role="region" aria-label="Scrollable comparable sales">
-        <table class="house-table house-valuation-table">
-          <thead><tr><th scope="col">Property</th><th scope="col">Sale date</th><th scope="col">Sold price</th><th scope="col">Asking price</th><th scope="col">Sold vs asking</th><th scope="col">Similarity</th></tr></thead>
-          <tbody>
-            <% for (const c of comparisons) { %>
-              <% const source = linkUrl(c.url), gap = c.asking > 0 ? (c.sold - c.asking) / c.asking : null;
-                 const perSqm = c.area > 0 && c.sold > 0 ? Math.round(c.sold / c.area) : null; %>
-              <tr>
-                <th scope="row">
-                  <%= c.address %>
-                  <% const specs = [c.property_type || '', c.beds == null ? '' : c.beds === 0 ? 'Studio' : `${c.beds} bed`, c.area == null ? '' : `${c.area} m²`, c.ber ? `BER ${c.ber}` : '', perSqm ? `${cost(perSqm)}/m²` : ''].filter(Boolean).join(' · '); %>
-                  <% if (specs) { %><div class="house-meta"><%= specs %></div><% } %>
-                  <% const compSv = streetViewUrl(c); %>
-                  <% if (source || compSv) { %>
-                    <div class="house-event-links" style="margin-top:4px">
-                      <% if (source) { %>
-                        <% const sourceLabel = c.source === 'daft' || c.source === 'daft_auto' ? 'Daft Sold' : 'PSRA data download'; %>
-                        <a class="house-source" href="<%= source %>" target="_blank" rel="noopener noreferrer" aria-label="<%= sourceLabel %> for <%= c.address %>"><%= sourceLabel %></a>
-                      <% } %>
-                      <% if (compSv) { %><a class="house-source" href="<%= compSv %>" target="_blank" rel="noopener noreferrer" aria-label="Street View for <%= c.address %>">Street View ↗</a><% } %>
-                    </div>
-                  <% } %>
-                </th>
-                <td><%= c.day ? entryDate(c.day) : '—' %></td>
-                <td><%= cost(c.sold) %></td>
-                <td><%= cost(c.asking) %></td>
-                <td><%= gap == null ? '—' : gapText(gap) %></td>
-                <td>
-                  <%= c.match || '—' %>
-                  <% if (Number.isFinite(c.similarity)) { %><div class="house-meta">Score <%= c.similarity %>/100</div><% } %>
-                </td>
-              </tr>
-            <% } %>
-          </tbody>
-        </table>
+    <details class="house-aging house-valuation-manual house-valuation-comps">
+      <summary>Comparable sales (<%= comparableCount %> shown<% if (v.outliersRemoved) { %> · <%= v.outliersRemoved %> outlier<%= v.outliersRemoved === 1 ? '' : 's' %> excluded<% } %><% if (Number.isFinite(v.medianGap) && v.pairCount >= 3) { %> · median <%= gapText(v.medianGap).toLowerCase() %><% } %>)</summary>
+      <div class="house-valuation-comps-body">
+        <% if (Number.isFinite(v.medianGap) && v.pairCount >= 3) { %>
+          <p class="house-valuation-gap">
+            The median sale was <strong><%= gapText(v.medianGap).toLowerCase() %></strong> across <%= v.pairCount %> comparables with both an advertised asking price and a recorded sale price.
+          </p>
+        <% } else { %>
+          <p class="house-meta house-valuation-gap">The median sold-versus-asking gap needs at least three comparable sales with both prices<%= v.pairCount ? ` (${v.pairCount} so far)` : '' %>.</p>
+        <% } %>
+        <div class="house-table-scroll" tabindex="0" role="region" aria-label="Scrollable comparable sales">
+          <table class="house-table house-valuation-table">
+            <thead><tr><th scope="col">Property</th><th scope="col">Sale date</th><th scope="col">Sold price</th><th scope="col">Asking price</th><th scope="col">Sold vs asking</th><th scope="col">Similarity</th></tr></thead>
+            <tbody>
+              <% for (const c of comparisons) { %>
+                <% const source = linkUrl(c.url), gap = c.asking > 0 ? (c.sold - c.asking) / c.asking : null;
+                   const perSqm = c.area > 0 && c.sold > 0 ? Math.round(c.sold / c.area) : null; %>
+                <tr>
+                  <th scope="row">
+                    <%= c.address %>
+                    <% const specs = [c.property_type || '', c.beds == null ? '' : c.beds === 0 ? 'Studio' : `${c.beds} bed`, c.area == null ? '' : `${c.area} m²`, c.ber ? `BER ${c.ber}` : '', perSqm ? `${cost(perSqm)}/m²` : ''].filter(Boolean).join(' · '); %>
+                    <% if (specs) { %><div class="house-meta"><%= specs %></div><% } %>
+                    <% const compSv = streetViewUrl(c); %>
+                    <% if (source || compSv) { %>
+                      <div class="house-event-links" style="margin-top:4px">
+                        <% if (source) { %>
+                          <% const sourceLabel = c.source === 'daft' || c.source === 'daft_auto' ? 'Daft Sold' : 'PSRA data download'; %>
+                          <a class="house-source" href="<%= source %>" target="_blank" rel="noopener noreferrer" aria-label="<%= sourceLabel %> for <%= c.address %>"><%= sourceLabel %></a>
+                        <% } %>
+                        <% if (compSv) { %><a class="house-source" href="<%= compSv %>" target="_blank" rel="noopener noreferrer" aria-label="Street View for <%= c.address %>">Street View ↗</a><% } %>
+                      </div>
+                    <% } %>
+                  </th>
+                  <td><%= c.day ? entryDate(c.day) : '—' %></td>
+                  <td><%= cost(c.sold) %></td>
+                  <td><%= cost(c.asking) %></td>
+                  <td><%= gap == null ? '—' : gapText(gap) %></td>
+                  <td>
+                    <%= c.match || '—' %>
+                    <% if (Number.isFinite(c.similarity)) { %><div class="house-meta">Score <%= c.similarity %>/100</div><% } %>
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </details>
   <% } %>
 
   <details class="house-aging house-valuation-manual" id="add-comparable" <% if (typeof comparableForm !== 'undefined') { %>open<% } %>>

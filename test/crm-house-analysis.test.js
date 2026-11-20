@@ -318,6 +318,16 @@ test('listing inspection + multi-image photo heating analysis runs through model
     const histRes = await fetch(`${base}/house/history`);
     assert.equal(histRes.status, 200);
     assert.match(await histRes.text(), /Area sold history/);
+
+    // Comparable sales render inside a collapsible <details> section
+    valuation.saveDaftSoldRows([{
+      source_id: 'comp-collapse-1', county: 'Dublin', locality: 'Santry',
+      address: '5 The Kilmore, Santry, Dublin 9', day: '2026-08-01', sold: 340000, asking: 320000,
+      beds: 3, baths: 2, area: 95, property_type: 'Apartment', ber: 'B3', lat: 53.395, lng: -6.245,
+      url: 'https://www.daft.ie/sold/5-the-kilmore/comp-collapse-1',
+    }], T);
+    const compHtml = await (await fetch(`${base}/house/properties/${prop.id}`)).text();
+    assert.match(compHtml, /<details class="house-aging house-valuation-manual house-valuation-comps">\s*<summary>Comparable sales \(1 shown\)<\/summary>/);
   } finally {
     server.closeAllConnections?.();
     server.close();
