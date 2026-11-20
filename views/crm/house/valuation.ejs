@@ -81,6 +81,42 @@
   <% } else { %>
     <p class="house-empty"><%= v.reason || (comparableCount ? 'The estimate needs at least three comparable sales.' : 'Estimate a sale price from recent similar sales near this property.') %></p>
   <% } %>
+
+  <% if (v.sellerStats?.agency) { const ss = v.sellerStats; %>
+    <div class="house-gap-box" style="margin-top:12px">
+      <div class="house-signal-head">
+        <span class="house-context">Auctioneer pricing pattern · <%= ss.agency %><% if (ss.agent && ss.agent !== ss.agency) { %> (<%= ss.agent %>)<% } %></span>
+        <% if (ss.pairedCount > 0) { %>
+          <span class="house-status" data-status="<%= ss.confidence === 'high' ? 'approved' : ss.confidence === 'medium' ? 'submitted' : 'pending' %>"><%= ss.confidence === 'high' ? `${ss.pairedCount} sales tracked` : ss.confidence === 'medium' ? `${ss.pairedCount} sales tracked` : `Early signal (${ss.pairedCount} ${ss.pairedCount === 1 ? 'sale' : 'sales'})` %></span>
+        <% } %>
+      </div>
+      <% if (ss.pairedCount > 0) { %>
+        <p>
+          Across <strong><%= ss.pairedCount %></strong> tracked Daft <%= ss.pairedCount === 1 ? 'sale' : 'sales' %> by <strong><%= ss.agency %></strong>,
+          homes sold a median <strong><%= gapText(ss.medianGap).toLowerCase() %></strong>
+          (range <%= gapText(ss.minGap).toLowerCase() %> to <%= gapText(ss.maxGap).toLowerCase() %>, median <%= ss.medianEuroDiff >= 0 ? '+' : '−' %><%= cost(Math.abs(ss.medianEuroDiff)) %>, <%= ss.overAskingPct %>% went over asking).
+          <% if (ss.expectedMid != null) { %>
+            On this <%= cost(p.asking_price) %> asking price, their pattern points toward a likely target around <strong><%= cost(ss.expectedMid) %></strong><% if (ss.expectedLow != null && ss.expectedHigh != null && ss.expectedLow !== ss.expectedHigh) { %> (typical band <%= cost(ss.expectedLow) %>–<%= cost(ss.expectedHigh) %>)<% } %> — a guide, not a guarantee.
+          <% } %>
+        </p>
+        <% if (ss.examples && ss.examples.length) { %>
+          <details class="house-aging" style="margin-top:8px">
+            <summary>Recent tracked sales by <%= ss.agency %> (<%= ss.examples.length %>)</summary>
+            <ul class="house-evidence-list" style="margin-top:6px">
+              <% for (const ex of ss.examples) { const eg = (ex.sold - ex.asking) / ex.asking; %>
+                <li>
+                  <a class="house-inline" href="<%= linkUrl(ex.url) %>" target="_blank" rel="noopener noreferrer"><%= ex.address %></a>
+                  (<%= entryDate(ex.day) %>): asking <%= cost(ex.asking) %> → sold <strong><%= cost(ex.sold) %></strong> (<%= gapText(eg).toLowerCase() %>)
+                </li>
+              <% } %>
+            </ul>
+          </details>
+        <% } %>
+      <% } else { %>
+        <p class="house-meta">Listed by <strong><%= ss.agency %></strong> — no paired asking-vs-sold Daft sales recorded for this auctioneer yet. Refreshing comparable sales across properties builds their track record automatically.</p>
+      <% } %>
+    </div>
+  <% } %>
   <p class="house-meta">Refreshing fetches Daft Sold comparables for this neighbourhood (with bedrooms, size, type and asking vs sold) alongside the Property Price Register, excluding likely multi-unit outliers.</p>
 
   <form class="house-filters house-valuation-filter" method="post" action="<%= propertyPath %>/valuation#sold-price-estimate">
@@ -119,7 +155,8 @@
                 <tr>
                   <th scope="row">
                     <%= c.address %>
-                    <% const specs = [c.property_type || '', c.beds == null ? '' : c.beds === 0 ? 'Studio' : `${c.beds} bed`, c.area == null ? '' : `${c.area} m²`, c.ber ? `BER ${c.ber}` : '', perSqm ? `${cost(perSqm)}/m²` : ''].filter(Boolean).join(' · '); %>
+                    <% if (c.sameSeller) { %> <span class="house-status" data-status="approved">Same agent</span><% } %>
+                    <% const specs = [c.property_type || '', c.beds == null ? '' : c.beds === 0 ? 'Studio' : `${c.beds} bed`, c.area == null ? '' : `${c.area} m²`, c.ber ? `BER ${c.ber}` : '', perSqm ? `${cost(perSqm)}/m²` : '', c.seller_agency || ''].filter(Boolean).join(' · '); %>
                     <% if (specs) { %><div class="house-meta"><%= specs %></div><% } %>
                     <% const compSv = streetViewUrl(c); %>
                     <% if (source || compSv) { %>

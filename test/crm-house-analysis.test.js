@@ -505,3 +505,131 @@ test('Daft listing & sold fetches route through daft-capable dev-server worker a
   assert.equal(soldRes.saved, 1);
   assert.equal(soldRes.areaSlug, 'santry-dublin');
 });
+
+test('auctioneer / estate agent tracking builds asking-vs-sold margin patterns and flags same-seller comparables', async () => {
+  // 1. Parse seller from both Daft Sold HTML and Daft For-Sale HTML
+  const soldPayload = {
+    props: {
+      pageProps: {
+        listings: [
+          {
+            listing: {
+              adId: 'rc1', title: '10 Millrace Road, Saggart, Co. Dublin', seoFriendlyPath: '/sold/10-millrace-road/rc1',
+              price: '€300,000', soldPrice: '€390,000', soldDate: '12/09/2026',
+              numBedrooms: '3 Bed', numBathrooms: '2 Bath', propertySize: '95 m²', propertyType: 'Terraced House',
+              ber: { rating: 'B3' },
+              seller: { branch: 'Ray Cooke Auctioneers', name: 'Sales Team 3', licenceNumber: '002307', sellerType: 'BRANDED_AGENT' },
+            },
+          },
+          {
+            listing: {
+              adId: 'rc2', title: '12 Millrace Drive, Saggart, Co. Dublin', seoFriendlyPath: '/sold/12-millrace-drive/rc2',
+              price: '€320,000', soldPrice: '€416,000', soldDate: '20/08/2026',
+              numBedrooms: '3 Bed', numBathrooms: '2 Bath', propertySize: '98 m²', propertyType: 'Terraced House',
+              ber: { rating: 'B3' },
+              seller: { branch: 'Ray Cooke Auctioneers', name: 'Sales Team 10', licenceNumber: '002307', sellerType: 'BRANDED_AGENT' },
+            },
+          },
+          {
+            listing: {
+              adId: 'rc3', title: '14 Millrace Court, Saggart, Co. Dublin', seoFriendlyPath: '/sold/14-millrace-court/rc3',
+              price: '€350,000', soldPrice: '€420,000', soldDate: '01/07/2026',
+              numBedrooms: '3 Bed', numBathrooms: '2 Bath', propertySize: '96 m²', propertyType: 'Terraced House',
+              ber: { rating: 'C1' },
+              seller: { branch: 'Ray Cooke Auctioneers', name: 'Sales Team 1', licenceNumber: '002307', sellerType: 'BRANDED_AGENT' },
+            },
+          },
+          {
+            listing: {
+              adId: 'qa1', title: '5 Quiet Grove, Saggart, Co. Dublin', seoFriendlyPath: '/sold/5-quiet-grove/qa1',
+              price: '€380,000', soldPrice: '€395,000', soldDate: '15/08/2026',
+              numBedrooms: '3 Bed', numBathrooms: '2 Bath', propertySize: '97 m²', propertyType: 'Terraced House',
+              ber: { rating: 'B3' },
+              seller: { branch: 'Steady Estates', name: 'Jane Byrne', licenceNumber: '009999', sellerType: 'BRANDED_AGENT' },
+            },
+          },
+        ],
+      },
+    },
+  };
+  const parsedSold = daft.parseSoldListings(`<script id="__NEXT_DATA__">${JSON.stringify(soldPayload)}</script>`, { county: 'Dublin', locality: 'Saggart' });
+  assert.equal(parsedSold.length, 4);
+  assert.equal(parsedSold[0].seller_agency, 'Ray Cooke Auctioneers');
+  assert.equal(parsedSold[0].seller_licence, '002307');
+  assert.equal(parsedSold[0].seller_key, 'ray cooke auctioneers');
+  valuation.saveDaftSoldRows(parsedSold, T);
+
+  const fsPayload = {
+    props: {
+      pageProps: {
+        listing: {
+          id: 6727500, title: '19 Millrace Park, Saggart, Co. Dublin',
+          seoFriendlyPath: '/for-sale/19-millrace-park-saggart-co-dublin/6727500',
+          price: '€325,000', numBedrooms: '3 Bed', numBathrooms: '2 Bath', propertySize: '96 m²',
+          propertyType: 'Terraced House', ber: { rating: 'B3' }, sellingType: 'By Private Treaty',
+          description: 'Turnkey 3 bed home.', features: [], facilities: [], media: { images: [] },
+          seller: { branch: 'Ray Cooke Auctioneers', name: 'Sales Team 10', licenceNumber: '002307', sellerType: 'BRANDED_AGENT' },
+        },
+      },
+    },
+  };
+  const parsedListing = daft.parseListingHtml(`<script id="__NEXT_DATA__">${JSON.stringify(fsPayload)}</script>`);
+  assert.equal(parsedListing.seller_agency, 'Ray Cooke Auctioneers');
+  assert.equal(parsedListing.seller_agent, 'Sales Team 10');
+
+  // 2. Inspecting the property saves the selling agent and feeds valuation + sameSeller flags
+  const prop = house.saveProperty({
+    title: '19 Millrace Park, Saggart, Co. Dublin',
+    address: '19 Millrace Park, Saggart, Co. Dublin',
+    url: 'https://www.daft.ie/for-sale/19-millrace-park-saggart-co-dublin/6727500',
+    asking_price: '325000',
+    beds: '3',
+    area: '96',
+    status: 'shortlisted',
+  });
+  const analyzed = await listing.inspect(prop, { analyzePhotos: false, fetchListing: async () => parsedListing, jobs: subJobs, t: T });
+  assert.equal(analyzed.seller_agency, 'Ray Cooke Auctioneers');
+
+  const updatedProp = house.dashboard().properties.find(p => p.id === prop.id);
+  assert.equal(updatedProp.seller_agency, 'Ray Cooke Auctioneers');
+
+  const val = valuation.get(updatedProp, T, { listing: analyzed });
+  assert.equal(val.sellerStats.agency, 'Ray Cooke Auctioneers');
+  assert.equal(val.sellerStats.pairedCount, 3);
+  // Gaps are +30%, +30%, +20% -> median +30% -> 325k * 1.30 = 422.5k -> rounded to 5k = 425,000
+  assert.ok(Math.abs(val.sellerStats.medianGap - 0.30) < 0.001);
+  assert.equal(val.sellerStats.expectedMid, 425000);
+  assert.equal(val.sellerStats.confidence, 'medium');
+  assert.equal(val.comparisons.filter(c => c.sameSeller).length, 3);
+  assert.match(val.gapExplanation, /Selling agent Ray Cooke Auctioneers/);
+
+  // 3. Leaderboard ranks agencies by paired sales & exposes margins on /house/history and /house/properties/:id
+  const board = valuation.sellerLeaderboard();
+  assert.equal(board[0].agency, 'Ray Cooke Auctioneers');
+  assert.equal(board[0].pairedCount, 3);
+  assert.equal(board[1].agency, 'Steady Estates');
+  assert.equal(board[1].pairedCount, 1);
+
+  const app = express();
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, '..', 'views'));
+  app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = { adminUser: 'douglas' }; next(); });
+  app.use(require('../routes/house'));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(r => server.once('listening', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const propHtml = await (await fetch(`${base}/house/properties/${prop.id}`)).text();
+    assert.match(propHtml, /Auctioneer pricing pattern · Ray Cooke Auctioneers/);
+    assert.match(propHtml, /€425,000/);
+    assert.match(propHtml, /Same agent/);
+
+    const histHtml = await (await fetch(`${base}/house/history`)).text();
+    assert.match(histHtml, /Auctioneer pricing patterns/);
+    assert.match(histHtml, /Ray Cooke Auctioneers/);
+    assert.match(histHtml, /Steady Estates/);
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+});

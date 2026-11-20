@@ -107,6 +107,47 @@
     <% } %>
   </section>
 
+  <% const board = (h.sellers && h.sellers.length) ? h.sellers : (h.allSellers || []); %>
+  <% if (board.length) { %>
+    <section class="house-section" id="auctioneers" aria-labelledby="house-auctioneers-heading">
+      <header class="house-section-head">
+        <div>
+          <h2 id="house-auctioneers-heading">Auctioneer pricing patterns</h2>
+          <p class="house-meta">Built automatically from every comparable sale you refresh — compares each estate agent's original asking price against the final sold price so you can spot who guides low to spark bidding wars.</p>
+        </div>
+        <span class="house-meta"><%= board.length %> <%= board.length === 1 ? 'agency' : 'agencies' %><%= (h.sellers && h.sellers.length && (h.locality || h.county)) ? ` in ${[h.locality, h.county].filter(Boolean).join(', ')}` : ' across all loaded areas' %></span>
+      </header>
+      <div class="house-table-scroll">
+        <table class="house-table">
+          <thead>
+            <tr>
+              <th scope="col">Auctioneer / Agency</th>
+              <th scope="col">Paired sales</th>
+              <th scope="col">Median vs asking</th>
+              <th scope="col">Min–Max gap</th>
+              <th scope="col">Median € jump</th>
+              <th scope="col">Over asking</th>
+              <th scope="col">Areas seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% for (const ag of board.slice(0, 40)) { %>
+              <tr>
+                <th scope="row"><%= ag.agency %><% if (ag.licence) { %><div class="house-meta">PSRA <%= ag.licence %></div><% } %></th>
+                <td><%= ag.pairedCount %></td>
+                <td><strong><%= gapText(ag.medianGap) %></strong></td>
+                <td><%= gapText(ag.minGap) %> to <%= gapText(ag.maxGap) %></td>
+                <td><%= ag.medianEuroDiff >= 0 ? '+' : '−' %><%= cost(Math.abs(ag.medianEuroDiff)) %></td>
+                <td><%= ag.overAskingPct %>%</td>
+                <td><%= ag.areas.join(', ') || '—' %></td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% } %>
+
   <section class="house-section">
     <header class="house-section-head"><h3>Recorded sales</h3><span class="house-meta">Latest <%= h.sales.length %> of <%= h.count %></span></header>
     <div class="house-table-scroll">
@@ -117,7 +158,7 @@
             <tr>
               <th scope="row">
                 <a class="house-inline" href="<%= linkUrl(s.url) %>" target="_blank" rel="noopener noreferrer"><%= s.address %></a>
-                <div class="house-meta"><%= [s.property_type, s.beds != null ? (s.beds === 0 ? 'Studio' : `${s.beds} bed`) : '', s.area ? `${s.area} m²` : '', s.ber ? `BER ${s.ber}` : ''].filter(Boolean).join(' · ') %></div>
+                <div class="house-meta"><%= [s.property_type, s.beds != null ? (s.beds === 0 ? 'Studio' : `${s.beds} bed`) : '', s.area ? `${s.area} m²` : '', s.ber ? `BER ${s.ber}` : '', s.seller_agency || ''].filter(Boolean).join(' · ') %></div>
                 <% const histSv = streetViewUrl(s); if (histSv) { %><a class="house-source" style="font-size:.82rem" href="<%= histSv %>" target="_blank" rel="noopener noreferrer">Street View ↗</a><% } %>
               </th>
               <td><%= entryDate(s.day) %></td>

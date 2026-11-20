@@ -71,6 +71,7 @@
               <strong><%= p.asking_price == null ? 'Price not recorded' : cost(p.asking_price) %></strong>
               <span class="house-meta"><%= [p.beds == null ? '' : p.beds === 0 ? 'Studio' : `${p.beds} bed`, p.baths == null ? '' : `${p.baths} bath`, p.area == null ? '' : `${p.area} m²`].filter(Boolean).join(' · ') %></span>
             </div>
+            <% if (p.seller_agency) { %><p class="house-meta">Agent: <%= p.seller_agency %></p><% } %>
             <% if (hb || bb) { %>
               <div class="house-area-pills">
                 <% if (hb) { %><span class="house-status" data-status="<%= hb.status %>"><%= hb.text %></span><% } %>
@@ -109,6 +110,7 @@
           ['Bedrooms', p => p.beds === 0 ? 'Studio' : p.beds],
           ['Bathrooms', p => p.baths],
           ['Floor area', p => p.area == null ? null : `${p.area} m²`],
+          ['Selling agent', p => p.seller_agency],
           ['Stage', p => stages[p.status]],
           ['Next viewing', p => { const e = upcoming.find(v => v.property_id === p.id); return e ? [entryDate(e.day), e.time].filter(Boolean).join(' · ') : null; }],
           ['Latest offer', p => { const e = offers.find(v => v.property_id === p.id); return e ? [e.amount != null ? cost(e.amount) : '', label(e.status)].filter(Boolean).join(' · ') : null; }],
