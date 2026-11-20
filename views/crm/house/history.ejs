@@ -118,6 +118,7 @@
               <th scope="row">
                 <a class="house-inline" href="<%= linkUrl(s.url) %>" target="_blank" rel="noopener noreferrer"><%= s.address %></a>
                 <div class="house-meta"><%= [s.property_type, s.beds != null ? (s.beds === 0 ? 'Studio' : `${s.beds} bed`) : '', s.area ? `${s.area} m²` : '', s.ber ? `BER ${s.ber}` : ''].filter(Boolean).join(' · ') %></div>
+                <% const histSv = streetViewUrl(s); if (histSv) { %><a class="house-source" style="font-size:.82rem" href="<%= histSv %>" target="_blank" rel="noopener noreferrer">Street View ↗</a><% } %>
               </th>
               <td><%= entryDate(s.day) %></td>
               <td><%= cost(s.sold) %></td>

@@ -77,10 +77,12 @@
         <% } %>
         <% if (s.details) { %><p class="house-detail"><%= s.details %></p><% } %>
         <% if (s.quote) { %><blockquote><%= s.quote %></blockquote><% } %>
-        <% const reviewHref = linkUrl(listing?.url || target?.url); %>
-        <% if (reviewHref || s.gmail_id) { %>
+        <% const reviewHref = linkUrl(listing?.url || target?.url);
+           const reviewSv = streetViewUrl(listing || target); %>
+        <% if (reviewHref || reviewSv || s.gmail_id) { %>
           <div class="house-event-links">
             <% if (reviewHref) { %><a class="house-source" href="<%= reviewHref %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(reviewHref) %></a><% } %>
+            <% if (reviewSv) { %><a class="house-source" href="<%= reviewSv %>" target="_blank" rel="noopener noreferrer">Street View ↗</a><% } %>
             <% if (s.gmail_id) { %><a class="house-source" href="<%= gmailUrl(s.gmail_id) %>" target="_blank" rel="noopener noreferrer"><%- icon.email %> <%= s.source_direction === 'sent' ? 'Sent' : 'Received' %> email · <%= fmt(s.occurred_at) %></a><% } %>
           </div>
         <% } %>

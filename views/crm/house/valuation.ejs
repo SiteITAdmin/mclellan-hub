@@ -123,9 +123,15 @@
                   <%= c.address %>
                   <% const specs = [c.property_type || '', c.beds == null ? '' : c.beds === 0 ? 'Studio' : `${c.beds} bed`, c.area == null ? '' : `${c.area} m²`, c.ber ? `BER ${c.ber}` : '', perSqm ? `${cost(perSqm)}/m²` : ''].filter(Boolean).join(' · '); %>
                   <% if (specs) { %><div class="house-meta"><%= specs %></div><% } %>
-                  <% if (source) { %>
-                    <% const sourceLabel = c.source === 'daft' || c.source === 'daft_auto' ? 'Daft Sold' : 'PSRA data download'; %>
-                    <a class="house-source" href="<%= source %>" target="_blank" rel="noopener noreferrer" aria-label="<%= sourceLabel %> for <%= c.address %>"><%= sourceLabel %></a>
+                  <% const compSv = streetViewUrl(c); %>
+                  <% if (source || compSv) { %>
+                    <div class="house-event-links" style="margin-top:4px">
+                      <% if (source) { %>
+                        <% const sourceLabel = c.source === 'daft' || c.source === 'daft_auto' ? 'Daft Sold' : 'PSRA data download'; %>
+                        <a class="house-source" href="<%= source %>" target="_blank" rel="noopener noreferrer" aria-label="<%= sourceLabel %> for <%= c.address %>"><%= sourceLabel %></a>
+                      <% } %>
+                      <% if (compSv) { %><a class="house-source" href="<%= compSv %>" target="_blank" rel="noopener noreferrer" aria-label="Street View for <%= c.address %>">Street View ↗</a><% } %>
+                    </div>
                   <% } %>
                 </th>
                 <td><%= c.day ? entryDate(c.day) : '—' %></td>

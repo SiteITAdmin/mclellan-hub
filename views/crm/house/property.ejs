@@ -7,7 +7,9 @@
       <% if (p.address && p.address !== p.title) { %><p class="house-meta"><%= p.address %></p><% } %>
     </div>
     <div class="house-actions">
+      <% const svHref = streetViewUrl(p); %>
       <% if (linkUrl(p.url)) { %><a class="btn" href="<%= linkUrl(p.url) %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(p.url) %></a><% } %>
+      <% if (svHref) { %><a class="btn" href="<%= svHref %>" target="_blank" rel="noopener noreferrer">Street View ↗</a><% } %>
       <a class="btn" href="<%= propertyUrl(p.id) %>/edit">Edit property</a>
     </div>
   </header>

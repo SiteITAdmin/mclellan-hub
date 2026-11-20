@@ -276,6 +276,8 @@ test('listing inspection + multi-image photo heating analysis runs through model
   try {
     const html = await (await fetch(`${base}/house/properties/${prop.id}`)).text();
     assert.match(html, /View on Daft ↗/);
+    assert.match(html, /Street View ↗/);
+    assert.match(html, /google\.com\/maps\/search\/\?api=1&amp;query=.*Santry/);
     assert.match(html, /Vacant Home \/ Derelict Grant/);
     assert.match(html, /Gas central heating likely/);
     assert.match(html, /White wall-mounted gas boiler/);
@@ -286,6 +288,7 @@ test('listing inspection + multi-image photo heating analysis runs through model
     const filteredHtml = await (await fetch(`${base}/house/properties?minPrice=250000&maxPrice=400000&minBeds=3&minBaths=2`)).text();
     assert.match(filteredHtml, /Apartment 2, The Kilmore, Santry/);
     assert.match(filteredHtml, /View on Daft ↗/);
+    assert.match(filteredHtml, /Street View ↗/);
     assert.doesNotMatch(filteredHtml, /Small Studio Flat/);
     assert.doesNotMatch(filteredHtml, /Big Detached House/);
 
@@ -345,6 +348,8 @@ test('Daft listing & sold fetches route through daft-capable dev-server worker a
         { url: 'https://media.daft.ie/1.jpg', thumb: 'https://media.daft.ie/1t.jpg' },
         { url: 'https://media.daft.ie/2.jpg', thumb: 'https://media.daft.ie/2t.jpg' },
       ],
+      lat: 53.3951,
+      lng: -6.2452,
     }),
     fetchImage: async () => PNG,
     runModel: async ({ documents }) => {
@@ -397,6 +402,8 @@ test('Daft listing & sold fetches route through daft-capable dev-server worker a
   assert.equal(updatedProp.beds, 3);
   assert.equal(updatedProp.baths, 2);
   assert.equal(updatedProp.area, 102);
+  assert.equal(updatedProp.listing_lat, 53.3951);
+  assert.equal(updatedProp.listing_lng, -6.2452);
 
   // 2. Keywords-only via worker preserves prior photo_result_json without invoking AI
   const kwQueued = await listing.inspect(prop, { analyzePhotos: false, useWorker: true, jobs: subJobs, t: 1795205020 });

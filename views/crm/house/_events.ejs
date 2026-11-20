@@ -4,6 +4,7 @@
       <% const property = propertiesById.get(e.property_id);
          const isReadOnly = typeof readOnly !== 'undefined' && readOnly;
          const listingHref = linkUrl(e.listing?.url || property?.url);
+         const svHref = streetViewUrl(e.listing || property);
          const showPropertyLink = property && !isReadOnly && screen !== 'property'; %>
       <li class="house-event">
         <div>
@@ -13,9 +14,10 @@
             <%= [kinds[e.kind], property?.title, e.day ? entryDate(e.day) : (e.gmail_id ? fmt(e.occurred_at) : ''), e.time, e.person].filter(Boolean).join(' · ') %>
           </p>
           <% if (e.details) { %><p class="house-detail"><%= e.details %></p><% } %>
-          <% if (listingHref || showPropertyLink || (e.gmail_id && !isReadOnly)) { %>
+          <% if (listingHref || svHref || showPropertyLink || (e.gmail_id && !isReadOnly)) { %>
             <div class="house-event-links">
               <% if (listingHref) { %><a class="house-source" href="<%= listingHref %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(listingHref) %></a><% } %>
+              <% if (svHref) { %><a class="house-source" href="<%= svHref %>" target="_blank" rel="noopener noreferrer">Street View ↗</a><% } %>
               <% if (showPropertyLink) { %><a class="house-source" href="<%= propertyUrl(property.id) %>">Property page</a><% } %>
               <% if (e.gmail_id && !isReadOnly) { %><a class="house-source" href="<%= gmailUrl(e.gmail_id) %>" target="_blank" rel="noopener noreferrer"><%- icon.email %> Source email</a><% } %>
             </div>

@@ -77,9 +77,11 @@
                 <% if (bb) { %><span class="house-status" data-status="<%= bb.status %>"><%= bb.text %></span><% } %>
               </div>
             <% } %>
-            <% if (linkUrl(p.url)) { %>
+            <% const cardListing = linkUrl(p.url), cardSv = streetViewUrl(p); %>
+            <% if (cardListing || cardSv) { %>
               <div class="house-event-links">
-                <a class="house-source" href="<%= linkUrl(p.url) %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(p.url) %></a>
+                <% if (cardListing) { %><a class="house-source" href="<%= cardListing %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(cardListing) %></a><% } %>
+                <% if (cardSv) { %><a class="house-source" href="<%= cardSv %>" target="_blank" rel="noopener noreferrer">Street View ↗</a><% } %>
               </div>
             <% } %>
           </article>
@@ -114,7 +116,7 @@
         ]) { %>
           <tr><th scope="row"><%= name %></th><% for (const p of comparison) { %><td><%= value(p) || '—' %></td><% } %></tr>
         <% } %>
-          <tr><th scope="row">Listing</th><% for (const p of comparison) { %><td><% if (linkUrl(p.url)) { %><a class="house-source" href="<%= linkUrl(p.url) %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(p.url) %></a><% } else { %>—<% } %></td><% } %></tr>
+          <tr><th scope="row">Listing</th><% for (const p of comparison) { const cUrl = linkUrl(p.url), cSv = streetViewUrl(p); %><td><div class="house-event-links" style="margin-top:0"><% if (cUrl) { %><a class="house-source" href="<%= cUrl %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(cUrl) %></a><% } %><% if (cSv) { %><a class="house-source" href="<%= cSv %>" target="_blank" rel="noopener noreferrer">Street View ↗</a><% } %><% if (!cUrl && !cSv) { %>—<% } %></div></td><% } %></tr>
         </tbody>
       </table>
     </div>

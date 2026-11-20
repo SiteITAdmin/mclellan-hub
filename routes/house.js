@@ -84,6 +84,23 @@ function listingLabel(value) {
   return 'Open listing ↗';
 }
 
+function streetViewUrl(target) {
+  if (!target) return '';
+  const rawLat = target.lat ?? target.listing_lat;
+  const rawLng = target.lng ?? target.listing_lng;
+  if (rawLat != null && rawLng != null && rawLat !== '' && rawLng !== '') {
+    const lat = Number(rawLat);
+    const lng = Number(rawLng);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
+      return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+    }
+  }
+  const raw = String(target.address || target.title || '').trim();
+  if (!raw) return '';
+  const query = /\bireland\b/i.test(raw) ? raw : `${raw}, Ireland`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 function newEntry(query = {}) {
   return `${BASE}/entry/new?${new URLSearchParams(query)}`;
 }
@@ -134,7 +151,7 @@ function model(screen, filter = {}) {
   return {
     ...data, screen, tabs, base: BASE, today, propertiesById, events, archived, activeProperties, viewings, upcoming, offers,
     nextActions, overdue, checklist, stage, search, minPrice, maxPrice, minBeds, minBaths, visibleProperties, comparison, cost, label, entryDate, gmailUrl: house.getGmailUrl, propertyUrl,
-    entryUrl, linkUrl, listingLabel, newEntry, byDay,
+    entryUrl, linkUrl, listingLabel, streetViewUrl, newEntry, byDay,
   };
 }
 
