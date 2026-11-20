@@ -29,6 +29,52 @@
   </div>
 </section>
 
+<section class="house-section" id="commute" aria-labelledby="house-commute-heading">
+  <header class="house-section-head">
+    <div>
+      <h2 id="house-commute-heading">Commute to <%= workplace.name %></h2>
+      <p class="house-meta"><%= workplace.shortName %> · leaving at <%= workplace.departAm %> and returning around <%= workplace.departPm %></p>
+    </div>
+    <div class="house-actions">
+      <form method="post" action="<%= propertyUrl(p.id) %>/commute#commute">
+        <button class="btn <%= p.commute ? '' : 'primary' %>" type="submit"><%= p.commute ? 'Refresh commute' : 'Calculate commute' %></button>
+      </form>
+    </div>
+  </header>
+  <% if (typeof commuteError !== 'undefined' && commuteError) { %>
+    <p class="house-valuation-error" role="alert"><%= commuteError %></p>
+  <% } %>
+  <% const c = p.commute, driveTo = commuteDirectionsUrl(p, { direction: 'to', mode: 'driving' }), driveFrom = commuteDirectionsUrl(p, { direction: 'from', mode: 'driving' }), transitTo = commuteDirectionsUrl(p, { direction: 'to', mode: 'transit' }); %>
+  <% if (c) { %>
+    <div class="house-valuation-summary house-valuation-trio">
+      <div>
+        <span class="house-context">7:00 AM → <%= workplace.name %></span>
+        <p class="house-valuation-range"><%= formatCommuteRange(c.am_min, c.am_max) %></p>
+        <p class="house-meta"><%= c.free_flow_am_min ? `Free-flow ${c.free_flow_am_min} min` : '' %><% if (c.m50_toll) { %> · M50 toll<% } %></p>
+      </div>
+      <div class="house-valuation-mid">
+        <span class="house-context">4:00 PM ← <%= workplace.name %></span>
+        <strong><%= formatCommuteRange(c.pm_min, c.pm_max) %></strong>
+        <p class="house-meta"><%= c.free_flow_pm_min ? `Free-flow ${c.free_flow_pm_min} min` : '' %></p>
+      </div>
+      <div class="house-valuation-mid">
+        <span class="house-context">Distance &amp; route</span>
+        <strong><%= c.distance_km != null ? `${c.distance_km} km` : '—' %></strong>
+        <p class="house-meta"><%= c.roads?.length ? `Via ${c.roads.join(', ')}` : 'Local roads' %> · <%= c.source === 'google_routes' ? 'Google weekday traffic' : 'Estimated Dublin peak' %></p>
+      </div>
+    </div>
+  <% } else { %>
+    <p class="house-empty">Click "Calculate commute" to estimate the 7:00 AM drive to <%= workplace.name %> and 4:00 PM return.</p>
+  <% } %>
+  <% if (driveTo || driveFrom || transitTo) { %>
+    <div class="house-event-links" style="margin-top:10px">
+      <% if (driveTo) { %><a class="house-source" href="<%= driveTo %>" target="_blank" rel="noopener noreferrer">Google Maps: To Beacon (drive) ↗</a><% } %>
+      <% if (driveFrom) { %><a class="house-source" href="<%= driveFrom %>" target="_blank" rel="noopener noreferrer">Return home (drive) ↗</a><% } %>
+      <% if (transitTo) { %><a class="house-source" href="<%= transitTo %>" target="_blank" rel="noopener noreferrer">Public transport / Luas ↗</a><% } %>
+    </div>
+  <% } %>
+</section>
+
 <%- include('valuation', { p }) %>
 
 <%- include('listing-analysis', { p }) %>

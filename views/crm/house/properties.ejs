@@ -1,5 +1,5 @@
 <%
-  const hasFilters = Boolean(stage || search || minPrice != null || maxPrice != null || minBeds != null || minBaths != null);
+  const hasFilters = Boolean(stage || search || minPrice != null || maxPrice != null || minBeds != null || minBaths != null || maxCommute != null);
   const BATH_BADGE = {
     two_plus_full: { text: '2+ full baths', status: 'approved' },
     one_full_plus_wc: { text: '1 bath + WC only', status: 'declined' },
@@ -12,8 +12,15 @@
 %>
 <section class="house-section" aria-labelledby="house-properties-heading">
   <header class="house-section-head">
-    <h2 id="house-properties-heading">Properties</h2>
-    <span class="house-meta"><%= visibleProperties.length %> shown</span>
+    <div>
+      <h2 id="house-properties-heading">Properties</h2>
+      <span class="house-meta"><%= visibleProperties.length %> shown</span>
+    </div>
+    <% if (missingCommuteCount > 0) { %>
+      <form method="post" action="<%= base %>/properties/commutes">
+        <button class="btn small" type="submit">Calculate Beacon commutes (<%= missingCommuteCount %>)</button>
+      </form>
+    <% } %>
   </header>
   <form class="house-filters" method="get" action="<%= base %>/properties" role="search" aria-label="Filter properties">
     <label>Search <input type="search" class="input" name="q" value="<%= search %>" placeholder="Address or area"></label>
@@ -30,6 +37,10 @@
     <label>Bathrooms <select class="input" name="minBaths">
       <option value="">Any</option>
       <% for (const n of [1, 2, 3, 4]) { %><option value="<%= n %>" <% if (minBaths === n) { %>selected<% } %>><%= n %>+ bath</option><% } %>
+    </select></label>
+    <label>7am commute <select class="input" name="maxCommute">
+      <option value="">Any</option>
+      <% for (const m of [20, 30, 45, 60]) { %><option value="<%= m %>" <% if (maxCommute === m) { %>selected<% } %>>≤ <%= m %> min</option><% } %>
     </select></label>
     <button class="btn" type="submit">Filter</button>
     <% if (hasFilters) { %><a class="house-inline" href="<%= base %>/properties">Clear filters</a><% } %>
@@ -50,6 +61,7 @@
       <% if (maxPrice != null) { %><input type="hidden" name="maxPrice" value="<%= maxPrice %>"><% } %>
       <% if (minBeds != null) { %><input type="hidden" name="minBeds" value="<%= minBeds %>"><% } %>
       <% if (minBaths != null) { %><input type="hidden" name="minBaths" value="<%= minBaths %>"><% } %>
+      <% if (maxCommute != null) { %><input type="hidden" name="maxCommute" value="<%= maxCommute %>"><% } %>
       <% if (visibleProperties.length > 1) { %>
         <div class="house-compare-controls">
           <p class="house-meta">Select two to four properties to compare.</p>
@@ -72,6 +84,9 @@
               <span class="house-meta"><%= [p.beds == null ? '' : p.beds === 0 ? 'Studio' : `${p.beds} bed`, p.baths == null ? '' : `${p.baths} bath`, p.area == null ? '' : `${p.area} m²`].filter(Boolean).join(' · ') %></span>
             </div>
             <% if (p.seller_agency) { %><p class="house-meta">Agent: <%= p.seller_agency %></p><% } %>
+            <% if (p.commute) { %>
+              <p class="house-meta">Beacon: <strong>7am <%= formatCommuteRange(p.commute.am_min, p.commute.am_max) %></strong> · 4pm <%= formatCommuteRange(p.commute.pm_min, p.commute.pm_max) %><%= p.commute.distance_km != null ? ` (${p.commute.distance_km} km)` : '' %><%= p.commute.m50_toll ? ' · M50 toll' : '' %></p>
+            <% } %>
             <% if (hb || bb) { %>
               <div class="house-area-pills">
                 <% if (hb) { %><span class="house-status" data-status="<%= hb.status %>"><%= hb.text %></span><% } %>
@@ -111,6 +126,8 @@
           ['Bathrooms', p => p.baths],
           ['Floor area', p => p.area == null ? null : `${p.area} m²`],
           ['Selling agent', p => p.seller_agency],
+          ['7:00 AM → Beacon', p => p.commute ? `${formatCommuteRange(p.commute.am_min, p.commute.am_max)}${p.commute.distance_km != null ? ` (${p.commute.distance_km} km)` : ''}` : null],
+          ['4:00 PM ← Beacon', p => p.commute ? formatCommuteRange(p.commute.pm_min, p.commute.pm_max) : null],
           ['Stage', p => stages[p.status]],
           ['Next viewing', p => { const e = upcoming.find(v => v.property_id === p.id); return e ? [entryDate(e.day), e.time].filter(Boolean).join(' · ') : null; }],
           ['Latest offer', p => { const e = offers.find(v => v.property_id === p.id); return e ? [e.amount != null ? cost(e.amount) : '', label(e.status)].filter(Boolean).join(' · ') : null; }],

@@ -681,3 +681,79 @@ test('existing crm.db without seller columns migrates cleanly on startup', () =>
     process.env.CRM_DB_PATH = prev;
   }
 });
+
+test('commute to Beacon Hospital calculates 7am outbound & 4pm return, caches results, and filters on /house/properties', async () => {
+  const commute = require('../lib/crm/house/commute');
+  const nearProp = house.saveProperty({
+    title: '19 Millrace Park, Saggart, Co. Dublin',
+    address: '19 Millrace Park, Saggart, Co. Dublin',
+    asking_price: '325000',
+    beds: '3',
+    baths: '2',
+    status: 'shortlisted',
+  });
+  const farProp = house.saveProperty({
+    title: '7 Ashton Drive, Swords, Co. Dublin',
+    address: '7 Ashton Drive, Swords, Co. Dublin',
+    asking_price: '410000',
+    beds: '3',
+    baths: '2',
+    status: 'researching',
+  });
+
+  // Mock OSRM responses (outbound & return) + geocoder
+  const nearRes = await commute.calculateForProperty(nearProp, {
+    geocode: async () => ({ lat: 53.2809463, lng: -6.4527956 }),
+    fetcher: async () => ({
+      ok: true,
+      json: async () => ({
+        routes: [{ distance: 23100, duration: 1260, legs: [{ steps: [{ ref: 'N7' }, { ref: 'M50' }] }] }],
+      }),
+    }),
+    googleApiKey: '',
+    t: T,
+  });
+  assert.equal(nearRes.source, 'osrm_peak');
+  assert.equal(nearRes.distance_km, 23.1);
+  assert.equal(nearRes.m50_toll, false);
+  assert.ok(nearRes.am_min >= 22 && nearRes.am_max <= 36);
+  assert.ok(nearRes.pm_min > nearRes.am_min, '4pm return from Sandyford is slower than 7am outbound');
+
+  const farRes = await commute.calculateForProperty(farProp, {
+    geocode: async () => ({ lat: 53.4597, lng: -6.2181 }),
+    fetcher: async () => ({
+      ok: true,
+      json: async () => ({
+        routes: [{ distance: 38800, duration: 2040, legs: [{ steps: [{ ref: 'M1' }, { ref: 'M50' }] }] }],
+      }),
+    }),
+    googleApiKey: '',
+    t: T,
+  });
+  assert.equal(farRes.m50_toll, true, 'North Dublin M50 route flags West-Link toll');
+  assert.ok(farRes.am_max > 45);
+
+  const app = express();
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, '..', 'views'));
+  app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = { adminUser: 'douglas' }; next(); });
+  app.use(require('../routes/house'));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(r => server.once('listening', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const propHtml = await (await fetch(`${base}/house/properties/${nearProp.id}`)).text();
+    assert.match(propHtml, /Commute to Beacon Hospital/);
+    assert.match(propHtml, /7:00 AM → Beacon Hospital/);
+    assert.match(propHtml, /4:00 PM ← Beacon Hospital/);
+    assert.match(propHtml, /23\.1 km/);
+    assert.match(propHtml, /Via N7, M50/);
+
+    const filteredHtml = await (await fetch(`${base}/house/properties?maxCommute=45`)).text();
+    assert.match(filteredHtml, /19 Millrace Park, Saggart/);
+    assert.doesNotMatch(filteredHtml, /7 Ashton Drive, Swords/);
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+});

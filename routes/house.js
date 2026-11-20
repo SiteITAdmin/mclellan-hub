@@ -10,6 +10,7 @@ const views = require('../lib/crm/views');
 const house = require('../lib/crm/house');
 const valuation = require('../lib/crm/house/valuation');
 const listing = require('../lib/crm/house/listing');
+const commute = require('../lib/crm/house/commute');
 const { counties } = require('../lib/crm/house/sales-register');
 
 const router = express.Router();
@@ -142,6 +143,7 @@ function model(screen, filter = {}) {
   const maxPrice = parseFilterInt(filter.maxPrice);
   const minBeds = parseFilterInt(filter.minBeds);
   const minBaths = parseFilterInt(filter.minBaths);
+  const maxCommute = parseFilterInt(filter.maxCommute);
   const visibleProperties = data.properties.filter(p => {
     if (stage && p.status !== stage) return false;
     if (search && ![p.title, p.address, p.area].filter(Boolean).join(' ').toLowerCase().includes(search.toLowerCase())) return false;
@@ -149,15 +151,20 @@ function model(screen, filter = {}) {
     if (maxPrice != null && (p.asking_price == null || p.asking_price > maxPrice)) return false;
     if (minBeds != null && (p.beds == null || p.beds < minBeds)) return false;
     if (minBaths != null && (p.baths == null || p.baths < minBaths)) return false;
+    if (maxCommute != null) {
+      const amEst = p.commute?.am_max ?? p.commute?.am_min;
+      if (amEst == null || amEst > maxCommute) return false;
+    }
     return true;
   });
+  const missingCommuteCount = data.properties.filter(p => !p.commute && (p.address || p.title)).length;
   const comparisonIds = [...new Set([filter.compare].flat().filter(id => propertiesById.has(id)))];
   const comparison = comparisonIds.map(id => propertiesById.get(id));
 
   return {
     ...data, screen, tabs, base: BASE, today, propertiesById, events, archived, activeProperties, viewings, upcoming, offers,
-    nextActions, overdue, checklist, stage, search, minPrice, maxPrice, minBeds, minBaths, visibleProperties, comparison, cost, label, entryDate, gmailUrl: house.getGmailUrl, propertyUrl,
-    entryUrl, linkUrl, listingLabel, streetViewUrl, newEntry, byDay,
+    nextActions, overdue, checklist, stage, search, minPrice, maxPrice, minBeds, minBaths, maxCommute, missingCommuteCount, visibleProperties, comparison, cost, label, entryDate, gmailUrl: house.getGmailUrl, propertyUrl,
+    entryUrl, linkUrl, listingLabel, streetViewUrl, commuteDirectionsUrl: commute.directionsUrl, formatCommuteRange: commute.formatRange, workplace: commute.WORKPLACE, newEntry, byDay,
   };
 }
 
@@ -287,6 +294,41 @@ function saveProperty(req, res) {
   res.redirect(propertyUrl(property.id));
 }
 post('/properties', saveProperty, propertyFailure);
+post('/properties/commutes', async (req, res) => {
+  const missing = house.dashboard().properties.filter(p => !p.commute && (p.address || p.title)).slice(0, 15);
+  let done = 0;
+  let failed = 0;
+  for (const p of missing) {
+    try {
+      await commute.calculateForProperty(p);
+      done += 1;
+    } catch {
+      failed += 1;
+    }
+    // Polite spacing for public Nominatim / OSRM endpoints.
+    if (missing.length > 1) await new Promise(r => setTimeout(r, 350));
+  }
+  if (done) {
+    flash(req, `Calculated Beacon Hospital commute for ${done} ${done === 1 ? 'property' : 'properties'}${failed ? ` (${failed} could not be located)` : ''}.`);
+  } else if (failed) {
+    flash(req, 'Could not locate those addresses for commute calculation.', 'bad');
+  } else {
+    flash(req, 'All properties already have commute estimates.');
+  }
+  res.redirect(`${BASE}/properties`);
+}, (req, res, message) => {
+  flash(req, message, 'bad');
+  res.redirect(`${BASE}/properties`);
+});
+post('/properties/:id/commute', async (req, res) => {
+  const property = house.dashboard().properties.find(p => p.id === req.params.id);
+  if (!property) return res.status(404).send('Property not found');
+  await commute.calculateForProperty(property);
+  flash(req, `Commute to ${commute.WORKPLACE.name} updated.`);
+  res.redirect(`${propertyUrl(property.id)}#commute`);
+}, (req, res, message) => {
+  showProperty(req, res.status(400), { commuteError: message });
+});
 post('/properties/:id', saveProperty, propertyFailure);
 
 function comparablePost(path, action) {
