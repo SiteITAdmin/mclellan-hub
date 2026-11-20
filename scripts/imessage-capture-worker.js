@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 'use strict';
-const fs=require('fs'),path=require('path'),os=require('os'),Database=require('better-sqlite3');
+const fs=require('fs'),path=require('path'),os=require('os');
+// Built-in SQLite: the repo folder is shared with the Linux dev server over SMB, so a native
+// better-sqlite3 build is only ever right for one of the two machines.
+// Node 24 warns on every run; launchd runs this each minute, so that would fill the error log.
+const emitWarning=process.emitWarning;process.emitWarning=(w,...a)=>String(w?.message??w).startsWith('SQLite is an experimental')?undefined:emitWarning.call(process,w,...a);
+const {DatabaseSync}=require('node:sqlite');
+function openChat(file){if(!fs.existsSync(file))throw new Error(`Messages database not found: ${file}`);return new DatabaseSync(file,{readOnly:true});}
 const {execFileSync}=require('child_process');const {normPhone,normEmail}=require('../lib/crm/text');
 const APPLE=978307200;
 function normal(v){return String(v).includes('@')?normEmail(v):normPhone(v);}
 function readBatch(db,cursor=0,t=Math.floor(Date.now()/1000)){
- const rows=db.prepare(`SELECT m.ROWID row_id,m.guid id,m.text,m.attributedBody,m.date,m.is_from_me,m.cache_has_attachments,
+ const rows=db.prepare(`SELECT m.ROWID row_id,m.guid id,m.text,m.attributedBody,m.date/1000000000 date_s,m.is_from_me,m.cache_has_attachments,
  h.id sender,c.guid chat_id,c.ROWID chat_row FROM message m JOIN chat_message_join j ON j.message_id=m.ROWID JOIN chat c ON c.ROWID=j.chat_id
  LEFT JOIN handle h ON h.ROWID=m.handle_id WHERE m.ROWID>? AND m.date>? AND m.is_system_message=0 AND m.associated_message_type=0
- ORDER BY m.ROWID LIMIT 200`).all(cursor,(t-7*86400-APPLE)*1e9);
- return rows.map(r=>({...r,participants:db.prepare('SELECT h.id FROM chat_handle_join j JOIN handle h ON h.ROWID=j.handle_id WHERE j.chat_id=?').all(r.chat_row).map(x=>x.id),sent_at:Math.floor(r.date/1e9)+APPLE}));
+ ORDER BY m.ROWID LIMIT 200`).all(cursor,BigInt(t-7*86400-APPLE)*1000000000n);
+ return rows.map(r=>({...r,participants:db.prepare('SELECT h.id FROM chat_handle_join j JOIN handle h ON h.ROWID=j.handle_id WHERE j.chat_id=?').all(r.chat_row).map(x=>x.id),sent_at:r.date_s+APPLE}));
 }
 function privateValues(data){const result=new Set();const walk=v=>{if(typeof v==='string'||typeof v==='number'){result.add(normal(String(v)));}else if(Array.isArray(v))v.forEach(walk);else if(v&&typeof v==='object')Object.values(v).forEach(walk);};walk(data.contacts||[]);return result;}
 function eligible(row,heartbeat,privateSet){
@@ -23,13 +29,13 @@ async function once({root=path.join(os.homedir(),'.hermes','hub-capture'),http=f
  const stateFile=path.join(root,'imessage-state.json');let state={cursor:0,sent:0,skipped:0,error:''};try{state={...state,...JSON.parse(fs.readFileSync(stateFile,'utf8'))};}catch{}
  const save=()=>fs.writeFileSync(stateFile,JSON.stringify(state),{mode:0o600});let db;
  try{
-  const heartbeat=await post('heartbeat',state);db=new Database(dbPath,{readonly:true,fileMustExist:true});
+  const heartbeat=await post('heartbeat',state);db=openChat(dbPath);
   const privateFile=path.join(root,'private-contacts.json');const privateSet=fs.existsSync(privateFile)?privateValues(JSON.parse(fs.readFileSync(privateFile,'utf8'))):new Set();
   if(heartbeat.paused){state.cursor=db.prepare('SELECT MAX(ROWID) n FROM message').get().n||state.cursor;state.error='';save();return state;}
   const rows=readBatch(db,state.cursor);const selected=rows.filter(r=>eligible(r,heartbeat,privateSet));
   const encoded=selected.filter(r=>!r.text&&r.attributedBody);
   let decoded=[];
-  if(encoded.length){decoded=JSON.parse(execFileSync(path.join(__dirname,'..','.tools','imessage-text'),[],{input:JSON.stringify(encoded.map(r=>r.attributedBody.toString('base64'))),timeout:15000,maxBuffer:4*1024*1024}).toString());}
+  if(encoded.length){decoded=JSON.parse(execFileSync(path.join(__dirname,'..','.tools','imessage-text'),[],{input:JSON.stringify(encoded.map(r=>Buffer.from(r.attributedBody).toString('base64'))),timeout:15000,maxBuffer:4*1024*1024}).toString());}
   const bodyById=new Map(encoded.map((r,i)=>[r.id,decoded[i]||'']));
   for(const r of rows){
    state.cursor=Math.max(state.cursor,r.row_id);save();
@@ -42,7 +48,7 @@ async function once({root=path.join(os.homedir(),'.hermes','hub-capture'),http=f
  }catch(e){
   state.error=String(e.message).slice(0,300);
   // A paused or disconnected reader never replays a backlog after it reconnects.
-  try{db ||= new Database(dbPath,{readonly:true,fileMustExist:true});state.cursor=db.prepare('SELECT MAX(ROWID) n FROM message').get().n||state.cursor;}catch{}
+  try{db ||= openChat(dbPath);state.cursor=db.prepare('SELECT MAX(ROWID) n FROM message').get().n||state.cursor;}catch{}
   save();await post('heartbeat',state).catch(()=>{});throw e;
  }finally{db?.close();}
 }
