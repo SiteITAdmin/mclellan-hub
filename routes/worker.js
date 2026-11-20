@@ -27,6 +27,7 @@ router.post('/api/subscription-agent/worker/claim', requireWorkerAuth, workerLim
       maxPriority: req.body?.max_priority ?? null,
       minPriority: req.body?.min_priority ?? null,
       available: req.body?.available ?? null,
+      capabilities: Array.isArray(req.body?.capabilities) ? req.body.capabilities : [],
     }));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

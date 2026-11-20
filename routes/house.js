@@ -277,8 +277,10 @@ post('/properties/:id/inspect', async (req, res) => {
   if (!property) return res.status(404).send('Property not found');
   const wantPhotos = req.body.photos !== '0';
   const result = await listing.inspect(property, { analyzePhotos: wantPhotos });
-  if (wantPhotos && result.photo_status === 'waiting') {
-    flash(req, 'Listing keywords extracted. Photo heating & condition analysis queued — this page updates automatically.');
+  if (result.photo_status === 'waiting') {
+    flash(req, wantPhotos
+      ? 'Queued Daft listing & photo inspection on your home worker — this page updates automatically.'
+      : 'Queued Daft listing keyword check on your home worker — this page updates automatically.');
   } else {
     flash(req, 'Listing details and keywords updated.');
   }

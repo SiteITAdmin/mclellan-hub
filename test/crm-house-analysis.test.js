@@ -299,3 +299,171 @@ test('listing inspection + multi-image photo heating analysis runs through model
     server.close();
   }
 });
+
+test('Daft listing & sold fetches route through daft-capable dev-server worker and stay invisible to legacy workers', async () => {
+  const prop = house.saveProperty({
+    title: '12 Oakwood Park, Santry, Dublin 9',
+    address: '12 Oakwood Park, Santry, Dublin 9',
+    url: 'https://www.daft.ie/for-sale/terraced-house-12-oakwood-park-santry/9999999',
+    status: 'shortlisted',
+  });
+
+  // 1. Enqueue full inspection via worker
+  const queued = await listing.inspect(prop, { analyzePhotos: true, useWorker: true, jobs: subJobs, t: 1795205000 });
+  assert.equal(queued.photo_status, 'waiting');
+  assert.ok(queued.photo_job_id);
+
+  // Legacy worker (no 'daft' capability) MUST NOT claim it
+  const legacyClaim = subJobs.claim({ workerId: 'mac:legacy', limit: 1, capabilities: [] });
+  assert.equal(legacyClaim.jobs.length, 0);
+
+  // dev-server-fast worker WITH 'daft' capability claims it immediately (priority 15 <= 30)
+  const devClaim = subJobs.claim({ workerId: 'dev-server-fast', limit: 1, maxPriority: 30, capabilities: ['daft'] });
+  assert.equal(devClaim.jobs.length, 1);
+  const job = devClaim.jobs[0];
+  assert.equal(job.payload.task, 'daft_inspect');
+  assert.equal(job.payload.requiresWorkerCapability, 'daft');
+
+  const workerResult = await listing.runDaftInspectTask(job.payload, {
+    fetchListing: async () => ({
+      url: prop.url,
+      title: '12 Oakwood Park, Santry, Dublin 9',
+      asking_price: 425000,
+      beds: 3,
+      baths: 2,
+      area: 102,
+      property_type: 'Terraced House',
+      ber: 'C1',
+      selling_type: 'Private Treaty',
+      date_of_construction: '1988',
+      description: 'Gas fired central heating. Main bathroom upstairs and en-suite shower room off master bedroom.',
+      features: ['GFCH', 'Master En-suite'],
+      facilities: ['Gas Fired Central Heating'],
+      images: [
+        { url: 'https://media.daft.ie/1.jpg', thumb: 'https://media.daft.ie/1t.jpg' },
+        { url: 'https://media.daft.ie/2.jpg', thumb: 'https://media.daft.ie/2t.jpg' },
+      ],
+    }),
+    fetchImage: async () => PNG,
+    runModel: async ({ documents }) => {
+      assert.equal(documents.length, 2);
+      return {
+        runner: 'claude',
+        model: 'sonnet',
+        effort: 'medium',
+        tier: 'sonnet',
+        durationMs: 1200,
+        text: JSON.stringify({
+          heating_verdict: 'gas_likely',
+          heating_confidence: 'high',
+          heating_summary: 'Gas boiler and wet radiators clearly visible.',
+          heating_evidence: [{ photo: 1, room: 'Kitchen', observation: 'Wall-mounted gas boiler' }],
+          bathroom_verdict: 'two_plus_full',
+          bathroom_confidence: 'high',
+          full_bathrooms_visible: 2,
+          wc_only_visible: 0,
+          bathroom_summary: 'Main family bathroom with tub plus en-suite shower room.',
+          bathroom_evidence: [
+            { photo: 1, room: 'Main bathroom', has_bath_or_shower: true, observation: 'Full bathtub' },
+            { photo: 2, room: 'En-suite', has_bath_or_shower: true, observation: 'Glass shower enclosure' },
+          ],
+          condition: 'good',
+          condition_summary: 'Well kept throughout.',
+          notes: [],
+        }),
+      };
+    },
+  });
+
+  await subJobs.complete({
+    jobId: job.id,
+    claimToken: job.claim_token,
+    output: JSON.stringify(workerResult.output),
+    meta: workerResult.meta,
+  });
+
+  const collected = listing.collect(prop.id, { jobs: subJobs, t: 1795205010 });
+  assert.equal(collected.photo_status, 'done');
+  assert.equal(collected.ber, 'C1');
+  assert.equal(collected.baths, 2);
+  assert.equal(collected.photo_result.bathroom_verdict, 'two_plus_full');
+  assert.equal(collected.photo_result.full_bathrooms_visible, 2);
+  assert.equal(collected.photo_model, 'claude/sonnet');
+  // Blank property fields auto-filled from worker listing data
+  const updatedProp = house.dashboard().properties.find(p => p.id === prop.id);
+  assert.equal(updatedProp.asking_price, 425000);
+  assert.equal(updatedProp.beds, 3);
+  assert.equal(updatedProp.baths, 2);
+  assert.equal(updatedProp.area, 102);
+
+  // 2. Keywords-only via worker preserves prior photo_result_json without invoking AI
+  const kwQueued = await listing.inspect(prop, { analyzePhotos: false, useWorker: true, jobs: subJobs, t: 1795205020 });
+  assert.equal(kwQueued.photo_status, 'waiting');
+  const kwClaim = subJobs.claim({ workerId: 'dev-server-fast', limit: 1, maxPriority: 30, capabilities: ['daft'] });
+  assert.equal(kwClaim.jobs.length, 1);
+  const kwOut = await listing.runDaftInspectTask(kwClaim.jobs[0].payload, {
+    fetchListing: async () => ({
+      url: prop.url,
+      title: prop.title,
+      asking_price: 425000,
+      beds: 3,
+      baths: 2,
+      area: 102,
+      property_type: 'Terraced House',
+      ber: 'B3',
+      selling_type: 'Private Treaty',
+      date_of_construction: '1988',
+      description: 'Updated BER B3 listing.',
+      features: [],
+      facilities: [],
+      images: [],
+    }),
+  });
+  await subJobs.complete({
+    jobId: kwClaim.jobs[0].id,
+    claimToken: kwClaim.jobs[0].claim_token,
+    output: JSON.stringify(kwOut.output),
+    meta: kwOut.meta,
+  });
+  const kwDone = listing.collect(prop.id, { jobs: subJobs, t: 1795205025 });
+  assert.equal(kwDone.ber, 'B3');
+  assert.equal(kwDone.photo_status, 'done');
+  assert.equal(kwDone.photo_result.bathroom_verdict, 'two_plus_full');
+
+  // 3. Daft Sold via worker (synchronous wait resolved by worker claim/complete)
+  const soldPromise = valuation.refreshAreaHistory({ county: 'Dublin', locality: 'Santry', useWorker: true, jobs: subJobs, t: 1795205030 });
+  await new Promise(r => setTimeout(r, 40));
+  // Legacy worker must not see it
+  assert.equal(subJobs.claim({ workerId: 'mac:legacy', limit: 1, capabilities: [] }).jobs.length, 0);
+  const soldClaim = subJobs.claim({ workerId: 'dev-server-fast', limit: 1, maxPriority: 30, capabilities: ['daft'] });
+  assert.equal(soldClaim.jobs.length, 1);
+  assert.equal(soldClaim.jobs[0].payload.task, 'daft_sold');
+  await subJobs.complete({
+    jobId: soldClaim.jobs[0].id,
+    claimToken: soldClaim.jobs[0].claim_token,
+    output: JSON.stringify({
+      areaSlug: 'santry-dublin',
+      rows: [{
+        source_id: 'daft-worker-1',
+        county: 'Dublin',
+        locality: 'Santry',
+        address: '8 Oakwood Park, Santry, Dublin 9',
+        day: '2026-09-12',
+        sold: 440000,
+        asking: 415000,
+        beds: 3,
+        baths: 2,
+        area: 100,
+        property_type: 'Terraced House',
+        ber: 'C2',
+        lat: null,
+        lng: null,
+        url: 'https://www.daft.ie/sold/8-oakwood-park-santry/daft-worker-1',
+      }],
+    }),
+    meta: { runner: 'daft-worker', model: 'http', rows: 1 },
+  });
+  const soldRes = await soldPromise;
+  assert.equal(soldRes.saved, 1);
+  assert.equal(soldRes.areaSlug, 'santry-dublin');
+});

@@ -10,7 +10,7 @@ UNIT_NAME="mclellan-hub-fast-worker.service"
 UNIT_PATH="${UNIT_DIR}/${UNIT_NAME}"
 NODE_BIN="$(command -v node)"
 MAX_PRIORITY="${SUBSCRIPTION_AGENT_MAX_PRIORITY:-30}"
-IDLE_MS="${SUBSCRIPTION_AGENT_IDLE_MS:-10000}"
+IDLE_MS="${SUBSCRIPTION_AGENT_IDLE_MS:-5000}"
 
 if [[ ! -f "${ROOT}/.env" ]]; then
   echo "Error: ${ROOT}/.env not found (needs HUB_URL and SUBSCRIPTION_AGENT_WORKER_SECRET)." >&2

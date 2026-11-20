@@ -26,6 +26,8 @@ if (!HUB_URL || !SECRET) throw new Error('HUB_URL and SUBSCRIPTION_AGENT_WORKER_
 
 const { runSubscriptionText, availableRunners } = require('../lib/subscription-agent');
 const { resolveFeatureRunner } = require('../lib/feature-runners');
+const daft = require('../lib/crm/house/daft');
+const houseListing = require('../lib/crm/house/listing');
 
 // Default 30s idle poll — continuous 5s claims hit the Hub write rate limiter.
 const IDLE_MS = Math.max(5000, Number(process.env.SUBSCRIPTION_AGENT_IDLE_MS) || 30000);
@@ -70,6 +72,44 @@ async function processJob(job) {
     fallbackTo: featureConfig.fallbackTo || null,
     lanes: Array.isArray(p.lanes) ? p.lanes.filter(l => l && LANE_RUNNERS.has(l.runner) && typeof l.model === 'string') : null,
   };
+
+  if (p.task === 'daft_sold') {
+    const res = await daft.fetchSoldArea(p.county, p.locality, {
+      extraLocality: p.extraLocality || '',
+      pages: Number(p.pages) || 2,
+    });
+    await api('/api/subscription-agent/worker/complete', {
+      job_id: job.id,
+      claim_token: job.claim_token,
+      output: JSON.stringify(res),
+      meta: { runner: 'daft-worker', model: 'http', rows: res.rows?.length || 0 },
+    });
+    console.log(`[subscription-agent-worker] completed ${job.feature} ${job.id} (${res.rows?.length || 0} Daft sold rows)`);
+    return;
+  }
+
+  if (p.task === 'daft_inspect') {
+    const res = await houseListing.runDaftInspectTask(p, {
+      runModel: ({ systemPrompt, userPrompt, documents }) => runSubscriptionText({
+        feature: 'crm_house_photos',
+        systemPrompt,
+        userPrompt,
+        documents,
+        timeoutMs: config.timeoutMs || 300000,
+        force: true,
+        config,
+      }),
+    });
+    await api('/api/subscription-agent/worker/complete', {
+      job_id: job.id,
+      claim_token: job.claim_token,
+      output: JSON.stringify(res.output),
+      meta: res.meta,
+    });
+    console.log(`[subscription-agent-worker] completed ${job.feature} ${job.id} (daft_inspect via ${res.meta?.runner}/${res.meta?.model})`);
+    return;
+  }
+
   if (config.runner === 'local') {
     throw new Error(`Feature ${job.feature} is a local specialist and cannot run on the CLI worker`);
   }
@@ -108,6 +148,7 @@ async function tick() {
     ...(MAX_PRIORITY ? { max_priority: MAX_PRIORITY } : {}),
     ...(MIN_PRIORITY ? { min_priority: MIN_PRIORITY } : {}),
     available: availableRunners(),
+    capabilities: ['daft'],
   });
   const jobs = claimed.jobs || [];
   if (!jobs.length) return false;
