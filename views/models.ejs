@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en-IE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Models – Hub</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/crm.css">
+  <link rel="stylesheet" href="/home.css">
+</head>
+<body>
+<%
+  const counts = o => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ');
+  const laneNames = ['Main', 'Backup 1', 'Backup 2'];
+%>
+<div class="home models">
+  <header class="home-bar">
+    <a class="home-brand" href="/home"><%- icon.mark %>Hub</a>
+    <form method="POST" action="/admin/logout"><button class="btn small" type="submit">Sign out</button></form>
+  </header>
+
+  <h1 class="home-hello">Models</h1>
+  <p class="subline">Which AI does each job, and which two stand in when it can&rsquo;t. A change applies to the next job queued.</p>
+
+  <% if (saved) { %><p class="models-note ok" role="status">Saved. New jobs use these choices.</p><% } %>
+  <% if (errors.length) { %>
+    <div class="models-note bad" role="alert"><strong>Nothing was saved.</strong><ul><% errors.forEach(e => { %><li><%= e %></li><% }) %></ul></div>
+  <% } %>
+
+  <section class="machines" aria-label="Machines">
+    <h2>Where the models run</h2>
+    <% if (!workers.length) { %>
+      <p class="muted">No machine has reported what it has installed yet. Each one does on its next check-in after updating.</p>
+    <% } else { %>
+      <ul>
+        <% workers.forEach(w => { %>
+          <li>
+            <span class="name"><%= w.machine %></span>
+            <span class="muted"><%= w.id %> &middot; <%= w.live ? 'checked in ' + ago(w.seenAt) : 'last seen ' + ago(w.seenAt) %></span>
+            <span class="runners">
+              <% Object.entries(runnerNames).forEach(([r, label]) => { %>
+                <span class="runner <%= w.available[r] ? 'yes' : 'no' %>"><%= label %><span class="sr-only"><%= w.available[r] ? ' installed' : ' not installed' %></span></span>
+              <% }) %>
+            </span>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+
+  <form method="POST" action="/models" class="models-form">
+    <% groups.forEach(g => { %>
+      <section class="model-group">
+        <h2><%= g.name %></h2>
+        <div class="model-head" aria-hidden="true"><span></span><% laneNames.forEach(n => { %><span><%= n %></span><% }) %></div>
+        <% g.rows.forEach(r => { %>
+          <div class="model-row">
+            <div class="model-what">
+              <span class="name"><%= r.label %></span>
+              <span class="what"><%= r.what %><% if (r.needs) { %> &middot; needs <%= r.needs.map(n => ({ pdf: 'PDF reading', image: 'picture reading', web: 'web search' })[n]).join(' and ') %><% } %></span>
+            </div>
+            <% [0, 1, 2].forEach(i => { %>
+              <label class="lane">
+                <span class="lane-name"><%= laneNames[i] %></span>
+                <select class="select" name="lanes[<%= r.fn %>][<%= i %>]" aria-label="<%= r.label %>: <%= laneNames[i] %>">
+                  <% if (i > 0) { %><option value=""<%= r.lanes[i] ? '' : ' selected' %>>None</option><% } %>
+                  <% r.choices.forEach(k => { %><option value="<%= k %>"<%= r.lanes[i] === k ? ' selected' : '' %>><%= models[k].label %></option><% }) %>
+                </select>
+              </label>
+            <% }) %>
+            <p class="model-activity">
+              <% const a = r.activity; if (!a) { %>Not run in the last 7 days.<% } else { %>
+                Last 7 days: <%= a.runs %> run<%= a.runs === 1 ? '' : 's' %><% if (a.done) { %> &middot; answered by <%= counts(a.models) %> &middot; on <%= counts(a.machines) %><% } %><% if (a.standIn) { %> &middot; <strong><%= a.standIn %> by a stand-in</strong><% } %><% if (a.failed) { %> &middot; <strong class="bad"><%= a.failed %> failed</strong><% } %><% if (a.waiting) { %> &middot; <%= a.waiting %> waiting<% } %>
+              <% } %>
+            </p>
+            <% r.missing.forEach(m => { %><p class="model-warn"><%= m %></p><% }) %>
+          </div>
+        <% }) %>
+      </section>
+    <% }) %>
+    <div class="models-save"><button class="btn primary" type="submit">Save choices</button></div>
+  </form>
+
+  <section class="model-group no-model">
+    <h2>No model</h2>
+    <p class="muted">The flight tracker calls no AI: Ryanair emails are read by fixed rules, and live take-off and landing times come from AeroDataBox.</p>
+  </section>
+</div>
+</body>
+</html>

@@ -14,6 +14,7 @@ const houseRouter = require('./routes/house');
 const workerRouter = require('./routes/worker');
 const crmRouter = require('./routes/crm');
 const homeRouter = require('./routes/home');
+const modelsRouter = require('./routes/models');
 const whatsappCaptureRouter = require('./routes/whatsapp-capture');
 const booxAppRouter = require('./routes/boox-app');
 const krispCaptureRouter = require('./routes/krisp-capture');
@@ -96,6 +97,7 @@ function portfolioHost(req, res, next, user) {
     if (req.path === '/money' || req.path.startsWith('/money/')) return moneyRouter(req, res, next);
     if (req.path === '/house' || req.path.startsWith('/house/')) return houseRouter(req, res, next);
     if (req.path === '/home') return homeRouter(req, res, next);
+    if (req.path === '/models') return modelsRouter(req, res, next);
     if (req.path === '/crm' || req.path.startsWith('/crm/')) return crmRouter(req, res, next);
     if (req.path.startsWith('/api/crm/imessage/')) return imessageCaptureRouter(req, res, next);
     if (req.path.startsWith('/api/crm/whatsapp/')) return whatsappCaptureRouter(req, res, next);

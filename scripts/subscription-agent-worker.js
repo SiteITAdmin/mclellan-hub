@@ -24,7 +24,7 @@ const HUB_URL = String(process.env.HUB_URL || '').replace(/\/$/, '');
 const SECRET = String(process.env.SUBSCRIPTION_AGENT_WORKER_SECRET || '').trim();
 if (!HUB_URL || !SECRET) throw new Error('HUB_URL and SUBSCRIPTION_AGENT_WORKER_SECRET are required');
 
-const { runSubscriptionText } = require('../lib/subscription-agent');
+const { runSubscriptionText, availableRunners } = require('../lib/subscription-agent');
 const { resolveFeatureRunner } = require('../lib/feature-runners');
 
 // Default 30s idle poll — continuous 5s claims hit the Hub write rate limiter.
@@ -51,6 +51,8 @@ async function api(pathname, body) {
   return data;
 }
 
+const LANE_RUNNERS = new Set(['claude', 'codex', 'grok', 'antigravity']);
+
 async function processJob(job) {
   const p = job.payload || {};
   const featureConfig = resolveFeatureRunner(job.feature);
@@ -66,6 +68,7 @@ async function processJob(job) {
     jsonMode: featureConfig.jsonMode,
     tier: featureConfig.tier,
     fallbackTo: featureConfig.fallbackTo || null,
+    lanes: Array.isArray(p.lanes) ? p.lanes.filter(l => l && LANE_RUNNERS.has(l.runner) && typeof l.model === 'string') : null,
   };
   if (config.runner === 'local') {
     throw new Error(`Feature ${job.feature} is a local specialist and cannot run on the CLI worker`);
@@ -104,6 +107,7 @@ async function tick() {
     limit: 1,
     ...(MAX_PRIORITY ? { max_priority: MAX_PRIORITY } : {}),
     ...(MIN_PRIORITY ? { min_priority: MIN_PRIORITY } : {}),
+    available: availableRunners(),
   });
   const jobs = claimed.jobs || [];
   if (!jobs.length) return false;
