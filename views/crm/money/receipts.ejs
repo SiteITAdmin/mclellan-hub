@@ -1,4 +1,4 @@
-<%- include('../_top') %>
+<%- include('../../_tool-top') %>
 <% const s = r.s, month = new Date(`${s.today.slice(0, 7)}-01T12:00:00Z`).toLocaleDateString('en-IE', { month: 'long', timeZone: 'UTC' }); %>
 <div class="title-row"><div><h1>Receipts</h1><p class="subline">The bank's lines are what counts. A receipt waits here until its bank line arrives in an upload, then sits beside it, so nothing is counted twice.</p></div></div>
 <%- include('_nav') %>
@@ -83,4 +83,4 @@
 <% if (!s.any) { %>
 <section class="grid"><div class="panel s12"><div class="empty">No receipts yet. Photograph one when you get it; it waits here until the bank line arrives, and the total above shows what the bank has not caught up with.</div></div></section>
 <% } %>
-<%- include('../_bottom') %>
+<%- include('../../_tool-bottom') %>

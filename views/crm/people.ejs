@@ -10,7 +10,7 @@
 <section class="grid first">
   <div class="panel s8">
     <% if (!list.length) { %><div class="empty"><%= q ? 'Nobody matches that.' : 'No people yet. Approve them in Who is this? as mail arrives.' %></div><% } else { %>
-    <table class="table">
+    <div class="table-wrap"><table class="table">
       <thead><tr><th>Name</th><th>Organisation</th><th class="num">Facts</th><th class="num">Last contact</th></tr></thead>
       <tbody>
       <% for (const p of list) { %>
@@ -22,7 +22,7 @@
         </tr>
       <% } %>
       </tbody>
-    </table>
+    </table></div>
     <% } %>
   </div>
   <div class="panel s4">

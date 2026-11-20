@@ -22,6 +22,16 @@
       <button class="btn" type="submit">Add</button>
     </form>
   </div>
+  <% if (locals.topicDupes && topicDupes.length) { %>
+  <div class="panel">
+    <div class="panel-head"><h2>Near-duplicate topics</h2><span class="chip"><%= topicDupes.length %></span></div>
+    <p class="subline" style="margin-top:0;font-size:13px">Topics that look like spelling or plural variants:</p>
+    <ul class="list" style="padding-left:18px;margin:8px 0 12px;font-size:13px">
+      <% for (const g of topicDupes.slice(0, 6)) { %><li><strong><%= g.keep.name %></strong> ← <%= g.merge.map(m => m.name).join(', ') %></li><% } %>
+    </ul>
+    <form method="post" action="/crm/<%= space %>/topics/tidy"><button class="btn small" type="submit">Merge duplicates</button></form>
+  </div>
+  <% } %>
   </div>
 </section>
 <%- include('_bottom') %>

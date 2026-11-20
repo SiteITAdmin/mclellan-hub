@@ -4,6 +4,12 @@
 [data-space="flights"] {
   --panel: #eeeefb; --row: #fafaff; --row-edge: #dadaf2; --accent: #5456c4; --active: #e3e3f7;
 }
+[data-space="money"] {
+  --panel: #eef3ea; --row: #fafcf8; --row-edge: #dbe3d5; --accent: #1b6e66; --active: #dfe8da;
+}
+[data-space="house"] {
+  --panel: #f4efe6; --row: #fdfbf7; --row-edge: #e4dac9; --accent: #7a5228; --active: #ebe2d3;
+}
 
 .home { max-width: 1148px; margin: 0 auto; padding: 24px 24px 72px; }
 .home-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 64px; }
@@ -58,6 +64,16 @@
 .money-art .money-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
 .money-art .money-coin { fill: var(--accent); }
 .money-art .money-euro { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; }
+
+.house-art { display: block; width: 100%; height: auto; }
+.house-art .house-ground { stroke: var(--accent); stroke-opacity: 0.3; stroke-width: 1.5; stroke-dasharray: 6 6; }
+.house-art .house-body { fill: var(--row); stroke: var(--row-edge); stroke-width: 2; }
+.house-art .house-roof { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.house-art .house-door { fill: var(--accent); }
+.house-art .house-win { fill: var(--panel); stroke: var(--row-edge); stroke-width: 1.5; }
+.house-art .house-pin { fill: var(--accent); }
+.house-art .house-pin-stem { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; stroke-linecap: round; }
+.house-art .house-pin-mark { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 
 /* The one moving thing on the page: the plane leaves Dublin once, when the page opens. */
 @supports (offset-path: path("M0 0")) {

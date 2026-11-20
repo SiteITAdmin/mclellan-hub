@@ -1,22 +1,94 @@
 <%- include('_top') %>
-<div class="title-row"><div><h1>Contacts and LinkedIn</h1><p class="subline">Exact email addresses and phone numbers strengthen known identities. New people and conflicting details wait for you.</p></div></div>
-<section class="grid first"><div class="panel s6"><h2>Google Contacts</h2>
-<p><%= connected ? 'Connected. Checked daily.' : 'Connect the main Google account to read names, email addresses, phones and birthdays.' %></p>
-<% if(run?.last_error) { %><p class="flash bad"><%= run.last_error %></p><% } %>
-<% if(run?.last_ok && connected) { %><p class="stamp">Last checked <%= ago(run.last_ok) %></p><% } %>
-<a class="btn" href="/crm/imports/contacts/connect"><%= connected ? 'Reconnect Google Contacts' : 'Connect Google Contacts' %></a>
-</div><div class="panel s6"><h2>LinkedIn connections</h2>
-<form method="post" action="/crm/imports/linkedin" enctype="multipart/form-data"><label for="connections">Connections.csv from your LinkedIn data export</label><input id="connections" type="file" name="file" accept=".csv" required><p><button class="btn" type="submit">Import connections</button></p></form>
+<div class="title-row">
+  <div>
+    <h1>Contacts and LinkedIn</h1>
+    <p class="subline">Exact email addresses and phone numbers strengthen known identities. New people and conflicting details wait here (<%= total %> matching).</p>
+  </div>
+  <a class="btn small" href="/crm/settings">Connections &amp; setup</a>
+</div>
+<section class="grid first">
+  <div class="panel s6">
+    <div class="panel-head"><h2>Google Contacts</h2></div>
+    <p><%= connected ? 'Connected. Checked daily.' : 'Connect the main Google account to read names, email addresses, phones and birthdays.' %></p>
+    <% if (run?.last_error) { %><p class="flash bad"><%= run.last_error %></p><% } %>
+    <% if (run?.last_ok && connected) { %><p class="stamp">Last checked <%= ago(run.last_ok) %></p><% } %>
+    <a class="btn small" href="/crm/imports/contacts/connect"><%= connected ? 'Reconnect Google Contacts' : 'Connect Google Contacts' %></a>
+  </div>
+  <div class="panel s6">
+    <div class="panel-head"><h2>LinkedIn connections</h2></div>
+    <form method="post" action="/crm/imports/linkedin" enctype="multipart/form-data">
+      <label for="connections">Connections.csv from your LinkedIn data export</label>
+      <div class="form-row" style="margin-top:8px"><input id="connections" type="file" name="file" accept=".csv" required><button class="btn small" type="submit">Import connections</button></div>
+    </form>
+  </div>
+</section>
+
+<section class="grid"><div class="panel s12">
+  <div class="panel-head">
+    <h2>Waiting for review</h2>
+    <span class="chip"><%= total %> total</span>
+    <form class="end form-row" method="get" action="/crm/imports" role="search">
+      <input class="input" name="q" value="<%= q %>" placeholder="Search name, company, email…" aria-label="Search imported contacts" style="height:30px">
+      <button class="btn small" type="submit">Find</button>
+      <% if (q) { %><a class="btn text small" href="/crm/imports">Clear</a><% } %>
+    </form>
+  </div>
+
+  <% if (!imports.length) { %>
+    <div class="empty"><%= q ? 'No imported contacts match that search.' : 'No imported contacts waiting.' %></div>
+  <% } else { %>
+    <div class="bulk-bar" style="position:static;margin:0 0 14px">
+      <label class="bulk-all"><input type="checkbox" data-check-all="ids" form="imports-bulk"> Select all on this page</label>
+      <form id="imports-bulk" method="post" action="/crm/imports/bulk-ignore" class="inline-form">
+        <input type="hidden" name="q" value="<%= q %>">
+        <button class="btn small" type="submit">Ignore selected</button>
+      </form>
+      <% if (!q && total > 1) { %>
+      <form method="post" action="/crm/imports/bulk-ignore" class="inline-form">
+        <input type="hidden" name="allPending" value="1">
+        <button class="btn text small" type="submit">Ignore all pending</button>
+      </form>
+      <% } %>
+    </div>
+
+    <div class="rows">
+    <% for (const r of imports) { %>
+      <div class="rowcard import-row" data-async-row>
+        <input type="checkbox" name="ids" value="<%= r.id %>" form="imports-bulk" aria-label="Select <%= r.data.name || 'contact' %>">
+        <div class="main">
+          <div class="what"><%= r.data.name || 'Unnamed contact' %> <span class="pill neutral"><%= r.provider === 'contacts' ? 'Google Contacts' : 'LinkedIn' %></span></div>
+          <div class="meta" style="white-space:normal"><%= [r.data.position, r.data.company, ...(r.data.emails || []), ...(r.data.phones || [])].filter(Boolean).join(' · ') %></div>
+          <% if (r.error) { %><p class="flash bad" style="margin:6px 0"><%= r.error %></p><% } %>
+          <form method="post" action="/crm/imports/<%= r.id %>/decide" class="form-row" style="margin-top:8px" data-async="remove">
+            <input type="hidden" name="q" value="<%= q %>">
+            <input class="input" name="name" value="<%= r.data.name %>" aria-label="Name" style="height:30px;max-width:200px">
+            <select class="select" name="space" aria-label="New person space" style="height:30px">
+              <option value="">Space…</option>
+              <option value="work">Work</option>
+              <option value="personal">Personal</option>
+            </select>
+            <button class="btn small primary" name="action" value="add">Add</button>
+            <select class="select" name="personId" aria-label="Link to existing person" style="height:30px;max-width:220px">
+              <option value="">Existing person…</option>
+              <% for (const p of people) { %><option value="<%= p.id %>"><%= p.name %> · <%= p.space %></option><% } %>
+            </select>
+            <button class="btn small" name="action" value="link">Link</button>
+            <button class="btn text small" name="action" value="ignore">Ignore</button>
+          </form>
+        </div>
+      </div>
+    <% } %>
+    </div>
+
+    <% const pages = Math.ceil(total / pageSize); if (pages > 1) { %>
+    <nav class="form-row" style="margin-top:16px;justify-content:space-between;align-items:center" aria-label="Pagination">
+      <span class="subline" style="margin:0;font-size:13px">Page <%= pageNo + 1 %> of <%= pages %></span>
+      <div class="form-row">
+        <% if (pageNo > 0) { %><a class="btn small" href="/crm/imports?page=<%= pageNo - 1 %><%= q ? `&q=${encodeURIComponent(q)}` : '' %>">Previous</a><% } %>
+        <% if (pageNo + 1 < pages) { %><a class="btn small" href="/crm/imports?page=<%= pageNo + 1 %><%= q ? `&q=${encodeURIComponent(q)}` : '' %>">Next</a><% } %>
+      </div>
+    </nav>
+    <% } %>
+  <% } %>
 </div></section>
-<% if(!imports.length) { %><section class="grid"><div class="panel s12"><p>No imported contacts waiting.</p></div></section><% } %>
-<% for(const r of imports) { %><section class="grid"><div class="panel s12">
-<h2><%= r.data.name || 'Unnamed contact' %></h2><p><%= [r.data.position,r.data.company,...(r.data.emails||[]),...(r.data.phones||[])].filter(Boolean).join(' · ') %></p>
-<p class="stamp"><%= r.provider === 'contacts' ? 'Google Contacts' : 'LinkedIn' %></p><% if(r.error) { %><p class="flash bad"><%= r.error %></p><% } %>
-<form method="post" action="/crm/imports/<%= r.id %>/decide" class="form-row">
-<label>Name <input class="input" name="name" value="<%= r.data.name %>"></label>
-<label>New person's space <select class="select" name="space"><option value="">Choose…</option><option value="work">Work</option><option value="personal">Personal</option></select></label>
-<button class="btn" name="action" value="add">Add as new person</button>
-<label>Existing person <select class="select" name="personId"><option value="">Choose…</option><% for(const p of people) { %><option value="<%= p.id %>"><%= p.name %> · <%= p.space %></option><% } %></select></label>
-<button class="btn" name="action" value="link">Same person</button><button class="btn text" name="action" value="ignore">Ignore</button>
-</form></div></section><% } %>
 <%- include('_bottom') %>

@@ -1,0 +1,68 @@
+<%- include('_top') %>
+<div class="title-row">
+  <div>
+    <h1>Connections &amp; setup</h1>
+    <p class="subline">Capture feeds, identity rules, and notifications across Work and Personal.</p>
+  </div>
+  <div class="acts"><a class="btn small" href="/crm/inbox">Open Inbox</a></div>
+</div>
+
+<section class="grid first">
+  <div class="panel s6">
+    <div class="panel-head"><h2>Identity &amp; filters</h2></div>
+    <div class="rows">
+      <a class="rowcard" href="/crm/review">
+        <span class="kind-icon" aria-hidden="true"><%- icon.review %></span>
+        <div class="main"><div class="what">Who is this?</div><div class="meta">Approve new people, resolve name clashes, confirm projects</div></div>
+        <div class="end"><span class="pill <%= reviewCount ? 'warn' : 'neutral' %>"><%= reviewCount %> waiting</span></div>
+      </a>
+      <a class="rowcard" href="/crm/vendors">
+        <span class="kind-icon" aria-hidden="true"><%- icon.org %></span>
+        <div class="main"><div class="what">Vendors</div><div class="meta">Sales senders and domains kept out of your people list</div></div>
+        <div class="end"><span class="pill neutral"><%= vendorCount %> listed</span></div>
+      </a>
+      <a class="rowcard" href="/crm/imports">
+        <span class="kind-icon" aria-hidden="true"><%- icon.people %></span>
+        <div class="main"><div class="what">Contacts &amp; LinkedIn</div><div class="meta"><%= imports.connected ? 'Google Contacts connected' : 'Google Contacts not connected' %><%= imports.run?.last_ok ? ` · synced ${ago(imports.run.last_ok)}` : '' %></div></div>
+        <div class="end"><span class="pill neutral"><%= imports.waiting %> waiting</span></div>
+      </a>
+    </div>
+  </div>
+
+  <div class="panel s6">
+    <div class="panel-head"><h2>Capture channels</h2></div>
+    <div class="rows">
+      <a class="rowcard" href="/crm/whatsapp">
+        <span class="kind-icon" aria-hidden="true"><%- icon.whatsapp %></span>
+        <div class="main"><div class="what">WhatsApp (Hermes)</div><div class="meta"><%= whatsapp.paused ? 'Paused' : whatsapp.hb ? `Last check-in ${ago(whatsapp.hb.at)}` : 'Waiting for check-in' %></div></div>
+        <div class="end"><span class="pill <%= whatsapp.waiting ? 'warn' : 'neutral' %>"><%= whatsapp.waiting ? `${whatsapp.waiting} waiting` : (whatsapp.paused ? 'Paused' : 'Active') %></span></div>
+      </a>
+      <a class="rowcard" href="/crm/messages">
+        <span class="kind-icon" aria-hidden="true"><%- icon.note %></span>
+        <div class="main"><div class="what">iMessage</div><div class="meta"><%= imessage.paused ? 'Paused' : imessage.lastOk ? `Last sync ${ago(imessage.lastOk)}` : 'Mac tap' %></div></div>
+        <div class="end"><span class="pill neutral"><%= imessage.paused ? 'Paused' : 'Configured' %></span></div>
+      </a>
+      <a class="rowcard" href="/crm/notebooks">
+        <span class="kind-icon" aria-hidden="true"><%- icon.captured %></span>
+        <div class="main"><div class="what">Boox notebooks</div><div class="meta"><%= boox.total %> <%= boox.total === 1 ? 'notebook' : 'notebooks' %><%= boox.run?.last_ok ? ` · checked ${ago(boox.run.last_ok)}` : '' %></div></div>
+        <div class="end"><span class="pill <%= boox.needs ? 'warn' : 'neutral' %>"><%= boox.needs ? `${boox.needs} to check` : 'Up to date' %></span></div>
+      </a>
+      <a class="rowcard" href="/crm/notifications">
+        <span class="kind-icon" aria-hidden="true"><%- icon.today %></span>
+        <div class="main"><div class="what">Push notifications</div><div class="meta">Alerts for meeting prep and urgent reminders</div></div>
+        <div class="end"><span class="pill neutral"><%= notifications.devices %> <%= notifications.devices === 1 ? 'device' : 'devices' %></span></div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="panel s12">
+    <div class="panel-head"><h2>Calendars &amp; standalone tools</h2></div>
+    <p class="subline" style="margin-top:0">
+      Work diary: <% if (hasWorkCalendar) { %><strong>connected</strong> (<code>CRM_WORK_CALENDAR_ID</code>).<% } else { %>not connected yet — subscribe to your Outlook calendar ICS feed in Google Calendar and set <code>CRM_WORK_CALENDAR_ID</code> on the Hub to bring Work meetings into your planner automatically.<% } %>
+    </p>
+    <p class="subline">Standalone Hub tools: <a href="/flights"><strong>Flights</strong></a> · <a href="/money"><strong>Money</strong></a> · <a href="/house"><strong>House hunting</strong></a> · <a href="/home">All tools</a></p>
+  </div>
+</section>
+<%- include('_bottom') %>

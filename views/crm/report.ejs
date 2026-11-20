@@ -2,8 +2,8 @@
 <div class="crumbs no-print"><a href="/crm/<%= space %>/reports<%= report.project_id ? '?projectId=' + report.project_id : '' %>">Reports</a><% if (report.project_id) { %> / <a href="/crm/<%= space %>/projects/<%= report.project_id %>">Project</a><% } %></div>
 <div class="title-row"><div><h1><%= report.title %></h1><p class="subline"><%= report.date_from || 'Background and current position' %> to <%= report.date_to %> · Generated <%= fmt(report.created_at) %></p></div></div>
 <% if (report.status === 'waiting') { %>
-<meta http-equiv="refresh" content="8">
-<section class="grid first"><div class="panel s12" role="status"><h2>Preparing your report</h2><p><%= report.slow ? 'This is taking longer than usual. The report is still waiting for the Mac worker.' : 'The Hub is reading the evidence and writing your report. This page refreshes automatically.' %></p><p>You can leave and return through Reports.</p></div></section>
+<noscript><meta http-equiv="refresh" content="8"></noscript>
+<section class="grid first"><div class="panel s12" role="status" data-poll-interval="6000"><h2>Preparing your report</h2><p><%= report.slow ? 'This is taking longer than usual. The report is still waiting for the Mac worker.' : 'The Hub is reading the evidence and writing your report. This page updates automatically.' %></p><p>You can leave and return through Reports.</p></div></section>
 <% } else if (report.status === 'failed') { %>
 <section class="grid first"><div class="panel s12"><h2>Could not generate this report</h2><p><%= report.error %></p></div></section>
 <% } else { %>

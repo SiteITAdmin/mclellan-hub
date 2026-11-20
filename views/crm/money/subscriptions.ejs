@@ -1,4 +1,4 @@
-<%- include('../_top') %>
+<%- include('../../_tool-top') %>
 <%
   const e = s.eur;
   const cadenceWord = { weekly: 'a week', fortnightly: 'a fortnight', monthly: 'a month', quarterly: 'a quarter', yearly: 'a year' };
@@ -6,7 +6,7 @@
   const actions = (sub, which) => { %>
     <div class="sub-actions">
       <% for (const [action, label] of which) { %>
-        <form class="inline-form" method="post" action="/crm/personal/money/subscriptions/<%= sub.id %>/<%= action %>"><button class="btn <%= action === 'cancel' ? 'primary' : '' %> small" type="submit"><%= label %></button></form>
+        <form class="inline-form" method="post" action="<%= locals.base || '/money' %>/subscriptions/<%= sub.id %>/<%= action %>"><button class="btn <%= action === 'cancel' ? 'primary' : '' %> small" type="submit"><%= label %></button></form>
       <% } %>
     </div>
 <% };
@@ -35,7 +35,7 @@
         <% if (sub.annual_cents) { %><div class="sub-cost">This costs <strong><%= e(sub.annual_cents) %> a year</strong> — about <%= e(sub.daily_cents) %> a day.</div><% } %>
         <% if (which.some(([a]) => a === 'keep') && sub.status === 'active') { %>
           <% if (sub.value.rated) { %><div class="sub-value<%= sub.value.poor ? ' poor' : '' %>"><%= sub.value.text %><%= sub.value.stale ? ` That was on ${day(sub.value.on)}: is it still true?` : '' %></div><% } %>
-          <% const useForm = () => { %><form class="sub-use" method="post" action="/crm/personal/money/subscriptions/<%= sub.id %>/use">
+          <% const useForm = () => { %><form class="sub-use" method="post" action="<%= locals.base || '/money' %>/subscriptions/<%= sub.id %>/use">
             <span class="sub-use-ask">In the last month, how much did you use it?</span>
             <% for (const [level, u] of Object.entries(s.USES)) { %><button class="btn small<%= sub.value.level === level ? ' primary' : '' %>" type="submit" name="level" value="<%= level %>"><%= u.label %></button><% } %>
           </form><% }; %>
@@ -121,7 +121,7 @@
 <details class="sub-decided"><summary>Cancelled and not subscriptions (<%= s.decided.length %>)</summary>
   <% for (const sub of s.decided) { %>
     <div class="sub-decided-row"><span><strong><%= sub.merchant %></strong> · <%= sub.status === 'cancelled' ? 'cancelled' : 'not a subscription' %><%= sub.annual_cents && sub.status === 'cancelled' ? ` · saves about ${e(sub.annual_cents)} a year` : '' %></span>
-      <form class="inline-form" method="post" action="/crm/personal/money/subscriptions/<%= sub.id %>/keep"><button class="btn text small" type="submit"><%= sub.status === 'dismissed' ? 'It is a subscription' : 'Still have it' %></button></form></div>
+      <form class="inline-form" method="post" action="<%= locals.base || '/money' %>/subscriptions/<%= sub.id %>/keep"><button class="btn text small" type="submit"><%= sub.status === 'dismissed' ? 'It is a subscription' : 'Still have it' %></button></form></div>
   <% } %>
 </details>
 <% } %>
@@ -132,4 +132,4 @@
   <% if (!s.mail.oldestMail) { %><p class="sub-warn">No Personal mail has been captured yet, so nothing in your mail can be checked.</p>
   <% } else if (s.mail.shortOfWindow) { %><p class="sub-warn">Captured Personal mail only goes back to <%= day(s.mail.shortOfWindow) %>. A yearly renewal from before then won't be found in mail.</p><% } %>
 </section>
-<%- include('../_bottom') %>
+<%- include('../../_tool-bottom') %>

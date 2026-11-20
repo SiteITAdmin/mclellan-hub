@@ -276,11 +276,11 @@ test('Search now: stalest first, once per 30 minutes, through the route with a f
   const router = { post: (p, ...fns) => routes.push({ p, fns }) };
   const flashes = [];
   deals.mount(router, { requireSameOrigin: (q, s, nx) => nx(), writeLimiter: (q, s, nx) => nx(), flash: (req, text, level = 'ok') => flashes.push({ text, level }),
-    back: (req, res, fallback) => res.redirect(fallback), base: '/crm/personal/money' });
-  assert.equal(routes[0].p, '/crm/:space/money/deals/search');
+    back: (req, res, fallback) => res.redirect(fallback), base: '/money' });
+  assert.equal(routes[0].p, '/money/deals/search');
   let to = '';
-  routes[0].fns[2]({ params: { space: 'personal' } }, { redirect: u => { to = u; } });
-  assert.equal(to, '/crm/personal/money/offers');
+  routes[0].fns[2]({ params: {} }, { redirect: u => { to = u; } });
+  assert.equal(to, '/money/offers');
   assert.equal(flashes[0].level, 'bad', 'one already queued in this test, so it is refused visibly');
 });
 
@@ -288,7 +288,7 @@ test('the partial renders status, per-merchant lines, errors and the button', as
   const file = path.join(__dirname, '..', 'views', 'crm', 'money', '_deals.ejs');
   const empty = await ejs.renderFile(file, { deals: deals.status(T) });
   assert.match(empty, /Searching the web for codes/); assert.match(empty, /Not searched yet/); assert.match(empty, /No spending to search for yet/);
-  assert.match(empty, /action="\/crm\/personal\/money\/deals\/search"/); assert.match(empty, /not tested/);
+  assert.match(empty, /action="\/money\/deals\/search"/); assert.match(empty, /not tested/);
   spending();
   const jobs = fakeJobs();
   await deals.tick({ jobs, t: T });

@@ -22,7 +22,7 @@
   const shortcuts = s => [
     pill(`/crm/${s}/calendar`, 'calendar', 'Calendar'), pill(`/crm/${s}/meetings`, 'meeting', 'Meetings'), pill(`/crm/${s}/tasks`, 'tasks', 'Tasks'), pill(`/crm/${s}/people`, 'people', 'People'),
     pill(`/crm/${s}/projects`, 'projects', 'Projects'), pill(`/crm/${s}/search`, 'search', 'Search'), pill(`/crm/${s}/note`, 'plus', 'Add a note'),
-    ...(s === 'personal' ? [pill('/crm/personal/house', 'projects', 'House hunting')] : []),
+    ...(s === 'work' ? [pill('/crm/work/briefing', 'briefing', 'Briefing')] : []),
   ].join('');
   const row = (href, ic, name, what) => `<li><a href="${href}">${icon[ic]}<span class="name">${name}</span><span class="what">${what}</span></a></li>`;
 %>
@@ -47,7 +47,7 @@
       <%- art([[382, 90, 38, 'people'], [264, 48, 24, 'email'], [252, 134, 24, 'whatsapp'], [160, 82, 22, 'note'], [138, 152, 18, 'calendar'], [62, 112, 20, 'captured']],
               [[0, 1], [0, 2], [1, 3], [2, 3], [2, 4], [3, 5]]) %>
       <h2><a href="/crm/personal">Personal</a></h2>
-      <p>Gmail, WhatsApp and iMessage: family, home, money and everyone outside work.</p>
+      <p>Gmail, WhatsApp and iMessage: family, home and everyone outside work.</p>
       <nav class="door-links" aria-label="Personal shortcuts"><%- shortcuts('personal') %></nav>
     </article>
   </section>
@@ -70,10 +70,10 @@
     </svg>
   </article>
 
-  <article class="feature" data-space="personal">
+  <article class="feature" data-space="money">
     <div>
-      <h2><a href="/crm/personal/money">Money</a></h2>
-      <p>Your spending, receipts and subscriptions. See where your money goes and find ways to save.</p>
+      <h2><a href="/money">Money</a></h2>
+      <p>Your spending, receipts, orders, budget and subscriptions. See where your money goes and challenge habits.</p>
     </div>
     <svg class="money-art" viewBox="0 0 640 200" aria-hidden="true">
       <path class="money-link" d="M150 100H490"/>
@@ -83,6 +83,24 @@
       <path class="money-line" d="M427 60H483M427 80H470M427 100H483M427 133H450"/>
       <circle class="money-coin" cx="330" cy="105" r="42"/>
       <path class="money-euro" d="M345 85A24 24 0 1 0 345 125M305 99H336M305 111H332"/>
+    </svg>
+  </article>
+
+  <article class="feature" data-space="house">
+    <div>
+      <h2><a href="/house">House hunting</a></h2>
+      <p>Saved properties, comparables from the Property Price Register, viewings, offers and solicitor progress.</p>
+    </div>
+    <svg class="house-art" viewBox="0 0 640 200" aria-hidden="true">
+      <path class="house-ground" d="M70 164H570"/>
+      <path class="house-body" d="M140 94L240 34L340 94V164H140Z"/>
+      <path class="house-roof" d="M124 102L240 32L356 102"/>
+      <rect class="house-door" x="218" y="114" width="44" height="50" rx="4"/>
+      <rect class="house-win" x="164" y="106" width="32" height="28" rx="4"/>
+      <rect class="house-win" x="284" y="106" width="32" height="28" rx="4"/>
+      <path class="house-pin" d="M470 54a34 34 0 1 1-68 0a34 34 0 1 1 68 0z"/>
+      <path class="house-pin-stem" d="M436 88V154"/>
+      <path class="house-pin-mark" d="M422 55l10 10l18-20"/>
     </svg>
   </article>
 

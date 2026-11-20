@@ -1,10 +1,17 @@
 <%- include('_top') %>
 <% const spaceName = s => s === 'work' ? 'Work' : 'Personal'; const ini = n => String(n || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(); %>
-<div class="review-title">
-  <h1>Who is this?</h1>
-  <p class="subline"><%= items.length %> waiting from both spaces. Nothing is linked to a person, and no new project is made, until you decide here. <a href="/crm/vendors">Vendors<% if (vendorCount) { %> (<%= vendorCount %>)<% } %></a></p>
+<div class="title-row review-title">
+  <div>
+    <h1>Who is this?</h1>
+    <p class="subline"><%= items.length %> waiting from both spaces. Nothing is linked to a person, and no new project is made, until you decide here. <a href="/crm/vendors">Vendors<% if (vendorCount) { %> (<%= vendorCount %>)<% } %></a></p>
+  </div>
+  <% if (locals.automatedCount) { %>
+  <form class="inline-form" method="post" action="/crm/review/ignore-automated">
+    <button class="btn small" type="submit">Ignore all automated (<%= automatedCount %>)</button>
+  </form>
+  <% } %>
 </div>
-<section class="grid first">
+<section class="grid first" data-review-shortcuts>
   <div class="s4">
     <% if (!items.length) { %><div class="empty">All decided. New people show up here as mail arrives.</div><% } %>
     <div class="queue">
@@ -48,9 +55,9 @@
     </div>
     <div class="panel">
       <div class="panel-head"><h2>Decide</h2><span class="actions">
-        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="vendor"><button class="btn small" type="submit">Vendor</button></form>
-        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit">Not a person</button></form>
-        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="later"><button class="btn text small" type="submit">Decide later</button></form>
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="vendor"><button class="btn small" type="submit" data-shortcut-action="vendor" title="Shortcut: V">Vendor</button></form>
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="ignore"><button class="btn text small" type="submit" data-shortcut-action="ignore" title="Shortcut: I">Not a person</button></form>
+        <form class="inline-form" method="post" action="/crm/review/<%= it.id %>"><input type="hidden" name="action" value="later"><button class="btn text small" type="submit" data-shortcut-action="later" title="Shortcut: L">Decide later</button></form>
       </span></div>
       <form method="post" action="/crm/review/<%= it.id %>" class="list">
         <input type="hidden" name="action" value="new">
@@ -77,6 +84,7 @@
         <button class="btn text small" type="submit">Whole company is a vendor</button>
       </form><% } %>
       <% if (p.automated) { %><p class="subline" style="font-size:13px;margin-top:12px">This address looks automated (a notification or no-reply sender). "Not a person" stops its mail being read.</p><% } %>
+      <p class="stamp" style="margin:12px 0 0;font-size:12px;color:var(--muted)">Keys: <kbd>v</kbd> vendor · <kbd>i</kbd> not a person · <kbd>l</kbd> later · <kbd>j</kbd>/<kbd>k</kbd> next/prev</p>
     </div>
     <div class="panel">
       <div class="panel-head"><h2>Where they appeared</h2></div>

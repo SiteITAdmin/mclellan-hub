@@ -208,22 +208,23 @@ test('the screens: a CSV and a PDF upload from the form, are listed by part, and
   const flashes = [];
   app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = new Proxy({ adminUser: 'douglas' }, { set(t, k, v) { if (k === 'crmFlash' && v) flashes.push(v); t[k] = v; return true; } }); next(); });
   app.use(require('../routes/crm'));
+  app.use(require('../routes/money'));
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const send = filesIn => {
     const form = new FormData(); form.append('account', 'Test current');
     for (const [name, bytes] of filesIn) form.append('images', new Blob([bytes]), name);
-    return fetch(`${base}/crm/personal/money/upload`, { method: 'POST', redirect: 'manual', headers: { Origin: base }, body: form });
+    return fetch(`${base}/money/upload`, { method: 'POST', redirect: 'manual', headers: { Origin: base }, body: form });
   };
   try {
     const r = await send([['export.csv', Buffer.from(`Date,Description,Amount\n${D1},<script>alert(1)</script>,-1.00\n`)], ['statement.pdf', await makePdf([statementPage, termsPage])], ['locked.pdf', await makePdf([statementPage], { userPassword: 'x', ownerPassword: 'y', pdfVersion: '1.7' })]]);
     assert.equal(r.status, 302);
     const said = flashes.pop();
     assert.match(said.text, /^2 files uploaded\. The Mac is reading them\b/); assert.match(said.text, /locked\.pdf is password-protected/);
-    const page = await (await fetch(`${base}/crm/personal/money`)).text();
+    const page = await (await fetch(`${base}/money`)).text();
     assert.match(page, /Uploads \(3\)/); assert.match(page, /export\.csv, lines 1–1 of 1/); assert.match(page, /statement\.pdf, page 2 of 2/); assert.match(page, /No amounts on this page/);
     const [csvUp, pdfUp] = uploadsOf();
-    const text = await fetch(`${base}/crm/personal/money/uploads/${csvUp.id}/image`);
+    const text = await fetch(`${base}/money/uploads/${csvUp.id}/image`);
     assert.deepEqual([text.headers.get('content-type'), text.headers.get('content-security-policy'), text.headers.get('x-content-type-options')], ['text/plain; charset=utf-8', 'sandbox', 'nosniff']);
     assert.match(await text.text(), /<script>alert\(1\)<\/script>/, 'served as inert text');
     const jobs = require('../lib/subscription-agent-jobs');
@@ -232,11 +233,11 @@ test('the screens: a CSV and a PDF upload from the form, are listed by part, and
       await jobs.complete({ jobId: j.id, claimToken: j.claim_token, output: JSON.stringify(reading([j.payload.documents ? line('VDP-TESCO STORES 5821', -42.1) : line('<script>alert(1)</script>', -1)])), meta: { runner: 'claude', model: 'sonnet' } });
     }
     await ledger.tick();
-    const checking = await (await fetch(`${base}/crm/personal/money`)).text();
-    assert.match(checking, new RegExp(`<a class="money-file" href="/crm/personal/money/uploads/${pdfUp.id}/image"[^>]*><strong>statement\\.pdf</strong><span>page 1 of 2</span><span>Open this page</span>`));
+    const checking = await (await fetch(`${base}/money`)).text();
+    assert.match(checking, new RegExp(`<a class="money-file" href="/money/uploads/${pdfUp.id}/image"[^>]*><strong>statement\\.pdf</strong><span>page 1 of 2</span><span>Open this page</span>`));
     assert.match(checking, /These match the page/); assert.match(checking, /These match the file/); assert.match(checking, /Open these lines/);
     assert.match(checking, /As read: &lt;script&gt;/);
-    const pdf = await fetch(`${base}/crm/personal/money/uploads/${pdfUp.id}/image`);
+    const pdf = await fetch(`${base}/money/uploads/${pdfUp.id}/image`);
     assert.equal(pdf.headers.get('content-type'), 'application/pdf');
     assert.ok(Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).equals(Buffer.from('%PDF-')));
   } finally { server.close(); }

@@ -1,8 +1,12 @@
 /* Personal money. Each module keeps to its own marked section so builds never collide. Colours and spacing come from crm.css tokens. */
 /* == shared == */
-.money-nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 var(--gap); }
-.money-nav a { padding: 6px 14px; border-radius: var(--radius-control); background: var(--panel); color: var(--text); text-decoration: none; }
+.money-nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.money-nav a { padding: 6px 14px; border-radius: var(--radius-control); background: var(--panel); color: var(--text); text-decoration: none; font-weight: 500; }
 .money-nav a[aria-current="page"] { background: var(--primary); color: var(--primary-ink); }
+.money-subnav { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 var(--gap); padding: 0 4px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.money-subnav a { color: var(--muted); text-decoration: none; padding-bottom: 4px; border-bottom: 2px solid transparent; }
+.money-subnav a:hover { color: var(--text); }
+.money-subnav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 /* == end shared == */
 /* == ledger == */
 .money-problems { margin: 0 0 var(--gap); }

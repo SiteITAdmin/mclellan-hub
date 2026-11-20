@@ -11,9 +11,9 @@
 <section class="grid first"><div class="panel s12"><div class="empty"><%= isToday ? 'Today\'s briefing has not been written yet. It is written on working mornings from 06:00, and not started after 14:00.' : 'No briefing was written for this day.' %></div></div></section>
 <% } else { %>
 <% if (b.running) { %>
-<meta http-equiv="refresh" content="20">
-<section class="grid first"><div class="panel s12" role="status"><h2><%= b.status === 'themes' ? 'Choosing today\'s themes from your work' : `Searching the web: ${b.searchedCount} of ${b.themes.length} themes done` %></h2>
-  <p><%= b.slow ? 'This is taking longer than usual. It is still waiting for the Mac worker.' : 'This page refreshes by itself.' %><% if (b.error) { %> <%= b.error %><% } %></p></div></section>
+<noscript><meta http-equiv="refresh" content="20"></noscript>
+<section class="grid first"><div class="panel s12" role="status" data-poll-interval="10000"><h2><%= b.status === 'themes' ? 'Choosing today\'s themes from your work' : `Searching the web: ${b.searchedCount} of ${b.themes.length} themes done` %></h2>
+  <p><%= b.slow ? 'This is taking longer than usual. It is still waiting for the Mac worker.' : 'This page updates by itself.' %><% if (b.error) { %> <%= b.error %><% } %></p></div></section>
 <% } else if (b.status === 'failed') { %>
 <section class="grid first"><div class="panel s12"><h2>This briefing couldn't be written</h2><p><%= b.error %></p></div></section>
 <% } else if (b.error) { %><div class="flash bad">Part of this briefing is missing. <%= b.error %></div><% } %>

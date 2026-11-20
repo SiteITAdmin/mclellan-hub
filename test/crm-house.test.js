@@ -16,7 +16,7 @@ const db = require('../lib/crm/db');
 const house = require('../lib/crm/house');
 const mail = require('../lib/crm/house/mail');
 const queue = require('../lib/subscription-agent-jobs');
-const BASE = '/crm/personal/house';
+const BASE = '/house';
 const T = Date.parse('2026-11-18T10:00:00Z') / 1000;
 const ROWAN = 'https://www.daft.ie/for-sale/house-6-rowan-grove-bray/5100001';
 const ELM = 'https://www.daft.ie/for-sale/house-8-elm-place-delgany/5100002';
@@ -295,6 +295,7 @@ function serve({ signedIn = true } = {}) {
     next();
   });
   app.use(require('../routes/crm'));
+  app.use(require('../routes/house'));
   const server = app.listen(0);
   return { server, origin: `http://127.0.0.1:${server.address().port}` };
 }

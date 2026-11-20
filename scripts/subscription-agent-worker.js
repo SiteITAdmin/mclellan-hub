@@ -30,6 +30,9 @@ const { resolveFeatureRunner } = require('../lib/feature-runners');
 // Default 30s idle poll — continuous 5s claims hit the Hub write rate limiter.
 const IDLE_MS = Math.max(5000, Number(process.env.SUBSCRIPTION_AGENT_IDLE_MS) || 30000);
 const ONCE = process.env.SUBSCRIPTION_AGENT_ONCE === '1';
+const WORKER_ID = String(process.env.SUBSCRIPTION_AGENT_WORKER_ID || `${process.platform === 'darwin' ? 'mac' : 'linux'}:${os.hostname()}`).trim();
+const MAX_PRIORITY = Number(process.env.SUBSCRIPTION_AGENT_MAX_PRIORITY) || null;
+const MIN_PRIORITY = Number(process.env.SUBSCRIPTION_AGENT_MIN_PRIORITY) || null;
 
 async function api(pathname, body) {
   const response = await fetch(`${HUB_URL}${pathname}`, {
@@ -97,8 +100,10 @@ async function processJob(job) {
 
 async function tick() {
   const claimed = await api('/api/subscription-agent/worker/claim', {
-    worker_id: `mac:${os.hostname()}`,
+    worker_id: WORKER_ID,
     limit: 1,
+    ...(MAX_PRIORITY ? { max_priority: MAX_PRIORITY } : {}),
+    ...(MIN_PRIORITY ? { min_priority: MIN_PRIORITY } : {}),
   });
   const jobs = claimed.jobs || [];
   if (!jobs.length) return false;
@@ -118,7 +123,8 @@ async function tick() {
 }
 
 async function main() {
-  console.log(`[subscription-agent-worker] starting continuous pull against ${HUB_URL}`);
+  const scope = MAX_PRIORITY ? ` (priority <= ${MAX_PRIORITY})` : '';
+  console.log(`[subscription-agent-worker] starting ${WORKER_ID}${scope} against ${HUB_URL}`);
   let backoffMs = IDLE_MS;
   for (;;) {
     let worked = false;

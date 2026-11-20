@@ -104,7 +104,8 @@
     });
     pop.querySelector('.cal-pop-close').addEventListener('click', close);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-    addEventListener('resize', close);
+    let lastW = innerWidth;
+    addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; close(); } });
   })();
   </script>
   <p class="cal-key"><span class="cal-swatch task" data-space="work"></span> Work task <span class="cal-swatch task" data-space="personal"></span> Personal task <span class="cal-swatch event" data-space="work"></span> Work appointment <span class="cal-swatch event" data-space="personal"></span> Personal appointment <span class="cal-swatch window"></span> Your <%= label.toLowerCase() %> hours</p>
@@ -126,7 +127,7 @@
       </div>
     <% } %>
     </div>
-    <p class="subline">An appointment stays put unless you make it flexible. A flexible one is moved in Google Calendar only when something fixed lands on top of it.<%= space === 'work' ? ' Your work diary is not connected yet, so every appointment here is from your personal calendar.' : '' %></p>
+    <p class="subline">An appointment stays put unless you make it flexible. A flexible one is moved in Google Calendar only when something fixed lands on top of it.<%= space === 'work' && !locals.hasWorkCalendar ? ' Your work diary is not connected yet — subscribe to its ICS feed in Google Calendar and set CRM_WORK_CALENDAR_ID to bring Work meetings in here.' : '' %></p>
   </div>
   <div class="s4 side-stack">
     <div class="panel">

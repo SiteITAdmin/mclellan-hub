@@ -207,52 +207,53 @@ test('the screens: Prices, the standing checks on Challenge with a cap, and the 
   const flashes = [];
   app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = new Proxy({ adminUser: 'douglas' }, { set(t, k, v) { if (k === 'crmFlash' && v) flashes.push(v); t[k] = v; return true; } }); next(); });
   app.use(require('../routes/crm'));
+  app.use(require('../routes/money'));
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const post = (p, body = '') => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { Origin: base, 'Content-Type': 'application/x-www-form-urlencoded' }, body });
   const today = require('../lib/crm/money/common').dublinDay(), ago = k => addDays(today, -k);
   const real = (shop, back, items) => { n += 1; db.crm().prepare(`INSERT INTO money_receipts (id, upload_id, shop, shop_norm, bought_on, amount_cents, items) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(`r${n}`, `u${n}`, shop, normMerchant(shop), ago(back), -500, JSON.stringify(items)); };
   try {
-    const empty = await (await fetch(`${base}/crm/personal/money/prices`)).text();
+    const empty = await (await fetch(`${base}/money/prices`)).text();
     assert.match(empty, /No receipts yet/); assert.match(empty, /aria-current="page">Prices</);
     assert.equal((await fetch(`${base}/crm/work/money/prices`)).status, 404);
 
     for (const back of [30, 20, 9, 2]) real('SuperValu', back, [item('whole milk', 225, 2, 'l'), item('<i>bread</i>', 199, 800, 'g'), item('bananas', 96, 0.642, 'kg')]);
     real('Lidl', 5, [item('whole milk', 189, 2, 'l'), item('<i>bread</i>', 119, 800, 'g'), item('bananas', 79, 0.6, 'kg')]);
-    const page = await (await fetch(`${base}/crm/personal/money/prices`)).text();
+    const page = await (await fetch(`${base}/money/prices`)).text();
     assert.match(page, /whole milk: why SuperValu\?/);
     assert.match(page, /You buy it at <strong>SuperValu<\/strong> for €1\.13 a litre \(4 times in 90 days\)\. Your <strong>Lidl<\/strong> receipt of \d+ \w+ has it for €0\.95 a litre/);
     assert.match(page, /SuperValu against Lidl/); assert.match(page, /3 things bought in both; 3 cheaper at Lidl/);
     assert.doesNotMatch(page, /on the web/i);
     assert.match(page, /&lt;i&gt;bread&lt;\/i&gt;/, 'escaped'); assert.doesNotMatch(page, /<i>bread<\/i>/);
     assert.match(page, /What you buy again and again/);
-    const overview = await (await fetch(`${base}/crm/personal/money`)).text();
+    const overview = await (await fetch(`${base}/money`)).text();
     assert.match(overview, /<h2>Prices<\/h2>/); assert.match(overview, /3 things cheaper in another shop you use/);
-    assert.equal((await post('/crm/personal/money/prices/why', 'key=whole+milk%7Cl&usual=supervalu&cheaper=lidl&reason=Lidl+is+too+far')).status, 302);
+    assert.equal((await post('/money/prices/why', 'key=whole+milk%7Cl&usual=supervalu&cheaper=lidl&reason=Lidl+is+too+far')).status, 302);
     assert.match(flashes.pop().text, /^Noted for whole milk\. You will not be asked again/);
-    const answered = await (await fetch(`${base}/crm/personal/money/prices`)).text();
+    const answered = await (await fetch(`${base}/money/prices`)).text();
     assert.doesNotMatch(answered, /whole milk: why SuperValu\?/); assert.match(answered, /Answered \(1\)/); assert.match(answered, /“Lidl is too far”/);
-    assert.equal((await post('/crm/personal/money/prices/ask-again', 'key=whole+milk%7Cl&usual=supervalu&cheaper=lidl')).status, 302);
-    assert.match(await (await fetch(`${base}/crm/personal/money/prices`)).text(), /whole milk: why SuperValu\?/);
+    assert.equal((await post('/money/prices/ask-again', 'key=whole+milk%7Cl&usual=supervalu&cheaper=lidl')).status, 302);
+    assert.match(await (await fetch(`${base}/money/prices`)).text(), /whole milk: why SuperValu\?/);
 
     const txAgo = (back, merchant, euros, category) => { n += 1; db.crm().prepare(`INSERT INTO money_transactions (id, posted_on, description, merchant, merchant_norm, amount_cents, category, kind, status, dup_key) VALUES (?, ?, ?, ?, ?, ?, ?, 'spend', 'confirmed', ?)`).run(`t${n}`, ago(back), merchant, merchant, normMerchant(merchant), -Math.round(euros * 100), category, `k${n}`); };
     for (const back of [0, 2, 4, 6, 8]) txAgo(back, 'Starbucks', 5.4, 'Coffee');
     for (const back of [1, 9]) txAgo(back, 'Insomnia', 3.9, 'Coffee');
     db.crm().prepare(`INSERT INTO money_subscriptions (id, merchant, merchant_norm, amount_cents, cadence, last_charge_on, first_seen, basis, evidence) VALUES ('s1', 'Netflix', 'netflix', 1599, 'monthly', ?, ?, 'recurring', '{}')`).run(ago(3), ago(200));
-    const challenge = await (await fetch(`${base}/crm/personal/money/challenge`)).text();
+    const challenge = await (await fetch(`${base}/money/challenge`)).text();
     assert.match(challenge, /Standing checks/); assert.match(challenge, /<th scope="row">Starbucks<\/th><td>5<\/td><td>€5\.40<\/td><td>€27\.00<\/td>/);
     assert.match(challenge, /A visit to <strong>Starbucks<\/strong> costs €1\.50 more than one to Insomnia/);
     assert.match(challenge, /1 not rated for how much you use it\./); assert.match(challenge, />Rate them</); assert.match(challenge, />Answer why</); assert.match(challenge, /Why SuperValu\?/);
-    assert.equal((await post('/crm/personal/money/challenge/cap', 'category=Coffee&cap=20')).status, 302);
+    assert.equal((await post('/money/challenge/cap', 'category=Coffee&cap=20')).status, 302);
     assert.match(flashes.pop().text, /^Taken on: Coffee under €20\.00 this month/);
-    assert.match(await (await fetch(`${base}/crm/personal/money/challenge`)).text(), /Your cap this month: €\d+\.\d\d of €20\.00/);
+    assert.match(await (await fetch(`${base}/money/challenge`)).text(), /Your cap this month: €\d+\.\d\d of €20\.00/);
 
-    const subsPage = await (await fetch(`${base}/crm/personal/money/subscriptions`)).text();
+    const subsPage = await (await fetch(`${base}/money/subscriptions`)).text();
     assert.match(subsPage, /Are they worth it\?/); assert.match(subsPage, /1 of 1 has no answer yet \(€15\.99 a month\)/);
     assert.match(subsPage, /In the last month, how much did you use it\?/); assert.match(subsPage, /name="level" value="never">Not at all</);
-    assert.equal((await post('/crm/personal/money/subscriptions/s1/use', 'level=never')).status, 302);
+    assert.equal((await post('/money/subscriptions/s1/use', 'level=never')).status, 302);
     assert.match(flashes.pop().text, /^Netflix: not at all\. Asked again in three months\.$/);
-    const rated = await (await fetch(`${base}/crm/personal/money/subscriptions`)).text();
+    const rated = await (await fetch(`${base}/money/subscriptions`)).text();
     assert.match(rated, /<strong>€191\.88 a year<\/strong> goes on one you say you hardly use/); assert.match(rated, /You said you do not use it: €191\.88 a year for nothing\./);
   } finally { server.close(); }
 });

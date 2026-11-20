@@ -111,7 +111,7 @@ test('a malformed reply is a visible failure with a retry', async () => {
   jobs.finish('{"findings": [ oops');
   await offers.tick({ jobs, t: t + 60 });
   const p = offers.problems();
-  assert.equal(p.length, 1); assert.equal(p[0].module, 'offers'); assert.equal(p[0].retry, '/crm/personal/money/offers/retry');
+  assert.equal(p.length, 1); assert.equal(p[0].module, 'offers'); assert.equal(p[0].retry, '/money/offers/retry');
   assert.match(p[0].text, /Offers mail reading: 1 batch of mail \(1 mails\) could not be read/);
 });
 
@@ -134,12 +134,11 @@ test('the Offers screen renders mail and web offers, the deals panel, and record
   const session = {};
   app.use((req, res, next) => { req.session = session; Object.assign(res.locals, { flash: session.flash || null, reviewAll: 0, krispWaiting: 0, whatsappWaiting: 0, fmt: String, ago: String, hueStyle: () => '', icon: require('../lib/crm/icons') }); delete session.flash; next(); });
   const router = express.Router(), pass = (req, res, next) => next();
-  offers.mount(router, { spaceParam: (req, res, next) => { res.locals.space = req.params.space; next(); }, personalOnly: (req, res, next) => req.params.space === 'personal' ? next() : res.status(404).send('Not found'),
-    requireSameOrigin: pass, writeLimiter: pass, flash: (req, text, level = 'ok') => { req.session.flash = { text, level }; } });
+  offers.mount(router, { requireSameOrigin: pass, writeLimiter: pass, flash: (req, text, level = 'ok') => { req.session.flash = { text, level }; }, base: '/money' });
   app.use(router);
   const server = app.listen(0); const base = `http://127.0.0.1:${server.address().port}`;
   try {
-    let html = await (await fetch(`${base}/crm/personal/money/offers`)).text();
+    let html = await (await fetch(`${base}/money/offers`)).text();
     assert.match(html, /aria-current="page">Offers &amp; codes</);
     assert.match(html, /Searching the web for codes/, 'the deals panel is included');
     const main = html.slice(html.indexOf('At shops you already use'), html.indexOf('Not shops you use'));
@@ -151,15 +150,15 @@ test('the Offers screen renders mail and web offers, the deals panel, and record
     assert.match(html, new RegExp(`href="/crm/personal/sources/${d.id}">open the email`));
     assert.equal((await fetch(`${base}/crm/work/money/offers`)).status, 404);
     const id = offer('€10 off €50 online').id;
-    let res = await fetch(`${base}/crm/personal/money/offers/${id}/use`, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'saved=12.50' });
+    let res = await fetch(`${base}/money/offers/${id}/use`, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'saved=12.50' });
     assert.equal(res.status, 302);
     assert.deepEqual([offer('€10 off €50 online').status, offer('€10 off €50 online').saved_cents], ['used', 1250]);
-    html = await (await fetch(`${base}/crm/personal/money/offers`)).text();
+    html = await (await fetch(`${base}/money/offers`)).text();
     assert.match(html, /Noted: about €12\.50 saved at Dunnes Stores/); assert.match(html, /about €12\.50 saved/);
-    res = await fetch(`${base}/crm/personal/money/offers/w1/use`, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'saved=lots' });
-    html = await (await fetch(`${base}/crm/personal/money/offers`)).text();
+    res = await fetch(`${base}/money/offers/w1/use`, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'saved=lots' });
+    html = await (await fetch(`${base}/money/offers`)).text();
     assert.match(html, /Saved amount should be a number/); assert.equal(offer('5% off first order').status, 'new');
-    await fetch(`${base}/crm/personal/money/offers/w1/dismiss`, { method: 'POST', redirect: 'manual' });
+    await fetch(`${base}/money/offers/w1/dismiss`, { method: 'POST', redirect: 'manual' });
     assert.equal(offer('5% off first order').status, 'dismissed');
   } finally { server.close(); }
 });

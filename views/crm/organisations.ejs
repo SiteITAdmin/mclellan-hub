@@ -3,12 +3,12 @@
 <section class="grid first">
   <div class="panel s8">
     <% if (!list.length) { %><div class="empty">No organisations yet.</div><% } else { %>
-    <table class="table">
+    <div class="table-wrap"><table class="table">
       <thead><tr><th>Name</th><th>Domains</th><th class="num">People</th></tr></thead>
       <tbody><% for (const o of list) { %>
         <tr><td><a class="name-cell" href="/crm/<%= space %>/organisations/<%= o.id %>"><span class="avatar none" aria-hidden="true"><%- icon.org %></span><%= o.name %></a></td><td><%= o.domains || '—' %></td><td class="num"><%= o.people %></td></tr>
       <% } %></tbody>
-    </table><% } %>
+    </table></div><% } %>
   </div>
   <div class="panel s4">
     <div class="panel-head"><h2>Add an organisation</h2></div>

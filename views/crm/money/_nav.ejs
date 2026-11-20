@@ -1,6 +1,27 @@
-<%# Sub-navigation shared by every Money screen. Pass `tab`: overview | budget | transactions | categories | receipts | orders | prices | subscriptions | offers | challenge. %>
+<%# Grouped sub-navigation shared by every Money screen (5 primary hubs, with secondary pills inside grouped hubs). %>
+<%
+  const root = locals.base || '/money';
+  const groups = [
+    { key: 'overview', label: 'Overview', href: root, tabs: ['overview'] },
+    { key: 'spending', label: 'Spending', href: `${root}/transactions`, tabs: ['transactions', 'receipts', 'orders'],
+      sub: [['transactions', 'Transactions', `${root}/transactions`], ['receipts', 'Receipts', `${root}/receipts`], ['orders', 'Orders', `${root}/orders`]] },
+    { key: 'plan', label: 'Budget & challenge', href: `${root}/budget`, tabs: ['budget', 'challenge'],
+      sub: [['budget', 'Budget', `${root}/budget`], ['challenge', 'Challenge', `${root}/challenge`]] },
+    { key: 'recurring', label: 'Subscriptions & deals', href: `${root}/subscriptions`, tabs: ['subscriptions', 'offers', 'prices'],
+      sub: [['subscriptions', 'Subscriptions', `${root}/subscriptions`], ['offers', 'Offers & codes', `${root}/offers`], ['prices', 'Prices', `${root}/prices`]] },
+    { key: 'categories', label: 'Categories', href: `${root}/categories`, tabs: ['categories'] },
+  ];
+  const activeGroup = groups.find(g => g.tabs.includes(tab)) || groups[0];
+%>
 <nav class="money-nav" aria-label="Money">
-  <% [['overview','Overview','/crm/personal/money'],['budget','Budget','/crm/personal/money/budget'],['transactions','Transactions','/crm/personal/money/transactions'],['categories','Categories','/crm/personal/money/categories'],['receipts','Receipts','/crm/personal/money/receipts'],['orders','Orders','/crm/personal/money/orders'],['prices','Prices','/crm/personal/money/prices'],['subscriptions','Subscriptions','/crm/personal/money/subscriptions'],['offers','Offers & codes','/crm/personal/money/offers'],['challenge','Challenge','/crm/personal/money/challenge']].forEach(([key,label,href]) => { %>
-    <a href="<%= href %>" <%- tab === key ? 'aria-current="page"' : '' %>><%= label %></a>
-  <% }) %>
+  <% for (const g of groups) { %>
+    <a href="<%= g.href %>" <%- g.key === activeGroup.key ? 'aria-current="page"' : '' %>><%= g.label %></a>
+  <% } %>
 </nav>
+<% if (activeGroup.sub) { %>
+<nav class="money-subnav" aria-label="<%= activeGroup.label %> sections">
+  <% for (const [key, label, href] of activeGroup.sub) { %>
+    <a href="<%= href %>" <%- tab === key ? 'aria-current="page"' : '' %>><%= label %></a>
+  <% } %>
+</nav>
+<% } %>

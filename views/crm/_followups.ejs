@@ -10,12 +10,12 @@
     <div class="meta"><span class="cal-tag"><%= f.direction === 'owed_to_me' ? 'Owed to you' : 'You owe' %></span><span>After you finished <a href="/crm/<%= space %>/tasks/<%= f.task_id %>"><%= f.task_title %></a></span></div>
     <% if (f.why) { %><div class="quote"><%= f.why %></div><% } %>
     <div class="acts">
-      <form method="post" action="/crm/<%= space %>/followups/<%= f.id %>/accept" class="followup-accept">
+      <form method="post" action="/crm/<%= space %>/followups/<%= f.id %>/accept" class="followup-accept" data-async="remove">
         <input type="hidden" name="back" value="<%= back %>">
         <label><span class="subline">By</span> <input class="input" type="date" name="due" value="<%= f.due || '' %>" aria-label="Date for <%= f.action %>"></label>
         <button class="btn small primary"><%= f.direction === 'owed_to_me' ? 'Add to Owed to you' : 'Add to You owe' %></button>
       </form>
-      <form method="post" action="/crm/<%= space %>/followups/<%= f.id %>/dismiss"><input type="hidden" name="back" value="<%= back %>"><button class="btn small">Not needed</button></form>
+      <form method="post" action="/crm/<%= space %>/followups/<%= f.id %>/dismiss" data-async="remove"><input type="hidden" name="back" value="<%= back %>"><button class="btn small">Not needed</button></form>
     </div>
     <div class="meta"><span><%= f.direction === 'owed_to_me' ? (f.chaseNote || '') : 'Also becomes a task, planned into your calendar' %></span></div>
   </div>

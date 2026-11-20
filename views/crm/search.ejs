@@ -6,8 +6,8 @@
   <button class="btn primary" type="submit"><%- icon.search %> Search</button>
 </form>
 <% if (question) { %>
-<% if (question.status === 'waiting') { %><meta http-equiv="refresh" content="6;url=/crm/<%= space %>/search?ask=<%= question.id %>"><% } %>
-<section class="grid first"><div class="panel s12 summary" aria-live="polite">
+<% if (question.status === 'waiting') { %><noscript><meta http-equiv="refresh" content="6;url=/crm/<%= space %>/search?ask=<%= question.id %>"></noscript><% } %>
+<section class="grid first"><div class="panel s12 summary" aria-live="polite"<% if (question.status === 'waiting') { %> data-poll-interval="5000" data-poll-url="/crm/<%= space %>/search?ask=<%= question.id %>"<% } %>>
   <div class="panel-head"><h2><%= question.question %></h2></div>
   <% if (question.status === 'waiting') { %><p><%= question.slow ? "The Mac hasn't picked this up yet. Check com.mclellan.hub.subscription-agent-worker." : 'The Mac is working out an answer. This page refreshes by itself.' %></p>
   <% } else if (question.status === 'failed') { %><p>No answer: <%= question.error %></p>

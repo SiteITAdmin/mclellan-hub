@@ -1,16 +1,18 @@
 <%# Transaction rows, each opening into its own edit form. Pass `rows` and `back` (where to return after saving). %>
+<% const matches = locals.orderMatches || {}; %>
 <div class="money-rows">
-<% for (const r of rows) { %>
+<% for (const r of rows) { const ord = matches[r.id] || null; %>
   <details class="money-tx<%= r.unsure ? ' is-unsure' : '' %><%= r.status === 'ignored' ? ' is-ignored' : '' %>" id="tx-<%= r.id %>" <%= r.unsure && r.status === 'new' ? 'open' : '' %>>
     <summary>
       <span class="money-tx-date"><%= dayLabel(r.posted_on) %></span>
-      <span class="money-tx-what"><span class="money-tx-name"><%= r.merchant || r.description %></span><span class="money-tx-meta"><%= r.kind === 'transfer' ? 'Transfer, not counted' : r.kind === 'income' ? 'Income' : r.category %><%= r.account ? ` · ${r.account}` : '' %><%= r.fx_cents != null ? ` · ${(Math.abs(r.fx_cents) / 100).toFixed(2)} ${r.fx_currency}${r.currency === 'EUR' ? ' in euro' : ' not yet in euro'}` : '' %><%= r.note ? ` · ${r.note}` : '' %></span></span>
+      <span class="money-tx-what"><span class="money-tx-name"><%= r.merchant || r.description %></span><span class="money-tx-meta"><%= r.kind === 'transfer' ? 'Transfer, not counted' : r.kind === 'income' ? 'Income' : r.category %><%= r.account ? ` · ${r.account}` : '' %><%= r.fx_cents != null ? ` · ${(Math.abs(r.fx_cents) / 100).toFixed(2)} ${r.fx_currency}${r.currency === 'EUR' ? ' in euro' : ' not yet in euro'}` : '' %><%= ord && ord.items.length ? ` · Order: ${ord.items.slice(0, 2).map(i => i.name.slice(0, 50)).join('; ')}${ord.items.length > 2 ? ` +${ord.items.length - 2}` : ''}` : '' %><%= r.note ? ` · ${r.note}` : '' %></span></span>
       <span class="money-tx-end">
         <% if (r.status === 'ignored') { %><span class="pill neutral">Deleted</span><% } else if (r.unsure) { %><span class="pill warn">Reader unsure</span><% } else if (r.status === 'new') { %><span class="pill neutral">Unchecked</span><% } %>
         <span class="money-amount<%= r.amount_cents > 0 ? ' is-in' : '' %>"><%= eur(r.amount_cents, { sign: true }) %></span>
       </span>
     </summary>
     <% if (r.unsure) { %><p class="money-why">The reader was not sure of this line<%= r.why_unsure ? `: ${r.why_unsure}` : '' %>. Check it against what was uploaded.</p><% } %>
+    <% if (ord) { %><p class="money-shown">Matched email order (<a href="<%= base %>/orders#order-<%= ord.id %>"><%= ord.merchant %><%= ord.order_ref ? ` #${ord.order_ref}` : '' %></a>): <%= ord.items.length ? ord.items.slice(0, 4).map(i => (i.quantity > 1 ? `${i.quantity} × ` : '') + i.name).join('; ') : ord.shown %><% if (ord.link) { %> · <a href="<%= ord.link %>" target="_blank" rel="noopener noreferrer">open email</a><% } %></p><% } %>
     <p class="money-shown">As read: <%= r.description %></p>
     <form method="post" action="<%= base %>/transactions/<%= r.id %>" class="money-edit">
       <input type="hidden" name="back" value="<%= back %>">

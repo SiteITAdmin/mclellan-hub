@@ -1,4 +1,4 @@
-<%- include('../_top') %>
+<%- include('../../_tool-top') %>
 <% const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`, slug = n => `cat-${String(n).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`; %>
 <div class="title-row"><div><h1>Categories</h1><p class="subline">The kinds of spending Money sorts your lines into. A category you add here is in every list at once: the readers use it for new bank lines and receipts, and it shows on Transactions, the Budget and the Challenge.</p></div></div>
 <%- include('_nav') %>
@@ -53,4 +53,4 @@
   </div>
   <% } %>
 </div></section>
-<%- include('../_bottom') %>
+<%- include('../../_tool-bottom') %>

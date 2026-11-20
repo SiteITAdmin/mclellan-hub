@@ -20,6 +20,8 @@ function serve(signedIn) {
   app.use(require('../routes/home'));
   app.use(require('../routes/crm'));
   app.use(require('../routes/flights'));
+  app.use(require('../routes/money'));
+  app.use(require('../routes/house'));
   const server = app.listen(0);
   return { server, base: `http://127.0.0.1:${server.address().port}` };
 }
@@ -40,7 +42,7 @@ test('every link on the landing page opens a real screen', async () => {
     const body = await res.text();
     assert.strictEqual(res.status, 200, body.slice(0, 300));
     const links = [...new Set([...body.matchAll(/<a href="([^"]+)"/g)].map(m => m[1]))];
-    for (const want of ['/crm/work', '/crm/personal', '/flights', '/crm/personal/money', '/crm/review', '/crm/vendors', '/crm/work/calendar', '/crm/work/meetings', '/crm/personal/meetings', '/crm/personal/note', '/admin', '/'])
+    for (const want of ['/crm/work', '/crm/personal', '/flights', '/money', '/house', '/crm/review', '/crm/vendors', '/crm/work/calendar', '/crm/work/meetings', '/crm/personal/meetings', '/crm/personal/note', '/admin', '/'])
       assert.ok(links.includes(want), `links to ${want}`);
     // The public site and its editor are served by other routers with their own tests.
     const elsewhere = ['/', '/admin', '/chat'];

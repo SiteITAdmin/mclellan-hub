@@ -8,40 +8,35 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/crm.css">
-  <% if (page === 'money') { %><link rel="stylesheet" href="/money.css"><% } %>
-  <% if (page === 'house') { %><link rel="stylesheet" href="/house.css"><% } %>
   <link rel="manifest" href="/crm.webmanifest">
   <meta name="theme-color" content="#f5f2ec">
 </head>
 <body>
 <% const base = space || 'work'; %>
-<% const nav = (href, ic, label, key, extra) => `<a href="${href}" ${page === key ? 'aria-current="page"' : ''}>${icon[ic]}<span>${label}</span>${extra || ''}</a>`; %>
+<% const swWork = locals.switchWork || '/crm/work'; %>
+<% const swPersonal = locals.switchPersonal || '/crm/personal'; %>
+<% const nav = (href, ic, label, key, extra) => `<a href="${href}" ${page === key ? 'aria-current="page"' : ''}>${icon[ic] || icon.note}<span>${label}</span>${extra || ''}</a>`; %>
 <% const navHtml = `
   <nav class="switch" aria-label="Space">
-    <a href="/crm/work" aria-current="${space === 'work'}">Work</a>
-    <a href="/crm/personal" aria-current="${space === 'personal'}">Personal</a>
+    <a href="${swWork}" aria-current="${space === 'work'}">Work</a>
+    <a href="${swPersonal}" aria-current="${space === 'personal'}">Personal</a>
   </nav>
   <nav class="nav">
     ${nav(`/crm/${base}`, 'today', 'Today', 'today')}
     ${nav(`/crm/${base}/calendar`, 'calendar', 'Calendar', 'calendar')}
     ${nav(`/crm/${base}/tasks`, 'tasks', 'Tasks', 'tasks')}
+    ${nav(`/crm/${base}/meetings`, 'meeting', 'Meetings', 'meetings', locals.krispWaiting ? `<span class="count">${locals.krispWaiting}<span class="sr-only"> waiting</span></span>` : '')}
+    ${base === 'work' ? nav('/crm/work/briefing', 'briefing', 'Briefing', 'briefing') : ''}
+    <div class="nav-group">Knowledge</div>
     ${nav(`/crm/${base}/people`, 'people', 'People', 'people')}
-    ${nav(`/crm/${base}/organisations`, 'org', 'Organisations', 'organisations')}
     ${nav(`/crm/${base}/projects`, 'projects', 'Projects', 'projects')}
-    ${nav(`/crm/${base}/reports`, 'note', 'Reports', 'reports')}
-    ${base === 'work' ? nav('/crm/work/briefing', 'note', 'Briefing', 'briefing') : ''}
-    ${nav(`/crm/${base}/captured`, 'captured', 'Captured', 'captured')}
-    ${nav(`/crm/${base}/meetings`, 'meeting', 'Meetings', 'meetings')}
+    ${nav(`/crm/${base}/organisations`, 'org', 'Organisations', 'organisations')}
     ${nav(`/crm/${base}/search`, 'search', 'Search', 'search')}
-    ${base === 'personal' ? nav('/crm/personal/money', 'note', 'Money', 'money') : ''}
-    ${base === 'personal' ? nav('/crm/personal/house', 'projects', 'House hunting', 'house') : ''}
+    ${nav(`/crm/${base}/reports`, 'note', 'Reports', 'reports')}
+    ${nav(`/crm/${base}/captured`, 'captured', 'Captured', 'captured')}
     <div class="nav-group">Both spaces</div>
-    ${nav('/crm/review', 'review', 'Who is this?', 'review', reviewAll ? `<span class="count">${reviewAll}<span class="sr-only"> waiting</span></span>` : '')}
-    ${nav('/crm/messages', 'note', 'iMessage', 'messages')}
-    ${nav('/crm/notifications', 'today', 'Notifications', 'notifications')}
-    ${nav('/crm/imports', 'people', 'Contacts & LinkedIn', 'imports')}
-    ${nav('/crm/notebooks', 'captured', 'Boox notebooks', 'notebooks')}
-    ${nav('/crm/whatsapp', 'whatsapp', 'WhatsApp', 'whatsapp', whatsappWaiting ? `<span class="count">${whatsappWaiting}<span class="sr-only"> waiting</span></span>` : '')}
+    ${nav('/crm/inbox', 'inbox', 'Inbox', 'inbox', locals.inboxCount ? `<span class="count">${locals.inboxCount}<span class="sr-only"> waiting</span></span>` : '')}
+    ${nav('/crm/settings', 'settings', 'Connections & setup', 'settings')}
   </nav>`; %>
 <div class="shell" data-space="<%= space || 'shared' %>">
   <aside class="sidebar" aria-label="Main">
@@ -49,22 +44,26 @@
     <%- navHtml %>
     <div class="sidebar-foot">
       <a class="btn primary" href="/crm/<%= base %>/note"><%- icon.plus %> Add a note</a>
-      <div class="user"><span class="avatar" style="background:var(--active);color:var(--text)" aria-hidden="true">DM</span><div>Douglas McLellan<small><a href="/flights">Flights</a></small></div></div>
+      <div class="user"><span class="avatar" style="background:var(--active);color:var(--text)" aria-hidden="true">DM</span><div>Douglas McLellan<small><a href="/flights">Flights</a> · <a href="/money">Money</a> · <a href="/house">House</a></small></div></div>
     </div>
   </aside>
   <header class="topbar">
-    <a class="menu-btn" href="#menu" aria-label="Open menu"><%- icon.menu %></a>
+    <button class="menu-btn" type="button" data-drawer-open aria-controls="menu" aria-expanded="false" aria-label="Open menu"><%- icon.menu %></button>
     <a class="brand" href="/home" style="padding:0" aria-label="All tools"><%- icon.mark %></a>
     <span class="t"><%= title %></span>
     <nav class="switch" aria-label="Space">
-      <a href="/crm/work" aria-current="<%= space === 'work' %>">Work</a>
-      <a href="/crm/personal" aria-current="<%= space === 'personal' %>">Personal</a>
+      <a href="<%= swWork %>" aria-current="<%= space === 'work' %>">Work</a>
+      <a href="<%= swPersonal %>" aria-current="<%= space === 'personal' %>">Personal</a>
     </nav>
+    <a class="topbar-quick" href="/crm/<%= base %>/note" aria-label="Add a note" title="Add a note"><%- icon.plus %></a>
   </header>
   <div class="sheet" id="menu" data-space="<%= space || 'shared' %>">
-    <p><a class="menu-btn" href="#" aria-label="Close menu"><%- icon.close %></a></p>
-    <%- navHtml %>
-    <p><a class="btn primary" href="/crm/<%= base %>/note"><%- icon.plus %> Add a note</a></p>
+    <div class="sheet-inner">
+      <p style="margin:0 0 8px"><button class="menu-btn" type="button" data-drawer-close aria-label="Close menu"><%- icon.close %></button></p>
+      <%- navHtml %>
+      <p><a class="btn primary" href="/crm/<%= base %>/note"><%- icon.plus %> Add a note</a></p>
+      <p class="subline" style="font-size:13px">Tools: <a href="/flights">Flights</a> · <a href="/money">Money</a> · <a href="/house">House hunting</a></p>
+    </div>
   </div>
   <main class="canvas"><div class="column">
   <% if (flash) { %><div class="flash <%= flash.level === 'bad' ? 'bad' : '' %>" role="status"><%= flash.text %></div><% } %>

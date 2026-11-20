@@ -22,7 +22,7 @@
       <% if (p.is_request) { %><span>Awaiting response — not yet agreed</span><% } else if (p.certainty === 'unsure') { %><span>Not definite</span><% } %>
     </div>
     <div class="acts">
-      <% const act = (name, label, primary) => `<form method="post" action="/crm/${space}/promises/${p.atom_id}/${name}"><input type="hidden" name="back" value="${back}"><button class="btn small ${primary ? 'primary' : ''}">${label}</button></form>`; %>
+      <% const act = (name, label, primary) => `<form method="post" action="/crm/${space}/promises/${p.atom_id}/${name}" data-async="${name === 'task' ? 'reload' : 'remove'}"><input type="hidden" name="back" value="${back}"><button class="btn small ${primary ? 'primary' : ''}">${label}</button></form>`; %>
       <% if (p.looks_done_source_id) { %><%- act('confirm', "Yes, it's done", true) %><%- act('notdone', 'Not done yet', false) %>
       <% } else { %>
       <% if (!owedToMe && !p.task_id) { %><%- act('task', 'Create task', true) %><% } %>

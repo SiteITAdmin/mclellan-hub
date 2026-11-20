@@ -1,4 +1,4 @@
-<%- include('../_top') %>
+<%- include('../../_tool-top') %>
 <%
   const day = d => d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '';
   const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
@@ -32,7 +32,7 @@
       <div class="price-what">
         <strong><%= o.merchant %> · <%= day(o.ordered_on) %><% if (o.status === 'cancelled') { %> <span class="pill neutral">Cancelled</span><% } else if (o.kind === 'receipt') { %> <span class="pill neutral">Receipt</span><% } %></strong>
         <% if (o.items.length) { %><span><%= o.items.slice(0, 3).map(i => (i.quantity > 1 ? `${i.quantity} × ` : '') + (i.name.length > 90 ? `${i.name.slice(0, 87)}…` : i.name)).join('; ') %><%= o.items.length > 3 ? `; and ${o.items.length - 3} more` : '' %></span><% } %>
-        <span class="money-small"><%= o.order_ref ? `Order ${o.order_ref}` : '' %><%= o.order_ref && o.payment ? ' · ' : '' %><%= o.payment %><% if (o.link) { %><%= o.order_ref || o.payment ? ' · ' : '' %><a href="<%= o.link %>" target="_blank" rel="noopener noreferrer">open the email</a><% } %></span>
+        <span class="money-small"><%= o.order_ref ? `Order ${o.order_ref}` : '' %><%= o.order_ref && o.payment ? ' · ' : '' %><%= o.payment %><% if (o.matched_tx) { %><%= o.order_ref || o.payment ? ' · ' : '' %><a href="<%= base %>/transactions?month=<%= o.matched_tx.posted_on.slice(0, 7) %>#tx-<%= o.matched_tx.id %>">Matched to bank line (<%= day(o.matched_tx.posted_on) %>)</a><% } %><% if (o.link) { %><%= o.order_ref || o.payment || o.matched_tx ? ' · ' : '' %><a href="<%= o.link %>" target="_blank" rel="noopener noreferrer">open the email</a><% } %></span>
       </div>
       <div class="price-gap"><span class="money-amount"><%= o.shown %></span>
         <% if (o.status === 'open') { %><form class="inline-form" method="post" action="<%= base %>/orders/dismiss"><input type="hidden" name="id" value="<%= o.id %>"><button class="btn text small" type="submit">Not an order</button></form><% } %>
@@ -41,3 +41,4 @@
     <% } %>
   </div>
 </section>
+<%- include('../../_tool-bottom') %>

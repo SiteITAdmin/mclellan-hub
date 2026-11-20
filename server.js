@@ -9,6 +9,8 @@ const BetterSqliteSessionStore = require('./lib/session-store');
 const portfolioRouter = require('./routes/portfolio');
 const adminRouter = require('./routes/admin');
 const flightsRouter = require('./routes/flights');
+const moneyRouter = require('./routes/money');
+const houseRouter = require('./routes/house');
 const workerRouter = require('./routes/worker');
 const crmRouter = require('./routes/crm');
 const homeRouter = require('./routes/home');
@@ -91,6 +93,8 @@ function portfolioHost(req, res, next, user) {
     if (/^\/api\/krisp\/webhook\/?$/.test(req.path)) return krispCaptureRouter(req, res, next);
     if (req.path.startsWith('/api/subscription-agent/')) return workerRouter(req, res, next);
     if (req.path === '/flights' || req.path.startsWith('/api/flights')) return flightsRouter(req, res, next);
+    if (req.path === '/money' || req.path.startsWith('/money/')) return moneyRouter(req, res, next);
+    if (req.path === '/house' || req.path.startsWith('/house/')) return houseRouter(req, res, next);
     if (req.path === '/home') return homeRouter(req, res, next);
     if (req.path === '/crm' || req.path.startsWith('/crm/')) return crmRouter(req, res, next);
     if (req.path.startsWith('/api/crm/imessage/')) return imessageCaptureRouter(req, res, next);

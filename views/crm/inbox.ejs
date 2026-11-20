@@ -1,0 +1,205 @@
+<%- include('_top') %>
+<% const s = summary; const spaceName = sp => sp === 'work' ? 'Work' : 'Personal'; %>
+<div class="title-row">
+  <div>
+    <h1>Inbox</h1>
+    <p class="subline">Everything waiting on a decision across Work and Personal, sorted by what needs you first.</p>
+  </div>
+  <div class="acts">
+    <% if (s.triage.automatedCount) { %>
+      <form class="inline-form" method="post" action="/crm/review/ignore-automated">
+        <input type="hidden" name="back" value="/crm/inbox">
+        <button class="btn small" type="submit">Ignore all automated (<%= s.triage.automatedCount %>)</button>
+      </form>
+    <% } %>
+    <a class="btn small" href="/crm/settings">Connections &amp; setup</a>
+  </div>
+</div>
+
+<% if (!s.urgent.count && !s.triage.count && !s.optional.count) { %>
+<section class="grid first"><div class="panel s12"><div class="empty">Inbox clear. Nothing is waiting on a decision across Work or Personal.</div></div></section>
+<% } %>
+
+<% if (s.urgent.count) { %>
+<section class="grid first"><div class="panel s12">
+  <div class="panel-head"><h2>Needs you now</h2><span class="chip"><%= s.urgent.count %> blocking</span></div>
+
+  <% if (s.urgent.healthBad.length) { %>
+  <div class="status-list" style="margin-bottom:14px">
+    <% for (const h of s.urgent.healthBad) { %>
+      <div class="status-item bad"><span class="pill space-<%= h.space %>"><%= spaceName(h.space) %></span> <% if (h.href) { %><a href="<%= h.href %>"><%= h.text %></a><% } else { %><%= h.text %><% } %></div>
+    <% } %>
+  </div>
+  <% } %>
+
+  <% if (s.urgent.recordings.length) { %>
+  <h3 class="group-label">Meeting recordings waiting to release (<%= s.urgent.recordings.length %>)</h3>
+  <div class="rows" style="margin-bottom:14px">
+    <% for (const r of s.urgent.recordings) { %>
+      <a class="rowcard" href="/crm/work/meetings#m-<%= r.id %>">
+        <span class="kind-icon" aria-hidden="true"><%- icon.meeting %></span>
+        <div class="main"><div class="what"><%= r.title || 'Untitled recording' %></div><div class="meta"><%= r.origin %> · confirm speakers and release to Work or Personal</div></div>
+        <div class="end"><span class="when"><%= fmt(r.occurred_at || r.received_at) %></span></div>
+      </a>
+    <% } %>
+  </div>
+  <% } %>
+
+  <% if (s.urgent.looksDone.length) { %>
+  <h3 class="group-label">Promises that look done (<%= s.urgent.looksDone.length %>)</h3>
+  <div class="promise-list" style="margin-bottom:14px">
+    <% for (const p of s.urgent.looksDone) { %>
+      <div class="promise" data-async-row>
+        <div class="what"><span class="pill space-<%= p.space %>"><%= spaceName(p.space) %></span> <%= p.action %></div>
+        <div class="looks-done"><strong>Looks done:</strong> “<%= p.looks_done_quote %>” <a href="/crm/<%= p.space %>/sources/<%= p.looks_done_source_id %>">Read email</a></div>
+        <div class="acts">
+          <form method="post" action="/crm/<%= p.space %>/promises/<%= p.atom_id %>/confirm" data-async="remove"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small primary">Yes, it's done</button></form>
+          <form method="post" action="/crm/<%= p.space %>/promises/<%= p.atom_id %>/notdone" data-async="remove"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small">Not done yet</button></form>
+        </div>
+      </div>
+    <% } %>
+  </div>
+  <% } %>
+
+  <% if (s.urgent.likelyTasks.length) { %>
+  <h3 class="group-label">Tasks that look finished in email (<%= s.urgent.likelyTasks.length %>)</h3>
+  <div class="rows" style="margin-bottom:14px">
+    <% for (const t of s.urgent.likelyTasks) { %>
+      <div class="rowcard" data-async-row>
+        <span class="kind-icon" aria-hidden="true"><%- icon.tasks %></span>
+        <div class="main">
+          <div class="what"><span class="pill space-<%= t.space %>"><%= spaceName(t.space) %></span> <a href="/crm/<%= t.space %>/tasks/<%= t.task_id %>"><%= t.title %></a></div>
+          <div class="meta">“<%= t.quote %>” · <a href="/crm/<%= t.space %>/sources/<%= t.source_id %>"><%= t.source_title %></a></div>
+        </div>
+        <div class="acts">
+          <form class="inline-form" method="post" action="/crm/<%= t.space %>/tasks/<%= t.task_id %>/complete" data-async="remove"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small primary">Tick off</button></form>
+          <form class="inline-form" method="post" action="/crm/<%= t.space %>/tasks/<%= t.task_id %>/reject-email" data-async="remove"><input type="hidden" name="source" value="<%= t.source_id %>"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small text">Still open</button></form>
+        </div>
+      </div>
+    <% } %>
+  </div>
+  <% } %>
+
+  <% if (s.urgent.followups.length) { %>
+  <h3 class="group-label">Follow-ups after finished tasks (<%= s.urgent.followups.length %>)</h3>
+  <div class="promise-list">
+    <% for (const f of s.urgent.followups) { %>
+      <div class="promise followup" data-async-row>
+        <div class="what"><span class="pill space-<%= f.space %>"><%= spaceName(f.space) %></span> <%= f.direction === 'owed_to_me' ? `${f.who || 'Someone'} will ${f.action}` : f.action %></div>
+        <div class="meta"><span class="cal-tag"><%= f.direction === 'owed_to_me' ? 'Owed to you' : 'You owe' %></span><span>After <a href="/crm/<%= f.space %>/tasks/<%= f.task_id %>"><%= f.task_title %></a></span></div>
+        <div class="acts">
+          <form method="post" action="/crm/<%= f.space %>/followups/<%= f.id %>/accept" class="followup-accept" data-async="remove">
+            <input type="hidden" name="back" value="/crm/inbox">
+            <input class="input" type="date" name="due" value="<%= f.due || '' %>" aria-label="Due date">
+            <button class="btn small primary"><%= f.direction === 'owed_to_me' ? 'Add to Owed to you' : 'Add to You owe' %></button>
+          </form>
+          <form method="post" action="/crm/<%= f.space %>/followups/<%= f.id %>/dismiss" data-async="remove"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small">Not needed</button></form>
+        </div>
+      </div>
+    <% } %>
+  </div>
+  <% } %>
+</div></section>
+<% } %>
+
+<% if (s.triage.count) { %>
+<section class="grid<%= s.urgent.count ? '' : ' first' %>"><div class="panel s12">
+  <div class="panel-head"><h2>Quick triage</h2><span class="chip"><%= s.triage.count %> waiting</span></div>
+
+  <% if (s.triage.reviewItems.length) { %>
+  <div class="inbox-group">
+    <div class="panel-head"><h3>Who is this?</h3><span class="chip"><%= s.triage.reviewItems.length %> waiting</span><a class="end" href="/crm/review">Open full queue</a></div>
+    <div class="rows">
+      <% for (const it of s.triage.reviewItems.slice(0, 8)) { const p = it.payload; %>
+      <div class="rowcard" data-async-row>
+        <span class="kind-icon" aria-hidden="true"><%- icon.review %></span>
+        <div class="main">
+          <div class="what"><a href="/crm/review?item=<%= it.id %>"><%= it.kind === 'person' ? (p.name || p.value) : it.kind === 'mention' ? `"${p.name}" in a fact` : p.name %></a>
+            <% if (it.space) { %><span class="pill space-<%= it.space %>"><%= spaceName(it.space) %></span><% } %>
+            <% if (p.automated) { %><span class="pill neutral">Automated</span><% } %>
+          </div>
+          <div class="meta"><%= it.kind === 'person' ? p.value : it.kind === 'mention' ? 'More than one person has this name' : 'Suggested new project' %></div>
+        </div>
+        <div class="acts">
+          <a class="btn small" href="/crm/review?item=<%= it.id %>">Decide</a>
+          <% if (it.kind === 'person') { %>
+            <form class="inline-form" method="post" action="/crm/review/<%= it.id %>" data-async="remove"><input type="hidden" name="action" value="vendor"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small">Vendor</button></form>
+            <form class="inline-form" method="post" action="/crm/review/<%= it.id %>" data-async="remove"><input type="hidden" name="action" value="ignore"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small text">Not a person</button></form>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (s.triage.whatsappChats.length) { %>
+  <div class="inbox-group">
+    <div class="panel-head"><h3>WhatsApp chats waiting approval</h3><span class="chip"><%= s.triage.whatsappChats.length %></span><a class="end" href="/crm/whatsapp">Open WhatsApp</a></div>
+    <div class="rows">
+      <% for (const c of s.triage.whatsappChats.slice(0, 6)) { %>
+      <a class="rowcard" href="/crm/whatsapp">
+        <span class="kind-icon" aria-hidden="true"><%- icon.whatsapp %></span>
+        <div class="main"><div class="what"><%= c.is_self ? 'You (notes to yourself)' : (c.name || c.peer_phone || 'Unnamed chat') %></div><div class="meta"><%= c.seen_count %> message<%= c.seen_count === 1 ? '' : 's' %> seen · choose space to approve</div></div>
+        <div class="end"><span class="when"><%= fmt(c.last_seen) %></span></div>
+      </a>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (s.triage.booxUnconfigured.length || s.triage.booxReview.length) { %>
+  <div class="inbox-group">
+    <div class="panel-head"><h3>Boox notebooks</h3><span class="chip"><%= s.triage.booxUnconfigured.length + s.triage.booxReview.length %></span><a class="end" href="/crm/notebooks">Open notebooks</a></div>
+    <div class="rows">
+      <% for (const nb of s.triage.booxUnconfigured) { %>
+      <a class="rowcard" href="/crm/notebooks"><span class="kind-icon" aria-hidden="true"><%- icon.captured %></span><div class="main"><div class="what"><%= nb.name %></div><div class="meta">Choose Work or Personal to read its pages automatically</div></div></a>
+      <% } %>
+      <% for (const pg of s.triage.booxReview.slice(0, 6)) { %>
+      <a class="rowcard" href="/crm/notebooks"><span class="kind-icon" aria-hidden="true"><%- icon.captured %></span><div class="main"><div class="what"><%= pg.name %> — page <%= pg.page_no %></div><div class="meta"><%= pg.status === 'failed' ? pg.error : (pg.uncertainty || 'Needs handwriting check') %></div></div></a>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (s.triage.unsurePromises.length) { %>
+  <div class="inbox-group">
+    <div class="panel-head"><h3>Promises without a task yet</h3><span class="chip"><%= s.triage.unsurePromises.length %></span></div>
+    <div class="promise-list">
+      <% for (const p of s.triage.unsurePromises.slice(0, 6)) { %>
+      <div class="promise" data-async-row>
+        <div class="what"><span class="pill space-<%= p.space %>"><%= spaceName(p.space) %></span> <%= p.action %></div>
+        <% if (p.quote) { %><div class="quote">“<%= p.quote %>”</div><% } %>
+        <div class="acts">
+          <form method="post" action="/crm/<%= p.space %>/promises/<%= p.atom_id %>/task" data-async="remove"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small primary">Create task</button></form>
+          <form method="post" action="/crm/<%= p.space %>/promises/<%= p.atom_id %>/kept" data-async="remove"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small">Done</button></form>
+          <form method="post" action="/crm/<%= p.space %>/promises/<%= p.atom_id %>/dismiss" data-async="remove"><input type="hidden" name="back" value="/crm/inbox"><button class="btn small text">Not a task</button></form>
+        </div>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+</div></section>
+<% } %>
+
+<% if (s.optional.count) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>When you have a minute</h2><span class="chip">Optional</span></div>
+  <% for (const c of s.optional.cadence) { const weeks = n => `${Math.max(1, Math.round(n / 7))} ${Math.round(n / 7) <= 1 ? 'week' : 'weeks'}`; %>
+    <form class="suggest" method="post" action="/crm/<%= c.space %>/people/<%= c.person.id %>/cadence" data-async="remove" data-async-row>
+      <input type="hidden" name="back" value="/crm/inbox">
+      <span><span class="pill space-<%= c.space %>"><%= spaceName(c.space) %></span> You and <a href="/crm/<%= c.space %>/people/<%= c.person.id %>"><%= c.person.name %></a> are usually in touch every <%= weeks(c.usual) %>. Nudge you after <%= weeks(c.days) %> of silence?</span>
+      <span class="acts"><button class="btn small primary" name="days" value="<%= c.days %>">Yes</button><button class="btn small" name="days" value="0">No</button></span>
+    </form>
+  <% } %>
+  <% if (s.optional.importCount) { %>
+    <div class="rowcard" style="margin-top:10px">
+      <span class="kind-icon" aria-hidden="true"><%- icon.people %></span>
+      <div class="main"><div class="what"><a href="/crm/imports"><%= s.optional.importCount %> imported contacts &amp; LinkedIn connections</a></div><div class="meta">Optional backlog — search, link, or bulk-ignore whenever you like</div></div>
+      <div class="end"><a class="btn small" href="/crm/imports">Review</a></div>
+    </div>
+  <% } %>
+</div></section>
+<% } %>
+<%- include('_bottom') %>

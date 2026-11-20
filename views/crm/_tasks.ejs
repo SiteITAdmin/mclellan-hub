@@ -10,7 +10,7 @@
 <div class="rows">
 <% for (const g of groups) { %>
   <% if (g.job) { %><div class="job-group"><%- include('_job-head', { job: g.job }) %><div class="rows"><% } %>
-  <% for (const task of g.items) { %><%- include('_task-row', { task, todayDate }) %><% } %>
+  <% for (const task of g.items) { %><%- include('_task-row', { task, todayDate, quickDates: locals.quickDates || null }) %><% } %>
   <% if (g.job) { %></div></div><% } %>
 <% } %>
 </div>

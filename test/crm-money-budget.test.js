@@ -176,6 +176,7 @@ test('the screens: Budget with its lines, links and forms; the Overview card; a 
   const flashes = [];
   app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = new Proxy({ adminUser: 'douglas' }, { set(t, k, v) { if (k === 'crmFlash' && v) flashes.push(v); t[k] = v; return true; } }); next(); });
   app.use(require('../routes/crm'));
+  app.use(require('../routes/money'));
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const post = (p, body = '') => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { Origin: base, 'Content-Type': 'application/x-www-form-urlencoded' }, body });
@@ -184,39 +185,39 @@ test('the screens: Budget with its lines, links and forms; the Overview card; a 
   const today = dublinDay(), month = today.slice(0, 7), first = `${month}-01`;
   const monthsBack = k => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 - k, 1)).toISOString().slice(0, 7);
   try {
-    const empty = await get('/crm/personal/money/budget');
+    const empty = await get('/money/budget');
     assert.match(empty, /Nothing to plan from yet/); assert.match(empty, /aria-current="page">Budget</);
     assert.equal((await fetch(`${base}/crm/work/money/budget`)).status, 404);
 
     for (const k of [1, 2, 3]) { const m = monthsBack(k); for (const d of ['02', '09', '16', '23', '27']) { tx(`${m}-${d}`, 'SuperValu', 50, 'Groceries'); tx(`${m}-${d}`, '<b>Bean</b>', 4, 'Coffee'); } tx(`${m}-01`, 'Landlord', 900, 'Home & utilities'); }
     tx(first, 'Landlord', 900, 'Home & utilities'); tx(first, '<b>Bean</b>', 90, 'Coffee'); tx(today, 'SuperValu', 20, 'Groceries'); tx(today, 'Ryanair', 80, 'Travel');
-    const page = await get('/crm/personal/money/budget');
+    const page = await get('/money/budget');
     assert.match(page, /The plan, line by line/); assert.match(page, /<strong>€90\.00<\/strong> of €20\.00/); assert.match(page, /Over by €70\.00/);
     assert.match(page, /The Hub’s figure: your average for /); assert.match(page, /Spent, but not in the plan/); assert.match(page, /Earlier months/);
     assert.match(page, /Tell it your monthly take-home pay/);
     assert.ok(page.indexOf('id="line-coffee"') < page.indexOf('id="line-groceries"'), 'the line over plan comes first');
 
-    assert.equal((await post('/crm/personal/money/budget/line', 'category=Groceries&amount=180')).status, 302);
+    assert.equal((await post('/money/budget/line', 'category=Groceries&amount=180')).status, 302);
     assert.match(flashes.pop().text, /^Groceries: €180\.00 a month, and it carries forward until you change it\.$/);
-    assert.equal((await post('/crm/personal/money/budget/line', 'category=Travel&amount=100')).status, 302); flashes.pop();
-    assert.equal((await post('/crm/personal/money/budget/money', 'income=2000&savings=200')).status, 302); flashes.pop();
-    assert.equal((await post('/crm/personal/money/challenge/cap', 'category=Coffee&cap=100')).status, 302);
+    assert.equal((await post('/money/budget/line', 'category=Travel&amount=100')).status, 302); flashes.pop();
+    assert.equal((await post('/money/budget/money', 'income=2000&savings=200')).status, 302); flashes.pop();
+    assert.equal((await post('/money/challenge/cap', 'category=Coffee&cap=100')).status, 302);
     assert.match(flashes.pop().text, /^Taken on: Coffee under €100\.00 this month/);
-    const after = await get('/crm/personal/money/budget');
+    const after = await get('/money/budget');
     assert.match(after, /Your own figure: your own figure, set on /); assert.match(after, /Your cap: your cap, taken on /);
-    assert.match(after, /<span class="challenge-ref">Agreed<\/span> <a href="\/crm\/personal\/money\/challenge">You agreed: Coffee under €100\.00 this month\. €90\.00 spent/);
+    assert.match(after, /<span class="challenge-ref">Agreed<\/span> <a href="\/money\/challenge">You agreed: Coffee under €100\.00 this month\. €90\.00 spent/);
     assert.match(after, /Take-home €2,000\.00, less €200\.00 to put away, less the €1,280\.00 planned:\s*<strong class="">€520\.00 not given a job<\/strong>/);
     assert.doesNotMatch(after, /Spent, but not in the plan/);
-    assert.equal((await post('/crm/personal/money/budget/reset', 'category=Groceries')).status, 302);
+    assert.equal((await post('/money/budget/reset', 'category=Groceries')).status, 302);
     assert.match(flashes.pop().text, /^Back to the Hub's figure: €250\.00\.$/);
-    assert.equal((await post('/crm/personal/money/budget/line', 'category=Groceries&amount=abc')).status, 302);
+    assert.equal((await post('/money/budget/line', 'category=Groceries&amount=abc')).status, 302);
     assert.match(flashes.pop().text, /Write the plan as euro/);
 
-    const past = await get(`/crm/personal/money/budget?month=${monthsBack(1)}`);
+    const past = await get(`/money/budget?month=${monthsBack(1)}`);
     assert.match(past, /No plan was held for /); assert.match(past, /Back to this month/); assert.doesNotMatch(past, /Change the plan for/);
-    const overview = await get('/crm/personal/money');
+    const overview = await get('/money');
     assert.match(overview, /<h2>Budget<\/h2>/); assert.match(overview, /planned for \w+ is spent/);
-    assert.match(await get('/crm/personal/money/challenge'), /Your cap this month: €90\.00 of €100\.00/);
+    assert.match(await get('/money/challenge'), /Your cap this month: €90\.00 of €100\.00/);
     void addDays;
   } finally { server.close(); }
 });

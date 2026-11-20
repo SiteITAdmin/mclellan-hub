@@ -1,6 +1,6 @@
-<%- include('../_top') %>
+<%- include('../../_tool-top') %>
 <%
-  const v = view, r = v.reading, action = '/crm/personal/money/challenge';
+  const v = view, r = v.reading, root = locals.base || '/money', action = `${root}/challenge`;
   const prize = c => c.saving_cents_per_month ? `About ${euros(c.saving_cents_per_month)} a month${c.capped ? ' (capped at what you spend there)' : ''}` : '';
   const buttons = c => { %>
     <div class="challenge-buttons">
@@ -39,7 +39,7 @@
   <section class="panel challenge-empty">
     <h2>Not enough to challenge yet</h2>
     <% for (const line of v.coverage.missing) { %><p><%= line %></p><% } %>
-    <p class="subline">No guess is made before then. <a href="/crm/personal/money">Upload statements on Overview</a>.</p>
+    <p class="subline">No guess is made before then. <a href="<%= root %>">Upload statements on Overview</a>.</p>
   </section>
 <% } else if (!r && !v.working && !v.failed) { %>
   <section class="panel challenge-empty"><h2>No challenge yet</h2><p>There is enough to work with. The first one is written within a minute or two of the data arriving.</p></section>
@@ -155,7 +155,7 @@
 <% if (r) { %>
   <footer class="challenge-foot">
     <p>Written <%= stamp(r.model_receipt.completed_at || r.created_at) %> by <%= [r.model_receipt.runner, r.model_receipt.model].filter(Boolean).join(' / ') || 'the model' %><%= r.model_receipt.fallbackFrom ? `, standing in for ${r.model_receipt.fallbackFrom}` : '' %>, from <%= r.tx_count %> purchases between <%= dayLabel(r.period_from) %> and <%= dayLabel(r.period_to) %>. The sums are the Hub’s; the model chose what to ask.</p>
-    <% if (r.packet.unchecked) { %><p><%= r.packet.unchecked %> of those rows had not been checked by you, so their categories were the reader’s guess. <a href="/crm/personal/money/transactions">Check them</a>.</p><% } %>
+    <% if (r.packet.unchecked) { %><p><%= r.packet.unchecked %> of those rows had not been checked by you, so their categories were the reader’s guess. <a href="<%= root %>/transactions">Check them</a>.</p><% } %>
     <% if (v.newer) { %><p><%= v.newer %> newer <%= v.newer === 1 ? 'purchase is' : 'purchases are' %> not in this reading yet.</p><% } %>
     <% if (!v.coverage.ok) { %><p><% for (const line of v.coverage.missing) { %><%= line %> <% } %>No new reading is written until then.</p><% } %>
     <% if (v.habits.length || v.wins.length) { %>
@@ -169,4 +169,4 @@
     <% } %>
   </footer>
 <% } %>
-<%- include('../_bottom') %>
+<%- include('../../_tool-bottom') %>

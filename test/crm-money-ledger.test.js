@@ -64,7 +64,7 @@ test('a screenshot is sent as one image with the Dublin date, and its rows wait 
   assert.deepEqual([u.status, u.found, u.added, u.read_by, u.period_from], ['done', 2, 2, 'codex/gpt-5.6-luna, standing in for claude/sonnet', TODAY]);
   assert.deepEqual(rows().map(r => [r.merchant, r.amount_cents, r.kind, r.category, r.category_by, r.status, r.account]),
     [['Tesco', -4210, 'spend', 'Groceries', 'model', 'new', 'Test current'], ['Acme', 250000, 'income', 'Other', 'model', 'new', 'Test current']]);
-  assert.deepEqual(ledger.health(), [{ level: 'warn', text: '2 transactions waiting for you to check', href: '/crm/personal/money' }]);
+  assert.deepEqual(ledger.health(), [{ level: 'warn', text: '2 transactions waiting for you to check', href: '/money' }]);
   assert.equal(ledger.hasData(), true); assert.equal(ledger.oldestDay(), TODAY);
   assert.deepEqual(ledger.categoryTotals(TODAY, TODAY), [{ category: 'Groceries', total_cents: 4210, count: 1 }], 'income is never spending');
 });
@@ -134,7 +134,7 @@ test('a failed, lost, late or garbled reading is tried again at most three times
   await ledger.tick({ jobs: q, t: T });
   assert.deepEqual([uploadRow(failed).status, uploadRow(failed).error], ['failed', 'claude/sonnet: usage_limit_reached; then codex: capacity']);
   assert.match(ledger.problems()[0].text, /1 upload could not be read: claude\/sonnet: usage_limit_reached/);
-  assert.deepEqual(ledger.health(), [{ level: 'warn', text: '1 banking upload could not be read', href: '/crm/personal/money' }]);
+  assert.deepEqual(ledger.health(), [{ level: 'warn', text: '1 banking upload could not be read', href: '/money' }]);
   assert.ok(ledger.health().every(h => h.level !== 'bad'), 'the morning email repeats bad lines, and money must not be in it');
 
   const lost = ledger.addUpload({ buffer: png(2), account: 'A' }, T).id;
@@ -338,6 +338,7 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     const flashes = [];
     app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = new Proxy(signedIn ? { adminUser: 'douglas' } : {}, { set(t, k, v) { if (k === 'crmFlash' && v) flashes.push(v); t[k] = v; return true; } }); next(); });
     app.use(require('../routes/crm'));
+    app.use(require('../routes/money'));
     return { app, flashes };
   };
   const { app, flashes } = build(true);
@@ -346,7 +347,7 @@ test('the screens: Personal only, signed in only, upload, check against the pict
   const base = `http://127.0.0.1:${server.address().port}`, out = `http://127.0.0.1:${stranger.address().port}`;
   const get = async url => { const r = await fetch(base + url, { redirect: 'manual' }); return { status: r.status, html: await r.text(), headers: r.headers }; };
   const post = (url, fields) => fetch(base + url, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: base }, body: new URLSearchParams(fields) });
-  const send = (files, account = 'Test current', url = '/crm/personal/money/upload') => {
+  const send = (files, account = 'Test current', url = '/money/upload') => {
     const form = new FormData(); form.append('account', account);
     for (const [name, bytes] of files) form.append('images', new Blob([bytes]), name);
     return fetch(base + url, { method: 'POST', redirect: 'manual', headers: { Origin: base }, body: form });
@@ -357,16 +358,16 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     assert.equal((await post('/crm/work/money/transactions/x', { action: 'ignore' })).status, 404);
     assert.equal(db.crm().prepare('SELECT COUNT(*) n FROM money_uploads').get().n, 0);
 
-    let page = await get('/crm/personal/money');
+    let page = await get('/money');
     assert.equal(page.status, 200);
     assert.match(page.html, /Nothing to show yet\./); assert.match(page.html, /a screenshot of each account’s transaction list for the last month or two/);
     assert.match(page.html, /name="images" accept="image\/png,image\/jpeg,image\/webp,application\/pdf,\.pdf,text\/csv,\.csv" multiple/); assert.match(page.html, /<datalist id="money-accounts">/);
-    assert.match(page.html, /href="\/crm\/personal\/money" aria-current="page"/); assert.match(page.html, /href="\/money\.css"/);
+    assert.match(page.html, /href="\/money" aria-current="page"/); assert.match(page.html, /href="\/money\.css"/);
     assert.doesNotMatch(page.html, /To check|Where .* went/);
-    assert.doesNotMatch((await get('/crm/work')).html, /\/crm\/personal\/money/, 'Work has no way in');
+    assert.doesNotMatch((await get('/crm/work')).html, /\/crm\/personal\/money/, 'Work has no old money link');
 
     let r = await send([['one.png', png(1)], ['two.png', png(2)], ['one-again.png', png(1)], ['notes.txt', Buffer.from('hello')]]);
-    assert.deepEqual([r.status, r.headers.get('location')], [302, '/crm/personal/money']);
+    assert.deepEqual([r.status, r.headers.get('location')], [302, '/money']);
     let said = flashes.pop();
     assert.equal(said.level, 'bad');
     assert.match(said.text, /2 files uploaded\. The Mac is reading them;/); assert.match(said.text, /one-again\.png was already uploaded on/); assert.match(said.text, /notes\.txt is not a screenshot \(PNG, JPEG or WebP\), a PDF statement or a CSV export/);
@@ -377,7 +378,7 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     r = await send(Array.from({ length: 7 }, (_, n) => [`many-${n}.png`, png(60 + n)]));
     assert.match(flashes.pop().text, /at most 6 files at a time\. Nothing was uploaded/);
     assert.equal(db.crm().prepare('SELECT COUNT(*) n FROM money_uploads').get().n, 2);
-    r = await fetch(`${base}/crm/personal/money/upload`, { method: 'POST', redirect: 'manual', headers: { Origin: 'https://evil.example' }, body: new FormData() });
+    r = await fetch(`${base}/money/upload`, { method: 'POST', redirect: 'manual', headers: { Origin: 'https://evil.example' }, body: new FormData() });
     assert.equal(r.status, 403);
 
     const jobs = require('../lib/subscription-agent-jobs');
@@ -388,9 +389,9 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     for (let n = 0; n < 2; n++) { const j = jobs.claim({ workerId: 'test' }).jobs[0]; await jobs.complete({ jobId: j.id, claimToken: j.claim_token, output: JSON.stringify(answers[j.id]), meta: { runner: 'claude', model: 'sonnet' } }); }
     await ledger.tick();
 
-    page = await get('/crm/personal/money');
+    page = await get('/money');
     assert.match(page.html, /<h2>To check<\/h2><span class="chip">5 rows<\/span>/);
-    assert.match(page.html, new RegExp(`<img src="/crm/personal/money/uploads/${one.id}/image"`));
+    assert.match(page.html, new RegExp(`<img src="/money/uploads/${one.id}/image"`));
     assert.match(page.html, /These match the screenshot/); assert.match(page.html, /read by claude\/sonnet/);
     assert.match(page.html, /class="money-tx is-unsure" id="tx-[\w-]+" open>/); assert.match(page.html, /third letter is hidden by glare/); assert.match(page.html, /Reader unsure/);
     assert.match(page.html, /1 pending line left out/);
@@ -400,65 +401,65 @@ test('the screens: Personal only, signed in only, upload, check against the pict
     assert.match(page.html, /<span class="money-bar-label">Groceries<\/span>[\s\S]*?style="width:100%"[\s\S]*?€42\.10<small>64% · 1<\/small>/);
     assert.match(page.html, /Top merchants this month[\s\S]*Tesco[\s\S]*€42\.10[\s\S]*Netflix/); assert.match(page.html, /Last six months/); assert.match(page.html, /always do this for <strong>Tesco<\/strong>/);
     assert.match(page.html, /Uploads \(2\)/); assert.match(page.html, /4 lines read, 4 new/);
-    assert.match((await get('/crm/personal')).html, /href="\/crm\/personal\/money">5 transactions waiting for you to check/);
+    assert.match((await get('/crm/personal')).html, /href="\/money">5 transactions waiting for you to check/);
     assert.doesNotMatch((await get('/crm/work')).html, /transactions waiting/);
 
-    const img = await fetch(`${base}/crm/personal/money/uploads/${one.id}/image`);
+    const img = await fetch(`${base}/money/uploads/${one.id}/image`);
     assert.deepEqual([img.status, img.headers.get('content-type'), img.headers.get('cache-control')], [200, 'image/png', 'no-store, private']);
     assert.ok(Buffer.from(await img.arrayBuffer()).equals(png(1)));
-    const refused = await fetch(`${out}/crm/personal/money/uploads/${one.id}/image`, { redirect: 'manual' });
+    const refused = await fetch(`${out}/money/uploads/${one.id}/image`, { redirect: 'manual' });
     assert.deepEqual([refused.status, refused.headers.get('location')], [302, '/admin/login'], 'nobody but the signed-in admin gets the picture');
-    assert.equal((await fetch(`${out}/crm/personal/money`, { redirect: 'manual' })).status, 302);
-    assert.equal((await get('/crm/personal/money/uploads/nope/image')).status, 404);
+    assert.equal((await fetch(`${out}/money`, { redirect: 'manual' })).status, 302);
+    assert.equal((await get('/money/uploads/nope/image')).status, 404);
 
-    r = await post(`/crm/personal/money/uploads/${one.id}/confirm`, { back: '/crm/personal/money#check' });
-    assert.equal(r.headers.get('location'), '/crm/personal/money#check');
+    r = await post(`/money/uploads/${one.id}/confirm`, { back: '/money#check' });
+    assert.equal(r.headers.get('location'), '/money#check');
     assert.match(flashes.pop().text, /3 rows confirmed\. 1 row the reader was unsure of is still to check/);
     const cafe = rows().find(x => x.unsure);
     assert.deepEqual([cafe.status, rows().filter(x => x.status === 'confirmed').length], ['new', 3]);
-    r = await post(`/crm/personal/money/transactions/${cafe.id}`, { action: 'save', date: first, amount: '-6.20', description: 'SMUDGY CAFE', merchant: 'Smudgy Cafe', category: 'Groceries', kind: 'spend', note: '', always: '1', back: 'https://evil.example/' });
-    assert.equal(r.headers.get('location'), '/crm/personal/money', 'never sent off the Money screens');
+    r = await post(`/money/transactions/${cafe.id}`, { action: 'save', date: first, amount: '-6.20', description: 'SMUDGY CAFE', merchant: 'Smudgy Cafe', category: 'Groceries', kind: 'spend', note: '', always: '1', back: 'https://evil.example/' });
+    assert.equal(r.headers.get('location'), '/money', 'never sent off the Money screens');
     assert.match(flashes.pop().text, /Saved\. Smudgy Cafe is always handled this way from now on/);
     assert.deepEqual((({ status, unsure, category, category_by }) => [status, unsure, category, category_by])(rows().find(x => x.id === cafe.id)), ['confirmed', 0, 'Groceries', 'you']);
     const netflix = rows().find(x => x.merchant === 'Netflix');
-    await post(`/crm/personal/money/transactions/${netflix.id}`, { action: 'ignore' });
+    await post(`/money/transactions/${netflix.id}`, { action: 'ignore' });
     assert.match(flashes.pop().text, /Deleted/);
-    await post('/crm/personal/money/transactions/nope', { action: 'save' });
+    await post('/money/transactions/nope', { action: 'save' });
     assert.deepEqual((({ level, text }) => [level, text])(flashes.pop()), ['bad', 'That transaction is no longer there']);
 
-    page = await get(`/crm/personal/money/transactions?month=${TODAY.slice(0, 7)}`);
+    page = await get(`/money/transactions?month=${TODAY.slice(0, 7)}`);
     assert.equal(page.status, 200);
     assert.match(page.html, /<h2>4 rows<\/h2><span class="chip">€48\.30 spent · €2,500\.00 in<\/span>/);
-    assert.match(page.html, /href="\/crm\/personal\/money\/transactions" aria-current="page"/); assert.match(page.html, /Transfer, not counted/); assert.match(page.html, /<span class="pill neutral">Unchecked<\/span>/);
+    assert.match(page.html, /href="\/money\/transactions" aria-current="page"/); assert.match(page.html, /Transfer, not counted/); assert.match(page.html, /<span class="pill neutral">Unchecked<\/span>/);
     assert.doesNotMatch(page.html, /Netflix/);
-    assert.match(page.html, new RegExp(`name="back" value="/crm/personal/money/transactions\\?month=${TODAY.slice(0, 7)}"`));
-    page = await get('/crm/personal/money/transactions?status=ignored');
+    assert.match(page.html, new RegExp(`name="back" value="/money/transactions\\?month=${TODAY.slice(0, 7)}"`));
+    page = await get('/money/transactions?status=ignored');
     assert.match(page.html, /Netflix/); assert.match(page.html, /Put back/); assert.match(page.html, /<h2>1 row<\/h2>/);
-    page = await get('/crm/personal/money/transactions?month=all&q=tesco&category=Groceries&account=Test%20current&status=confirmed');
+    page = await get('/money/transactions?month=all&q=tesco&category=Groceries&account=Test%20current&status=confirmed');
     assert.match(page.html, /<h2>1 row<\/h2><span class="chip">€42\.10 spent<\/span>/);
-    page = await get('/crm/personal/money/transactions?q=100%25_nothing');
+    page = await get('/money/transactions?q=100%25_nothing');
     assert.match(page.html, /Nothing matches/);
 
     hub.prepare("UPDATE subscription_agent_jobs SET status = 'failed', error = 'every model lane was down' WHERE 0").run();
     db.crm().prepare("UPDATE money_uploads SET status = 'failed', error = 'every model lane was down' WHERE id = ?").run(two.id);
-    page = await get('/crm/personal/money');
+    page = await get('/money');
     assert.match(page.html, /class="status-item bad"><strong>Ledger:<\/strong> 1 upload could not be read: every model lane was down/);
     assert.match(page.html, /<details class="panel s12" open>/); assert.match(page.html, /Read again/);
-    r = await post(`/crm/personal/money/uploads/${two.id}/retry`, {});
+    r = await post(`/money/uploads/${two.id}/retry`, {});
     assert.match(flashes.pop().text, /read again/); assert.equal(uploadRow(two.id).status, 'queued');
 
-    r = await post(`/crm/personal/money/uploads/${two.id}/delete`, {});
+    r = await post(`/money/uploads/${two.id}/delete`, {});
     assert.match(flashes.pop().text, /rows read from it are kept/);
     assert.deepEqual(rows().filter(x => x.merchant === 'Savings').map(x => x.upload_id), [null]);
-    r = await post(`/crm/personal/money/uploads/${one.id}/delete`, { rows: 'delete' });
+    r = await post(`/money/uploads/${one.id}/delete`, { rows: 'delete' });
     assert.match(flashes.pop().text, /with the 4 rows read from it/);
     assert.equal(rows().length, 1);
 
     const { id } = ledger.addUpload({ buffer: png(9), account: 'A' }, T - 40 * 86400);
     db.crm().prepare("UPDATE money_uploads SET status = 'done', read_at = ? WHERE id = ?").run(T - 40 * 86400, id);
-    assert.equal((await get(`/crm/personal/money/uploads/${id}/image`)).status, 200);
+    assert.equal((await get(`/money/uploads/${id}/image`)).status, 200);
     await ledger.tick();
-    assert.equal((await get(`/crm/personal/money/uploads/${id}/image`)).status, 404, 'gone once purged');
-    assert.match((await get('/crm/personal/money')).html, /file removed/);
+    assert.equal((await get(`/money/uploads/${id}/image`)).status, 404, 'gone once purged');
+    assert.match((await get('/money')).html, /file removed/);
   } finally { server.close(); stranger.close(); }
 });

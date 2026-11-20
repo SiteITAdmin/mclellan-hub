@@ -1,10 +1,19 @@
 'use strict';
 
+// Standalone House Hunting tool at douglas.mclellan.scot/house, behind the
+// site admin's Google sign-in.
+
+const express = require('express');
+const { createRateLimiter, requireSameOrigin } = require('../lib/security');
+const views = require('../lib/crm/views');
 const house = require('../lib/crm/house');
 const valuation = require('../lib/crm/house/valuation');
 const { counties } = require('../lib/crm/house/sales-register');
 
-const BASE = '/crm/personal/house';
+const router = express.Router();
+const writeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 300, keyPrefix: 'house-write' });
+
+const BASE = '/house';
 const tabs = [
   ['summary', BASE, 'Overview'],
   ['properties', `${BASE}/properties`, 'Properties'],
@@ -32,6 +41,28 @@ const label = value => String(value || '').replaceAll('_', ' ').replace(/^./, c 
 const entryDate = day => day ? dateLabel.format(new Date(`${day}T12:00:00Z`)) : '';
 const propertyUrl = id => `${BASE}/properties/${encodeURIComponent(id)}`;
 const entryUrl = id => `${BASE}/entry/${encodeURIComponent(id)}`;
+
+function requireAuth(req, res, next) {
+  if (req.portfolioUser === 'douglas' && req.session?.adminUser === 'douglas') return next();
+  res.redirect('/admin/login');
+}
+
+function flash(req, text, level = 'ok') { req.session.crmFlash = { text, level }; }
+
+function fmt(ts, style = 'short') {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  const tz = { timeZone: 'Europe/Dublin' };
+  const todayKey = new Date().toLocaleDateString('en-GB', tz);
+  const key = d.toLocaleDateString('en-GB', tz);
+  const time = d.toLocaleTimeString('en-GB', { ...tz, hour: '2-digit', minute: '2-digit' });
+  if (style === 'time') return time;
+  if (key === todayKey) return style === 'date' ? 'Today' : `Today ${time}`;
+  const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-GB', tz);
+  if (key === yesterday) return style === 'date' ? 'Yesterday' : `Yesterday ${time}`;
+  if (style === 'date') return d.toLocaleDateString('en-IE', { ...tz, weekday: 'short', day: 'numeric', month: 'short' });
+  return `${d.toLocaleDateString('en-IE', { ...tz, weekday: 'short', day: 'numeric', month: 'short' })} ${time}`;
+}
 
 function linkUrl(value) {
   try {
@@ -83,139 +114,144 @@ function model(screen, filter = {}) {
   };
 }
 
-module.exports = function mountHouse(router, { spaceParam, requireSameOrigin, writeLimiter, flash }) {
-  const prefix = '/crm/:space/house';
-  router.use(prefix, spaceParam, (req, res, next) => {
-    if (req.params.space !== 'personal') return res.status(404).send('Not found');
-    res.set('Cache-Control', 'no-store');
-    next();
+router.use(BASE, requireAuth, (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  res.locals.flash = req.session.crmFlash || null;
+  delete req.session.crmFlash;
+  res.locals.ago = views.ago;
+  res.locals.fmt = fmt;
+  res.locals.icon = require('../lib/crm/icons');
+  res.locals.space = 'personal';
+  res.locals.toolSpace = 'house';
+  next();
+});
+
+function show(res, screen, data = model(screen)) {
+  res.render('crm/house', { page: 'house', title: 'House hunting', ...data });
+}
+
+router.get(BASE, (req, res) => show(res, 'summary'));
+router.get(`${BASE}/properties`, (req, res) => show(res, 'properties', model('properties', req.query)));
+router.get(`${BASE}/properties/new`, (req, res) => show(res, 'property-editor', { ...model('property-editor'), record: {} }));
+function showProperty(req, res, locals = {}) {
+  const data = model('property');
+  const property = data.propertiesById.get(req.params.id);
+  if (!property) return res.status(404).send('Property not found');
+  show(res, 'property', { ...data, property, valuation: valuation.get(property), manualComps: valuation.listComparables(property), counties, ...locals });
+}
+router.get(`${BASE}/properties/:id`, (req, res) => showProperty(req, res));
+router.get(`${BASE}/properties/:id/edit`, (req, res) => {
+  const data = model('property-editor');
+  const record = data.propertiesById.get(req.params.id);
+  if (!record) return res.status(404).send('Property not found');
+  show(res, 'property-editor', { ...data, record });
+});
+router.get(`${BASE}/viewings-offers`, (req, res) => show(res, 'viewings'));
+router.get(`${BASE}/purchase`, (req, res) => show(res, 'purchase'));
+router.get(`${BASE}/mail`, (req, res) => show(res, 'mail'));
+router.get(`${BASE}/entry/new`, (req, res) => {
+  const data = model('entry-editor');
+  const { kind, property_id, title } = req.query;
+  const from = typeof req.query.from === 'string' ? req.query.from : '';
+  show(res, 'entry-editor', {
+    ...data, from,
+    record: {
+      kind: typeof kind === 'string' && Object.hasOwn(data.kinds, kind) ? kind : 'note',
+      property_id: data.propertiesById.has(property_id) ? property_id : null,
+      title: typeof title === 'string' ? title.slice(0, 200) : '',
+    },
+    cancel: returnPath({ from, property_id: data.propertiesById.has(property_id) ? property_id : null }),
   });
+});
+router.get(`${BASE}/entry/:id`, (req, res) => {
+  const data = model('entry-editor');
+  const current = data.events.find(e => e.id === req.params.id);
+  const record = current || data.archived.find(e => e.id === req.params.id);
+  if (!record) return res.status(404).send('Entry not found');
+  const from = typeof req.query.from === 'string' ? req.query.from : '';
+  show(res, 'entry-editor', { ...data, record, from, cancel: returnPath({ from, property_id: record.property_id }) });
+});
 
-  function show(res, screen, data = model(screen)) {
-    res.render('crm/house', { page: 'house', title: 'House hunting', ...data });
-  }
-
-  router.get(prefix, (req, res) => show(res, 'summary'));
-  router.get(`${prefix}/properties`, (req, res) => show(res, 'properties', model('properties', req.query)));
-  router.get(`${prefix}/properties/new`, (req, res) => show(res, 'property-editor', { ...model('property-editor'), record: {} }));
-  function showProperty(req, res, locals = {}) {
-    const data = model('property');
-    const property = data.propertiesById.get(req.params.id);
-    if (!property) return res.status(404).send('Property not found');
-    show(res, 'property', { ...data, property, valuation: valuation.get(property), manualComps: valuation.listComparables(property), counties, ...locals });
-  }
-  router.get(`${prefix}/properties/:id`, (req, res) => showProperty(req, res));
-  router.get(`${prefix}/properties/:id/edit`, (req, res) => {
-    const data = model('property-editor');
-    const record = data.propertiesById.get(req.params.id);
-    if (!record) return res.status(404).send('Property not found');
-    show(res, 'property-editor', { ...data, record });
+function post(path, handler, failed) {
+  router.post(`${BASE}${path}`, requireSameOrigin, writeLimiter, async (req, res) => {
+    try { await handler(req, res); }
+    catch (err) { failed(req, res, err.message); }
   });
-  router.get(`${prefix}/viewings-offers`, (req, res) => show(res, 'viewings'));
-  router.get(`${prefix}/purchase`, (req, res) => show(res, 'purchase'));
-  router.get(`${prefix}/mail`, (req, res) => show(res, 'mail'));
-  router.get(`${prefix}/entry/new`, (req, res) => {
-    const data = model('entry-editor');
-    const { kind, property_id, title } = req.query;
-    const from = typeof req.query.from === 'string' ? req.query.from : '';
-    show(res, 'entry-editor', {
-      ...data, from,
-      record: {
-        kind: typeof kind === 'string' && Object.hasOwn(data.kinds, kind) ? kind : 'note',
-        property_id: data.propertiesById.has(property_id) ? property_id : null,
-        title: typeof title === 'string' ? title.slice(0, 200) : '',
-      },
-      cancel: returnPath({ from, property_id: data.propertiesById.has(property_id) ? property_id : null }),
-    });
-  });
-  router.get(`${prefix}/entry/:id`, (req, res) => {
-    const data = model('entry-editor');
-    const current = data.events.find(e => e.id === req.params.id);
-    const record = current || data.archived.find(e => e.id === req.params.id);
-    if (!record) return res.status(404).send('Entry not found');
-    const from = typeof req.query.from === 'string' ? req.query.from : '';
-    show(res, 'entry-editor', { ...data, record, from, cancel: returnPath({ from, property_id: record.property_id }) });
-  });
+}
 
-  function post(path, handler, failed) {
-    router.post(`${prefix}${path}`, requireSameOrigin, writeLimiter, async (req, res) => {
-      try { await handler(req, res); }
-      catch (err) { failed(req, res, err.message); }
-    });
-  }
-
-  const propertyFailure = (req, res, message) => {
-    res.locals.flash = { text: message, level: 'bad' };
-    show(res.status(400), 'property-editor', { ...model('property-editor'), record: { ...req.body, id: req.params.id } });
-  };
-  function saveProperty(req, res) {
-    const property = house.saveProperty(req.body, req.params.id);
-    flash(req, req.params.id ? 'Property updated.' : 'Property added.');
-    res.redirect(propertyUrl(property.id));
-  }
-  post('/properties', saveProperty, propertyFailure);
-  post('/properties/:id', saveProperty, propertyFailure);
-
-  function comparablePost(path, action) {
-    post(`/properties/:id/${path}`, async (req, res) => {
-      const property = house.dashboard().properties.find(p => p.id === req.params.id);
-      if (!property) return res.status(404).send('Property not found');
-      const message = await action(property, req);
-      if (message) flash(req, message);
-      res.redirect(`${propertyUrl(property.id)}#sold-price-estimate`);
-    }, (req, res, message) => {
-      showProperty(req, res.status(400), {
-        valuationError: message,
-        ...(path === 'comparables' ? { comparableForm: req.body } : {}),
-      });
-    });
-  }
-
-  comparablePost('valuation', async (property, req) => {
-    const result = await valuation.refresh(property, { county: req.body.county, locality: req.body.locality });
-    if (['unavailable', 'needs_location'].includes(result.status)) throw new Error(result.reason);
-    return 'Comparable sales refreshed.';
-  });
-  comparablePost('comparables', (property, req) => {
-    valuation.addComparable(property, req.body);
-    return 'Daft sale added.';
-  });
-  comparablePost('comparables/:compId/remove', (property, req) => {
-    valuation.removeComparable(property, req.params.compId);
-    return 'Daft sale removed.';
-  });
-
-  const entryFailure = (req, res, message) => {
-    const data = model('entry-editor');
-    const prior = data.events.find(e => e.id === req.params.id);
-    res.locals.flash = { text: message, level: 'bad' };
-    show(res.status(400), 'entry-editor', {
-      ...data, record: { ...prior, ...req.body, id: req.params.id }, from: req.body.from, cancel: returnPath(req.body),
-    });
-  };
-  function saveEntry(req, res) {
-    const entry = house.saveEvent(req.body, req.params.id);
-    flash(req, req.params.id ? 'Entry updated.' : 'Entry added.');
-    const from = req.body.from || (entry.property_id ? 'property' : null);
-    res.redirect(returnPath({ from, property_id: entry.property_id }));
-  }
-  post('/entry', saveEntry, entryFailure);
-  post('/entry/:id', saveEntry, entryFailure);
-
-  function mailPost(path, action, notice) {
-    post(`/mail${path}`, (req, res) => {
-      action(req);
-      flash(req, notice);
-      res.redirect(tabPath.mail);
-    }, (req, res, message) => {
-      flash(req, message, 'bad');
-      res.redirect(tabPath.mail);
-    });
-  }
-  mailPost('/:id/accept', req => house.accept(req.params.id, {
-    property_id: req.body.property_id, replace_id: req.body.replace_id,
-  }), 'Update added to your tracker.');
-  mailPost('/:id/dismiss', req => house.dismiss(req.params.id), 'Update dismissed.');
-  mailPost('/retry', () => house.retryMail(), 'Failed emails queued for another reading.');
-  mailPost('/scan', () => house.requestScan(), 'Gmail scan requested.');
+const propertyFailure = (req, res, message) => {
+  res.locals.flash = { text: message, level: 'bad' };
+  show(res.status(400), 'property-editor', { ...model('property-editor'), record: { ...req.body, id: req.params.id } });
 };
+function saveProperty(req, res) {
+  const property = house.saveProperty(req.body, req.params.id);
+  flash(req, req.params.id ? 'Property updated.' : 'Property added.');
+  res.redirect(propertyUrl(property.id));
+}
+post('/properties', saveProperty, propertyFailure);
+post('/properties/:id', saveProperty, propertyFailure);
+
+function comparablePost(path, action) {
+  post(`/properties/:id/${path}`, async (req, res) => {
+    const property = house.dashboard().properties.find(p => p.id === req.params.id);
+    if (!property) return res.status(404).send('Property not found');
+    const message = await action(property, req);
+    if (message) flash(req, message);
+    res.redirect(`${propertyUrl(property.id)}#sold-price-estimate`);
+  }, (req, res, message) => {
+    showProperty(req, res.status(400), {
+      valuationError: message,
+      ...(path === 'comparables' ? { comparableForm: req.body } : {}),
+    });
+  });
+}
+
+comparablePost('valuation', async (property, req) => {
+  const result = await valuation.refresh(property, { county: req.body.county, locality: req.body.locality });
+  if (['unavailable', 'needs_location'].includes(result.status)) throw new Error(result.reason);
+  return 'Comparable sales refreshed.';
+});
+comparablePost('comparables', (property, req) => {
+  valuation.addComparable(property, req.body);
+  return 'Daft sale added.';
+});
+comparablePost('comparables/:compId/remove', (property, req) => {
+  valuation.removeComparable(property, req.params.compId);
+  return 'Daft sale removed.';
+});
+
+const entryFailure = (req, res, message) => {
+  const data = model('entry-editor');
+  const prior = data.events.find(e => e.id === req.params.id);
+  res.locals.flash = { text: message, level: 'bad' };
+  show(res.status(400), 'entry-editor', {
+    ...data, record: { ...prior, ...req.body, id: req.params.id }, from: req.body.from, cancel: returnPath(req.body),
+  });
+};
+function saveEntry(req, res) {
+  const entry = house.saveEvent(req.body, req.params.id);
+  flash(req, req.params.id ? 'Entry updated.' : 'Entry added.');
+  const from = req.body.from || (entry.property_id ? 'property' : null);
+  res.redirect(returnPath({ from, property_id: entry.property_id }));
+}
+post('/entry', saveEntry, entryFailure);
+post('/entry/:id', saveEntry, entryFailure);
+
+function mailPost(path, action, notice) {
+  post(`/mail${path}`, (req, res) => {
+    action(req);
+    flash(req, notice);
+    res.redirect(tabPath.mail);
+  }, (req, res, message) => {
+    flash(req, message, 'bad');
+    res.redirect(tabPath.mail);
+  });
+}
+mailPost('/:id/accept', req => house.accept(req.params.id, {
+  property_id: req.body.property_id, replace_id: req.body.replace_id,
+}), 'Update added to your tracker.');
+mailPost('/:id/dismiss', req => house.dismiss(req.params.id), 'Update dismissed.');
+mailPost('/retry', () => house.retryMail(), 'Failed emails queued for another reading.');
+mailPost('/scan', () => house.requestScan(), 'Gmail scan requested.');
+
+module.exports = router;

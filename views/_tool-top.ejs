@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en-IE">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title><%= title %> – Hub</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/crm.css">
+  <% if (page === 'money') { %><link rel="stylesheet" href="/money.css"><% } %>
+  <% if (page === 'house') { %><link rel="stylesheet" href="/house.css"><% } %>
+  <meta name="theme-color" content="#f5f2ec">
+</head>
+<body>
+<div class="tool-shell" data-space="<%= locals.toolSpace || 'personal' %>">
+  <header class="tool-bar">
+    <div class="tool-bar-in">
+      <a class="tool-brand" href="/home" title="All Hub tools"><%- icon.mark %><span>Hub</span></a>
+      <nav class="tool-links" aria-label="Tools">
+        <a href="/home">Home</a>
+        <a href="/crm/work">Work</a>
+        <a href="/crm/personal">Personal</a>
+        <a href="/flights">Flights</a>
+        <a href="/money" <%- page === 'money' ? 'aria-current="page"' : '' %>>Money</a>
+        <a href="/house" <%- page === 'house' ? 'aria-current="page"' : '' %>>House hunting</a>
+      </nav>
+    </div>
+  </header>
+  <main class="tool-canvas"><div class="column">
+  <% if (flash) { %><div class="flash <%= flash.level === 'bad' ? 'bad' : '' %>" role="status"><%= flash.text %></div><% } %>

@@ -10,6 +10,7 @@
    };
    const named = m => m.by === 'people' ? 'named after who spoke' : m.by === 'date' ? 'named after its date' : '';
    const placeholder = label => /^(speaker|unknown|unidentified)(\s*\d+)?$/i.test(label.trim()); %>
+<% if (locals.speakerPeople && speakerPeople.length) { %><datalist id="speaker-people"><% for (const nm of speakerPeople) { %><option value="<%= nm %>"></option><% } %></datalist><% } %>
 <% if (held.length) { %>
 <section class="grid<%= locals.first ? ' first' : '' %>"><div class="panel s12">
 <div class="panel-head"><h2>Waiting for you</h2><span class="chip"><%= held.length %> to release</span></div>
@@ -35,7 +36,7 @@
 <fieldset class="speaker">
 <legend><%= speaker.label %></legend>
 <div class="field"><label for="speaker-<%= d.id %>-<%= i %>">Who is &ldquo;<%= speaker.label %>&rdquo;?</label>
-<input class="input" id="speaker-<%= d.id %>-<%= i %>" name="names" required maxlength="120" autocomplete="off" placeholder="Full name"<% if (['wispr', 'transcript'].includes(d.origin) && !placeholder(speaker.label)) { %> value="<%= speaker.label %>"<% } %>></div>
+<input class="input" id="speaker-<%= d.id %>-<%= i %>" name="names" list="speaker-people" required maxlength="120" autocomplete="off" placeholder="Full name"<% if (['wispr', 'transcript'].includes(d.origin) && !placeholder(speaker.label)) { %> value="<%= speaker.label %>"<% } %>></div>
 <p class="speaker-said">What <%= speaker.label %> said</p>
 <% for (const preview of speaker.previews) { %><blockquote><%= preview %></blockquote><% } %>
 </fieldset>

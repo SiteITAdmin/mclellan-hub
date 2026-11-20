@@ -36,12 +36,42 @@ function spaceParam(req, res, next) {
   next();
 }
 
+const SWITCHABLE_SUBPATHS = new Set(['', '/calendar', '/tasks', '/tasks/review', '/tasks/new', '/meetings', '/people', '/projects', '/organisations', '/reports', '/captured', '/search', '/note', '/promises', '/facts']);
+function switchHref(req, targetSpace) {
+  const fullPath = `${req.baseUrl || ''}${req.path || ''}`;
+  const m = /^\/crm\/(work|personal)(\/.*)?$/.exec(fullPath);
+  if (!m) return `/crm/${targetSpace}`;
+  const sub = (m[2] || '').replace(/\/$/, '');
+  if (SWITCHABLE_SUBPATHS.has(sub)) return `/crm/${targetSpace}${sub}`;
+  const top = sub.split('/')[1];
+  if (['people', 'projects', 'organisations', 'tasks', 'reports', 'meetings', 'captured'].includes(top)) return `/crm/${targetSpace}/${top}`;
+  return `/crm/${targetSpace}`;
+}
+
+function wantsJson(req) {
+  return req.get('x-requested-with') === 'fetch' || String(req.get('accept') || '').includes('application/json');
+}
+
+function speakerSuggestions(space) {
+  const rows = crm().prepare('SELECT name, space FROM people ORDER BY (space = ?) DESC, name COLLATE NOCASE').all(space);
+  const seen = new Set();
+  const out = [];
+  for (const r of rows) {
+    const k = r.name.toLowerCase();
+    if (!seen.has(k)) { seen.add(k); out.push(r.name); }
+  }
+  return out;
+}
+
 router.use('/crm', requireAuth, (req, res, next) => {
   res.locals.flash = req.session.crmFlash || null;
   delete req.session.crmFlash;
   res.locals.reviewAll = review.openCount();
   res.locals.krispWaiting = crm().prepare("SELECT count(*) n FROM krisp_intake WHERE status = 'pending'").get().n;
   res.locals.whatsappWaiting = require('../lib/crm/whatsapp').waitingCount();
+  res.locals.inboxCount = require('../lib/crm/inbox').badgeCount();
+  res.locals.switchWork = switchHref(req, 'work');
+  res.locals.switchPersonal = switchHref(req, 'personal');
   res.locals.ago = views.ago;
   res.locals.fmt = fmt;
   res.locals.hueStyle = hueStyle;
@@ -80,13 +110,13 @@ router.post('/crm/krisp/:id/classify', requireSameOrigin, writeLimiter, (req, re
   catch (err) { res.status(err.status || 500).send(err.status ? err.message : 'Classification failed; transcript remains pending'); }
 });
 
-router.get('/crm/messages', (req,res) => res.render('crm/messages', {page:'messages',title:'Messages',imessage:require('../lib/crm/imessage').status()}));
+router.get('/crm/messages', (req,res) => res.render('crm/messages', {page:'settings',title:'Messages',imessage:require('../lib/crm/imessage').status()}));
 router.post('/crm/messages/pause', requireSameOrigin, writeLimiter, (req,res) => {
   require('../lib/crm/db').setSetting('imessage_paused',req.body.paused==='1'?'1':'0');res.redirect('/crm/messages');
 });
 
 router.get('/crm/notifications', (req, res) => res.render('crm/notifications', {
-  page: 'notifications', title: 'Notifications', publicKey: require('../lib/crm/notifications').keys().publicKey,
+  page: 'settings', title: 'Notifications', publicKey: require('../lib/crm/notifications').keys().publicKey,
   devices: require('../lib/crm/notifications').list(),
 }));
 router.post('/crm/notifications/subscribe', requireSameOrigin, writeLimiter, (req,res) => {
@@ -97,16 +127,65 @@ router.post('/crm/notifications/unsubscribe', requireSameOrigin, writeLimiter, (
   require('../lib/crm/notifications').remove(req.body.endpoint); res.json({ok:true});
 });
 
-router.get('/crm/imports', (req, res) => res.render('crm/imports', {
-  page: 'imports', title: 'Contacts and LinkedIn', imports: require('../lib/crm/imports').list(),
-  people: crm().prepare('SELECT id,name,space FROM people ORDER BY name').all(), connected: require('../lib/crm/imports').connected(),
-  run: require('../lib/crm/runs').all().contacts_sync,
-}));
+router.get('/crm/inbox', (req, res) => {
+  const summary = require('../lib/crm/inbox').summary();
+  res.render('crm/inbox', { page: 'inbox', space: null, title: 'Inbox', summary });
+});
+
+router.get('/crm/settings', (req, res) => {
+  const runs = require('../lib/crm/runs').all();
+  const boox = require('../lib/crm/boox');
+  const notebooks = boox.list();
+  const booxNeeds = notebooks.filter(n => !n.space).length
+    + crm().prepare("SELECT COUNT(*) AS n FROM notebook_pages WHERE status IN ('review','failed')").get().n;
+  const whatsapp = require('../lib/crm/whatsapp');
+  const imports = require('../lib/crm/imports');
+  const notifications = require('../lib/crm/notifications');
+  const imessage = require('../lib/crm/imessage').status();
+  const vendors = require('../lib/crm/vendors').count();
+  res.render('crm/settings', {
+    page: 'settings', space: null, title: 'Connections & setup',
+    reviewCount: review.openCount(), vendorCount: vendors,
+    whatsapp: { waiting: whatsapp.waitingCount(), hb: whatsapp.lastHeartbeat(), paused: whatsapp.isPaused() },
+    imessage, boox: { total: notebooks.length, needs: booxNeeds, run: runs.boox_capture },
+    imports: { waiting: imports.count(), connected: imports.connected(), run: runs.contacts_sync },
+    notifications: { devices: notifications.list().length },
+    hasWorkCalendar: require('../lib/crm/config').calendars.some(c => c.space === 'work'),
+  });
+});
+
+router.get('/crm/imports', (req, res) => {
+  const importsMod = require('../lib/crm/imports');
+  const q = String(req.query.q || '').trim();
+  const pageSize = 50;
+  const pageNo = Math.max(0, Number(req.query.page) || 0);
+  const total = importsMod.count({ q });
+  const list = importsMod.list({ q, limit: pageSize, offset: pageNo * pageSize });
+  res.render('crm/imports', {
+    page: 'settings', title: 'Contacts and LinkedIn', imports: list, total, pageNo, pageSize, q,
+    people: crm().prepare('SELECT id,name,space FROM people ORDER BY name COLLATE NOCASE').all(),
+    connected: importsMod.connected(),
+    run: require('../lib/crm/runs').all().contacts_sync,
+  });
+});
 router.get('/crm/imports/contacts/connect', (req, res) => require('../lib/crm/contacts-connect').start(req, res));
+router.post('/crm/imports/bulk-ignore', requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const importsMod = require('../lib/crm/imports');
+    const n = req.body.allPending === '1'
+      ? importsMod.ignoreAllPending(req.body.provider || '')
+      : importsMod.ignoreMany(req.body.ids);
+    flash(req, n ? `Ignored ${n} imported ${n === 1 ? 'contact' : 'contacts'}.` : 'Nothing selected to ignore.');
+  } catch (e) { flash(req, e.message, 'bad'); }
+  res.redirect(`/crm/imports${req.body.q ? `?q=${encodeURIComponent(req.body.q)}` : ''}`);
+});
 router.post('/crm/imports/:id/decide', requireSameOrigin, writeLimiter, (req, res) => {
-  try { require('../lib/crm/imports').decide(req.params.id, req.body); flash(req, 'Contact reviewed.'); }
-  catch(e) { flash(req,e.message,'bad'); }
-  res.redirect('/crm/imports');
+  let msg = 'Contact reviewed.', level = 'ok';
+  try { require('../lib/crm/imports').decide(req.params.id, req.body); }
+  catch (e) { msg = e.message; level = 'bad'; }
+  if (wantsJson(req)) return res.status(level === 'bad' ? 400 : 200).json({ ok: level !== 'bad', message: msg });
+  flash(req, msg, level);
+  res.redirect(`/crm/imports${req.body.q ? `?q=${encodeURIComponent(req.body.q)}` : ''}`);
 });
 const identityUpload = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 2 * 1024 * 1024, files: 1 } }).single('file');
 router.post('/crm/imports/linkedin', requireSameOrigin, writeLimiter, (req, res) => identityUpload(req,res,err => {
@@ -120,7 +199,7 @@ router.get('/crm/notebooks', (req, res) => {
   const notebooks = require('../lib/crm/boox').list();
   const pages = crm().prepare(`SELECT p.id, p.page_no, p.text, p.uncertainty, p.error, p.status, n.name, n.space FROM notebook_pages p
     JOIN notebooks n ON n.id=p.notebook_id WHERE p.status IN ('review','failed') ORDER BY p.occurred_at DESC LIMIT 40`).all();
-  res.render('crm/notebooks', { page: 'notebooks', title: 'Boox notebooks', notebooks, pages, run: require('../lib/crm/runs').all().boox_capture,
+  res.render('crm/notebooks', { page: 'settings', title: 'Boox notebooks', notebooks, pages, run: require('../lib/crm/runs').all().boox_capture,
     app: require('../lib/crm/boox-app').lastSeen(), readerRetryAt: require('../lib/crm/boox').readerWait(), dayLabel: require('../lib/crm/boox').dayLabel });
 });
 router.post('/crm/notebooks/:id/configure', requireSameOrigin, writeLimiter, (req, res) => {
@@ -148,6 +227,7 @@ router.get('/crm', (req, res) => res.redirect('/crm/work'));
 // ── Who is this? ───────────────────────────────────────────────────────────
 router.get('/crm/review', (req, res) => {
   const items = review.openItems();
+  const automatedCount = items.filter(i => i.kind === 'person' && i.payload?.automated).length;
   const selected = items.find(i => i.id === req.query.item) || items[0] || null;
   let detail = null;
   if (selected) {
@@ -173,10 +253,25 @@ router.get('/crm/review', (req, res) => {
   }
   const peopleBySpace = Object.fromEntries(SPACES.map(s => [s, crm().prepare('SELECT id, name, org FROM people_v WHERE space = ? ORDER BY name COLLATE NOCASE').all(s)]));
   const orgsBySpace = Object.fromEntries(SPACES.map(s => [s, orgs.list(s)]));
-  res.render('crm/review', { page: 'review', space: null, items, selected, detail, peopleBySpace, orgsBySpace, vendorCount: require('../lib/crm/vendors').count(), title: 'Who is this?' });
+  res.render('crm/review', { page: 'settings', space: null, items, automatedCount, selected, detail, peopleBySpace, orgsBySpace, vendorCount: require('../lib/crm/vendors').count(), title: 'Who is this?' });
+});
+
+router.post('/crm/review/ignore-automated', requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const n = review.ignoreAutomated();
+    const msg = n ? `Ignored ${n} automated ${n === 1 ? 'sender' : 'senders'}. Their mail won't be read.` : 'No automated senders waiting.';
+    if (wantsJson(req)) return res.json({ ok: true, count: n, message: msg });
+    flash(req, msg);
+  } catch (err) {
+    if (wantsJson(req)) return res.status(400).json({ ok: false, message: err.message });
+    flash(req, err.message, 'bad');
+  }
+  const backTo = String(req.body.back || '');
+  res.redirect(backTo.startsWith('/crm/') && !backTo.includes('\\') ? backTo : '/crm/review');
 });
 
 router.post('/crm/review/:id', requireSameOrigin, writeLimiter, (req, res) => {
+  let msg = 'Done';
   try {
     const body = {
       action: String(req.body.action || ''),
@@ -190,25 +285,29 @@ router.post('/crm/review/:id', requireSameOrigin, writeLimiter, (req, res) => {
     const messages = { new: 'Added', same: 'Linked', ignore: 'Set aside for good', later: 'Moved to later', choose: 'Linked', none: 'Marked as nobody you know', add: 'Project added' };
     if (body.action === 'vendor') {
       const others = r.vendors - 1;
-      flash(req, r.domain
+      msg = r.domain
         ? `Put in Vendors, with everyone at ${r.domain}${others ? ` (${others} more waiting)` : ''}. Nobody new from there will be asked about.`
-        : 'Put in Vendors. Their mail won’t be read.');
-    } else flash(req, messages[body.action] || 'Done');
+        : 'Put in Vendors. Their mail won’t be read.';
+    } else msg = messages[body.action] || 'Done';
+    if (wantsJson(req)) return res.json({ ok: true, message: msg, personId: r.personId || null });
+    flash(req, msg);
     if (r.personId && req.body.open === '1') {
       const p = crm().prepare('SELECT space FROM people WHERE id = ?').get(r.personId);
       return res.redirect(`/crm/${p.space}/people/${r.personId}`);
     }
   } catch (err) {
+    if (wantsJson(req)) return res.status(400).json({ ok: false, message: err.message });
     flash(req, err.message, 'bad');
     return res.redirect(`/crm/review?item=${encodeURIComponent(req.params.id)}`);
   }
-  res.redirect('/crm/review');
+  const backTo = String(req.body.back || '');
+  res.redirect(backTo.startsWith('/crm/') && !backTo.includes('\\') ? backTo : '/crm/review');
 });
 
 // ── Vendors ────────────────────────────────────────────────────────────────
 router.get('/crm/vendors', (req, res) => {
   const { people, domains } = require('../lib/crm/vendors').list();
-  res.render('crm/vendors', { page: 'review', space: null, people, domains, title: 'Vendors' });
+  res.render('crm/vendors', { page: 'settings', space: null, people, domains, title: 'Vendors' });
 });
 
 router.post('/crm/vendors/:action(unmark|domain-remove)', requireSameOrigin, writeLimiter, (req, res) => {
@@ -230,7 +329,7 @@ router.get('/crm/whatsapp', (req, res) => {
   const whatsapp = require('../lib/crm/whatsapp');
   const { setting } = require('../lib/crm/db');
   res.render('crm/whatsapp', {
-    page: 'whatsapp', space: null, title: 'WhatsApp',
+    page: 'settings', space: null, title: 'WhatsApp',
     chats: whatsapp.list(), hb: whatsapp.lastHeartbeat(), paused: whatsapp.isPaused(),
     projectsBySpace: Object.fromEntries(SPACES.map(sp => [sp, crm().prepare('SELECT id, name FROM projects WHERE space = ? ORDER BY name COLLATE NOCASE').all(sp)])),
     lastMessage: Number(setting('whatsapp_last_message_at')) || null,
@@ -332,15 +431,21 @@ router.post('/crm/:space/people/:id/:action', spaceParam, requireSameOrigin, wri
       flash(req, action === 'join' ? `Added to ${project.name}` : `Taken off ${project.name}`);
     } else if (action === 'cadence') {
       require('../lib/crm/keepintouch').setCadence(id, req.body.days);
-      flash(req, Number(req.body.days) ? 'Keep-in-touch saved' : 'No keep-in-touch for this person');
+      const msg = Number(req.body.days) ? 'Keep-in-touch saved' : 'No keep-in-touch for this person';
+      if (wantsJson(req)) return res.json({ ok: true, message: msg });
+      flash(req, msg);
     } else if (action === 'email') {
       const email = String(req.body.email || '').trim();
       identity.linkIdentifier(id, 'email', email);
       sources.releaseHeld(email, 'linked');
       flash(req, 'Email added');
     } else return res.status(404).send('Not found');
-  } catch (err) { flash(req, err.message, 'bad'); }
-  res.redirect(String(req.body.back || '') === `/crm/${space}` ? `/crm/${space}` : to);
+  } catch (err) {
+    if (wantsJson(req)) return res.status(400).json({ ok: false, message: err.message });
+    flash(req, err.message, 'bad');
+  }
+  const backTo = String(req.body.back || '');
+  res.redirect(backTo.startsWith('/crm/') && !backTo.includes('\\') ? backTo : to);
 });
 
 // ── Organisations ──────────────────────────────────────────────────────────
@@ -421,7 +526,14 @@ router.get('/crm/:space/sources/:id', spaceParam, (req, res) => {
   const joined = s ? null : require('../lib/crm/transcript-merge').joinedInto(req.params.id);
   if (joined) return res.redirect(`/crm/${joined.space}/sources/${joined.id}`);
   if (!s || s.space !== req.params.space) return res.status(404).send('Not found');
-  res.render('crm/source', { krispRaw: ['krisp', 'wispr', 'transcript'].includes(s.origin) ? require('../lib/crm/krisp').rawForSource(s) : null, meeting: s.kind === 'meeting' ? require('../lib/crm/meetings').eventFor(s) : null, speakers: speakerCorrection.review(s.id), page: 'captured', s, title: s.title });
+  const speakers = speakerCorrection.review(s.id);
+  res.render('crm/source', {
+    krispRaw: ['krisp', 'wispr', 'transcript'].includes(s.origin) ? require('../lib/crm/krisp').rawForSource(s) : null,
+    meeting: s.kind === 'meeting' ? require('../lib/crm/meetings').eventFor(s) : null,
+    speakers,
+    speakerPeople: speakers && speakers.labels.length ? speakerSuggestions(req.params.space) : [],
+    page: 'captured', s, title: s.title,
+  });
 });
 
 router.post('/crm/:space/sources/:id/speaker-names', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -474,19 +586,25 @@ router.get('/crm/:space/promises', spaceParam, (req, res) => {
 
 router.post('/crm/:space/promises/:atomId/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   const { space, atomId, action } = req.params;
+  let msg = 'Saved';
   try {
     const p = promises.get(atomId);
     if (!p || p.space !== space) return res.status(404).send('Not found');
-    if (action === 'task') { promises.makeTask(atomId); flash(req, 'Task created. It reaches Google at the next sync.'); }
-    else if (action === 'kept') { promises.close(atomId, 'kept', 'douglas'); flash(req, 'Marked as done'); }
-    else if (action === 'dismiss') { promises.close(atomId, 'dismissed', 'douglas'); flash(req, 'Taken off the list'); }
-    else if (action === 'notdone') { promises.notDone(atomId); flash(req, "Kept open. That email won't be raised again."); }
-    else if (action === 'confirm') { promises.close(atomId, 'kept', p.looks_done_source_id ? `source:${p.looks_done_source_id}` : 'douglas'); flash(req, 'Marked as done'); }
-    else if (action === 'reopen') { promises.reopen(atomId); flash(req, 'Back on the list'); }
+    if (action === 'task') { promises.makeTask(atomId); msg = 'Task created. It reaches Google at the next sync.'; }
+    else if (action === 'kept') { promises.close(atomId, 'kept', 'douglas'); msg = 'Marked as done'; }
+    else if (action === 'dismiss') { promises.close(atomId, 'dismissed', 'douglas'); msg = 'Taken off the list'; }
+    else if (action === 'notdone') { promises.notDone(atomId); msg = "Kept open. That email won't be raised again."; }
+    else if (action === 'confirm') { promises.close(atomId, 'kept', p.looks_done_source_id ? `source:${p.looks_done_source_id}` : 'douglas'); msg = 'Marked as done'; }
+    else if (action === 'reopen') { promises.reopen(atomId); msg = 'Back on the list'; }
     else return res.status(404).send('Not found');
-  } catch (err) { flash(req, err.message, 'bad'); }
+    if (wantsJson(req)) return res.json({ ok: true, message: msg });
+    flash(req, msg);
+  } catch (err) {
+    if (wantsJson(req)) return res.status(400).json({ ok: false, message: err.message });
+    flash(req, err.message, 'bad');
+  }
   const next = String(req.body.back || '');
-  res.redirect(next.startsWith(`/crm/${space}`) && !next.includes('\\') ? next : `/crm/${space}`);
+  res.redirect((next.startsWith(`/crm/${space}`) || next === '/crm/inbox') && !next.includes('\\') ? next : `/crm/${space}`);
 });
 
 function taskForm(req, res, t, error = null) {
@@ -494,9 +612,24 @@ function taskForm(req, res, t, error = null) {
 }
 
 router.get('/crm/:space/tasks', spaceParam, (req, res) => {
+  const space = req.params.space;
   const status = ['completed', 'deleted'].includes(req.query.status) ? req.query.status : 'needsAction';
-  res.render('crm/tasks', { page: 'tasks', list: tasks.list(req.params.space, { status }), status,
-    sync: require('../lib/crm/runs').all().tasks_sync, title: 'Tasks' });
+  const filter = ['overdue', 'undated', 'meeting'].includes(req.query.filter) ? req.query.filter : '';
+  const q = String(req.query.q || '').trim();
+  const projectId = String(req.query.projectId || '').trim();
+  const personId = String(req.query.personId || '').trim();
+  const taskReview = require('../lib/crm/task-review');
+  const reviewCounts = taskReview.counts(taskReview.list(space));
+  res.render('crm/tasks', {
+    page: 'tasks',
+    list: tasks.list(space, { status, filter: status === 'needsAction' ? filter : '', q, projectId: projectId || undefined, personId: personId || undefined }),
+    status, filter: status === 'needsAction' ? filter : '', q, projectId, personId,
+    choices: tasks.choices(space),
+    dates: taskReview.quickDates(),
+    reviewCounts,
+    sync: require('../lib/crm/runs').all().tasks_sync,
+    title: 'Tasks',
+  });
 });
 
 router.get('/crm/:space/tasks/review', spaceParam, (req, res) => {
@@ -510,35 +643,48 @@ router.post('/crm/:space/tasks/review', spaceParam, requireSameOrigin, writeLimi
   const space = req.params.space;
   let anchor = String(req.body.task || '');
   try {
-    flash(req, require('../lib/crm/task-review').act(space, req.body));
+    const msg = require('../lib/crm/task-review').act(space, req.body);
     if (['done', 'drop'].includes(req.body.do)) anchor = String(req.body.next || '');
     replanned();
-  } catch (err) { flash(req, err.message, 'bad'); }
+    if (wantsJson(req)) return res.json({ ok: true, message: msg });
+    flash(req, msg);
+  } catch (err) {
+    if (wantsJson(req)) return res.status(400).json({ ok: false, message: err.message });
+    flash(req, err.message, 'bad');
+  }
+  const backTo = String(req.body.back || '');
+  if (backTo.startsWith(`/crm/${space}`) && !backTo.includes('\\')) return res.redirect(backTo);
   res.redirect(`/crm/${space}/tasks/review${/^[\w-]+$/.test(anchor) ? `#t-${anchor}` : ''}`);
 });
 
 router.post('/crm/:space/followups/:id/:action', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
   const { space, id, action } = req.params;
   const followups = require('../lib/crm/task-followups');
+  let msg = 'Saved';
   try {
     if (action === 'again') {
       const t = tasks.get(id);
       if (!t || t.space !== space) return res.status(404).send('Not found');
       followups.again(t.id);
-      flash(req, 'The Hub will look again at what follows, usually within a few minutes.');
+      msg = 'The Hub will look again at what follows, usually within a few minutes.';
     } else {
       const s = crm().prepare('SELECT space FROM followup_suggestions WHERE id = ?').get(id);
       if (!s || s.space !== space) return res.status(404).send('Not found');
       if (action === 'accept') {
         const r = followups.accept(id, { due: req.body.due });
         if (r.task) replanned();
-        flash(req, r.task ? `Added to You owe, and as a task: ${r.task.title}.` : 'Added to Owed to you. The Hub will chase it if nothing arrives.');
-      } else if (action === 'dismiss') { followups.dismiss(id); flash(req, 'Left out.'); }
+        msg = r.task ? `Added to You owe, and as a task: ${r.task.title}.` : 'Added to Owed to you. The Hub will chase it if nothing arrives.';
+      } else if (action === 'dismiss') { followups.dismiss(id); msg = 'Left out.'; }
       else return res.status(404).send('Not found');
     }
-  } catch (err) { flash(req, err.message, 'bad'); }
+    if (wantsJson(req)) return res.json({ ok: true, message: msg });
+    flash(req, msg);
+  } catch (err) {
+    if (wantsJson(req)) return res.status(400).json({ ok: false, message: err.message });
+    flash(req, err.message, 'bad');
+  }
   const next = String(req.body.back || '');
-  res.redirect(next.startsWith(`/crm/${space}`) && !next.includes('\\') ? next : `/crm/${space}/tasks/review`);
+  res.redirect((next.startsWith(`/crm/${space}`) || next === '/crm/inbox') && !next.includes('\\') ? next : `/crm/${space}/tasks/review`);
 });
 
 router.get('/crm/:space/tasks/new', spaceParam, (req, res) => {
@@ -612,8 +758,11 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
     }
     else return res.status(404).send('Not found');
     replanned();
-    flash(req, 'Saved. Your calendar has been replanned.');
+    const msg = req.params.action === 'complete' ? 'Task completed.' : req.params.action === 'reopen' ? 'Task reopened.' : 'Saved. Your calendar has been replanned.';
+    if (wantsJson(req)) return res.json({ ok: true, message: msg });
+    flash(req, msg);
   } catch (err) {
+    if (wantsJson(req)) return res.status(400).json({ ok: false, message: err.message });
     if (req.params.action === 'edit') {
       res.status(400);
       return taskForm(req, res, { ...tasks.detail(t), ...req.body, context: req.body }, err.message);
@@ -621,7 +770,7 @@ router.post('/crm/:space/tasks/:id/:action', spaceParam, requireSameOrigin, writ
     flash(req, err.message, 'bad');
   }
   const next = String(req.body.back || '');
-  res.redirect(next.startsWith(`/crm/${t.space}/`) && !next.includes('\\') ? next : `/crm/${t.space}/tasks/${t.id}`);
+  res.redirect((next.startsWith(`/crm/${t.space}`) || next === '/crm/inbox') && !next.includes('\\') ? next : `/crm/${t.space}/tasks/${t.id}`);
 });
 
 // ── Jobs ───────────────────────────────────────────────────────────────────
@@ -668,6 +817,7 @@ router.get('/crm/:space/calendar', spaceParam, (req, res) => {
     earlier: from > first ? planner.addDays(from, -7) < first ? first : planner.addDays(from, -7) : null,
     later: from < last ? planner.addDays(from, 7) > last ? last : planner.addDays(from, 7) : null,
     days: calendar.week(req.params.space, from), state: calendar.state(req.params.space), hours: calendar.hours(),
+    hasWorkCalendar: require('../lib/crm/config').calendars.some(c => c.space === 'work'),
     notes: require('../lib/crm/boox').dayNotes(from, planner.addDays(from, 6)), transcriptTypes: require('../lib/crm/transcript-upload').ACCEPT.join(',') });
 });
 
@@ -735,8 +885,21 @@ router.get('/crm/:space/reports/:id/download', spaceParam, (req,res) => {
   res.attachment(`report-${report.date_to}.txt`).type('text/plain').send(reports.text(report));
 });
 
-require('./money')(router, { spaceParam, requireSameOrigin, writeLimiter, flash, back });
-require('./house')(router, { spaceParam, requireSameOrigin, writeLimiter, flash, back });
+// Money and House hunting now live as standalone tools at /money and /house.
+// Keep old Personal bookmarks working with a 302; Work paths still 404.
+for (const tool of ['money', 'house']) {
+  router.all(`/crm/:space/${tool}`, spaceParam, (req, res) => {
+    if (req.params.space !== 'personal') return res.status(404).send('Not found');
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, `/${tool}${qs}`);
+  });
+  router.all(`/crm/:space/${tool}/*`, spaceParam, (req, res) => {
+    if (req.params.space !== 'personal') return res.status(404).send('Not found');
+    const rest = req.params[0] ? `/${req.params[0]}` : '';
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, `/${tool}${rest}${qs}`);
+  });
+}
 
 const briefing = require('../lib/crm/briefing');
 const workOnly = (req, res, next) => (req.params.space === 'work' ? next() : res.status(404).send('Not found'));
@@ -758,7 +921,21 @@ router.post('/crm/:space/briefing/:action', spaceParam, workOnly, requireSameOri
 });
 
 router.get('/crm/:space/projects', spaceParam, (req, res) => {
-  res.render('crm/projects', { page: 'projects', list: views.projects(req.params.space), unfiled: require('../lib/crm/facts').unfiled(req.params.space, { limit: 0 }).total, title: 'Projects' });
+  res.render('crm/projects', {
+    page: 'projects',
+    list: views.projects(req.params.space),
+    unfiled: require('../lib/crm/facts').unfiled(req.params.space, { limit: 0 }).total,
+    topicDupes: require('../lib/crm/topics').duplicates(req.params.space),
+    title: 'Projects',
+  });
+});
+
+router.post('/crm/:space/topics/tidy', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  try {
+    const r = require('../lib/crm/topics').tidyAll(req.params.space);
+    flash(req, r.merged ? `Merged ${r.merged} near-duplicate ${r.merged === 1 ? 'topic' : 'topics'} across ${r.groups} ${r.groups === 1 ? 'group' : 'groups'}.` : 'No near-duplicate topics found.');
+  } catch (err) { flash(req, err.message, 'bad'); }
+  res.redirect(`/crm/${req.params.space}/projects`);
 });
 
 router.post('/crm/:space/projects', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
@@ -907,6 +1084,7 @@ router.get('/crm/:space/meetings', spaceParam, async (req, res) => {
       return { ...d, attendees, suggest, event, ...meetings.naming({ key: d.id, recorded: d.title, event, occurred_at: d.occurred_at || d.received_at, names: attendees }) };
     }),
     recordings: meetings.recordings(space), capture: require('../lib/crm/wispr-capture').state(),
+    speakerPeople: speakerSuggestions(space),
     krispLast: crm().prepare("SELECT max(received_at) t FROM krisp_intake WHERE origin = 'krisp'").get().t,
   });
 });

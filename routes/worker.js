@@ -21,7 +21,12 @@ function requireWorkerAuth(req, res, next) {
 
 router.post('/api/subscription-agent/worker/claim', requireWorkerAuth, workerLimiter, (req, res) => {
   try {
-    res.json(jobs.claim({ workerId: req.body?.worker_id || 'mac', limit: req.body?.limit || 1 }));
+    res.json(jobs.claim({
+      workerId: req.body?.worker_id || 'mac',
+      limit: req.body?.limit || 1,
+      maxPriority: req.body?.max_priority ?? null,
+      minPriority: req.body?.min_priority ?? null,
+    }));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -213,16 +213,17 @@ test('the screens: Receipts with its running total and a suggestion, the Overvie
   const flashes = [];
   app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = new Proxy({ adminUser: 'douglas' }, { set(t, k, v) { if (k === 'crmFlash' && v) flashes.push(v); t[k] = v; return true; } }); next(); });
   app.use(require('../routes/crm'));
+  app.use(require('../routes/money'));
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
-    const empty = await (await fetch(`${base}/crm/personal/money/receipts`)).text();
+    const empty = await (await fetch(`${base}/money/receipts`)).text();
     assert.match(empty, /No receipts yet/); assert.match(empty, /aria-current="page">Receipts</);
     assert.equal((await fetch(`${base}/crm/work/money/receipts`)).status, 404);
 
     const form = new FormData();
     form.append('receipts', new Blob([png(5)]), 'till.png'); form.append('receipts', new Blob([Buffer.from('a,b\n1,2\n')]), 'x.csv');
-    const r = await fetch(`${base}/crm/personal/money/receipts/upload`, { method: 'POST', redirect: 'manual', headers: { Origin: base }, body: form });
+    const r = await fetch(`${base}/money/receipts/upload`, { method: 'POST', redirect: 'manual', headers: { Origin: base }, body: form });
     assert.equal(r.status, 302);
     assert.match(flashes.pop().text, /^1 receipt uploaded\. The Mac is reading it.*x\.csv is not a photo/);
     const jobs = require('../lib/subscription-agent-jobs');
@@ -233,32 +234,32 @@ test('the screens: Receipts with its running total and a suggestion, the Overvie
     const q = fakeQueue();
     await bank(q, [line(day(-1), 'SQ *BEAN', -18.5, { merchant: 'Bean' })], 1);
 
-    const page = await (await fetch(`${base}/crm/personal/money/receipts`)).text();
+    const page = await (await fetch(`${base}/money/receipts`)).text();
     assert.match(page, /Waiting for the bank/); assert.match(page, /€18\.50/);
     assert.match(page, /Is this it\?/); assert.match(page, /Same amount; the bank names the shop differently/);
     assert.match(page, /&lt;b&gt;Cafe&lt;\/b&gt;/, 'escaped');
     assert.match(page, /Bank lines held up to: AIB current/);
-    const overview = await (await fetch(`${base}/crm/personal/money`)).text();
+    const overview = await (await fetch(`${base}/money`)).text();
     assert.match(overview, /1 receipt \(€18\.50\)<\/a> from this month is not on a bank upload yet/);
     assert.match(overview, /<h2>Receipts<\/h2>/);
     assert.doesNotMatch(overview, /till\.png/, 'receipts are not listed with bank uploads');
 
     const rec = all()[0], sug = receipts.suggestions(rec)[0];
-    const yes = await fetch(`${base}/crm/personal/money/receipts/${rec.id}/match`, { method: 'POST', redirect: 'manual', headers: { Origin: base, 'Content-Type': 'application/x-www-form-urlencoded' }, body: `transaction_id=${sug.id}` });
-    assert.equal(yes.status, 302); assert.equal(yes.headers.get('location'), `/crm/personal/money/receipts#receipt-${rec.id}`);
+    const yes = await fetch(`${base}/money/receipts/${rec.id}/match`, { method: 'POST', redirect: 'manual', headers: { Origin: base, 'Content-Type': 'application/x-www-form-urlencoded' }, body: `transaction_id=${sug.id}` });
+    assert.equal(yes.status, 302); assert.equal(yes.headers.get('location'), `/money/receipts#receipt-${rec.id}`);
     assert.equal(receipts.get(rec.id).status, 'matched');
-    const after = await (await fetch(`${base}/crm/personal/money/receipts`)).text();
+    const after = await (await fetch(`${base}/money/receipts`)).text();
     assert.match(after, /Matched \(latest 1\)/); assert.match(after, /Matched by you\./);
     const { id: failed } = await receipts.addReceipt({ buffer: png(77), filename: 'blurry.jpg' }, T);
     db.crm().prepare("UPDATE money_uploads SET status = 'failed', error = 'The Mac could not read it' WHERE id = ?").run(failed);
     const cashRec = await receipt(fakeQueue(), receiptReading({ shop: 'Chipper', paid_by: 'cash', total: 9, items: [] }), 78);
-    const more = await (await fetch(`${base}/crm/personal/money/receipts`)).text();
+    const more = await (await fetch(`${base}/money/receipts`)).text();
     assert.match(more, /blurry\.jpg <span class="pill neg">Could not be read/); assert.match(more, /The Mac could not read it/); assert.match(more, /Read again/);
     assert.match(more, /Cash and set aside \(1\)/); assert.match(more, /Paid in cash\. Not added to spending/);
     assert.match(more, /1 receipt could not be read: The Mac could not read it/, 'the failure shows at the top');
     receipts.decide(cashRec.id, 'delete', {}, T);
     db.crm().prepare('DELETE FROM money_uploads WHERE id = ?').run(failed);
-    const del = await fetch(`${base}/crm/personal/money/receipts/${rec.id}/delete`, { method: 'POST', redirect: 'manual', headers: { Origin: base } });
+    const del = await fetch(`${base}/money/receipts/${rec.id}/delete`, { method: 'POST', redirect: 'manual', headers: { Origin: base } });
     assert.equal(del.status, 302);
     assert.deepEqual([all().length, db.crm().prepare("SELECT COUNT(*) n FROM money_uploads WHERE source = 'receipt'").get().n], [0, 0]);
   } finally { server.close(); }

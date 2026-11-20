@@ -125,39 +125,40 @@ test('the screens: Categories with add, move and remove; the new category in Tra
   const flashes = [];
   app.use((req, res, next) => { req.portfolioUser = 'douglas'; req.session = new Proxy({ adminUser: 'douglas' }, { set(t, k, v) { if (k === 'crmFlash' && v) flashes.push(v); t[k] = v; return true; } }); next(); });
   app.use(require('../routes/crm'));
+  app.use(require('../routes/money'));
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const post = (p, body = '') => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { Origin: base, 'Content-Type': 'application/x-www-form-urlencoded' }, body });
   const get = async p => (await fetch(`${base}${p}`)).text();
   const today = dublinDay();
   try {
-    const empty = await get('/crm/personal/money/categories');
+    const empty = await get('/money/categories');
     assert.match(empty, /aria-current="page">Categories</); assert.match(empty, /None yet\. Add one above\./); assert.match(empty, />Groceries</);
     assert.equal((await fetch(`${base}/crm/work/money/categories`)).status, 404);
     tx(addDays(today, -2), '<b>Smyths</b>', 30, 'Shopping'); tx(addDays(today, -1), 'Tesco', 50, 'Groceries');
 
-    const added = await post('/crm/personal/money/categories/add', 'name=Kids&about=%3Ci%3Eschool%3C%2Fi%3E+things');
-    assert.equal(added.headers.get('location'), '/crm/personal/money/categories#cat-kids');
+    const added = await post('/money/categories/add', 'name=Kids&about=%3Ci%3Eschool%3C%2Fi%3E+things');
+    assert.equal(added.headers.get('location'), '/money/categories#cat-kids');
     assert.match(flashes.pop().text, /^Kids added\. It is in every category list now/);
-    assert.equal((await post('/crm/personal/money/categories/add', 'name=kids')).status, 302);
+    assert.equal((await post('/money/categories/add', 'name=kids')).status, 302);
     assert.match(flashes.pop().text, /already a category called Kids/);
-    const page = await get('/crm/personal/money/categories');
+    const page = await get('/money/categories');
     assert.match(page, /id="cat-kids"/); assert.match(page, /&lt;i&gt;school&lt;\/i&gt; things/); assert.match(page, /&lt;b&gt;Smyths&lt;\/b&gt;/);
     assert.match(page, /Move shops into Kids/);
 
-    assert.equal((await post('/crm/personal/money/categories/shops', `name=Kids&shop=${encodeURIComponent(normMerchant('<b>Smyths</b>'))}`)).status, 302);
+    assert.equal((await post('/money/categories/shops', `name=Kids&shop=${encodeURIComponent(normMerchant('<b>Smyths</b>'))}`)).status, 302);
     assert.match(flashes.pop().text, /^1 shop moved into Kids: 1 line changed, and new ones follow\.$/);
-    const txPage = await get('/crm/personal/money/transactions?month=all&category=Kids');
+    const txPage = await get('/money/transactions?month=all&category=Kids');
     assert.match(txPage, /<option selected>Kids<\/option>/); assert.match(txPage, /1 row/);
-    const budgetPage = await get('/crm/personal/money/budget');
+    const budgetPage = await get('/money/budget');
     assert.match(budgetPage, /Kids/);
     assert.match(budgetPage, /Add one on Categories/);
 
-    assert.equal((await post('/crm/personal/money/categories/save', 'name=Kids&about=for+Nakai&bill=1')).status, 302);
+    assert.equal((await post('/money/categories/save', 'name=Kids&about=for+Nakai&bill=1')).status, 302);
     assert.match(flashes.pop().text, /^Kids saved\.$/);
-    assert.match(await get('/crm/personal/money/categories'), /<span class="pill neutral">Bill<\/span>/);
-    assert.equal((await post('/crm/personal/money/categories/remove', 'name=Kids')).status, 302);
+    assert.match(await get('/money/categories'), /<span class="pill neutral">Bill<\/span>/);
+    assert.equal((await post('/money/categories/remove', 'name=Kids')).status, 302);
     assert.match(flashes.pop().text, /^Kids removed\. Its 1 line went to Other\.$/);
-    assert.doesNotMatch(await get('/crm/personal/money/transactions'), /<option[^>]*>Kids<\/option>/);
+    assert.doesNotMatch(await get('/money/transactions'), /<option[^>]*>Kids<\/option>/);
   } finally { server.close(); }
 });

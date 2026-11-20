@@ -1,19 +1,41 @@
 <%- include('_top') %>
-<% if (krispWaiting) { %><p><a href="/crm/<%= space %>/meetings"><%= krispWaiting %> meeting <%= krispWaiting === 1 ? 'recording is' : 'recordings are' %> waiting for you to confirm the speakers</a></p><% } %>
 <% const d = data; const label = space === 'work' ? 'Work' : 'Personal'; %>
 <% const dateLine = new Date().toLocaleDateString('en-IE', { timeZone: 'Europe/Dublin', weekday: 'long', day: 'numeric', month: 'long' }); %>
-<% const owe = d.ledger.mine.length, owed = d.ledger.owed.length; let finding;
+<% const owe = d.ledger.mine.length, owed = d.ledger.owed.length;
+   const plannedCount = d.day.items.filter(i => i.type === 'task').length;
+   const eventCount = d.day.items.filter(i => i.type === 'event').length;
+   let finding;
    if (owe || owed) finding = [owe ? `You owe <a class="who" href="#promises">${owe} ${owe === 1 ? 'thing' : 'things'}</a>` : '', owed ? `${owe ? 'and ' : ''}<a class="who" href="#promises">${owed} ${owed === 1 ? 'is' : 'are'}</a> owed to you` : ''].filter(Boolean).join(', ') + '.';
-   else if (d.waitingReview) finding = `${d.waitingReview} ${d.waitingReview === 1 ? 'person is' : 'people are'} waiting in <a class="who" href="/crm/review">Who is this?</a>`;
+   else if (eventCount || plannedCount) finding = `${[eventCount ? `${eventCount} ${eventCount === 1 ? 'meeting' : 'meetings'}` : '', plannedCount ? `${plannedCount} planned ${plannedCount === 1 ? 'task' : 'tasks'}` : ''].filter(Boolean).join(' and ')} today.`;
+   else if (d.waitingReview) finding = `${d.waitingReview} ${d.waitingReview === 1 ? 'person is' : 'people are'} waiting in <a class="who" href="/crm/inbox">Inbox</a>.`;
    else if (d.factsToday) finding = `<span class="who">${d.factsToday}</span> new ${d.factsToday === 1 ? 'fact' : 'facts'} since midnight.`;
    else if (d.reading) finding = `The Mac is reading <span class="who">${d.reading}</span> ${d.reading === 1 ? 'source' : 'sources'}.`;
-   else finding = 'Nothing new yet today.'; %>
+   else finding = 'Clear day so far.'; %>
+
 <div class="greeting">
   <div>
     <h1><%= greeting %>, Douglas. <%- finding %></h1>
-    <p class="subline"><span class="space-name"><%= label %></span>, <%= dateLine %>. <%= d.capturedToday %> captured today, <%= d.factsToday %> <%= d.factsToday === 1 ? 'fact' : 'facts' %> learned.</p>
+    <p class="subline"><span class="space-name"><%= label %></span>, <%= dateLine %> · <%= d.capturedToday %> captured today, <%= d.factsToday %> <%= d.factsToday === 1 ? 'fact' : 'facts' %> learned.</p>
   </div>
 </div>
+
+<% const alerts = d.health.filter(h => h.level === 'bad' || h.level === 'warn'); %>
+<% if (alerts.length) { %>
+<div class="status-list today-alerts" role="status">
+  <% for (const h of alerts) { %><div class="status-item <%= h.level %>"><% if (h.href) { %><a href="<%= h.href %>"><%= h.text %></a><% } else { %><%= h.text %><% } %></div><% } %>
+</div>
+<% } %>
+
+<% const strip = [];
+   if (krispWaiting) strip.push({ href: `/crm/${space}/meetings`, label: `${krispWaiting} ${krispWaiting === 1 ? 'recording' : 'recordings'} to release`, tone: 'warn' });
+   if (d.needMeeting.length) strip.push({ href: `/crm/${space}/tasks/review#t-${d.needMeeting[0].id}`, label: `${d.needMeeting.length} ${d.needMeeting.length === 1 ? 'task needs' : 'tasks need'} a meeting`, tone: 'warn' });
+   if (d.reviewCounts.late || d.reviewCounts.undated) strip.push({ href: `/crm/${space}/tasks/review`, label: `Dates: ${[d.reviewCounts.late ? `${d.reviewCounts.late} late` : '', d.reviewCounts.undated ? `${d.reviewCounts.undated} undated` : ''].filter(Boolean).join(', ')}`, tone: d.reviewCounts.late ? 'bad' : 'neutral' });
+   if (locals.inboxCount) strip.push({ href: '/crm/inbox', label: `Inbox (${locals.inboxCount})`, tone: 'neutral' }); %>
+<% if (strip.length) { %>
+<nav class="action-strip" aria-label="Needs attention">
+  <% for (const s of strip) { %><a class="strip-pill <%= s.tone %>" href="<%= s.href %>"><%= s.label %></a><% } %>
+</nav>
+<% } %>
 
 <% if (d.followups.list.length || d.followups.failed.length) { %>
 <section class="grid first" id="followups" aria-label="Follow-ups"><div class="panel s12">
@@ -21,9 +43,15 @@
   <%- include('_followups', { follow: { ...d.followups, thinking: 0 }, back: `/crm/${space}#followups` }) %>
 </div></section>
 <% } %>
-<% if (d.needMeeting.length) { %><p><a href="/crm/<%= space %>/tasks/review#t-<%= d.needMeeting[0].id %>"><%= d.needMeeting.length %> <%= d.needMeeting.length === 1 ? 'task needs' : 'tasks need' %> a meeting booked first<%= d.needMeeting.some(w => w.lost) ? ' (a linked meeting has gone from your calendar)' : '' %>: <%= d.needMeeting.slice(0, 3).map(w => w.title).join('; ') %></a></p><% } %>
-<% if (d.reviewCounts.undated || d.reviewCounts.late) { %><p><a href="/crm/<%= space %>/tasks/review">Open steps: <%= [d.reviewCounts.late ? `${d.reviewCounts.late} late` : '', d.reviewCounts.undated ? `${d.reviewCounts.undated} with no date` : ''].filter(Boolean).join(', ') %>. Review dates</a></p><% } %>
-<section class="grid <%= d.followups.list.length || d.followups.failed.length ? '' : 'first' %>" id="promises" aria-label="Promises">
+
+<section class="grid <%= d.followups.list.length || d.followups.failed.length ? '' : 'first' %>" aria-label="Your day"><div class="panel s12">
+  <div class="panel-head"><h2>Your day</h2><span class="chip"><%= plannedCount %> planned</span><a class="end" href="/crm/<%= space %>/calendar">Calendar</a></div>
+  <%- include('_day', { day: d.day, none: 'Nothing in the diary or planned for today.' }) %>
+</div></section>
+
+<%- include('_meeting-prep', { meetings: d.meetings }) %>
+
+<section class="grid" id="promises" aria-label="Promises">
   <div class="panel s6">
     <div class="panel-head"><h2>You owe</h2><span class="chip"><%= owe %> open</span><a class="end" href="/crm/<%= space %>/promises">All promises</a></div>
     <%- include('_promises', { list: d.ledger.mine, back: `/crm/${space}`, none: 'Nothing you have promised is open.' }) %>
@@ -34,12 +62,27 @@
   </div>
 </section>
 
-<section class="grid" aria-label="Counts">
-  <div class="tile s3"><span class="label">Captured today</span><span class="value"><%= d.capturedToday %></span><span class="caption"><%= space === 'work' ? 'Outlook mail and notes' : 'Gmail and notes' %></span></div>
-  <div class="tile s3"><span class="label">Facts learned today</span><span class="value"><%= d.factsToday %></span><span class="caption"><%= d.totalFacts %> in <%= label %> so far</span></div>
-  <div class="tile s3"><span class="label">Waiting for you</span><span class="value"><%= d.waitingReview %></span><span class="caption"><% if (d.held) { %><%= d.held %> <%= d.held === 1 ? 'email' : 'emails' %> held until you decide<% } else { %>In Who is this?<% } %></span></div>
-  <div class="tile s3"><span class="label">People</span><span class="value"><%= d.peopleCount %></span><span class="caption">In <%= label %></span></div>
-</section>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Tasks</h2><span class="chip"><%= d.tasks.length %> open</span><a class="end" href="/crm/<%= space %>/tasks">All tasks</a></div>
+  <%- include('_tasks', { taskList: d.tasks.slice(0, 8), taskBack: `/crm/${space}` }) %>
+</div></section>
+
+<%- include('_briefing-card', { briefing: d.briefing }) %>
+
+<% if (d.personalTools && d.personalTools.length) { %>
+<section class="grid"><div class="panel s12">
+  <div class="panel-head"><h2>Personal tools</h2><span class="chip">Urgent items</span><span class="end"><a href="/money">Money</a> · <a href="/house">House hunting</a></span></div>
+  <div class="rows">
+    <% for (const item of d.personalTools) { %>
+      <a class="rowcard" href="<%= item.href %>">
+        <span class="kind-icon" aria-hidden="true"><%- item.tool === 'Money' ? icon.money : icon.house %></span>
+        <div class="main"><div class="what"><%= item.text %></div><div class="meta"><%= item.tool %></div></div>
+        <div class="end"><span class="when">Open →</span></div>
+      </a>
+    <% } %>
+  </div>
+</div></section>
+<% } %>
 
 <% if (d.drift.length || d.cadenceSuggestions.length || d.dates.length) { const weeks = n => `${Math.max(1, Math.round(n / 7))} ${Math.round(n / 7) <= 1 ? 'week' : 'weeks'}`; %>
 <section class="grid">
@@ -54,7 +97,7 @@
     <% } %>
     </div>
     <% for (const s of d.cadenceSuggestions) { %>
-      <form class="suggest" method="post" action="/crm/<%= space %>/people/<%= s.person.id %>/cadence"><input type="hidden" name="back" value="/crm/<%= space %>">
+      <form class="suggest" method="post" action="/crm/<%= space %>/people/<%= s.person.id %>/cadence" data-async="remove" data-async-row><input type="hidden" name="back" value="/crm/<%= space %>">
         <span>You and <a href="/crm/<%= space %>/people/<%= s.person.id %>"><%= s.person.name %></a> are usually in touch every <%= weeks(s.usual) %>. Nudge you after <%= weeks(s.days) %> of silence?</span>
         <span class="acts"><button class="btn small primary" name="days" value="<%= s.days %>">Yes</button><button class="btn small" name="days" value="0">No</button></span></form>
     <% } %>
@@ -67,63 +110,53 @@
 </section>
 <% } %>
 
-<section class="grid"><div class="panel s12">
-  <div class="panel-head"><h2>Your day</h2><span class="chip"><%= d.day.items.filter(i => i.type === 'task').length %> planned</span><a class="end" href="/crm/<%= space %>/calendar">Calendar</a></div>
-  <%- include('_day', { day: d.day, none: 'Nothing in the diary or planned for today.' }) %>
-</div></section>
-
-<%- include('_meeting-prep', { meetings: d.meetings }) %>
-<%- include('_briefing-card', { briefing: d.briefing }) %>
-
-<section class="grid"><div class="panel s12">
-  <div class="panel-head"><h2>Other tasks</h2><span class="chip"><%= d.tasks.length %> open</span><a class="end" href="/crm/<%= space %>/tasks">View all</a></div>
-  <%- include('_tasks', { taskList: d.tasks.slice(0, 8), taskBack: `/crm/${space}` }) %>
-</div></section>
-
-<section class="grid">
-  <div class="panel s8 feed">
-    <div class="panel-head"><h2>Captured</h2><span class="chip"><%= d.reading ? `${d.reading} still to read` : 'all read' %></span><a class="end" href="/crm/<%= space %>/captured">View all</a></div>
-    <% if (!d.captured.length) { %><div class="empty">Nothing captured in <%= label %> yet. <%= space === 'work' ? 'Outlook mail arrives from your Drive flow every 15 minutes.' : 'Gmail is checked every 15 minutes.' %></div><% } %>
-    <div class="rows">
-    <% for (const s of d.captured) { %>
-      <a class="rowcard" href="/crm/<%= space %>/sources/<%= s.id %>">
-        <span class="kind-icon" aria-hidden="true"><%- s.kind === 'note' ? icon.note : icon.email %></span>
-        <div class="main"><div class="what"><%= s.title %></div><div class="meta"><%- include('_state', { s }) %></div></div>
-        <div class="end"><span class="when"><%= fmt(s.occurred_at) %></span></div>
-      </a>
-    <% } %>
-    </div>
-  </div>
-  <div class="s4 side-stack">
-    <div class="panel">
-      <div class="panel-head"><h2>Running</h2></div>
-      <div class="status-list">
-        <% if (!d.health.length) { %><div class="status-item ok">Capture and reading are working. Last check <%= ago(d.captureLast) %>.</div><% } %>
-        <% for (const h of d.health) { %><div class="status-item <%= h.level %>"><% if (h.href) { %><a href="<%= h.href %>"><%= h.text %></a><% } else { %><%= h.text %><% } %></div><% } %>
+<details class="today-more">
+  <summary>Recent activity, facts &amp; topics <span>(<%= d.capturedToday %> captured · <%= d.factsToday %> facts · <%= d.peopleCount %> people<%= !alerts.length ? ` · capture ok ${ago(d.captureLast)}` : '' %>)</span></summary>
+  <section class="grid">
+    <div class="panel s8 feed">
+      <div class="panel-head"><h2>Captured</h2><span class="chip"><%= d.reading ? `${d.reading} still to read` : 'all read' %></span><a class="end" href="/crm/<%= space %>/captured">View all</a></div>
+      <% if (!d.captured.length) { %><div class="empty">Nothing captured in <%= label %> yet. <%= space === 'work' ? 'Outlook mail arrives from your Drive flow every 15 minutes.' : 'Gmail is checked every 15 minutes.' %></div><% } %>
+      <div class="rows">
+      <% for (const s of d.captured) { %>
+        <a class="rowcard" href="/crm/<%= space %>/sources/<%= s.id %>">
+          <span class="kind-icon" aria-hidden="true"><%- s.kind === 'note' ? icon.note : icon.email %></span>
+          <div class="main"><div class="what"><%= s.title %></div><div class="meta"><%- include('_state', { s }) %></div></div>
+          <div class="end"><span class="when"><%= fmt(s.occurred_at) %></span></div>
+        </a>
+      <% } %>
       </div>
     </div>
-    <div class="panel">
-      <div class="panel-head"><h2>Topics this week</h2></div>
-      <% if (!d.topics.length) { %><div class="empty">Topics build up on their own as facts arrive.</div><% } %>
+    <div class="s4 side-stack">
+      <div class="panel">
+        <div class="panel-head"><h2>Running</h2></div>
+        <div class="status-list">
+          <% if (!d.health.length) { %><div class="status-item ok">Capture and reading are working. Last check <%= ago(d.captureLast) %>.</div><% } %>
+          <% for (const h of d.health) { %><div class="status-item <%= h.level %>"><% if (h.href) { %><a href="<%= h.href %>"><%= h.text %></a><% } else { %><%= h.text %><% } %></div><% } %>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Topics this week</h2></div>
+        <% if (!d.topics.length) { %><div class="empty">Topics build up on their own as facts arrive.</div><% } %>
+        <div class="topics-list">
+          <% for (const t of d.topics) { %><a class="topic-row" href="/crm/<%= space %>/topics/<%= t.id %>"><span><%= t.name %></span><span class="n"><%= t.n %> <%= t.n === 1 ? 'fact' : 'facts' %></span></a><% } %>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel s8">
+      <div class="panel-head"><h2>Recent facts</h2><a class="end" href="/crm/<%= space %>/search">Search</a></div>
+      <% if (!d.facts.length) { %><div class="empty">Facts appear here once the Mac has read new mail and notes.</div><% } %>
+      <% for (const a of d.facts) { %><%- include('_atom', { a }) %><% } %>
+    </div>
+    <div class="panel s4">
+      <div class="panel-head"><h2>Projects</h2><a class="end" href="/crm/<%= space %>/projects">All</a></div>
+      <% if (!d.projects.length) { %><div class="empty">No projects in <%= label %> yet.</div><% } %>
       <div class="topics-list">
-        <% for (const t of d.topics) { %><a class="topic-row" href="/crm/<%= space %>/topics/<%= t.id %>"><span><%= t.name %></span><span class="n"><%= t.n %> <%= t.n === 1 ? 'fact' : 'facts' %></span></a><% } %>
+        <% for (const p of d.projects.slice(0, 8)) { %><a class="topic-row" href="/crm/<%= space %>/projects/<%= p.id %>"><span><%= p.name %></span><span class="n"><%= p.facts %></span></a><% } %>
       </div>
     </div>
-  </div>
-</section>
-
-<section class="grid">
-  <div class="panel s8">
-    <div class="panel-head"><h2>Recent facts</h2><a class="end" href="/crm/<%= space %>/search">Search</a></div>
-    <% if (!d.facts.length) { %><div class="empty">Facts appear here once the Mac has read new mail and notes.</div><% } %>
-    <% for (const a of d.facts) { %><%- include('_atom', { a }) %><% } %>
-  </div>
-  <div class="panel s4">
-    <div class="panel-head"><h2>Projects</h2><a class="end" href="/crm/<%= space %>/projects">All</a></div>
-    <% if (!d.projects.length) { %><div class="empty">No projects in <%= label %> yet.</div><% } %>
-    <div class="topics-list">
-      <% for (const p of d.projects.slice(0, 8)) { %><a class="topic-row" href="/crm/<%= space %>/projects/<%= p.id %>"><span><%= p.name %></span><span class="n"><%= p.facts %></span></a><% } %>
-    </div>
-  </div>
-</section>
+  </section>
+</details>
 <%- include('_bottom') %>

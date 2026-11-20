@@ -151,7 +151,7 @@ test('a malformed reply fails visibly; a stale job is re-queued, then capped at 
   jobs.finish('Sorry, I cannot help with that {not json');
   await subs.tick({ jobs, t: t += 60 });
   let p = subs.problems();
-  assert.equal(p.length, 1); assert.match(p[0].text, /could not be read.*Couldn't use the reader's reply/); assert.equal(p[0].retry, '/crm/personal/money/subscriptions/retry');
+  assert.equal(p.length, 1); assert.match(p[0].text, /could not be read.*Couldn't use the reader's reply/); assert.equal(p[0].retry, '/money/subscriptions/retry');
   assert.equal(require('../lib/crm/money').problems().filter(x => x.module === 'subscriptions').length, 1, 'shown on the Money screen');
   assert.equal(subs.retryFailed('subscription', { jobs }), 1);
   assert.equal(subs.problems().length, 0);
@@ -196,12 +196,11 @@ test('the Subscriptions screen renders and its buttons record decisions', async 
   app.use((req, res, next) => { req.session = session; Object.assign(res.locals, { flash: session.flash || null, reviewAll: 0, krispWaiting: 0, whatsappWaiting: 0, fmt: String, ago: String, hueStyle: () => '', icon: require('../lib/crm/icons') }); delete session.flash; next(); });
   const router = express.Router();
   const pass = (req, res, next) => next();
-  subs.mount(router, { spaceParam: (req, res, next) => { res.locals.space = req.params.space; next(); }, personalOnly: (req, res, next) => req.params.space === 'personal' ? next() : res.status(404).send('Not found'),
-    requireSameOrigin: pass, writeLimiter: pass, flash: (req, text, level = 'ok') => { req.session.flash = { text, level }; } });
+  subs.mount(router, { requireSameOrigin: pass, writeLimiter: pass, flash: (req, text, level = 'ok') => { req.session.flash = { text, level }; }, base: '/money' });
   app.use(router);
   const server = app.listen(0); const base = `http://127.0.0.1:${server.address().port}`;
   try {
-    let res = await fetch(`${base}/crm/personal/money/subscriptions`); assert.equal(res.status, 200);
+    let res = await fetch(`${base}/money/subscriptions`); assert.equal(res.status, 200);
     let html = await res.text();
     assert.match(html, /<link rel="stylesheet" href="\/money.css">/);
     assert.match(html, /aria-current="page">Subscriptions</);
@@ -213,13 +212,13 @@ test('the Subscriptions screen renders and its buttons record decisions', async 
     assert.match(html, /Watching: one charge so far[^]*Audible/);
     assert.match(html, /No Personal mail has been captured yet/);
     assert.equal((await fetch(`${base}/crm/work/money/subscriptions`)).status, 404);
-    res = await fetch(`${base}/crm/personal/money/subscriptions/${row('Netflix').id}/dismiss`, { method: 'POST', redirect: 'manual' });
+    res = await fetch(`${base}/money/subscriptions/${row('Netflix').id}/dismiss`, { method: 'POST', redirect: 'manual' });
     assert.equal(res.status, 302);
     assert.equal(row('Netflix').status, 'dismissed');
-    html = await (await fetch(`${base}/crm/personal/money/subscriptions`)).text();
+    html = await (await fetch(`${base}/money/subscriptions`)).text();
     assert.match(html, /Netflix won&#39;t be suggested as a subscription again/);
     assert.match(html, /Cancelled and not subscriptions \(1\)/);
-    res = await fetch(`${base}/crm/personal/money/subscriptions/${row('Netflix').id}/keep`, { method: 'POST', redirect: 'manual' });
+    res = await fetch(`${base}/money/subscriptions/${row('Netflix').id}/keep`, { method: 'POST', redirect: 'manual' });
     assert.deepEqual([row('Netflix').status, row('Netflix').note], ['active', 'keep']);
   } finally { server.close(); }
 });

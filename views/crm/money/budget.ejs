@@ -1,4 +1,4 @@
-<%- include('../_top') %>
+<%- include('../../_tool-top') %>
 <% const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`, slug = c => c.toLowerCase().replace(/[^a-z]+/g, '-');
    const how = { history: 'The Hub’s figure', you: 'Your own figure', kept: 'Carried from a cap you kept', cap: 'Your cap' }; %>
 <div class="title-row"><div><h1>Budget</h1><p class="subline">A plan for the month, and where your bank lines stand against it. A cap you take on in a challenge becomes the plan for that line; what you set yourself stands until you change it.</p></div></div>
@@ -115,4 +115,4 @@
 </div></section>
 <% } %>
 <% } %>
-<%- include('../_bottom') %>
+<%- include('../../_tool-bottom') %>

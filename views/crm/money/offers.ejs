@@ -1,4 +1,4 @@
-<%- include('../_top') %>
+<%- include('../../_tool-top') %>
 <%
   const e = o.eur;
   const day = d => d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '';
@@ -21,9 +21,9 @@
         </div>
       </div>
       <div class="offer-actions">
-        <% if (x.status !== 'saved') { %><form class="inline-form" method="post" action="/crm/personal/money/offers/<%= x.id %>/save"><button class="btn small" type="submit">Save</button></form><% } %>
-        <form class="inline-form offer-used" method="post" action="/crm/personal/money/offers/<%= x.id %>/use"><label class="sr-only" for="saved-<%= x.id %>">Saved about €</label><input class="input" id="saved-<%= x.id %>" name="saved" inputmode="decimal" placeholder="saved €"><button class="btn small" type="submit">Used</button></form>
-        <form class="inline-form" method="post" action="/crm/personal/money/offers/<%= x.id %>/dismiss"><button class="btn text small" type="submit">Dismiss</button></form>
+        <% if (x.status !== 'saved') { %><form class="inline-form" method="post" action="<%= locals.base || '/money' %>/offers/<%= x.id %>/save"><button class="btn small" type="submit">Save</button></form><% } %>
+        <form class="inline-form offer-used" method="post" action="<%= locals.base || '/money' %>/offers/<%= x.id %>/use"><label class="sr-only" for="saved-<%= x.id %>">Saved about €</label><input class="input" id="saved-<%= x.id %>" name="saved" inputmode="decimal" placeholder="saved €"><button class="btn small" type="submit">Used</button></form>
+        <form class="inline-form" method="post" action="<%= locals.base || '/money' %>/offers/<%= x.id %>/dismiss"><button class="btn text small" type="submit">Dismiss</button></form>
       </div>
     </article>
 <% }; %>
@@ -61,4 +61,4 @@
     <%= o.mail.read %> read<%= o.mail.waiting ? `; ${o.mail.waiting} still to read, a few at a time` : '' %><%= o.mail.inFlight ? '; a batch is with the Mac now' : '' %>.<% if (o.dismissed) { %> <%= o.dismissed %> dismissed.<% } %></p>
   <% if (!o.mail.oldestMail) { %><p class="sub-warn">No Personal mail has been captured yet.</p><% } %>
 </section>
-<%- include('../_bottom') %>
+<%- include('../../_tool-bottom') %>
