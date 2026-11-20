@@ -12,28 +12,54 @@
   const askDifference = hasEstimate && p.asking_price != null ? p.asking_price - v.mid : null;
   const county = counties.find(c => c.toLowerCase() === v.county?.toLowerCase());
   const daftSoldUrl = 'https://www.daft.ie/sold-properties' + (county ? `/${encodeURIComponent(county.toLowerCase())}` : '');
+  const historyUrl = `${base}/history?${new URLSearchParams({ ...(county ? { county } : {}), ...(v.locality ? { locality: v.locality } : {}) })}`;
 %>
 <section class="house-section" id="sold-price-estimate" aria-labelledby="house-valuation-heading">
   <header class="house-section-head">
     <h2 id="house-valuation-heading">Sold price estimate</h2>
-    <a class="house-inline" href="https://www.propertypriceregister.ie/website/npsra/ppr-home-en.html" target="_blank" rel="noopener noreferrer">Residential Property Price Register</a>
+    <div class="house-actions">
+      <% if (county) { %><a class="house-inline" href="<%= historyUrl %>">Area history</a><% } %>
+      <a class="house-inline" href="https://www.propertypriceregister.ie/website/npsra/ppr-home-en.html" target="_blank" rel="noopener noreferrer">Property Price Register</a>
+    </div>
   </header>
   <% if (typeof valuationError !== 'undefined' && valuationError) { %>
     <p class="house-valuation-error" role="alert"><%= valuationError %></p>
   <% } %>
 
   <% if (hasEstimate) { %>
-    <div class="house-valuation-summary">
+    <div class="house-valuation-summary house-valuation-trio">
       <div>
-        <span class="house-context">Estimated sale range</span>
+        <span class="house-context">Similar sales range</span>
         <p class="house-valuation-range"><%= cost(v.low) %>–<%= cost(v.high) %></p>
-        <p class="house-meta"><%= [v.locality, v.county, asOf ? `Sales data as of ${asOf}` : ''].filter(Boolean).join(' · ') %></p>
+        <p class="house-meta"><%= [v.locality, v.county, asOf ? `As of ${asOf}` : ''].filter(Boolean).join(' · ') %></p>
       </div>
       <div class="house-valuation-mid">
         <span class="house-context">Central estimate</span>
         <strong><%= cost(v.mid) %></strong>
+        <p class="house-meta"><%= v.daftCount ? `${v.daftCount} Daft Sold` : `${comparableCount} register` %> · <%= comparableCount %> total</p>
       </div>
+      <% if (v.sqmEstimate || v.askEstimate) { %>
+        <div class="house-valuation-mid">
+          <% if (v.sqmEstimate) { %>
+            <span class="house-context">Size-adjusted (€/m²)</span>
+            <strong><%= cost(v.sqmEstimate.estimate) %></strong>
+            <p class="house-meta"><%= cost(v.sqmEstimate.perSqm) %>/m² × <%= p.area %> m² (<%= v.sqmEstimate.count %> sales)</p>
+          <% } else if (v.askEstimate) { %>
+            <span class="house-context">Asking-trend guide</span>
+            <strong><%= cost(v.askEstimate) %></strong>
+            <p class="house-meta"><%= gapText(v.medianGap) %> (<%= v.pairCount %> paired)</p>
+          <% } %>
+        </div>
+      <% } %>
     </div>
+
+    <% if (v.sqmEstimate && v.askEstimate) { %>
+      <p class="house-valuation-ask">
+        <strong>Asking-trend guide:</strong> <%= cost(v.askEstimate) %>
+        (<%= gapText(v.medianGap).toLowerCase() %> across <%= v.pairCount %> paired Daft sales, applied to the <%= cost(p.asking_price) %> asking price).
+      </p>
+    <% } %>
+
     <% if (askDifference != null) { %>
       <p class="house-valuation-ask">
         This property's asking price of <strong><%= cost(p.asking_price) %></strong>
@@ -42,12 +68,20 @@
         <% } %>
       </p>
     <% } %>
-    <p class="house-meta">The central estimate is the median of these <%= comparableCount %> sales, rounded to the nearest €5,000. The range covers <%= comparableCount >= 5 ? 'the middle half of sale prices' : 'the full span of sale prices' %>, with the ends rounded outward to €5,000.</p>
+
+    <% if (v.gapExplanation) { %>
+      <div class="house-gap-box">
+        <span class="house-context">Why there may be a gap</span>
+        <p><%= v.gapExplanation %></p>
+      </div>
+    <% } %>
+
+    <p class="house-meta">The central estimate is the median of these <%= comparableCount %> most similar sales, rounded to €5,000. The range covers <%= comparableCount >= 5 ? 'the middle half of sale prices' : 'the full span of sale prices' %>, rounded outward to €5,000.</p>
     <% if (v.reason) { %><p class="house-meta"><%= v.reason %></p><% } %>
   <% } else { %>
-    <p class="house-empty"><%= v.reason || (comparableCount ? 'The estimate needs at least three comparable sales.' : 'Estimate a sale price from recent sales near this property.') %></p>
+    <p class="house-empty"><%= v.reason || (comparableCount ? 'The estimate needs at least three comparable sales.' : 'Estimate a sale price from recent similar sales near this property.') %></p>
   <% } %>
-  <p class="house-meta">Register sales are matched by address and date. Check listing details to compare bedrooms, floor area and condition.</p>
+  <p class="house-meta">Refreshing fetches Daft Sold comparables for this neighbourhood (with bedrooms, size, type and asking vs sold) alongside the Property Price Register, excluding likely multi-unit outliers.</p>
 
   <form class="house-filters house-valuation-filter" method="post" action="<%= propertyPath %>/valuation#sold-price-estimate">
     <label>County
@@ -68,7 +102,7 @@
     <div class="house-valuation-comps">
       <header class="house-section-head">
         <h3>Comparable sales</h3>
-        <span class="house-meta"><%= comparableCount %> shown</span>
+        <span class="house-meta"><%= comparableCount %> shown<% if (v.outliersRemoved) { %> · <%= v.outliersRemoved %> outlier<%= v.outliersRemoved === 1 ? '' : 's' %> excluded<% } %></span>
       </header>
       <% if (Number.isFinite(v.medianGap) && v.pairCount >= 3) { %>
         <p class="house-valuation-gap">
@@ -79,17 +113,18 @@
       <% } %>
       <div class="house-table-scroll" tabindex="0" role="region" aria-label="Scrollable comparable sales">
         <table class="house-table house-valuation-table">
-          <thead><tr><th scope="col">Property</th><th scope="col">Sale date</th><th scope="col">Sold price</th><th scope="col">Asking price</th><th scope="col">Sold vs asking</th><th scope="col">Match</th></tr></thead>
+          <thead><tr><th scope="col">Property</th><th scope="col">Sale date</th><th scope="col">Sold price</th><th scope="col">Asking price</th><th scope="col">Sold vs asking</th><th scope="col">Similarity</th></tr></thead>
           <tbody>
             <% for (const c of comparisons) { %>
-              <% const source = linkUrl(c.url), gap = c.asking > 0 ? (c.sold - c.asking) / c.asking : null; %>
+              <% const source = linkUrl(c.url), gap = c.asking > 0 ? (c.sold - c.asking) / c.asking : null;
+                 const perSqm = c.area > 0 && c.sold > 0 ? Math.round(c.sold / c.area) : null; %>
               <tr>
                 <th scope="row">
                   <%= c.address %>
-                  <% const specs = [c.beds == null ? '' : c.beds === 0 ? 'Studio' : `${c.beds} bed`, c.area == null ? '' : `${c.area} m²`].filter(Boolean).join(' · '); %>
+                  <% const specs = [c.property_type || '', c.beds == null ? '' : c.beds === 0 ? 'Studio' : `${c.beds} bed`, c.area == null ? '' : `${c.area} m²`, c.ber ? `BER ${c.ber}` : '', perSqm ? `${cost(perSqm)}/m²` : ''].filter(Boolean).join(' · '); %>
                   <% if (specs) { %><div class="house-meta"><%= specs %></div><% } %>
                   <% if (source) { %>
-                    <% const sourceLabel = c.source === 'daft' ? 'Daft Sold' : 'PSRA data download'; %>
+                    <% const sourceLabel = c.source === 'daft' || c.source === 'daft_auto' ? 'Daft Sold' : 'PSRA data download'; %>
                     <a class="house-source" href="<%= source %>" target="_blank" rel="noopener noreferrer" aria-label="<%= sourceLabel %> for <%= c.address %>"><%= sourceLabel %></a>
                   <% } %>
                 </th>
@@ -97,7 +132,10 @@
                 <td><%= cost(c.sold) %></td>
                 <td><%= cost(c.asking) %></td>
                 <td><%= gap == null ? '—' : gapText(gap) %></td>
-                <td><%= c.match || '—' %></td>
+                <td>
+                  <%= c.match || '—' %>
+                  <% if (Number.isFinite(c.similarity)) { %><div class="house-meta">Score <%= c.similarity %>/100</div><% } %>
+                </td>
               </tr>
             <% } %>
           </tbody>
@@ -107,7 +145,7 @@
   <% } %>
 
   <details class="house-aging house-valuation-manual" id="add-comparable" <% if (typeof comparableForm !== 'undefined') { %>open<% } %>>
-    <summary>Add a Daft sold comparable</summary>
+    <summary>Add a Daft sold comparable by hand</summary>
     <p class="house-meta">Find a nearby home on <a class="house-inline" href="<%= daftSoldUrl %>" target="_blank" rel="noopener noreferrer">Daft Sold</a> and enter the figures shown for that property.</p>
     <% const form = typeof comparableForm === 'undefined' ? {} : comparableForm; %>
     <form class="house-fields" method="post" action="<%= propertyPath %>/comparables#sold-price-estimate">

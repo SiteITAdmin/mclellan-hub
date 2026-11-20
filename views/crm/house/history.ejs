@@ -1,0 +1,133 @@
+<%
+  const h = historyData;
+  const percent = new Intl.NumberFormat('en-IE', { style: 'percent', maximumFractionDigits: 1 });
+  const gapText = ratio => ratio == null ? '—' : ratio === 0 ? 'At asking' : `${percent.format(Math.abs(ratio))} ${ratio > 0 ? 'over' : 'under'}`;
+  const TYPES = [
+    ['', 'All property types'],
+    ['apartment', 'Apartment'],
+    ['duplex', 'Duplex'],
+    ['terraced', 'Terraced / Townhouse'],
+    ['semi-d', 'Semi-D'],
+    ['detached', 'Detached'],
+    ['bungalow', 'Bungalow'],
+  ];
+%>
+<section class="house-section" aria-labelledby="house-history-heading">
+  <header class="house-section-head">
+    <div>
+      <h2 id="house-history-heading">Area sold history</h2>
+      <p class="house-meta">Historical guide built from Daft Sold sales you have refreshed. Load any neighbourhood on demand to see quarterly sale prices, €/m², and how far over or under asking homes went.</p>
+    </div>
+  </header>
+
+  <form class="house-filters" method="post" action="<%= base %>/history/refresh">
+    <label>County
+      <select class="input" name="county" required>
+        <option value="">Choose county…</option>
+        <% for (const c of counties) { %>
+          <option value="<%= c %>" <% if (c === h.county) { %>selected<% } %>><%= c %></option>
+        <% } %>
+      </select>
+    </label>
+    <label>Neighbourhood or town
+      <input class="input" name="locality" value="<%= h.locality || '' %>" maxlength="100" placeholder="e.g. Santry, Bray, Rathfarnham">
+    </label>
+    <button class="btn primary" type="submit">Load from Daft Sold</button>
+  </form>
+
+  <% if (h.areas.length) { %>
+    <div class="house-area-pills">
+      <span class="house-meta">Cached areas:</span>
+      <a class="house-status" href="<%= base %>/history" data-status="<%= !h.county && !h.locality ? 'approved' : 'pending' %>">All (<%= h.areas.reduce((s, a) => s + a.n, 0) %>)</a>
+      <% for (const area of h.areas.slice(0, 14)) { const active = h.county.toLowerCase() === area.county.toLowerCase() && h.locality.toLowerCase() === area.locality.toLowerCase(); %>
+        <a class="house-status" data-status="<%= active ? 'approved' : 'pending' %>" href="<%= base %>/history?<%= new URLSearchParams({ county: area.county, ...(area.locality ? { locality: area.locality } : {}) }) %>"><%= [area.locality, area.county].filter(Boolean).join(', ') %> (<%= area.n %>)</a>
+      <% } %>
+    </div>
+  <% } %>
+
+  <form class="house-filters" method="get" action="<%= base %>/history" style="margin-top:12px">
+    <% if (h.county) { %><input type="hidden" name="county" value="<%= h.county %>"><% } %>
+    <% if (h.locality) { %><input type="hidden" name="locality" value="<%= h.locality %>"><% } %>
+    <label>Property type
+      <select class="input" name="type">
+        <% for (const [val, lbl] of TYPES) { %><option value="<%= val %>" <% if (h.propertyType === val) { %>selected<% } %>><%= lbl %></option><% } %>
+      </select>
+    </label>
+    <label>Bedrooms
+      <select class="input" name="beds">
+        <option value="">Any beds</option>
+        <% for (const b of [1, 2, 3, 4, 5]) { %><option value="<%= b %>" <% if (h.beds === b) { %>selected<% } %>><%= b %> bed</option><% } %>
+      </select>
+    </label>
+    <button class="btn" type="submit">Filter</button>
+    <% if (h.propertyType || h.beds != null) { %><a class="btn text small" href="<%= base %>/history?<%= new URLSearchParams({ ...(h.county ? { county: h.county } : {}), ...(h.locality ? { locality: h.locality } : {}) }) %>">Clear filters</a><% } %>
+  </form>
+</section>
+
+<% if (!h.count) { %>
+  <section class="house-section"><p class="house-empty">No Daft Sold records loaded for this selection yet. Choose a county and neighbourhood above and click "Load from Daft Sold", or refresh any property's estimate.</p></section>
+<% } else { %>
+  <section class="house-section">
+    <div class="house-valuation-summary house-valuation-trio">
+      <div>
+        <span class="house-context">Median sold price</span>
+        <p class="house-valuation-range"><%= cost(h.medianSold) %></p>
+        <p class="house-meta"><%= h.count %> <%= h.count === 1 ? 'sale' : 'sales' %><%= h.locality ? ` in ${h.locality}` : h.county ? ` in ${h.county}` : '' %></p>
+      </div>
+      <div class="house-valuation-mid">
+        <span class="house-context">Median €/m²</span>
+        <strong><%= h.medianSqm ? `${cost(h.medianSqm)}/m²` : '—' %></strong>
+      </div>
+      <div class="house-valuation-mid">
+        <span class="house-context">Median sold vs asking</span>
+        <strong><%= gapText(h.medianGap) %></strong>
+        <p class="house-meta"><%= h.paired %> paired <%= h.paired === 1 ? 'sale' : 'sales' %></p>
+      </div>
+    </div>
+
+    <% if (h.quarters.length) { %>
+      <h3>Quarterly breakdown</h3>
+      <div class="house-table-scroll">
+        <table class="house-table">
+          <thead><tr><th scope="col">Quarter</th><th scope="col">Sales</th><th scope="col">Median sold</th><th scope="col">Range</th><th scope="col">Median €/m²</th><th scope="col">Median vs asking</th></tr></thead>
+          <tbody>
+            <% for (const q of h.quarters) { %>
+              <tr>
+                <th scope="row"><%= q.quarter %></th>
+                <td><%= q.count %></td>
+                <td><%= cost(q.medianSold) %></td>
+                <td><%= cost(q.minSold) %>–<%= cost(q.maxSold) %></td>
+                <td><%= q.medianSqm ? `${cost(q.medianSqm)}/m²` : '—' %></td>
+                <td><%= gapText(q.medianGap) %></td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+
+  <section class="house-section">
+    <header class="house-section-head"><h3>Recorded sales</h3><span class="house-meta">Latest <%= h.sales.length %> of <%= h.count %></span></header>
+    <div class="house-table-scroll">
+      <table class="house-table house-valuation-table">
+        <thead><tr><th scope="col">Property</th><th scope="col">Date</th><th scope="col">Sold</th><th scope="col">Asking</th><th scope="col">Gap</th><th scope="col">€/m²</th></tr></thead>
+        <tbody>
+          <% for (const s of h.sales) { const gap = s.asking > 0 ? (s.sold - s.asking) / s.asking : null; const perSqm = s.area > 0 ? Math.round(s.sold / s.area) : null; %>
+            <tr>
+              <th scope="row">
+                <a class="house-inline" href="<%= linkUrl(s.url) %>" target="_blank" rel="noopener noreferrer"><%= s.address %></a>
+                <div class="house-meta"><%= [s.property_type, s.beds != null ? (s.beds === 0 ? 'Studio' : `${s.beds} bed`) : '', s.area ? `${s.area} m²` : '', s.ber ? `BER ${s.ber}` : ''].filter(Boolean).join(' · ') %></div>
+              </th>
+              <td><%= entryDate(s.day) %></td>
+              <td><%= cost(s.sold) %></td>
+              <td><%= cost(s.asking) %></td>
+              <td><%= gapText(gap) %></td>
+              <td><%= perSqm ? `${cost(perSqm)}/m²` : '—' %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<% } %>

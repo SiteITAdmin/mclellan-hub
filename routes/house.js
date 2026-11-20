@@ -4,19 +4,23 @@
 // site admin's Google sign-in.
 
 const express = require('express');
+const multer = require('multer');
 const { createRateLimiter, requireSameOrigin } = require('../lib/security');
 const views = require('../lib/crm/views');
 const house = require('../lib/crm/house');
 const valuation = require('../lib/crm/house/valuation');
+const listing = require('../lib/crm/house/listing');
 const { counties } = require('../lib/crm/house/sales-register');
 
 const router = express.Router();
 const writeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 300, keyPrefix: 'house-write' });
+const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_400_000, files: 8 } });
 
 const BASE = '/house';
 const tabs = [
   ['summary', BASE, 'Overview'],
   ['properties', `${BASE}/properties`, 'Properties'],
+  ['history', `${BASE}/history`, 'Area history'],
   ['viewings', `${BASE}/viewings-offers`, 'Viewings & offers'],
   ['purchase', `${BASE}/purchase`, 'Purchase plan'],
   ['mail', `${BASE}/mail`, 'Mail review'],
@@ -137,7 +141,16 @@ function showProperty(req, res, locals = {}) {
   const data = model('property');
   const property = data.propertiesById.get(req.params.id);
   if (!property) return res.status(404).send('Property not found');
-  show(res, 'property', { ...data, property, valuation: valuation.get(property), manualComps: valuation.listComparables(property), counties, ...locals });
+  const listingAnalysis = listing.get(property);
+  show(res, 'property', {
+    ...data,
+    property,
+    listingAnalysis,
+    valuation: valuation.get(property, undefined, { listing: listingAnalysis }),
+    manualComps: valuation.listComparables(property),
+    counties,
+    ...locals,
+  });
 }
 router.get(`${BASE}/properties/:id`, (req, res) => showProperty(req, res));
 router.get(`${BASE}/properties/:id/edit`, (req, res) => {
@@ -145,6 +158,32 @@ router.get(`${BASE}/properties/:id/edit`, (req, res) => {
   const record = data.propertiesById.get(req.params.id);
   if (!record) return res.status(404).send('Property not found');
   show(res, 'property-editor', { ...data, record });
+});
+router.get(`${BASE}/history`, (req, res) => {
+  show(res, 'history', {
+    ...model('history'),
+    counties,
+    historyData: valuation.areaHistory({
+      county: req.query.county,
+      locality: req.query.locality,
+      propertyType: req.query.type,
+      beds: req.query.beds,
+    }),
+  });
+});
+router.post(`${BASE}/history/refresh`, requireSameOrigin, writeLimiter, async (req, res) => {
+  const county = String(req.body.county || '').trim();
+  const locality = String(req.body.locality || '').trim();
+  try {
+    const r = await valuation.refreshAreaHistory({ county, locality });
+    flash(req, `Loaded ${r.saved} recent Daft sold records for ${locality ? `${locality}, ` : ''}${county}.`);
+  } catch (err) {
+    flash(req, err.message, 'bad');
+  }
+  const qs = new URLSearchParams();
+  if (county) qs.set('county', county);
+  if (locality) qs.set('locality', locality);
+  res.redirect(`${BASE}/history${qs.toString() ? `?${qs}` : ''}`);
 });
 router.get(`${BASE}/viewings-offers`, (req, res) => show(res, 'viewings'));
 router.get(`${BASE}/purchase`, (req, res) => show(res, 'purchase'));
@@ -207,7 +246,8 @@ function comparablePost(path, action) {
 }
 
 comparablePost('valuation', async (property, req) => {
-  const result = await valuation.refresh(property, { county: req.body.county, locality: req.body.locality });
+  const analysis = listing.get(property);
+  const result = await valuation.refresh(property, { county: req.body.county, locality: req.body.locality, listing: analysis });
   if (['unavailable', 'needs_location'].includes(result.status)) throw new Error(result.reason);
   return 'Comparable sales refreshed.';
 });
@@ -218,6 +258,39 @@ comparablePost('comparables', (property, req) => {
 comparablePost('comparables/:compId/remove', (property, req) => {
   valuation.removeComparable(property, req.params.compId);
   return 'Daft sale removed.';
+});
+
+post('/properties/:id/inspect', async (req, res) => {
+  const property = house.dashboard().properties.find(p => p.id === req.params.id);
+  if (!property) return res.status(404).send('Property not found');
+  const wantPhotos = req.body.photos !== '0';
+  const result = await listing.inspect(property, { analyzePhotos: wantPhotos });
+  if (wantPhotos && result.photo_status === 'waiting') {
+    flash(req, 'Listing keywords extracted. Photo heating & condition analysis queued — this page updates automatically.');
+  } else {
+    flash(req, 'Listing details and keywords updated.');
+  }
+  res.redirect(`${propertyUrl(property.id)}#listing-analysis`);
+}, (req, res, message) => {
+  showProperty(req, res.status(400), { listingError: message });
+});
+
+router.post(`${BASE}/properties/:id/photos`, requireSameOrigin, writeLimiter, (req, res, next) => {
+  photoUpload.array('photos', 8)(req, res, err => {
+    if (!err) return next();
+    const msg = err.code === 'LIMIT_FILE_SIZE' ? 'Each photo must be under 2.4 MB.' : 'Choose up to 8 JPEG, PNG or WebP photos.';
+    showProperty(req, res.status(400), { listingError: msg });
+  });
+}, (req, res) => {
+  const property = house.dashboard().properties.find(p => p.id === req.params.id);
+  if (!property) return res.status(404).send('Property not found');
+  try {
+    listing.analyzeUploadedPhotos(property, req.files);
+    flash(req, 'Photo heating & condition analysis queued — this page updates automatically.');
+    res.redirect(`${propertyUrl(property.id)}#listing-analysis`);
+  } catch (err) {
+    showProperty(req, res.status(400), { listingError: err.message });
+  }
 });
 
 const entryFailure = (req, res, message) => {

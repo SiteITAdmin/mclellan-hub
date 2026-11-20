@@ -78,7 +78,7 @@ async function processJob(job) {
     feature: job.feature,
     systemPrompt: p.systemPrompt || p.prompt || '',
     userPrompt: p.userPrompt || p.input || '',
-    documents: ['crm_boox_read', 'crm_money_read'].includes(job.feature) ? p.documents : null,
+    documents: ['crm_boox_read', 'crm_money_read', 'crm_house_photos'].includes(job.feature) ? p.documents : null,
     timeoutMs: config.timeoutMs || 300000,
     force: true,
     config,

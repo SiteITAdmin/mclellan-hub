@@ -106,8 +106,8 @@
         if (!res.ok) { setTimeout(poll, ms); return; }
         const html = await res.text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        const nextMain = doc.querySelector('main.canvas .column');
-        const curMain = document.querySelector('main.canvas .column');
+        const nextMain = doc.querySelector('main.canvas .column, main.tool-canvas .column');
+        const curMain = document.querySelector('main.canvas .column, main.tool-canvas .column');
         const stillWaiting = !!doc.querySelector('[data-poll-interval]');
         if (nextMain && curMain) {
           // Only replace if user isn't actively typing in an input inside main.

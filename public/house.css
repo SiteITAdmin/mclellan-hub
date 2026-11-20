@@ -477,3 +477,42 @@ a.house-event-title:hover { color: var(--house-accent); text-decoration: underli
   .house-valuation-filter label { flex: 1 1 100%; }
   .house-valuation-filter label:nth-child(2) { flex-basis: 100%; max-width: none; }
 }
+
+.house-valuation-trio { grid-template-columns: minmax(0, 1.35fr) repeat(auto-fit, minmax(165px, 1fr)); }
+.house-gap-box {
+  margin: 12px 0;
+  padding: 12px 15px;
+  border-radius: 12px;
+  background: var(--house-paper);
+  border-left: 3px solid var(--house-accent);
+}
+.house-gap-box p { margin: 4px 0 0; line-height: 1.5; }
+.house-signal-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.house-signal {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--house-border);
+  background: var(--house-paper);
+}
+.house-signal[data-impact="price_down"] { background: #fbf4ec; border-color: #e9d1b8; }
+.house-signal[data-impact="price_up"] { background: #eef6ee; border-color: #c9dec9; }
+.house-signal[data-impact="caution"] { background: #fdf9eb; border-color: #e9ddb0; }
+.house-signal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.house-signal-tag {
+  font-size: .74rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(38, 55, 46, .08);
+  color: var(--house-ink);
+}
+.house-photo-result {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 13px;
+  background: var(--house-paper);
+  border: 1px solid var(--house-border);
+}
+.house-photo-result p { margin: 8px 0 0; }
+.house-evidence-list { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: .9rem; }
+.house-area-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
