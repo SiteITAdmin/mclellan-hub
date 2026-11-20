@@ -76,6 +76,14 @@ function linkUrl(value) {
   return '';
 }
 
+function listingLabel(value) {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    if (host === 'daft.ie' || host.endsWith('.daft.ie')) return 'View on Daft ↗';
+  } catch {}
+  return 'Open listing ↗';
+}
+
 function newEntry(query = {}) {
   return `${BASE}/entry/new?${new URLSearchParams(query)}`;
 }
@@ -126,7 +134,7 @@ function model(screen, filter = {}) {
   return {
     ...data, screen, tabs, base: BASE, today, propertiesById, events, archived, activeProperties, viewings, upcoming, offers,
     nextActions, overdue, checklist, stage, search, minPrice, maxPrice, minBeds, minBaths, visibleProperties, comparison, cost, label, entryDate, gmailUrl: house.getGmailUrl, propertyUrl,
-    entryUrl, linkUrl, newEntry, byDay,
+    entryUrl, linkUrl, listingLabel, newEntry, byDay,
   };
 }
 

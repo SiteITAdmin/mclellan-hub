@@ -144,6 +144,14 @@
 }
 .house-inline:hover, .house-source:hover { text-decoration-thickness: 2px; }
 .house-inline svg, .house-source svg { vertical-align: text-bottom; }
+.house-event-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 6px;
+  font-size: .86rem;
+}
 .house-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

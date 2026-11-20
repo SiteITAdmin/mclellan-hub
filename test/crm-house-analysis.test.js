@@ -275,6 +275,7 @@ test('listing inspection + multi-image photo heating analysis runs through model
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
     const html = await (await fetch(`${base}/house/properties/${prop.id}`)).text();
+    assert.match(html, /View on Daft ↗/);
     assert.match(html, /Vacant Home \/ Derelict Grant/);
     assert.match(html, /Gas central heating likely/);
     assert.match(html, /White wall-mounted gas boiler/);
@@ -284,6 +285,7 @@ test('listing inspection + multi-image photo heating analysis runs through model
     // Filter by price range + minBeds + minBaths
     const filteredHtml = await (await fetch(`${base}/house/properties?minPrice=250000&maxPrice=400000&minBeds=3&minBaths=2`)).text();
     assert.match(filteredHtml, /Apartment 2, The Kilmore, Santry/);
+    assert.match(filteredHtml, /View on Daft ↗/);
     assert.doesNotMatch(filteredHtml, /Small Studio Flat/);
     assert.doesNotMatch(filteredHtml, /Big Detached House/);
 

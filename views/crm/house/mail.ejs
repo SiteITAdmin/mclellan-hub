@@ -71,15 +71,18 @@
             <strong><%= listing.address || listing.title %></strong>
             <%= [listing.asking_price == null ? '' : cost(listing.asking_price), listing.beds == null ? '' : listing.beds === 0 ? 'Studio' : `${listing.beds} bed`, listing.area == null ? '' : `${listing.area} m²`].filter(Boolean).join(' · ') %>
           </p>
-          <% if (linkUrl(listing.url)) { %><a class="house-inline" href="<%= linkUrl(listing.url) %>" target="_blank" rel="noopener noreferrer">Open listing</a><% } %>
         <% } %>
         <% if (s.day || s.time || s.amount != null || s.person) { %>
           <p class="house-meta"><%= [s.day && entryDate(s.day), s.time, s.amount != null && cost(s.amount), s.person].filter(Boolean).join(' · ') %></p>
         <% } %>
         <% if (s.details) { %><p class="house-detail"><%= s.details %></p><% } %>
         <% if (s.quote) { %><blockquote><%= s.quote %></blockquote><% } %>
-        <% if (s.gmail_id) { %>
-          <a class="house-source" href="<%= gmailUrl(s.gmail_id) %>" target="_blank" rel="noopener noreferrer"><%- icon.email %> <%= s.source_direction === 'sent' ? 'Sent' : 'Received' %> email · <%= fmt(s.occurred_at) %></a>
+        <% const reviewHref = linkUrl(listing?.url || target?.url); %>
+        <% if (reviewHref || s.gmail_id) { %>
+          <div class="house-event-links">
+            <% if (reviewHref) { %><a class="house-source" href="<%= reviewHref %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(reviewHref) %></a><% } %>
+            <% if (s.gmail_id) { %><a class="house-source" href="<%= gmailUrl(s.gmail_id) %>" target="_blank" rel="noopener noreferrer"><%- icon.email %> <%= s.source_direction === 'sent' ? 'Sent' : 'Received' %> email · <%= fmt(s.occurred_at) %></a><% } %>
+          </div>
         <% } %>
         <div class="house-review-actions">
           <form method="post" class="house-review-confirm" action="<%= base %>/mail/<%= encodeURIComponent(s.id) %>/accept">

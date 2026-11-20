@@ -77,6 +77,11 @@
                 <% if (bb) { %><span class="house-status" data-status="<%= bb.status %>"><%= bb.text %></span><% } %>
               </div>
             <% } %>
+            <% if (linkUrl(p.url)) { %>
+              <div class="house-event-links">
+                <a class="house-source" href="<%= linkUrl(p.url) %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(p.url) %></a>
+              </div>
+            <% } %>
           </article>
         <% } %>
       </div>
@@ -109,6 +114,7 @@
         ]) { %>
           <tr><th scope="row"><%= name %></th><% for (const p of comparison) { %><td><%= value(p) || '—' %></td><% } %></tr>
         <% } %>
+          <tr><th scope="row">Listing</th><% for (const p of comparison) { %><td><% if (linkUrl(p.url)) { %><a class="house-source" href="<%= linkUrl(p.url) %>" target="_blank" rel="noopener noreferrer"><%= listingLabel(p.url) %></a><% } else { %>—<% } %></td><% } %></tr>
         </tbody>
       </table>
     </div>
