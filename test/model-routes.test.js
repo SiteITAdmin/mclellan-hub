@@ -36,7 +36,7 @@ test('a saved choice reaches the queued job; models that cannot do the job are r
   assert.equal(p.fn, 'digest');
   assert.deepEqual(p.lanes.map(l => l.key), ['gemini-neon', 'claude-opus', 'grok']);
   assert.deepEqual([p.runner, p.model, p.effort], ['antigravity', 'gemini-4-neon', 'high'], 'old workers still run the main choice');
-  assert.throws(() => routes.save('boox_read', ['gemini-neon']), /can only|choose a main model/);
+  assert.throws(() => routes.save('money_read', ['gemini-neon']), /can only|choose a main model/);
   assert.throws(() => routes.save('briefing_search', ['chatgpt']), /choose a main model/);
   assert.throws(() => routes.save('digest', ['grok', 'grok']), /each model once/);
   assert.deepEqual(routes.save('digest', ['claude-opus', 'chatgpt']), ['claude-opus', 'chatgpt']);

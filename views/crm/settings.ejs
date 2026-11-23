@@ -42,11 +42,6 @@
         <div class="main"><div class="what">iMessage</div><div class="meta"><%= imessage.paused ? 'Paused' : imessage.lastOk ? `Last sync ${ago(imessage.lastOk)}` : 'Mac tap' %></div></div>
         <div class="end"><span class="pill neutral"><%= imessage.paused ? 'Paused' : 'Configured' %></span></div>
       </a>
-      <a class="rowcard" href="/crm/notebooks">
-        <span class="kind-icon" aria-hidden="true"><%- icon.captured %></span>
-        <div class="main"><div class="what">Boox notebooks</div><div class="meta"><%= boox.total %> <%= boox.total === 1 ? 'notebook' : 'notebooks' %><%= boox.run?.last_ok ? ` · checked ${ago(boox.run.last_ok)}` : '' %></div></div>
-        <div class="end"><span class="pill <%= boox.needs ? 'warn' : 'neutral' %>"><%= boox.needs ? `${boox.needs} to check` : 'Up to date' %></span></div>
-      </a>
       <a class="rowcard" href="/crm/notifications">
         <span class="kind-icon" aria-hidden="true"><%- icon.today %></span>
         <div class="main"><div class="what">Push notifications</div><div class="meta">Alerts for meeting prep and urgent reminders</div></div>

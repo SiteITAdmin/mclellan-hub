@@ -148,20 +148,6 @@
   </div>
   <% } %>
 
-  <% if (s.triage.booxUnconfigured.length || s.triage.booxReview.length) { %>
-  <div class="inbox-group">
-    <div class="panel-head"><h3>Boox notebooks</h3><span class="chip"><%= s.triage.booxUnconfigured.length + s.triage.booxReview.length %></span><a class="end" href="/crm/notebooks">Open notebooks</a></div>
-    <div class="rows">
-      <% for (const nb of s.triage.booxUnconfigured) { %>
-      <a class="rowcard" href="/crm/notebooks"><span class="kind-icon" aria-hidden="true"><%- icon.captured %></span><div class="main"><div class="what"><%= nb.name %></div><div class="meta">Choose Work or Personal to read its pages automatically</div></div></a>
-      <% } %>
-      <% for (const pg of s.triage.booxReview.slice(0, 6)) { %>
-      <a class="rowcard" href="/crm/notebooks"><span class="kind-icon" aria-hidden="true"><%- icon.captured %></span><div class="main"><div class="what"><%= pg.name %> — page <%= pg.page_no %></div><div class="meta"><%= pg.status === 'failed' ? pg.error : (pg.uncertainty || 'Needs handwriting check') %></div></div></a>
-      <% } %>
-    </div>
-  </div>
-  <% } %>
-
   <% if (s.triage.unsurePromises.length) { %>
   <div class="inbox-group">
     <div class="panel-head"><h3>Promises without a task yet</h3><span class="chip"><%= s.triage.unsurePromises.length %></span></div>

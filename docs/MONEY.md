@@ -33,7 +33,7 @@ mounted by `routes/money.js`, which has already applied `spaceParam` + Personal-
 
 Feature slots are in `lib/feature-runners.js`, on the Hub's existing Sonnet and Opus tiers (Fable and Opus were used to build the tool, not to run it).
 Model calls go `lib/model.js enqueueModelJob` → VPS queue → Mac worker → result collected on a later
-tick via `subscription-agent-jobs.getJob` (see `lib/crm/boox.js` and `lib/crm/ask.js` for the pattern;
+tick via `subscription-agent-jobs.getJob` (see `lib/crm/ask.js` for the pattern;
 never block a request waiting for the Mac). Chain is Claude → ChatGPT → Grok, except `crm_money_deals`,
 which falls straight to Grok because ChatGPT's lane has no web and would invent codes.
 

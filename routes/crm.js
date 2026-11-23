@@ -134,10 +134,6 @@ router.get('/crm/inbox', (req, res) => {
 
 router.get('/crm/settings', (req, res) => {
   const runs = require('../lib/crm/runs').all();
-  const boox = require('../lib/crm/boox');
-  const notebooks = boox.list();
-  const booxNeeds = notebooks.filter(n => !n.space).length
-    + crm().prepare("SELECT COUNT(*) AS n FROM notebook_pages WHERE status IN ('review','failed')").get().n;
   const whatsapp = require('../lib/crm/whatsapp');
   const imports = require('../lib/crm/imports');
   const notifications = require('../lib/crm/notifications');
@@ -147,7 +143,7 @@ router.get('/crm/settings', (req, res) => {
     page: 'settings', space: null, title: 'Connections & setup',
     reviewCount: review.openCount(), vendorCount: vendors,
     whatsapp: { waiting: whatsapp.waitingCount(), hb: whatsapp.lastHeartbeat(), paused: whatsapp.isPaused() },
-    imessage, boox: { total: notebooks.length, needs: booxNeeds, run: runs.boox_capture },
+    imessage,
     imports: { waiting: imports.count(), connected: imports.connected(), run: runs.contacts_sync },
     notifications: { devices: notifications.list().length },
     hasWorkCalendar: require('../lib/crm/config').calendars.some(c => c.space === 'work'),
@@ -194,33 +190,6 @@ router.post('/crm/imports/linkedin', requireSameOrigin, writeLimiter, (req, res)
   } catch(e) { flash(req,e.message,'bad'); }
   res.redirect('/crm/imports');
 }));
-
-router.get('/crm/notebooks', (req, res) => {
-  const notebooks = require('../lib/crm/boox').list();
-  const pages = crm().prepare(`SELECT p.id, p.page_no, p.text, p.uncertainty, p.error, p.status, n.name, n.space FROM notebook_pages p
-    JOIN notebooks n ON n.id=p.notebook_id WHERE p.status IN ('review','failed') ORDER BY p.occurred_at DESC LIMIT 40`).all();
-  res.render('crm/notebooks', { page: 'settings', title: 'Boox notebooks', notebooks, pages, run: require('../lib/crm/runs').all().boox_capture,
-    app: require('../lib/crm/boox-app').lastSeen(), readerRetryAt: require('../lib/crm/boox').readerWait(), dayLabel: require('../lib/crm/boox').dayLabel });
-});
-router.post('/crm/notebooks/:id/configure', requireSameOrigin, writeLimiter, (req, res) => {
-  try { require('../lib/crm/boox').configure(req.params.id, req.body.space, req.body.kind); flash(req, 'Notebook set. Its pages will be read automatically.'); }
-  catch (e) { flash(req, e.message, 'bad'); }
-  res.redirect('/crm/notebooks');
-});
-router.get('/crm/notebook-pages/:id/pdf', (req, res) => {
-  const p = crm().prepare('SELECT pdf FROM notebook_pages WHERE id=?').get(req.params.id);
-  if (!p) return res.status(404).send('Page not found');
-  res.set('Cache-Control', 'no-store').type('pdf').send(p.pdf);
-});
-router.post('/crm/notebook-pages/:id/confirm', requireSameOrigin, writeLimiter, (req, res) => {
-  try { require('../lib/crm/boox').confirm(req.params.id, req.body.text); flash(req, 'Corrected page saved as source evidence.'); }
-  catch (e) { flash(req, e.message, 'bad'); }
-  res.redirect('/crm/notebooks');
-});
-router.post('/crm/notebook-pages/:id/retry', requireSameOrigin, writeLimiter, (req, res) => {
-  crm().prepare("UPDATE notebook_pages SET status='pending', error='', attempts=0 WHERE id=? AND status='failed' AND length(pdf)<=900000").run(req.params.id);
-  res.redirect('/crm/notebooks');
-});
 
 router.get('/crm', (req, res) => res.redirect('/crm/work'));
 
@@ -818,7 +787,7 @@ router.get('/crm/:space/calendar', spaceParam, (req, res) => {
     later: from < last ? planner.addDays(from, 7) > last ? last : planner.addDays(from, 7) : null,
     days: calendar.week(req.params.space, from), state: calendar.state(req.params.space), hours: calendar.hours(),
     hasWorkCalendar: require('../lib/crm/config').calendars.some(c => c.space === 'work'),
-    notes: require('../lib/crm/boox').dayNotes(from, planner.addDays(from, 6)), transcriptTypes: require('../lib/crm/transcript-upload').ACCEPT.join(',') });
+    transcriptTypes: require('../lib/crm/transcript-upload').ACCEPT.join(',') });
 });
 
 const transcriptFile = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });

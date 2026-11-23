@@ -324,7 +324,6 @@ test('the reader commands: Claude gets an image block, ChatGPT an image file, Gr
   let ran = false; const spy = script('spy', `require('fs').writeFileSync('${path.join(tmp, 'ran')}','1')`);
   await assert.rejects(run(spy, spy, spy, { documents: [{ type: 'image', mime: 'image/png', data: Buffer.from('not a png at all').toString('base64') }] }), /Invalid or oversized screenshot/);
   await assert.rejects(agent.runSubscriptionText({ feature: 'crm_atomise', systemPrompt: '', userPrompt: '', force: true, config: { ...resolveFeatureRunner('crm_atomise'), feature: 'crm_atomise' }, documents: [{ data: Buffer.from('%PDF-1.7\nsynthetic').toString('base64') }] }), /cannot take this kind of attachment/);
-  await assert.rejects(agent.runSubscriptionText({ feature: 'crm_boox_read', systemPrompt: '', userPrompt: '', force: true, config: { ...resolveFeatureRunner('crm_boox_read'), feature: 'crm_boox_read' }, documents }), /cannot take this kind of attachment/);
   ran = fs.existsSync(path.join(tmp, 'ran'));
   assert.equal(ran, false, 'a bad attachment stops before any model is started');
 });

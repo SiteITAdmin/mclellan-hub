@@ -586,6 +586,8 @@ Validation: synthetic PDF and long-text ingestion, cross-space deduplication, si
 
 ## Boox and meeting preparation implementation (9 November 2026)
 
+> **Boox removed on 23 November 2026.** Douglas is not using the Boox, so the Drive capture job, page reader (`crm_boox_read`), `/crm/notebooks`, the Android app and its API were deleted. Pages already read remain as source evidence. The Boox notes below are history.
+
 - Boox discovery reads the existing `onyx/NoteMax/Notebooks` Drive folder and its subfolders every 15 minutes. `/crm/notebooks` lists creation dates and asks once for each notebook's space and kind. Raw `notebooks` and `notebook_pages` retain PDF pages, their hashes, transcription and review status. Only appended fresh pages can create actions; previous pages and journals are history. Journal promises are rejected at atom admission too. Uncertain handwriting waits for a corrected transcription before becoming source evidence.
 - The existing Mac worker accepts one PDF page through a dedicated `crm_boox_read` Claude subscription lane. No new OCR service or API-key fallback. Individual pages are limited to 900 KB, notebooks to 20 MB / 500 pages, with explicit errors.
 - Calendar capture retains descriptions and attendee addresses and records immutable calendar sources as history, so invitations do not create tasks. The `meeting_preps` cache is built from active facts and open promises for today's meetings with known attendees. Today, Meetings and the morning digest show cited prep. Changed facts or events invalidate it; cancelled meetings delete the cache.

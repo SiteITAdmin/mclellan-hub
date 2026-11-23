@@ -23,8 +23,8 @@ const run = (feature, claude, codex, grok = grokDown, extra = {}) => {
   return agent.runSubscriptionText({ feature, systemPrompt: 'Reply with JSON.', userPrompt: 'Which lane?', force: true, timeoutMs: 10000, config: { ...f, feature }, ...extra });
 };
 
-test('Claude → ChatGPT → Grok is ordered, including Boox; local specialists have no fallback', () => {
-  for (const f of ['crm_atomise', 'hub_chat', 'nakai_daily_briefing', 'crm_boox_read']) {
+test('Claude → ChatGPT → Grok is ordered, including money reading; local specialists have no fallback', () => {
+  for (const f of ['crm_atomise', 'hub_chat', 'nakai_daily_briefing', 'crm_money_read']) {
     const first = resolveFeatureRunner(f), second = agent.fallbackConfig(first), third = agent.fallbackConfig(second);
     assert.deepEqual([first.runner, second.runner, third.runner], ['claude', 'codex', 'grok']);
     assert.equal(agent.fallbackConfig(third), null);
@@ -62,25 +62,25 @@ test('the first working lane wins; all failures and missing binaries remain visi
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
 const renderer = nodeScript('pdftoppm', `const fs=require('fs'),a=process.argv.slice(2); if(!fs.readFileSync(a.at(-2)).toString().startsWith('%PDF-'))process.exit(2);fs.writeFileSync(a.at(-1)+'.png',Buffer.from('${png}','base64'));`);
 const documents = [{ data: Buffer.from('%PDF-1.7\nsynthetic page').toString('base64') }];
-const transcription = { text: 'Boox connection test. No actions.', uncertain: false, reason: '' };
+const transcription = { readable: true, transactions: [] };
 const imageCodex = nodeScript('image-codex', `const fs=require('fs'),a=process.argv.slice(2),p=a[a.indexOf('--image')+1];if(!p||!fs.existsSync(p))process.exit(2);console.log(JSON.stringify(${JSON.stringify(transcription)}));`);
 const imageGrok = nodeScript('image-grok', `const fs=require('fs'),a=process.argv.slice(2),p=a[a.indexOf('--prompt-file')+1];const b=JSON.parse(fs.readFileSync(p));if(a.includes('--single')||b.content[1].type!=='image'||b.content[1].mimeType!=='image/png'||b.content[1].data!=='${png}')process.exit(2);console.log(JSON.stringify({text:JSON.stringify(${JSON.stringify(transcription)})}));`);
 
 test('the same PDF is rendered for ChatGPT and Grok; scratch attachments are removed', async () => {
   process.env.PDFTOPPM_PATH = renderer;
-  const before = fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('hub-notebook-')).sort();
-  const gpt = await run('crm_boox_read', claudeDown, imageCodex, imageGrok, { documents });
+  const before = fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('hub-pdf-')).sort();
+  const gpt = await run('crm_money_read', claudeDown, imageCodex, imageGrok, { documents });
   assert.equal(gpt.runner, 'codex'); assert.deepEqual(JSON.parse(gpt.text), transcription);
-  const grok = await run('crm_boox_read', claudeDown, codexDown, imageGrok, { documents });
+  const grok = await run('crm_money_read', claudeDown, codexDown, imageGrok, { documents });
   assert.equal(grok.runner, 'grok'); assert.deepEqual(JSON.parse(grok.text), transcription);
-  assert.deepEqual(fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('hub-notebook-')).sort(), before);
+  assert.deepEqual(fs.readdirSync(os.tmpdir()).filter(n => n.startsWith('hub-pdf-')).sort(), before);
 });
 
 test('invalid PDF input stops before any lane; invalid transcription falls through to Grok', async () => {
-  await assert.rejects(run('crm_boox_read', claudeUp, imageCodex, imageGrok, { documents: [{ data: 'invalid' }] }), /Invalid or oversized/);
+  await assert.rejects(run('crm_money_read', claudeUp, imageCodex, imageGrok, { documents: [{ data: 'invalid' }] }), /Invalid or oversized/);
   process.env.PDFTOPPM_PATH = renderer;
-  const result = await run('crm_boox_read', claudeDown, codexUp, imageGrok, { documents });
+  const result = await run('crm_money_read', claudeDown, codexUp, imageGrok, { documents });
   assert.equal(result.runner, 'grok');
   process.env.PDFTOPPM_PATH = path.join(tmp, 'missing-renderer');
-  await assert.rejects(run('crm_boox_read', claudeDown, imageCodex, imageGrok, { documents }), /ENOENT/);
+  await assert.rejects(run('crm_money_read', claudeDown, imageCodex, imageGrok, { documents }), /ENOENT/);
 });

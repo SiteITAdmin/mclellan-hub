@@ -66,14 +66,14 @@ test('the models page lists every function with three choices and saves only val
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(origin ? { Origin: origin } : {}) } });
   try {
     const page = await (await fetch(`${base}/models`)).text();
-    for (const name of ['Morning email', 'Task help', 'Boox pages', 'Briefing news search', 'House-hunting mail']) assert.match(page, new RegExp(name));
+    for (const name of ['Morning email', 'Task help', 'Bank screenshots and statements', 'Briefing news search', 'House-hunting mail']) assert.match(page, new RegExp(name));
     assert.match(page, /name="lanes\[digest\]\[0\]"[\s\S]*?<option value="gemini-neon">Gemini Neon<\/option>/);
-    assert.doesNotMatch(page.slice(page.indexOf('lanes[boox_read][0]'), page.indexOf('lanes[boox_read][1]')), /gemini-neon/, 'Gemini cannot read PDF pages here');
+    assert.doesNotMatch(page.slice(page.indexOf('lanes[money_read][0]'), page.indexOf('lanes[money_read][1]')), /gemini-neon/, 'Gemini cannot read PDF pages here');
     assert.match(page, /AeroDataBox/);
     assert.strictEqual((await post({ 'lanes[digest][0]': 'gemini-neon' }, null)).status, 403, 'a cross-site post is refused');
-    const bad = await post({ 'lanes[boox_read][0]': 'gemini-neon', 'lanes[digest][0]': 'gemini-neon' });
+    const bad = await post({ 'lanes[money_read][0]': 'gemini-neon', 'lanes[digest][0]': 'gemini-neon' });
     assert.strictEqual(bad.status, 400);
-    assert.match(await bad.text(), /Nothing was saved[\s\S]*Boox pages: that model can/);
+    assert.match(await bad.text(), /Nothing was saved[\s\S]*Bank screenshots and statements: that model can/);
     assert.deepStrictEqual(require('../lib/model-routes').laneKeys('digest'), ['claude-opus', 'chatgpt', 'grok'], 'nothing saved when one row is wrong');
     const ok = await post({ 'lanes[digest][0]': 'gemini-neon', 'lanes[digest][1]': 'claude-opus', 'lanes[digest][2]': '' });
     assert.strictEqual(ok.headers.get('location'), '/models?saved=1');

@@ -1466,7 +1466,7 @@ test('every CRM screen renders for the signed-in owner', async () => {
     const pages = ['/crm/work', '/crm/personal', '/crm/work/people', `/crm/work/people/${jane}`, '/crm/review',
       '/crm/work/organisations', `/crm/work/organisations/${beacon}`, '/crm/work/search?q=beacon',
       `/crm/work/organisations/${beacon}/units/${crm().prepare("SELECT id FROM org_units WHERE name = 'Finance'").get().id}`,
-      '/crm/messages', '/crm/notifications', '/crm/imports', '/crm/notebooks', '/crm/work/captured', '/crm/work/captured?filter=attention', `/crm/work/sources/${src}`, '/crm/work/projects',
+      '/crm/messages', '/crm/notifications', '/crm/imports', '/crm/work/captured', '/crm/work/captured?filter=attention', `/crm/work/sources/${src}`, '/crm/work/projects',
       `/crm/work/projects/${project}`, `/crm/work/promises`, '/crm/personal/promises', `/crm/work/topics/${topic}`, '/crm/work/search?q=purview', '/crm/personal/note', '/crm/work/meetings', '/crm/personal/meetings', '/crm/whatsapp'];
     const waSource = crm().prepare("SELECT id, space FROM sources WHERE origin = 'whatsapp' AND kind = 'whatsapp' LIMIT 1").get();
     pages.push(`/crm/${waSource.space}/sources/${waSource.id}`);

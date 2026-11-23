@@ -11,6 +11,5 @@ tmp
 config/google-service-account.json
 public/knowledge
 .repair-worktrees
-boox-app
 .taste-skill
 design
