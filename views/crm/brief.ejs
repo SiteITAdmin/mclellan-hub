@@ -1,0 +1,24 @@
+<%- include('_top') %>
+<% const name = space === 'work' ? 'Work' : 'Personal'; %>
+<div class="title-row"><div><h1>Current brief</h1>
+  <p class="subline">What the <%= name %> part of your morning email should know: your priorities, the decisions that stay yours, and what you have put off until a date. All optional.<% if (brief.updated_at) { %> Last changed <%= ago(brief.updated_at) %>.<% } %></p></div></div>
+<section class="grid first"><div class="panel s12">
+<form method="post" action="/crm/<%= space %>/brief" class="list">
+  <div class="field"><label for="brief-priorities">Priorities right now</label>
+    <textarea class="input" id="brief-priorities" name="priorities" rows="4" maxlength="1500"><%= brief.priorities %></textarea></div>
+  <div class="field"><label for="brief-mine">Decisions that stay yours</label>
+    <textarea class="input" id="brief-mine" name="mine" rows="3" maxlength="1000"><%= brief.mine %></textarea></div>
+  <fieldset class="field"><legend>Put off until a date</legend>
+    <p class="meta">The email won't raise these before their date. Each one lapses on its date.</p>
+    <% const rows = [...brief.deferred, {}, {}, {}]; rows.forEach((d, i) => { const lapsed = d.until && d.until <= today; %>
+    <div class="form-row">
+      <input class="input" type="text" name="defer_what" value="<%= d.what || '' %>" maxlength="200" aria-label="Put off <%= i + 1 %>: what" placeholder="For example: conveyancing replies">
+      <input class="input" type="date" name="defer_until" value="<%= d.until || '' %>" aria-label="Put off <%= i + 1 %>: until">
+      <% if (lapsed) { %><span class="meta">lapsed</span><% } %>
+    </div>
+    <% }) %>
+  </fieldset>
+  <div><button class="btn primary" type="submit">Save brief</button></div>
+</form>
+</div></section>
+<%- include('_bottom') %>

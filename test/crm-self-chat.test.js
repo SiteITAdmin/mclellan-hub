@@ -69,3 +69,17 @@ test("the Hub's own reply, echoed back by WhatsApp, is not stored and is never a
   assert.equal(selfChat.claim([c.chat_id], db.now()).length, 0);
   assert.equal(db.crm().prepare("SELECT COUNT(*) n FROM sources WHERE origin='whatsapp'").get().n, 1);
 });
+test('morning nudges moved to the morning email: no drifting list or promise-due message; the meeting reminder still comes', () => {
+  chat();
+  const t = Date.parse('2026-11-19T08:00:00Z') / 1000;
+  db.crm().prepare("INSERT INTO people (id, space, name, cadence_days, created_at) VALUES ('d1', 'personal', 'Old Friend', 14, ?)").run(t - 60 * 86400);
+  const notifications = require('../lib/crm/notifications');
+  const real = notifications.candidates;
+  notifications.candidates = () => [
+    { key: 'promise:a1:2026-11-19', title: 'Personal promise due today', body: 'Send the form', url: '/crm/personal/promises', ttl: 3600 },
+    { key: 'meeting:e1:123', title: 'Meeting in 30 minutes', body: 'Team Call', url: '/crm/personal/meetings', ttl: 1800 },
+  ];
+  try { selfChat.tick(t); } finally { notifications.candidates = real; }
+  const keys = db.crm().prepare('SELECT item_key FROM whatsapp_outbox ORDER BY item_key').all().map(r => r.item_key);
+  assert.deepEqual(keys, ['reminder:personal:meeting:e1:123', 'reminder:work:meeting:e1:123']);
+});

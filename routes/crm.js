@@ -878,6 +878,15 @@ router.get('/crm/:space/briefing/:day?', spaceParam, workOnly, (req, res) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(404).send('Not found');
   res.render('crm/briefing', { page: 'briefing', title: 'Work briefing', b: briefing.shown(briefing.get(day)), day, isToday: day === today, recent: briefing.recent(), prefs: briefing.prefs() });
 });
+router.get('/crm/:space/brief', spaceParam, (req, res) => {
+  res.render('crm/brief', { page: 'settings', title: 'Current brief', brief: require('../lib/crm/current-brief').get(req.params.space),
+    today: require('../lib/crm/planner').local(require('../lib/crm/db').now()).date });
+});
+router.post('/crm/:space/brief', spaceParam, requireSameOrigin, writeLimiter, (req, res) => {
+  try { require('../lib/crm/current-brief').save(req.params.space, req.body); flash(req, 'Saved. Tomorrow morning\'s email will use it.'); }
+  catch (e) { flash(req, e.message, 'bad'); }
+  res.redirect(`/crm/${req.params.space}/brief`);
+});
 router.post('/crm/:space/briefing/:action', spaceParam, workOnly, requireSameOrigin, writeLimiter, (req, res) => {
   try {
     if (req.params.action === 'write') { briefing.writeNow(); flash(req, 'Writing today\'s briefing. It appears here when the Mac finishes.'); }

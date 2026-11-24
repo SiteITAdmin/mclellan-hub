@@ -125,7 +125,7 @@ test('items: need a real page, a quote, a date inside 30 days, and must be new',
   assert.equal(why['Seen last week'], 'already reported');
 });
 
-test('a morning end to end: themes, two search jobs, nothing private in the search, links back to his work', async () => {
+test('a morning end to end: themes, two themes to a search job, nothing private in the search, links back to his work', async () => {
   work();
   const jobs = fakeJobs();
   assert.equal((await briefing.tick({ jobs, t: T })).started, true);
@@ -143,16 +143,21 @@ test('a morning end to end: themes, two search jobs, nothing private in the sear
   const sent = search1.payload.systemPrompt + search1.payload.userPrompt;
   for (const secret of ['Aoife', 'Brennan', 'Northside', 'Departments', 'data transfer', 'pr1', 't1']) assert.ok(!sent.includes(secret), `${secret} must not reach the web step`);
   const asked = JSON.parse(search1.payload.userPrompt);
-  assert.equal(asked.themes.length, 4);
+  assert.equal(asked.themes.length, 2, 'two themes to a job, so every theme gets its searches');
   assert.equal(asked.since, '2026-10-18');
+  const four = ['a', 'b', 'c', 'd'];
 
   jobs.finish('job2', { items: [item(), item({ headline: 'Sharing links default changes', source_url: 'https://learn.microsoft.com/sharing-default', published: '2026-11-16', kind: 'change' }),
     item({ theme: 'SQL Server Extended Security Updates', headline: 'ESU year two pricing published', source_url: 'https://learn.microsoft.com/esu', kind: 'licensing' })],
-    searched: [{ theme: 'Microsoft Entra ID', found: 0, note: 'Checked the Entra blog and release notes; nothing since 10 November.' }] });
+    searched: [{ theme: 'SharePoint Online', found: 2, queries: four }, { theme: 'SQL Server Extended Security Updates', found: 1, queries: four }] });
   await briefing.tick({ jobs, t: T + 300 });
+  assert.deepEqual(JSON.parse(jobs.last().payload.userPrompt).themes.map(x => x.theme), ['Microsoft Entra ID', 'Power Automate']);
+  jobs.finish('job3', { items: [], searched: [{ theme: 'Microsoft Entra ID', found: 0, note: 'Checked the Entra blog and release notes; nothing since 10 November.', queries: four },
+    { theme: 'Power Automate', found: 0, note: 'Nothing.', queries: ['power automate news'] }] });
+  await briefing.tick({ jobs, t: T + 400 });
   assert.equal(row().status, 'search', 'the fifth theme still needs its own job');
   assert.equal(JSON.parse(jobs.last().payload.userPrompt).themes.length, 1);
-  jobs.finish('job3', { items: [], searched: [] }, { runner: 'grok', model: 'grok-4.7', fallbackFrom: 'claude' });
+  jobs.finish('job4', { items: [], searched: [{ theme: 'Microsoft Teams', found: 0, queries: four }] }, { runner: 'grok', model: 'grok-4.7', fallbackFrom: 'claude' });
   await briefing.tick({ jobs, t: T + 500 });
 
   const b = briefing.today(T + 600);
@@ -163,6 +168,9 @@ test('a morning end to end: themes, two search jobs, nothing private in the sear
   assert.equal(sp.items.length, 2);
   assert.deepEqual(sp.links.map(l => l.href), ['/crm/work/projects/pr1', '/crm/work/tasks/t1']);
   assert.match(b.themes.find(th => th.name === 'Microsoft Entra ID').note, /nothing since/);
+  const pa = b.themes.find(th => th.name === 'Power Automate');
+  assert.equal(pa.shallow, true, 'one search out of four is not "nothing new"');
+  assert.match(pa.note, /Not searched properly: 1 of 4 searches/);
   assert.deepEqual(briefing.headlines(T + 600, 5).map(h => h.themeName), ['SharePoint Online', 'SQL Server Extended Security Updates', 'SharePoint Online']);
   assert.equal((await briefing.tick({ jobs, t: T + 3600 })).started, false, 'once a day');
   assert.deepEqual(briefing.health('work', T + 3600), []);
@@ -272,8 +280,61 @@ test('screens render: full briefing, Today card, morning email section', async (
   assert.match(card, /News for your work/);
   assert.match(card, /1 new on 1 theme/);
   assert.equal((await ejs.renderFile(path.join(views, '_briefing-card.ejs'), { briefing: null })).trim(), '');
-  const mail = require('../lib/crm/digest').build('work', T + 3600);
-  assert.match(mail.text, /News for your work\n- SharePoint Online: /);
-  assert.match(mail.text, /crm\/work\/briefing/);
-  assert.ok(!require('../lib/crm/digest').build('personal', T + 3600).text.includes('News for your work'));
+  assert.equal(briefing.forEmail(T + 3600).length, 1, 'the morning email can use it');
+});
+
+test('worth finding: one official Microsoft page may be undated; anything else is turned away', () => {
+  const batch = [{ norm: 'sharepoint migration tool', name: 'SharePoint Migration Tool', find: true }, { norm: 'sharepoint online', name: 'SharePoint Online' }];
+  const tool = o => item({ theme: 'SharePoint Migration Tool', headline: 'SPMT scans file shares before moving', published: '', kind: 'guidance', ...o });
+  const { kept, dropped } = briefing.validate({ items: [
+    tool({ source_url: 'https://learn.microsoft.com/sharepointmigration/spmt-scan' }),
+    tool({ headline: 'A second tool', source_url: 'https://learn.microsoft.com/other' }),
+    tool({ headline: 'Blog copy', source_url: 'https://someblog.example.com/spmt' }),
+    item({ headline: 'Project Online retires', source_url: 'https://learn.microsoft.com/project-online-retire', published: '2026-09-30', kind: 'retirement' }),
+    item({ headline: 'Old feature news', source_url: 'https://learn.microsoft.com/old-feature', published: '2026-09-30', kind: 'feature' }),
+    item({ headline: 'Undated news', source_url: 'https://learn.microsoft.com/undated', published: '' }),
+  ] }, batch, DAY);
+  assert.deepEqual(kept.map(k => [k.headline, k.kind]), [['SPMT scans file shares before moving', 'tool'], ['Project Online retires', 'retirement']]);
+  const why = Object.fromEntries(dropped.map(d => [d.headline, d.reason]));
+  assert.match(why['A second tool'], /more than 1/);
+  assert.match(why['Blog copy'], /official Microsoft page/);
+  assert.match(why['Old feature news'], /older than 30 days/);
+  assert.match(why['Undated news'], /publication date/);
+  assert.ok(briefing.officialUrl('https://github.com/microsoft/spmt'));
+  assert.ok(!briefing.officialUrl('https://github.com/someone/microsoft'));
+  assert.ok(!briefing.officialUrl('https://microsoft.com.evil.example/x'));
+});
+
+test('the theme reader may ask for one tool to find for an open task; it must cite the task and keep names off the web', () => {
+  work();
+  const records = briefing.packet(T);
+  const ok = briefing.cleanThemes({ themes: [theme()], find: { name: 'SharePoint Migration Tool', query: 'scan file shares before migration', why: 'For the file-share move.', refs: ['T1'] } }, records);
+  assert.deepEqual(ok.kept.map(th => [th.name, !!th.find]), [['SharePoint Online', false], ['SharePoint Migration Tool', true]]);
+  const leaky = briefing.cleanThemes({ themes: [], find: { name: 'Tool for Aoife Brennan', query: 'x', refs: ['T1'] } }, records);
+  assert.equal(leaky.kept.length, 0);
+  assert.match(leaky.dropped[0].reason, /named a person/);
+  const uncited = briefing.cleanThemes({ themes: [], find: { name: 'Some Tool', query: 'x', refs: [] } }, records);
+  assert.match(uncited.dropped[0].reason, /nothing in your work/);
+});
+
+test('email eligibility: an item stays offered until it is sent, then never again; low confidence and stale news are left out', () => {
+  const c = db.crm();
+  const put = (day, items) => c.prepare("INSERT INTO briefings (id, day, trigger, status, themes, items, created_at) VALUES (?, ?, 'auto', 'done', ?, ?, ?)")
+    .run(`b-${day}`, day, JSON.stringify([{ norm: 'sharepoint online', name: 'SharePoint Online', why: 'File-share move', weight: 3 }]), JSON.stringify(items), T);
+  const it = o => ({ theme: 'sharepoint online', headline: 'h', summary: 's', action: 'a', published: '2026-11-15', source: 'MS', url: 'https://learn.microsoft.com/a', quote: 'q', kind: 'feature', confidence: 'high', ...o });
+  put('2026-11-16', [it(), it({ url: 'https://learn.microsoft.com/low', confidence: 'low' }), it({ url: 'https://learn.microsoft.com/stale', published: '2026-10-01' })]);
+  put('2026-11-17', [it({ url: 'https://learn.microsoft.com/b', published: '2026-11-16' })]);
+  const first = briefing.forEmail(T + 3600);
+  assert.deepEqual(first.map(i => i.url).sort(), ['https://learn.microsoft.com/a', 'https://learn.microsoft.com/b']);
+  assert.equal(first[0].why, 'File-share move');
+  briefing.markDelivered(first.filter(i => i.url.endsWith('/a')), T + 3600);
+  assert.deepEqual(briefing.forEmail(T + 86400).map(i => i.url), ['https://learn.microsoft.com/b'], 'yesterday\'s unsent item carries over; the sent one does not');
+  assert.ok(JSON.parse(briefing.searchUserPrompt([{ name: 'SharePoint Online', query: 'q' }], '2026-11-18')).already_reported.includes('https://learn.microsoft.com/a'));
+});
+
+test('two briefings running with shallow searches are flagged as not to be trusted', () => {
+  const c = db.crm();
+  for (const day of ['2026-11-16', '2026-11-17']) c.prepare("INSERT INTO briefings (id, day, trigger, status, themes, raw_count, created_at) VALUES (?, ?, 'auto', 'done', ?, 1, ?)")
+    .run(`b-${day}`, day, JSON.stringify([{ norm: 'x', name: 'X', searched: true, shallow: true }]), T);
+  assert.match(briefing.health('work', T + 3600).map(h => h.text).join(' '), /fewer searches than it must on two briefings running/);
 });

@@ -16,14 +16,12 @@ const identity = require('../lib/crm/identity');
 const sources = require('../lib/crm/sources');
 const atoms = require('../lib/crm/atoms');
 const planner = require('../lib/crm/planner');
-const digest = require('../lib/crm/digest');
 const narrative = require('../lib/crm/digest-narrative');
+const brief = require('../lib/crm/current-brief');
 
 const DAY = 86400;
-const THU = planner.epoch('2026-11-19', 7 * 60 + 30); // Thursday
-const FRI = planner.epoch('2026-11-20', 7 * 60 + 30); // Friday
-const SAT = planner.epoch('2026-11-21', 7 * 60 + 30); // Saturday
-const MON = planner.epoch('2026-11-23', 7 * 60 + 30); // Monday
+const at = (date, h, m = 0) => planner.epoch(date, h * 60 + m);
+const THU = '2026-11-19', FRI = '2026-11-20', SAT = '2026-11-21', MON = '2026-11-23';
 
 let seq = 0;
 
@@ -31,270 +29,323 @@ function fakeJobs() {
   const map = new Map(), list = [];
   return {
     list,
-    enqueue(spec) {
-      const id = `job-${++seq}`;
-      const job = { id, status: 'pending', ...spec, result: null, error: null };
-      map.set(id, job);
-      list.push(job);
-      return { jobId: id };
-    },
+    enqueue(spec) { const id = `job-${++seq}`; const job = { id, status: 'pending', ...spec, result: null }; map.set(id, job); list.push(job); return { jobId: id }; },
     getJob(id) { return map.get(id) || null; },
-    complete(id, output, meta = { runner: 'claude', model: 'opus' }) {
-      const j = map.get(id);
-      j.status = 'completed';
-      j.result = { output, meta };
-    },
-    fail(id, error) {
-      const j = map.get(id);
-      j.status = 'failed';
-      j.error = error;
-    },
+    complete(id, output, meta = { runner: 'claude', model: 'opus' }) { Object.assign(map.get(id), { status: 'completed', result: { output: typeof output === 'string' ? output : JSON.stringify(output), meta } }); },
+    fail(id, error) { Object.assign(map.get(id), { status: 'failed', error }); },
     last() { return list[list.length - 1] || null; },
   };
 }
 
 function fakeMailer() {
   const sent = [];
-  return {
-    sent,
-    mail: {
-      user: 'douglas@mclellan.scot',
-      mailer: {
-        sendMail: async m => { sent.push(m); return { messageId: `msg-${sent.length}` }; },
-      },
-    },
-  };
+  return { sent, mail: { user: 'douglas@mclellan.scot', mailer: { sendMail: async m => { sent.push(m); return { messageId: `msg-${sent.length}` }; } } } };
 }
 
-function seedActivity(space, at = THU) {
+function seedActivity(space, t) {
   const d = db.crm();
-  const pid = `proj-${space}-${++seq}`;
+  const work = space === 'work';
   d.prepare('INSERT OR IGNORE INTO projects (id, space, name, name_norm, about) VALUES (?, ?, ?, ?, ?)')
-    .run(pid, space, space === 'work' ? 'M365 Rollout' : 'House Hunt', space === 'work' ? 'm365 rollout' : 'house hunt',
-      space === 'work' ? 'Rollout of M365' : 'Finding a house');
-  const email = space === 'work' ? 'ken@beaconhospital.ie' : 'agent@daft.ie';
+    .run(`proj-${space}`, space, work ? 'M365 Rollout' : 'House Hunt', work ? 'm365 rollout' : 'house hunt', work ? 'Rollout of M365' : 'Finding a house');
+  const email = work ? 'ken@beaconhospital.ie' : 'agent@daft.ie';
   if (!identity.personForAddress('email', email)) {
-    const personId = `per-${space}-${++seq}`;
-    d.prepare('INSERT INTO people (id, space, name) VALUES (?, ?, ?)').run(personId, space, space === 'work' ? 'Ken Murray' : 'Alex Agent');
+    const personId = `per-${space}`;
+    d.prepare('INSERT INTO people (id, space, name) VALUES (?, ?, ?)').run(personId, space, work ? 'Ken Murray' : 'Alex Agent');
     identity.linkIdentifier(personId, 'email', email);
   }
-
   const src = sources.admitSource({
-    space, kind: 'email', origin: space === 'work' ? 'outlook' : 'gmail',
-    externalId: `ext-${++seq}`, title: space === 'work' ? 'Re: M365 Governance' : 'Viewing Saturday',
-    occurredAt: at - 12 * 3600, direction: 'out',
-    text: space === 'work' ? 'F3 licences cannot do 24-hour Teams chat deletion; minimum is 30 days.' : 'Confirmed viewing at 11am Saturday.',
+    space, kind: 'email', origin: work ? 'outlook' : 'gmail', externalId: `ext-${++seq}`, title: work ? 'Re: M365 Governance' : 'Viewing Saturday',
+    occurredAt: t - 12 * 3600, direction: 'out',
+    text: work ? 'F3 licences cannot do 24-hour Teams chat deletion; minimum is 30 days.' : 'Confirmed viewing at 11am Saturday.',
     participants: [
-      { role: 'from', email: space === 'work' ? 'douglas.mclellan@beaconhospital.ie' : 'douglas@mclellan.scot', name: 'Douglas McLellan' },
-      { role: 'to', email, name: space === 'work' ? 'Ken Murray' : 'Alex Agent' },
+      { role: 'from', email: work ? 'douglas.mclellan@beaconhospital.ie' : 'douglas@mclellan.scot', name: 'Douglas McLellan' },
+      { role: 'to', email, name: work ? 'Ken Murray' : 'Alex Agent' },
     ],
   }).source;
   d.prepare("UPDATE sources SET atomise_status = 'done' WHERE id = ?").run(src.id);
-
   atoms.applyAtoms(src.id, [{
-    statement: space === 'work'
-      ? 'F3 licences cannot delete Teams chat after 24 hours; the minimum is 30 days.'
-      : 'House viewing confirmed for 11am on Saturday.',
-    kind: 'decision',
-    quote: space === 'work' ? 'F3 licences cannot do 24-hour Teams chat deletion' : 'Confirmed viewing at 11am Saturday',
-    people: [],
-    projects: [space === 'work' ? 'M365 Rollout' : 'House Hunt'],
-    topics: [space === 'work' ? 'm365 governance' : 'house viewing'],
-    confidence: 'high',
+    statement: work ? 'F3 licences cannot delete Teams chat after 24 hours; the minimum is 30 days.' : 'House viewing confirmed for 11am on Saturday.',
+    kind: 'decision', quote: work ? 'F3 licences cannot do 24-hour Teams chat deletion' : 'Confirmed viewing at 11am Saturday',
+    people: [], projects: [work ? 'M365 Rollout' : 'House Hunt'], topics: [work ? 'm365 governance' : 'house viewing'], confidence: 'high',
   }]);
-
-  // One completed task and one open task in this space.
-  d.prepare(`INSERT INTO tasks (id, space, title, origin, status, due, completed_at, created_at) VALUES (?, ?, ?, 'manual', 'completed', ?, ?, ?)`)
-    .run(`done-${space}-${++seq}`, space, space === 'work' ? 'Close legal tickets 137462 and 137654' : 'Send payslips to broker', null, at - 3600, at - DAY);
-  d.prepare(`INSERT INTO tasks (id, space, title, origin, status, due, created_at) VALUES (?, ?, ?, 'manual', 'needsAction', ?, ?)`)
-    .run(`open-${space}-${++seq}`, space, space === 'work' ? 'Check remaining internal Aptvision addresses' : 'Confirm viewing directions', planner.local(at).date, at - 2 * DAY);
-
-  // One upcoming calendar event in this space.
+  // The fact was learned before this morning.
+  d.prepare('UPDATE atoms SET created_at = ? WHERE space = ?').run(t - 6 * 3600, space);
+  d.prepare("INSERT INTO tasks (id, space, title, origin, status, due, completed_at, created_at) VALUES (?, ?, ?, 'manual', 'completed', NULL, ?, ?)")
+    .run(`done-${space}-${++seq}`, space, work ? 'Close legal tickets 137462 and 137654' : 'Send payslips to broker', t - 3600, t - DAY);
+  d.prepare("INSERT INTO tasks (id, space, title, origin, status, due, created_at) VALUES (?, ?, ?, 'manual', 'needsAction', ?, ?)")
+    .run(`open-${space}`, space, work ? 'Check remaining internal Aptvision addresses' : 'Confirm viewing directions', planner.local(t).date, t - 2 * DAY);
   d.prepare(`INSERT INTO calendar_events (id, calendar_id, space, title, start_at, end_at, all_day, busy, solo, link, seen_at)
-    VALUES (?, 'cal-1', ?, ?, ?, ?, 0, 1, 0, '', ?)`)
-    .run(`ev-${space}-${++seq}`, space, space === 'work' ? 'Team Call' : 'Mortgage Call', at + 3 * 3600, at + 4 * 3600, at);
+    VALUES (?, 'cal-1', ?, ?, ?, ?, 0, 1, 0, '', ?)`).run(`ev-${space}-${++seq}`, space, work ? 'Team Call' : 'Mortgage Call', t + 3 * 3600, t + 4 * 3600, t);
 }
 
-beforeEach(() => {
-  db._reset();
-  fs.rmSync(process.env.CRM_DB_PATH, { force: true });
-  seq = 0;
+function news(day, items, themes = [{ norm: 'teams retention', name: 'Microsoft Teams retention', why: 'Your 24-hour Teams chat retention question for the governance meeting.', weight: 3, searched: true }]) {
+  db.crm().prepare("INSERT INTO briefings (id, day, trigger, status, themes, items, created_at, finished_at) VALUES (?, ?, 'auto', 'done', ?, ?, ?, ?)")
+    .run(`b-${day}`, day, JSON.stringify(themes), JSON.stringify(items), at(day, 6), at(day, 6, 30));
+}
+const newsItem = o => ({ theme: 'teams retention', headline: 'Copilot leaves legacy Teams retention policies', summary: 'From January Copilot interactions get their own retention location.',
+  action: 'Review retention policies.', published: '2026-11-12', source: 'Microsoft 365 Message Center', url: 'https://learn.microsoft.com/mc1481313', quote: 'Copilot interactions move.',
+  kind: 'change', confidence: 'high', ...o });
+
+const workPart = (o = {}) => ({
+  subject_hook: 'F3 Teams limit flagged before governance',
+  needs_you: [{ what: 'Check the Aptvision addresses', recommendation: 'Do it before the Team Call so the list is current.', deadline: THU, deadline_confirmed: true, evidence: 'T1' }],
+  last_two_days: ['You flagged the **F3** 30-day minimum to Ken.'],
+  coming_up: ['**Team Call** this morning.'],
+  m365: [{ item: 'N1', text: 'Copilot interactions leave legacy Teams retention in January, which bears on your 24-hour retention question.' }],
+  week_in_view: '',
+  ...o,
+});
+const personalPart = (o = {}) => ({
+  subject_hook: 'Saturday viewing confirmed',
+  needs_you: [{ what: 'Confirm viewing directions', recommendation: 'Text Alex today.', deadline: THU, deadline_confirmed: true, evidence: 'T1' }],
+  last_two_days: ['Viewing confirmed with **Alex Agent**.'],
+  coming_up: ['**Mortgage Call** later today.'],
+  m365: [], week_in_view: '',
+  ...o,
 });
 
-after(() => {
-  db._reset();
-  fs.rmSync(tmp, { recursive: true, force: true });
+beforeEach(() => { db._reset(); fs.rmSync(process.env.CRM_DB_PATH, { force: true }); seq = 0; });
+after(() => { db._reset(); fs.rmSync(tmp, { recursive: true, force: true }); });
+
+test('windows: new means since the last email sent for that space, so Monday Work reaches back to Friday morning', () => {
+  // No email yet: two days back, Monday Work from Friday.
+  assert.equal(narrative.windows('personal', at(THU, 7, 30)).backFrom, '2026-11-17');
+  assert.equal(narrative.windows('work', at(MON, 7, 30)).backFrom, FRI);
+  // Work last went out on Friday at 07:31; the weekend emails were Personal only.
+  db.crm().prepare("INSERT INTO digest_drafts (id, space, day, kind, trigger, status, created_at, sent_at) VALUES ('w', 'work', ?, 'daily', 'auto', 'done', ?, ?)").run(FRI, at(FRI, 7), at(FRI, 7, 31));
+  const mon = narrative.windows('work', at(MON, 7, 30));
+  assert.equal(mon.backStart, at(FRI, 7, 31));
+  assert.equal(mon.lastSentAt, at(FRI, 7, 31));
+  // Friday Work looks ahead through Monday.
+  assert.equal(narrative.windows('work', at(FRI, 7, 30)).forwardUntil, MON);
+  assert.equal(narrative.windows('personal', at(FRI, 7, 30)).forwardUntil, '2026-11-22');
 });
 
-test('kindFor and windows pick daily (48h/48h) Mon-Thu and weekly on Fridays', () => {
-  assert.equal(narrative.kindFor('work', THU), 'daily');
-  assert.equal(narrative.kindFor('personal', THU), 'daily');
-  assert.equal(narrative.kindFor('work', FRI), 'weekly');
-  assert.equal(narrative.kindFor('personal', FRI), 'weekly');
-  assert.equal(narrative.kindFor('personal', SAT), 'daily');
-  assert.equal(narrative.kindFor('work', MON), 'daily');
+test('packet: one space only, things already told are marked, evidence is keyed, and only Work sees Microsoft 365 items', () => {
+  const t = at(THU, 7, 30);
+  seedActivity('work', t);
+  seedActivity('personal', t);
+  news(THU, [newsItem()]);
+  db.crm().prepare("INSERT INTO digest_drafts (id, space, day, kind, trigger, status, created_at, sent_at, body_json) VALUES ('w0', 'work', '2026-11-18', 'daily', 'auto', 'done', ?, ?, ?)")
+    .run(t - DAY, t - DAY, JSON.stringify({ last_two_days: ['Yesterday you met Ken.'], coming_up: [], needs_you: [], m365: [] }));
 
-  // Mon Work daily reaches back 3 days to Friday; Fri Work daily (if run manually) reaches 3 days forward to Monday.
-  const monWin = narrative.windows('work', 'daily', MON);
-  assert.equal(monWin.backFrom, '2026-11-20');
-  assert.equal(monWin.forwardUntil, '2026-11-25');
-  const friDaily = narrative.windows('work', 'daily', FRI);
-  assert.equal(friDaily.backFrom, '2026-11-18');
-  assert.equal(friDaily.forwardUntil, '2026-11-23');
-  const friWeekly = narrative.windows('work', 'weekly', FRI);
-  assert.equal(friWeekly.backFrom, '2026-11-15');
-  assert.equal(friWeekly.forwardUntil, '2026-11-27');
+  const w = narrative.packet('work', t), p = narrative.packet('personal', t);
+  const wj = JSON.stringify(w.payload), pj = JSON.stringify(p.payload);
+  assert.ok(wj.includes('F3 licences cannot delete Teams chat'));
+  assert.ok(!wj.includes('House viewing') && !wj.includes('Mortgage Call'));
+  assert.ok(pj.includes('House viewing confirmed') && !pj.includes('M365 Rollout'));
+  assert.equal(w.payload.last_email.text, 'Yesterday you met Ken.');
+  assert.equal(w.payload.recent_facts[0].told, undefined, 'learned after the last email, so new');
+  assert.equal(w.payload.open_tasks[0].key, 'T1');
+  assert.equal(w.refs.T1.path, '/crm/work/tasks/open-work');
+  assert.equal(w.refs.T1.due, THU);
+  assert.equal(w.payload.m365_candidates[0].key, 'N1');
+  assert.match(w.payload.m365_candidates[0].why_it_matters_to_him, /24-hour Teams chat retention/);
+  assert.ok(!wj.includes('https://learn.microsoft.com/mc1481313'), 'the model never sees a link to copy');
+  assert.equal(p.payload.m365_candidates, undefined);
+  assert.equal(w.quiet, false);
+
+  // A fact learned before the last email is marked as told.
+  db.crm().prepare('UPDATE digest_drafts SET sent_at = ? WHERE id = ?').run(t - 60, 'w0');
+  assert.equal(narrative.packet('work', t).payload.recent_facts[0].told, true);
 });
 
-test('packet isolates Work from Personal, includes completed tasks and Work news only for Work', () => {
-  seedActivity('work', FRI);
-  seedActivity('personal', FRI);
-
-  // Add a Work public news item for today.
-  db.crm().prepare(`INSERT INTO briefings (id, day, trigger, status, themes, items, created_at, finished_at)
-    VALUES ('b1', '2026-11-20', 'auto', 'done', ?, ?, ?, ?)`)
-    .run(
-      JSON.stringify([{ norm: 'exchange outage', name: 'Exchange Online outage', weight: 3, searched: true, found: 1, refs: [] }]),
-      JSON.stringify([{ theme: 'exchange outage', headline: 'EX1550543 service credit deadline Dec 2026', summary: 'Claim before end of December.', action: 'File claim.', source: 'O365 IT Pros', published: '2026-11-16', url: 'https://example.com/1', quote: 'Claim before December', kind: 'change', confidence: 'high' }]),
-      FRI - 3600, FRI - 3000,
-    );
-
-  // Add an unclassified Personal-sounding recording in krisp_intake to confirm housekeeping never leaks its title into Work.
-  db.crm().prepare(`INSERT INTO krisp_intake (id, raw_json, title, transcript, occurred_at, readable, status, space)
-    VALUES ('rec-1', '{}', 'Private Mortgage Chat', 'Speaker: hi', ?, 1, 'pending', NULL)`).run(FRI - 12 * 3600);
-
-  const workPkt = narrative.packet('work', 'weekly', FRI);
-  const personalPkt = narrative.packet('personal', 'weekly', FRI);
-
-  assert.equal(workPkt.empty, false);
-  assert.equal(workPkt.hasNews, true);
-  assert.equal(personalPkt.hasNews, false);
-
-  const workJson = JSON.stringify(workPkt.payload);
-  const personalJson = JSON.stringify(personalPkt.payload);
-  assert.ok(workJson.includes('F3 licences cannot delete Teams chat'));
-  assert.ok(workJson.includes('Close legal tickets 137462 and 137654'));
-  assert.ok(workJson.includes('EX1550543 service credit deadline'));
-  assert.ok(!workJson.includes('Mortgage Call'));
-  assert.ok(!workJson.includes('House viewing'));
-
-  assert.ok(personalJson.includes('House viewing confirmed'));
-  assert.ok(personalJson.includes('Mortgage Call'));
-  assert.ok(!personalJson.includes('M365 Rollout'));
-  assert.ok(!personalJson.includes('EX1550543'));
-
-  const hk = narrative.housekeeping('work', FRI).join(' | ');
-  assert.match(hk, /1 meeting recording/);
-  assert.ok(!hk.includes('Private Mortgage Chat'));
+test('current brief: priorities and decisions pass through; a deferral hides until its date and then lapses', () => {
+  const t = at(THU, 7, 30);
+  assert.equal(brief.forDraft('personal', t), null, 'optional: nothing when empty');
+  assert.throws(() => brief.save('personal', { defer_what: ['Conveyancing replies'], defer_until: [''] }, t), /Give a date/);
+  brief.save('personal', { priorities: 'Dad first', mine: 'Christmas plans', defer_what: ['Conveyancing replies', 'Old thing', ''], defer_until: ['2026-12-01', '2026-11-10', ''] }, t);
+  const b = brief.forDraft('personal', t);
+  assert.equal(b.priorities, 'Dad first');
+  assert.deepEqual(b.deferred, [{ what: 'Conveyancing replies', until: '2026-12-01' }], 'a deferral already past is dropped on save');
+  assert.equal(brief.forDraft('personal', at('2026-12-01', 7)).deferred, undefined, 'it lapses on its date');
+  assert.equal(brief.forDraft('work', t), null, 'each space keeps its own');
+  seedActivity('personal', t);
+  assert.equal(narrative.packet('personal', t).payload.current_brief.priorities, 'Dad first');
 });
 
-test('validate and render safely format bold spans, escape HTML, and reject invalid payloads', () => {
-  assert.throws(() => narrative.validate({}), /no sections/);
-  assert.throws(() => narrative.validate({ subject_hook: 'Hi', sections: [{ heading: 'Empty', paragraphs: [], bullets: [] }] }), /empty/);
+test('drifting people (once a WhatsApp nudge) are named only when newly drifting, or on Friday', () => {
+  const t = at(THU, 7, 30);
+  seedActivity('personal', t);
+  db.crm().prepare("INSERT INTO people (id, space, name, cadence_days, created_at) VALUES ('d1', 'personal', 'Old Friend', 14, ?)").run(t - 60 * DAY);
+  assert.deepEqual(narrative.packet('personal', t).payload.drifting_contacts.map(d => d.name), ['Old Friend']);
+  db.crm().prepare("INSERT INTO digest_drafts (id, space, day, kind, trigger, status, created_at, sent_at, body_json) VALUES ('p0', 'personal', '2026-11-18', 'daily', 'auto', 'done', ?, ?, ?)")
+    .run(t - DAY, t - DAY, JSON.stringify({ drift: ['Old Friend'] }));
+  assert.equal(narrative.packet('personal', t).payload.drifting_contacts, undefined, 'already named in the last email');
+  assert.deepEqual(narrative.packet('personal', at(FRI, 7, 30)).payload.drifting_contacts.map(d => d.name), ['Old Friend']);
+});
 
-  const valid = narrative.validate({
-    subject_hook: 'Aptvision fix & <M365> update',
-    sections: [
-      { heading: 'Last 48 hours', paragraphs: ['**Ken Murray** booked <governance> review.'], bullets: [] },
-      { heading: 'Next 48 hours', paragraphs: ['Light day ahead.'], bullets: ['Check **Duncan** quote'] },
+test('validate: evidence must be real, a deadline is confirmed only when the data says so, and an over-long part is sent back', () => {
+  const refs = { T1: { path: '/crm/work/tasks/a', label: 'Task A', due: THU }, N1: { news: { url: 'https://learn.microsoft.com/x', url_key: 'learn.microsoft.com/x', source: 'MS', kind: 'change' } } };
+  const body = narrative.validate({
+    subject_hook: 'Hook here',
+    needs_you: [
+      { what: 'Real one', recommendation: 'Do it.', deadline: THU, deadline_confirmed: true, evidence: 'T1' },
+      { what: 'Claims confirmed', recommendation: 'Hmm.', deadline: '2026-11-25', deadline_confirmed: true, evidence: 'T1' },
+      { what: 'No evidence', recommendation: 'x', deadline: '', evidence: 'T9' },
     ],
-  });
-  const out = narrative.render('work', 'daily', valid, THU, { hasNews: true });
-  assert.equal(out.subject, 'Work, Thu 19 Nov — Aptvision fix & <M365> update');
-  assert.ok(out.html.includes('<strong>Ken Murray</strong> booked &lt;governance&gt; review.'));
-  assert.ok(out.html.includes('Work news briefing'));
-  assert.ok(out.text.includes('Ken Murray booked <governance> review.'));
-  assert.ok(!out.text.includes('**Ken Murray**'));
+    last_two_days: ['A day.'], coming_up: ['Next.'],
+    m365: [{ item: 'N1', text: 'Tied to your work.' }, { item: 'N7', text: 'Invented.' }],
+  }, refs, 'work');
+  assert.deepEqual(body.needs_you.map(n => [n.what, n.confirmed]), [['Real one', true], ['Claims confirmed', false]]);
+  assert.equal(body.needs_you[0].evidence.path, '/crm/work/tasks/a');
+  assert.deepEqual(body.m365.map(m => m.url), ['https://learn.microsoft.com/x']);
+  assert.throws(() => narrative.validate({ subject_hook: 'x', needs_you: [], last_two_days: [], coming_up: [] }, refs, 'work'), /empty/);
+  const long = Array(260).fill('word').join(' ');
+  assert.throws(() => narrative.validate({ subject_hook: 'x', last_two_days: [long], coming_up: [] }, refs, 'personal'), /over its 140/);
 });
 
-test('tick drafts sequentially from 06:45, sends narratives at 07:30, and skips Work on weekends', async () => {
-  seedActivity('work', THU);
-  seedActivity('personal', THU);
+test('compose: one email, Needs you ranked across both spaces, Microsoft 365 linked, whole units dropped over the cap', () => {
+  const t = at(THU, 7, 30);
+  const need = (space, what, deadline, confirmed) => ({ space, what, recommendation: 'Do it.', deadline, confirmed, evidence: { path: `/crm/${space}/tasks/x` } });
+  const work = { subject_hook: 'Work hook', needs_you: [need('work', 'Suggested work thing', THU, false), need('work', 'No date work thing', '', false)],
+    last_two_days: ['Work story with <b>tags</b>.'], coming_up: ['Work ahead.'],
+    m365: [1, 2, 3].map(i => ({ text: `M365 item ${i}`, url: `https://learn.microsoft.com/${i}`, url_key: `k${i}`, source: 'MS', published: '2026-11-12' })), week_in_view: '' };
+  const personal = { subject_hook: 'Personal hook', needs_you: [need('personal', 'Confirmed personal thing', '2026-11-20', true)], last_two_days: ['Personal story.'], coming_up: ['Personal ahead.'] };
+  const out = narrative.compose({ work, personal }, t, { house: ['1 item waiting'] });
+  assert.equal(out.subject, 'Thu 19 Nov — Confirmed personal thing', 'a confirmed deadline within 48 hours leads, whichever space');
+  assert.ok(out.text.indexOf('Personal: **') < 0 && out.text.indexOf('Personal: Confirmed personal thing') < out.text.indexOf('Work: Suggested work thing'));
+  assert.match(out.text, /Due Fri 20 Nov/);
+  assert.match(out.text, /Suggested by Thu 19 Nov/);
+  assert.ok(out.text.indexOf('Work: the last two days') < out.text.indexOf('Microsoft 365 for your work'));
+  assert.ok(out.text.indexOf('Microsoft 365 for your work') < out.text.indexOf('\nPersonal\n'));
+  assert.match(out.text, /MS, Thu 12 Nov: https:\/\/learn\.microsoft\.com\/1/);
+  assert.match(out.text, /Work Today: .*\/crm\/work · Personal Today: .*\/crm\/personal/);
+  assert.match(out.text, /Worth a look in the Hub: 1 item waiting/);
+  assert.ok(out.html.includes('&lt;b&gt;tags&lt;/b&gt;'));
+  assert.equal(out.m365.length, 3);
+  assert.ok(!/What's biting/.test(out.text));
+
+  const padded = { ...work, last_two_days: [Array(590).fill('w').join(' ')] };
+  const trimmed = narrative.compose({ work: padded, personal }, t);
+  assert.equal(trimmed.m365.length, 2, 'the third M365 item goes first');
+  assert.ok(!trimmed.text.includes('Personal ahead.'), 'then the Personal look-ahead');
+  assert.ok(trimmed.text.includes('Personal story.'));
+});
+
+test('a weekday morning: Personal drafts first, Work waits for the news search, one email goes at 07:30 and M365 items count as delivered', async () => {
+  const t0 = at(THU, 7, 30);
+  seedActivity('work', t0);
+  seedActivity('personal', t0);
+  db.crm().prepare("INSERT INTO briefings (id, day, trigger, status, created_at) VALUES ('b-run', ?, 'auto', 'search', ?)").run(THU, at(THU, 6));
   const jobs = fakeJobs();
   const { sent, mail } = fakeMailer();
 
-  // Before 06:45: nothing starts.
-  const tooEarly = await narrative.tick({ jobs, t: planner.epoch('2026-11-19', 6 * 60 + 30), mail });
-  assert.deepEqual(tooEarly.started, []);
-  assert.equal(jobs.list.length, 0);
-
-  // At 06:46: starts Work daily first (one in flight at a time).
-  const t1 = planner.epoch('2026-11-19', 6 * 60 + 46);
-  const r1 = await narrative.tick({ jobs, t: t1, mail });
-  assert.deepEqual(r1.started, ['work:daily']);
-  assert.equal(jobs.last().feature, 'crm_report');
-  assert.equal(jobs.last().payload.model, 'opus');
-  assert.match(jobs.last().payload.systemPrompt, /LAST 48 HOURS/);
-
-  // Complete Work job -> next tick collects Work and starts Personal daily.
-  jobs.complete(jobs.last().id, JSON.stringify({
-    subject_hook: 'F3 Teams limit flagged and tickets closed',
-    sections: [
-      { heading: 'Last 48 hours', paragraphs: ['You flagged the **F3** 30-day minimum.'], bullets: [] },
-      { heading: 'Next 48 hours', paragraphs: ['**Team Call** ahead.'], bullets: ['Check internal Aptvision addresses'] },
-    ],
-  }));
-  const t2 = planner.epoch('2026-11-19', 6 * 60 + 50);
-  const r2 = await narrative.tick({ jobs, t: t2, mail });
+  assert.deepEqual((await narrative.tick({ jobs, t: at(THU, 6, 30), mail })).started, [], 'nothing before 06:45');
+  assert.deepEqual((await narrative.tick({ jobs, t: at(THU, 6, 46), mail })).started, ['personal']);
+  assert.match(jobs.last().payload.systemPrompt, /ONE PART of Douglas McLellan's morning email/);
+  jobs.complete(jobs.last().id, personalPart());
+  const r2 = await narrative.tick({ jobs, t: at(THU, 6, 50), mail });
   assert.equal(r2.collected.done, true);
-  assert.deepEqual(r2.started, ['personal:daily']);
-  assert.equal(sent.length, 0); // Still before 07:30.
+  assert.deepEqual(r2.started, [], 'Work waits while the news search is still running');
 
-  // At 07:30 while Personal is still writing: Work sends its narrative; Personal waits.
-  const r3 = await digest.run({ t: THU, mail });
-  assert.equal(r3.work.narrative, true);
-  assert.match(r3.work.sent, /^Work, Thu 19 Nov — F3 Teams limit flagged/);
-  assert.deepEqual(r3.personal, { waiting: 'narrative' });
-  assert.equal(sent.length, 1);
+  // The briefing finishes with one item; Work starts and sees it.
+  db.crm().prepare('DELETE FROM briefings').run();
+  news(THU, [newsItem()]);
+  assert.deepEqual((await narrative.tick({ jobs, t: at(THU, 7, 0), mail })).started, ['work']);
+  assert.equal(JSON.parse(jobs.last().payload.userPrompt).m365_candidates.length, 1);
+  jobs.complete(jobs.last().id, workPart());
+  await narrative.tick({ jobs, t: at(THU, 7, 10), mail });
+  assert.equal(sent.length, 0, 'not before 07:30');
 
-  // Personal finishes at 07:34 -> tick collects AND sends Personal narrative immediately.
-  jobs.complete(jobs.last().id, JSON.stringify({
-    subject_hook: 'Saturday viewing confirmed',
-    sections: [
-      { heading: 'Last 48 hours', paragraphs: ['Viewing confirmed with **Alex Agent**.'], bullets: [] },
-      { heading: 'Next 48 hours', paragraphs: ['**Mortgage Call** today.'], bullets: ['Confirm directions'] },
-    ],
-  }));
-  const r4 = await narrative.tick({ jobs, t: THU + 4 * 60, mail });
-  assert.equal(r4.collected.done, true);
-  assert.equal(r4.sent.personal.narrative, true);
-  assert.match(r4.sent.personal.sent, /^Personal, Thu 19 Nov — Saturday viewing confirmed/);
-  assert.equal(sent.length, 2);
+  const r = await narrative.tick({ jobs, t: t0, mail });
+  assert.equal(r.sent.kind, 'email');
+  assert.equal(sent.length, 1, 'one email for both spaces');
+  const m = sent[0];
+  assert.match(m.subject, /^Thu 19 Nov — Check the Aptvision addresses/);
+  assert.match(m.text, /Needs you\n- Work: Check the Aptvision addresses.*Due Thu 19 Nov\. Evidence: .*\/crm\/work\/tasks\/open-work/);
+  assert.match(m.text, /- Personal: Confirm viewing directions/);
+  assert.match(m.text, /Microsoft 365 for your work\n- Copilot interactions leave legacy Teams retention/);
+  assert.match(m.text, /https:\/\/learn\.microsoft\.com\/mc1481313/);
+  assert.match(m.text, /\nPersonal\nViewing confirmed with Alex Agent\./);
+  assert.ok(narrative.get('work', THU).sent_at && narrative.get('personal', THU).sent_at);
+  assert.deepEqual(require('../lib/crm/briefing').forEmail(t0 + 60), [], 'a sent M365 item is not offered again');
 
-  // Subsequent tick does not resend.
-  const r5 = await narrative.tick({ jobs, t: THU + 6 * 60, mail });
-  assert.deepEqual(r5.sent, {});
-  assert.equal(sent.length, 2);
-
-  // Saturday: skips Work completely, starts Personal daily only.
-  seedActivity('personal', SAT);
-  const satTick = await narrative.tick({ jobs, t: planner.epoch('2026-11-21', 6 * 60 + 50), mail });
-  assert.deepEqual(satTick.started, ['personal:daily']);
+  assert.equal((await narrative.tick({ jobs, t: t0 + 120, mail })).sent, null);
+  assert.equal(sent.length, 1, 'never twice');
 });
 
-test('Friday drafts weekly briefing, and repeated failure falls back cleanly with visible health warning', async () => {
-  seedActivity('work', FRI);
+test('Work starts at 07:15 without the news search; one part failing still sends the other with a one-line note', async () => {
+  const t0 = at(THU, 7, 30);
+  seedActivity('work', t0);
+  seedActivity('personal', t0);
   const jobs = fakeJobs();
   const { sent, mail } = fakeMailer();
+  await narrative.tick({ jobs, t: at(THU, 6, 46), mail });
+  for (let i = 0; i < 3; i++) { jobs.fail(jobs.last().id, 'Claude CLI busy'); await narrative.tick({ jobs, t: at(THU, 6, 50 + i), mail }); }
+  assert.equal(narrative.get('personal', THU).status, 'failed');
+  assert.deepEqual((await narrative.tick({ jobs, t: at(THU, 7, 0), mail })).started, [], 'no briefing yet, so Work waits');
+  assert.deepEqual((await narrative.tick({ jobs, t: at(THU, 7, 16), mail })).started, ['work']);
+  jobs.complete(jobs.last().id, workPart({ m365: [] }));
+  await narrative.tick({ jobs, t: at(THU, 7, 20), mail });
+  await narrative.tick({ jobs, t: t0, mail });
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].text, /^The Personal part couldn't be written this morning \(Claude CLI busy/);
+  assert.match(sent[0].text, /Work: the last two days/);
+  assert.match(narrative.health('personal', t0).map(h => h.text).join(' '), /Personal part of the morning email.*couldn't be written/);
+});
 
-  const tStart = planner.epoch('2026-11-20', 6 * 60 + 50);
-  const r1 = await narrative.tick({ jobs, t: tStart, mail });
-  assert.deepEqual(r1.started, ['work:weekly']);
-  assert.match(jobs.last().payload.systemPrompt, /FRIDAY WEEKLY/);
+test('at 09:30 a part still writing is given up and the ready part goes; with nothing ready, a three-line note', async () => {
+  const t0 = at(THU, 7, 30);
+  seedActivity('work', t0);
+  seedActivity('personal', t0);
+  const jobs = fakeJobs();
+  const { sent, mail } = fakeMailer();
+  await narrative.tick({ jobs, t: at(THU, 6, 46), mail });
+  jobs.complete(jobs.last().id, personalPart());
+  await narrative.tick({ jobs, t: at(THU, 7, 16), mail });
+  assert.equal(narrative.get('work', THU).status, 'writing');
+  await narrative.tick({ jobs, t: at(THU, 7, 40), mail });
+  assert.equal(sent.length, 0, 'waits for Work while there is time');
+  // The Mac is slow but still inside its 20 minutes at 09:30.
+  db.crm().prepare("UPDATE digest_drafts SET queued_at = ? WHERE space = 'work'").run(at(THU, 9, 20));
+  await narrative.tick({ jobs, t: at(THU, 9, 30), mail });
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].text, /The Work part couldn't be written this morning \(Not ready by 09:30\)/);
+  assert.equal(narrative.get('work', THU).status, 'failed');
 
-  // Fail 3 times -> status becomes failed, health warns, and 07:30 tick sends short summary fallback with note.
-  for (let i = 0; i < 3; i += 1) {
-    jobs.fail(jobs.last().id, 'Claude CLI busy');
-    await narrative.tick({ jobs, t: tStart + (i + 1) * 60, mail });
-  }
-  const row = narrative.get('work', '2026-11-20', 'weekly');
-  assert.equal(row.status, 'failed');
-  assert.ok(narrative.health('work', FRI).some(h => /weekly narrative briefing.*couldn't be written/i.test(h.text)));
+  // Another morning where nothing is ready at all.
+  db._reset(); fs.rmSync(process.env.CRM_DB_PATH, { force: true });
+  seedActivity('personal', at(SAT, 7, 30));
+  const j2 = fakeJobs(), m2 = fakeMailer();
+  await narrative.tick({ jobs: j2, t: at(SAT, 6, 46), mail: m2.mail });
+  for (let i = 0; i < 3; i++) { j2.fail(j2.last().id, 'Mac offline'); await narrative.tick({ jobs: j2, t: at(SAT, 6, 50 + i), mail: m2.mail }); }
+  await narrative.tick({ jobs: j2, t: at(SAT, 7, 30), mail: m2.mail });
+  assert.equal(m2.sent.length, 1);
+  assert.match(m2.sent[0].subject, /^Sat 21 Nov — morning email couldn't be written \(Personal\)/);
+  assert.equal(m2.sent[0].text.split('\n').length, 3);
+});
 
-  const rSend = await narrative.tick({ jobs, t: FRI, mail });
-  assert.equal(rSend.sent.work.narrative, false);
-  const workMail = sent.find(m => m.subject.startsWith('Work, Fri 20 Nov'));
-  assert.ok(workMail);
-  assert.match(workMail.text, /weekly narrative briefing couldn't be written in time/i);
-  assert.match(workMail.html, /weekly narrative briefing couldn&#39;t be written|weekly narrative briefing couldn't be written/i);
+test('a quiet morning sends nothing unless something is broken; weekends are Personal only', async () => {
+  // In a fresh database the iMessage reader has never checked in, which counts as broken.
+  const broken = fakeMailer();
+  await narrative.tick({ jobs: fakeJobs(), t: at('2026-11-18', 6, 46), mail: broken.mail });
+  await narrative.tick({ jobs: fakeJobs(), t: at('2026-11-18', 7, 30), mail: broken.mail });
+  assert.equal(broken.sent.length, 1);
+  assert.match(broken.sent[0].subject, /something in the Hub needs a look/);
+  assert.match(broken.sent[0].text, /iMessage reader has not checked in/);
+
+  db.crm().prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('imessage_paused', '1')").run();
+  const jobs = fakeJobs();
+  const { sent, mail } = fakeMailer();
+  await narrative.tick({ jobs, t: at(THU, 6, 46), mail });
+  await narrative.tick({ jobs, t: at(THU, 6, 48), mail });
+  assert.equal(jobs.list.length, 0, 'nothing to write, so no model job');
+  assert.equal(narrative.get('personal', THU).error, narrative.QUIET);
+  const r = await narrative.tick({ jobs, t: at(THU, 7, 30), mail });
+  assert.equal(r.sent.silent, true);
+  assert.equal(sent.length, 0);
+  assert.equal(narrative.outcome().status, 'silent');
+  assert.deepEqual(narrative.health('work', at(THU, 11)).map(h => h.text), [], 'silence is not a failure');
+
+  seedActivity('personal', at(SAT, 7, 30));
+  seedActivity('work', at(SAT, 7, 30));
+  const s = await narrative.tick({ jobs, t: at(SAT, 6, 46), mail });
+  assert.deepEqual(s.started, ['personal']);
+  jobs.complete(jobs.last().id, personalPart());
+  await narrative.tick({ jobs, t: at(SAT, 7, 0), mail });
+  assert.equal(narrative.get('work', SAT), null, 'no Work part at the weekend');
+  await narrative.tick({ jobs, t: at(SAT, 7, 30), mail });
+  assert.equal(sent.length, 1);
+  assert.ok(!sent[0].text.includes('Work Today'));
 });

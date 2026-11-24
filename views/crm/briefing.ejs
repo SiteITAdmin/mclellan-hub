@@ -27,7 +27,7 @@
 <% let first = !b.running && b.status === 'done' && !b.error && b.items.length; %>
 <% for (const th of b.themes) { %>
 <section class="grid <%= first ? 'first' : '' %>"><% first = false; %><article class="panel s12 briefing-theme">
-  <div class="panel-head"><h2><%= th.name %></h2><span class="chip"><%= !th.searched ? 'not searched yet' : th.items.length ? `${th.items.length} new` : 'nothing new' %><%= th.followed ? ' · you follow this' : '' %></span>
+  <div class="panel-head"><h2><%= th.name %></h2><span class="chip"><%= !th.searched ? 'not searched yet' : th.shallow && !th.items.length ? 'not searched properly' : th.items.length ? `${th.items.length} new` : 'nothing new' %><%= th.followed ? ' · you follow this' : '' %></span>
     <% if (!th.muted) { %><form class="end inline-form no-print" method="post" action="/crm/work/briefing/mute"><input type="hidden" name="name" value="<%= th.name %>"><button class="btn text small" type="submit" title="Never put this theme in a briefing again">Not relevant</button></form><% } else { %><span class="end">turned off</span><% } %>
   </div>
   <% if (th.why || th.links.length) { %><p class="briefing-why"><strong>Why you:</strong> <%= th.why %>
