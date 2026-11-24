@@ -44,18 +44,25 @@
     const form = e.target;
     if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-async')) return;
     if (e.defaultPrevented) return;
+    const submitter = e.submitter instanceof HTMLButtonElement || e.submitter instanceof HTMLInputElement ? e.submitter : null;
+    // Let the browser handle buttons that override the form's submission settings.
+    if (submitter?.hasAttribute('formaction') || submitter?.hasAttribute('formmethod')) return;
     e.preventDefault();
 
-    const submitter = e.submitter instanceof HTMLButtonElement || e.submitter instanceof HTMLInputElement ? e.submitter : null;
     const mode = form.getAttribute('data-async') || 'remove';
     const data = new URLSearchParams(new FormData(form));
     if (submitter && submitter.name) data.append(submitter.name, submitter.value);
 
     const row = form.closest('[data-async-row], .promise, .task-row, .suggest, .rowcard');
-    if (submitter) submitter.disabled = true;
+    const scope = row || form;
+    if (scope.hasAttribute('data-async-pending')) return;
+    scope.setAttribute('data-async-pending', '');
+    const buttons = [...scope.querySelectorAll('button:enabled, input[type="submit"]:enabled')];
+    buttons.forEach(button => { button.disabled = true; });
+    let dismissing = false;
     try {
-      const res = await fetch(form.action, {
-        method: (form.method || 'POST').toUpperCase(),
+      const res = await fetch(form.getAttribute('action') || window.location.href, {
+        method: (form.getAttribute('method') || 'POST').toUpperCase(),
         headers: {
           'Accept': 'application/json',
           'X-Requested-With': 'fetch',
@@ -66,31 +73,34 @@
       });
       const ct = res.headers.get('content-type') || '';
       if (!ct.includes('application/json')) {
+        if (!res.ok) {
+          showToast('Could not save change (HTTP ' + res.status + ').', true);
+          return;
+        }
         // Fallback for endpoints that returned a full redirect/HTML page.
         window.location.href = res.url || window.location.href;
         return;
       }
       const json = await res.json();
       if (!res.ok || json.ok === false) {
-        showToast(json.message || 'Could not save change.', true);
-        if (submitter) submitter.disabled = false;
+        showToast(json.message || json.error || 'Could not save change.', true);
         return;
       }
       showToast(json.message || 'Saved.', false);
-      if (mode === 'remove' && row) {
-        row.classList.add('is-dismissing');
-        setTimeout(() => row.remove(), 180);
-      } else if (mode === 'toggle-task' && row) {
+      if ((mode === 'remove' || mode === 'toggle-task') && row) {
+        dismissing = true;
         row.classList.add('is-dismissing');
         setTimeout(() => row.remove(), 180);
       } else if (mode === 'reload') {
         window.location.reload();
-      } else if (submitter) {
-        submitter.disabled = false;
       }
     } catch (_) {
-      form.removeAttribute('data-async');
-      form.submit();
+      showToast('Could not confirm the change. Refresh to check its status.', true);
+    } finally {
+      if (!dismissing) {
+        scope.removeAttribute('data-async-pending');
+        buttons.forEach(button => { button.disabled = false; });
+      }
     }
   });
 
