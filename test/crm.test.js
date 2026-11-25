@@ -158,7 +158,7 @@ test('atoms are checked against the source and names go through the matcher', ()
     { statement: 'Beacon plans a records retention review.', kind: 'fact', quote: 'words that are not in the email', people: [], projects: ['Records Programme'], topics: ['data protection'], confidence: 'high' },
     { statement: 'x', kind: 'fact' },
   ], packet.relatedIds);
-  assert.strictEqual(n, 2, 'the too-short atom is dropped');
+  assert.strictEqual(n, 1, 'the too-short atom is dropped, and so is the one whose quote is not in the email');
 
   const dpia = crm().prepare("SELECT * FROM atoms WHERE statement LIKE 'The DPIA%'").get();
   assert.strictEqual(dpia.confidence, 'high');
@@ -167,11 +167,12 @@ test('atoms are checked against the source and names go through the matcher', ()
   assert.deepStrictEqual(mentions.map(m => [m.name, m.status, m.pname]), [['Alec', 'ambiguous', null], ['Jane Whelan', 'resolved', 'Jane Whelan']]);
   assert.ok(reviewItem(`mention:${mentions[0].id}`), 'two Alecs: Douglas is asked which');
 
-  const unverified = crm().prepare("SELECT a.confidence, s.quote_verified FROM atoms a JOIN atom_sources s ON s.atom_id = a.id WHERE a.statement LIKE 'Beacon plans%'").get();
-  assert.deepStrictEqual(unverified, { confidence: 'low', quote_verified: 0 }, 'a quote not found in the source lowers confidence');
-  assert.ok(reviewItem('project:work:records programme'), 'unknown projects are proposed, not created');
+  assert.strictEqual(crm().prepare("SELECT COUNT(*) AS n FROM atoms WHERE statement LIKE 'Beacon plans%'").get().n, 0, 'an email claim whose quote is not in the email stores nothing');
+  assert.ok(!reviewItem('project:work:records programme'), 'a rejected claim proposes no project');
   assert.strictEqual(crm().prepare("SELECT COUNT(*) AS n FROM projects WHERE space = 'work'").get().n, 1);
-  assert.strictEqual(crm().prepare("SELECT atomise_status, atom_count FROM sources WHERE id = ?").get(src.id).atom_count, 2);
+  const read = crm().prepare('SELECT atomise_status, atom_count, atomise_error, atomise_attempts FROM sources WHERE id = ?').get(src.id);
+  assert.deepStrictEqual([read.atomise_status, read.atom_count, read.atomise_attempts], ['pending', 1, 1], 'the good claim is kept and the email is read again');
+  assert.match(read.atomise_error, /1 claim quoted words that are not in this email/);
 
   const hits = views.search('work', 'data protection');
   assert.ok(hits.atoms.some(a => a.id === dpia.id), 'full-text search finds facts by topic');
@@ -186,12 +187,12 @@ test('a repeated fact joins the existing atom; a newer one supersedes it', () =>
   const old = atoms.applyAtoms(source.id, [], []);
   assert.strictEqual(old, 0, 'zero atoms is a valid result');
 
-  const f3 = outlook.parseOutlookFile(outlookFile({ from: 'Jane.Whelan@beaconhospital.ie', to: ME, subject: 'Purview', received: new Date(hours(1) * 1000).toISOString(), body: 'The DPIA for Purview is now due on 28 November.', messageId: 'jane-3' }));
+  const f3 = outlook.parseOutlookFile(outlookFile({ from: 'Jane.Whelan@beaconhospital.ie', to: ME, subject: 'Purview', received: new Date(hours(1) * 1000).toISOString(), body: 'The DPIA for Purview was due on 14 November. The DPIA for Purview is now due on 28 November.', messageId: 'jane-3' }));
   const s3 = outlook.admitOutlookEmail(f3, { fileId: 'f-jane-3' }).source;
   const packet = atoms.buildPacket(s3);
   assert.ok(packet.relatedIds.includes(dpia.id), 'related atoms are offered to the model');
   atoms.applyAtoms(s3.id, [
-    { statement: 'The DPIA for Purview is due on 14 November 2026.', quote: 'The DPIA for Purview', same_as: dpia.id, kind: 'date' },
+    { statement: 'The DPIA for Purview at Beacon is due on 14 November 2026.', quote: 'The DPIA for Purview was due on 14 November', same_as: dpia.id, kind: 'date' },
     { statement: 'The DPIA for Purview at Beacon is now due on 28 November 2026.', quote: 'The DPIA for Purview is now due on 28 November', supersedes: dpia.id, kind: 'date', topics: ['data protection'] },
     { statement: 'An invented reference is ignored.', quote: 'The DPIA', same_as: 'not-a-real-atom', kind: 'fact' },
   ], packet.relatedIds);
@@ -591,22 +592,22 @@ test('a clear promise needs the source to bear it out', async () => {
     'Douglas will archive the mailbox, per an earlier email.', 'I will archive the mailbox', { ...MINE, action: 'archive the mailbox', who: null });
   const invented = promiseAtom(promiseSource('work', { text: 'Nothing about that here.' }),
     'Douglas will rebuild the portal.', 'I will rebuild the portal', { ...MINE, action: 'rebuild the portal', who: null });
+  assert.equal(invented, undefined, 'a promise whose words are not in the email is never stored');
   const vague = promiseAtom(promiseSource('work', { text: "I'll be in touch about the portal." }),
     'Douglas will be in touch about the portal.', "I'll be in touch about the portal", { ...MINE, action: 'get in touch about the portal', who: null, certainty: 'unsure' });
-  for (const a of [fromSomeoneElse, quoted, invented, vague]) assert.strictEqual(promises.get(a.id).certainty, 'unsure', a.statement);
+  for (const a of [fromSomeoneElse, vague]) assert.strictEqual(promises.get(a.id).certainty, 'unsure', a.statement);
   await promises.run();
-  for (const a of [fromSomeoneElse, quoted, invented, vague]) assert.strictEqual(promises.get(a.id).task_id, null, 'waits on Today instead');
+  for (const a of [fromSomeoneElse, vague]) assert.strictEqual(promises.get(a.id).task_id, null, 'waits on Today instead');
   assert.ok(promises.ledger('work').mine.some(p => p.atom_id === vague.id));
 
   const made = promises.makeTask(vague.id);
   assert.strictEqual(made.title, 'Get in touch about the portal', 'Create task works from Today');
-  promises.close(invented.id, 'dismissed', 'douglas');
-  assert.ok(!promises.ledger('work').mine.some(p => p.atom_id === invented.id), 'Not a task takes it off');
-  promises.reopen(invented.id);
-  assert.ok(promises.ledger('work').mine.some(p => p.atom_id === invented.id));
-  promises.close(invented.id, 'dismissed', 'douglas');
+  assert.equal(quoted, undefined, 'the quoted history cannot create another promise');
   promises.close(fromSomeoneElse.id, 'dismissed', 'douglas');
-  promises.close(quoted.id, 'dismissed', 'douglas');
+  assert.ok(!promises.ledger('work').mine.some(p => p.atom_id === fromSomeoneElse.id), 'Not a task takes it off');
+  promises.reopen(fromSomeoneElse.id);
+  assert.ok(promises.ledger('work').mine.some(p => p.atom_id === fromSomeoneElse.id));
+  promises.close(fromSomeoneElse.id, 'dismissed', 'douglas');
 });
 
 test('old mail, other people\'s promises and task text never become tasks', async () => {
@@ -716,7 +717,9 @@ test('existing mail is checked when a promise is recorded and again before a cha
   assert.strictEqual(promises.enqueueCheck(jobs), true, 'six hours before the chase the mail is read again');
   job = { status: 'completed', result: { output: JSON.stringify({ verdict: 'done', source_id: earlier.id, quote: "I've moved it to next Tuesday" }) } };
   promises.collectCheck(jobs, parse);
-  assert.strictEqual(promises.get(a.id).state, 'kept', 'the real words close it, as with the rescheduled session');
+  assert.strictEqual(promises.get(a.id).state, 'open', 'real words that share nothing with the action ask first rather than close');
+  assert.strictEqual(promises.get(a.id).looks_done_source_id, earlier.id);
+  promises.close(a.id, 'kept', `source:${earlier.id}`);
   assert.strictEqual(promises.closed('personal').find(x => x.atom_id === a.id).closing_source_id, earlier.id);
 });
 
@@ -775,7 +778,7 @@ test('the same promise twice is one task; a changed promise keeps its task on th
   const text = 'I will call the vendor on Friday.';
   const statement = 'Douglas will call the vendor on Friday.';
   const a = promiseAtom(promiseSource('work', { text }), statement, 'I will call the vendor', { ...MINE, action: 'call the vendor', who: null, due: '2026-12-04' });
-  atoms.applyAtoms(promiseSource('work', { text }).id, [{ statement, kind: 'promise', quote: 'I will call the vendor', confidence: 'high', promise: { ...MINE, action: 'call the vendor', who: null } }]);
+  atoms.applyAtoms(promiseSource('work', { text }).id, [{ statement, kind: 'promise', quote: 'I will call the vendor', confidence: 'high', promise: { ...MINE, action: 'call the vendor', who: null, due: '2026-12-04' } }]);
   assert.strictEqual(crm().prepare('SELECT COUNT(*) AS n FROM atoms WHERE statement = ?').get(statement).n, 1);
   await promises.run();
   const taskId = promises.get(a.id).task_id;

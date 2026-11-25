@@ -120,7 +120,7 @@ test('deleting a fact removes it everywhere, keeps the email, tidies what pointe
 
   atoms.applyAtoms(s.id, [raw, { ...raw, statement: 'Karol is away until 9 November', quote: 'I am out of the office and return on Monday 9 November 2026' }]);
   assert.equal(db.crm().prepare("SELECT COUNT(*) n FROM atoms WHERE statement LIKE 'Karol%'").get().n, 0, 'reading the same email again brings neither wording back');
-  const other = sources.admitSource({ space: 'work', kind: 'email', origin: 'outlook', externalId: 'other', title: 'Leave', occurredAt: db.now(), text: raw.statement, participants: [] }).source;
+  const other = sources.admitSource({ space: 'work', kind: 'email', origin: 'outlook', externalId: 'other', title: 'Leave', occurredAt: db.now(), text: 'Karol Podziewski: I am out of the office and return on Monday 9 November 2026.', participants: [] }).source;
   atoms.applyAtoms(other.id, [raw]);
   assert.equal(db.crm().prepare("SELECT COUNT(*) n FROM atoms WHERE statement LIKE 'Karol%'").get().n, 1, 'a different email saying it is a new fact');
   assert.throws(() => facts.deleteFact(a, 'work'), /not found/);
