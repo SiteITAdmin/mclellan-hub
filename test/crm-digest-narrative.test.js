@@ -150,6 +150,31 @@ test('packet: one space only, things already told are marked, evidence is keyed,
   assert.equal(narrative.packet('work', t).payload.recent_facts[0].told, true);
 });
 
+test('where he is crosses over: his own away entries and flights reach the other part, nothing else does', () => {
+  const t = at(THU, 7, 30);
+  seedActivity('work', t);
+  const add = (id, space, title, from, toExclusive) => db.crm().prepare(`INSERT INTO calendar_events (id, calendar_id, space, title, start_at, end_at, all_day, busy, solo, link, seen_at)
+    VALUES (?, 'primary', ?, ?, ?, ?, 1, 0, 0, '', ?)`).run(id, space, title, planner.epoch(from), planner.epoch(toExclusive), t);
+  add('away', 'personal', 'Douglas In Scotland', FRI, '2026-11-23');
+  add('kai', 'personal', 'Kai Barcelona', FRI, '2026-11-22');
+  add('bday', 'personal', "Mum's birthday", FRI, SAT);
+  require('../lib/db').hub().prepare(`INSERT INTO flights (id, user, flight_number, airline, direction, flight_date, scheduled_dep, scheduled_arr, status)
+    VALUES ('f1', 'douglas', 'FR812', 'Ryanair', 'DUB-EDI', ?, '07:05', '08:10', 'scheduled'), ('f2', 'someone', 'FR1', 'Ryanair', 'DUB-STN', ?, '09:00', '10:00', 'scheduled')`).run(FRI, FRI);
+
+  const where = narrative.packet('work', t).payload.whereabouts;
+  assert.deepEqual(where.away, [{ away: 'Douglas In Scotland', from: 'Fri 20 Nov', to: 'Sun 22 Nov' }], 'last day, not the exclusive end');
+  assert.deepEqual(where.flights, [{ day: 'Fri 20 Nov', route: 'DUB-EDI', flight: 'FR812', departs: '07:05', arrives: '08:10' }]);
+  const wj = JSON.stringify(narrative.packet('work', t).payload);
+  assert.ok(!wj.includes('Kai Barcelona') && !wj.includes('birthday'), 'other people and other personal entries stay in Personal');
+  // Personal already has its own calendar, so it gets only the flights.
+  seedActivity('personal', t);
+  const p = narrative.packet('personal', t).payload;
+  assert.equal(p.whereabouts.away, undefined);
+  assert.equal(p.whereabouts.flights.length, 1);
+  assert.match(p.upcoming_calendar.find(e => e.title === 'Douglas In Scotland').end, /last day Sun 22 Nov/);
+  assert.match(narrative.SYSTEM_PROMPT, /whereabouts/);
+});
+
 test('current brief: priorities and decisions pass through; a deferral hides until its date and then lapses', () => {
   const t = at(THU, 7, 30);
   assert.equal(brief.forDraft('personal', t), null, 'optional: nothing when empty');
