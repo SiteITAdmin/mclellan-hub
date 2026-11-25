@@ -182,4 +182,15 @@
       for (const b of boxes()) b.checked = master.checked;
     });
   });
+
+  // ── Collapsible mobile task filters ──────────────────────────────────────
+  document.querySelectorAll('[data-filter-toggle]').forEach(btn => {
+    const targetId = btn.getAttribute('aria-controls');
+    const panel = targetId ? document.getElementById(targetId) : null;
+    if (!panel) return;
+    btn.addEventListener('click', () => {
+      const open = panel.classList.toggle('is-open');
+      btn.setAttribute('aria-expanded', String(open));
+    });
+  });
 })();

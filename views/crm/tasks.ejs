@@ -35,20 +35,29 @@
   </nav>
 </div>
 
-<form class="tasks-filters form-row" method="get" action="/crm/<%= space %>/tasks" role="search">
+<% const hasExtraFilter = Boolean(projectId || personId); %>
+<form class="tasks-filters" method="get" action="/crm/<%= space %>/tasks" role="search">
   <% if (status !== 'needsAction') { %><input type="hidden" name="status" value="<%= status %>"><% } %>
   <% if (filter) { %><input type="hidden" name="filter" value="<%= filter %>"><% } %>
-  <input class="input" name="q" value="<%= q %>" placeholder="Filter tasks…" aria-label="Search tasks">
-  <select class="select" name="projectId" aria-label="Filter by project">
-    <option value="">All projects</option>
-    <% for (const p of choices.projectId || []) { %><option value="<%= p.id %>" <%= projectId === p.id ? 'selected' : '' %>><%= p.name %></option><% } %>
-  </select>
-  <select class="select" name="personId" aria-label="Filter by person">
-    <option value="">All people</option>
-    <% for (const p of choices.personId || []) { %><option value="<%= p.id %>" <%= personId === p.id ? 'selected' : '' %>><%= p.name %></option><% } %>
-  </select>
-  <button class="btn small" type="submit">Filter</button>
-  <% if (q || projectId || personId || filter) { %><a class="btn text small" href="/crm/<%= space %>/tasks">Clear</a><% } %>
+  <div class="tasks-search-row">
+    <div class="search-well">
+      <%- icon.search %>
+      <input class="input" name="q" value="<%= q %>" placeholder="Search tasks…" aria-label="Search tasks">
+    </div>
+    <button class="icon-btn tasks-filter-toggle<%= hasExtraFilter ? ' has-active' : '' %>" type="button" data-filter-toggle aria-controls="tasks-filter-extra" aria-expanded="<%= hasExtraFilter ? 'true' : 'false' %>" aria-label="Filter by project or person" title="Filter by project or person"><%- icon.filter %></button>
+  </div>
+  <div class="tasks-filter-extra<%= hasExtraFilter ? ' is-open' : '' %>" id="tasks-filter-extra">
+    <select class="select" name="projectId" aria-label="Filter by project">
+      <option value="">All projects</option>
+      <% for (const p of choices.projectId || []) { %><option value="<%= p.id %>" <%= projectId === p.id ? 'selected' : '' %>><%= p.name %></option><% } %>
+    </select>
+    <select class="select" name="personId" aria-label="Filter by person">
+      <option value="">All people</option>
+      <% for (const p of choices.personId || []) { %><option value="<%= p.id %>" <%= personId === p.id ? 'selected' : '' %>><%= p.name %></option><% } %>
+    </select>
+    <button class="btn small" type="submit">Filter</button>
+    <% if (q || projectId || personId || filter) { %><a class="btn text small" href="/crm/<%= space %>/tasks">Clear</a><% } %>
+  </div>
 </form>
 
 <% if (sync?.last_error) { %><p class="flash bad" role="status"><%= sync.last_error %></p><% } %>

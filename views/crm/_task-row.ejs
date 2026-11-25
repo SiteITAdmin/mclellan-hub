@@ -1,7 +1,7 @@
   <div class="rowcard task-row" data-async-row>
     <% if (task.status !== 'deleted') { %><form method="post" action="/crm/<%= space %>/tasks/<%= task.id %>/<%= task.status === 'completed' ? 'reopen' : 'complete' %>" data-async="toggle-task">
       <input type="hidden" name="revision" value="<%= task.revision %>"><input type="hidden" name="back" value="<%= taskBack %>">
-      <button class="task-check" aria-label="<%= task.status === 'completed' ? 'Reopen' : 'Complete' %> <%= task.title %>"><%= task.status === 'completed' ? '✓' : '○' %></button>
+      <button class="task-check<%= task.status === 'completed' ? ' is-done' : '' %>" aria-label="<%= task.status === 'completed' ? 'Reopen' : 'Complete' %> <%= task.title %>"><span aria-hidden="true">✓</span></button>
     </form><% } else { %><span aria-hidden="true">—</span><% } %>
     <div class="main"><a class="what" href="/crm/<%= space %>/tasks/<%= task.id %>"><%= task.title %></a>
       <div class="meta"><%= [...task.people, ...task.organisations, ...task.projects].map(x => x.name).join(' · ') || 'No context yet' %><% if (task.meeting) { %> · waiting for meeting<% } %></div>

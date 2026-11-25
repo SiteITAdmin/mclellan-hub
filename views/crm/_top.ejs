@@ -9,9 +9,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/crm.css">
   <link rel="manifest" href="/crm.webmanifest">
-  <meta name="theme-color" content="#f5f2ec">
+  <meta name="theme-color" content="<%= space === 'personal' ? '#e7eee5' : space === 'work' ? '#e7eef5' : '#ecece9' %>">
 </head>
-<body>
+<body class="crm-app" data-space="<%= space || 'shared' %>">
 <% const base = space || 'work'; %>
 <% const swWork = locals.switchWork || '/crm/work'; %>
 <% const swPersonal = locals.switchPersonal || '/crm/personal'; %>
@@ -48,21 +48,21 @@
     </div>
   </aside>
   <header class="topbar">
-    <button class="menu-btn" type="button" data-drawer-open aria-controls="menu" aria-expanded="false" aria-label="Open menu"><%- icon.menu %></button>
-    <a class="brand" href="/home" style="padding:0" aria-label="All tools"><%- icon.mark %></a>
-    <span class="t"><%= title %></span>
+    <button class="hub-menu" type="button" data-drawer-open aria-controls="menu" aria-expanded="false" aria-label="Open menu"><%- icon.grid %><span>Hub</span></button>
     <nav class="switch" aria-label="Space">
       <a href="<%= swWork %>" aria-current="<%= space === 'work' %>">Work</a>
       <a href="<%= swPersonal %>" aria-current="<%= space === 'personal' %>">Personal</a>
     </nav>
-    <a class="topbar-quick" href="/crm/<%= base %>/note" aria-label="Add a note" title="Add a note"><%- icon.plus %></a>
   </header>
   <div class="sheet" id="menu" data-space="<%= space || 'shared' %>">
     <div class="sheet-inner">
-      <p style="margin:0 0 8px"><button class="menu-btn" type="button" data-drawer-close aria-label="Close menu"><%- icon.close %></button></p>
+      <div class="sheet-head">
+        <a class="brand" href="/home" title="All tools"><%- icon.mark %><span>Hub</span></a>
+        <button class="menu-btn" type="button" data-drawer-close aria-label="Close menu"><%- icon.close %></button>
+      </div>
       <%- navHtml %>
       <p><a class="btn primary" href="/crm/<%= base %>/note"><%- icon.plus %> Add a note</a></p>
-      <p class="subline" style="font-size:13px">Tools: <a href="/flights">Flights</a> · <a href="/money">Money</a> · <a href="/house">House hunting</a></p>
+      <p class="subline" style="font-size:13px">Tools: <a href="/home">Home</a> · <a href="/flights">Flights</a> · <a href="/money">Money</a> · <a href="/house">House hunting</a></p>
     </div>
   </div>
   <main class="canvas"><div class="column">

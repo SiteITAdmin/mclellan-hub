@@ -248,3 +248,41 @@ test('unified task filters, topic tidy, order-to-bank-line matching, WhatsApp Ta
     server.close();
   }
 });
+
+test('CRM neumorphism-lite shell, mobile dock, and collapsible task filters stay scoped to CRM only', async () => {
+  resetDbs();
+  const db = crmDb.crm();
+  db.prepare("INSERT INTO projects (id, space, name, name_norm) VALUES ('p1', 'work', 'Migration', 'migration')").run();
+  tasks.create('work', { title: 'Confirm cutover window', due: '2020-01-01' });
+
+  const { server, base } = await startServer(makeApp());
+  try {
+    const workToday = await (await fetch(`${base}/crm/work`)).text();
+    assert.match(workToday, /<body class="crm-app" data-space="work">/);
+    assert.match(workToday, /class="hub-menu"/);
+    assert.match(workToday, /class="mobile-dock"/);
+    assert.match(workToday, /class="dock-fab" href="\/crm\/work\/note"/);
+
+    const personalToday = await (await fetch(`${base}/crm/personal`)).text();
+    assert.match(personalToday, /<body class="crm-app" data-space="personal">/);
+    assert.match(personalToday, /name="theme-color" content="#e7eee5"/);
+
+    const workTasks = await (await fetch(`${base}/crm/work/tasks`)).text();
+    assert.match(workTasks, /class="dock-fab" href="\/crm\/work\/tasks\/new"/);
+    assert.match(workTasks, /class="tasks-filter-extra" id="tasks-filter-extra"/);
+    assert.match(workTasks, /data-filter-toggle/);
+
+    const filteredTasks = await (await fetch(`${base}/crm/work/tasks?projectId=p1`)).text();
+    assert.match(filteredTasks, /class="tasks-filter-extra is-open" id="tasks-filter-extra"/);
+
+    // Non-CRM tools and Home stay untouched (no crm-app body class, no mobile dock)
+    for (const p of ['/home', '/money', '/house', '/flights']) {
+      const html = await (await fetch(base + p)).text();
+      assert.doesNotMatch(html, /class="crm-app"/, p);
+      assert.doesNotMatch(html, /class="mobile-dock"/, p);
+    }
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+});

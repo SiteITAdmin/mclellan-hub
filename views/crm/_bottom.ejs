@@ -1,5 +1,13 @@
   </div></main>
 </div>
+<% const dockBase = locals.space || 'work'; const dockPage = locals.page || ''; const dockAddHref = dockPage === 'tasks' ? `/crm/${dockBase}/tasks/new` : `/crm/${dockBase}/note`; const dockAddLabel = dockPage === 'tasks' ? 'Add a task' : 'Add a note'; %>
+<nav class="mobile-dock" aria-label="Quick navigation">
+  <a href="/crm/<%= dockBase %>" <%- dockPage === 'today' ? 'aria-current="page"' : '' %>><%- icon.today %><span>Today</span></a>
+  <a href="/crm/<%= dockBase %>/tasks" <%- dockPage === 'tasks' ? 'aria-current="page"' : '' %>><%- icon.tasks %><span>Tasks</span></a>
+  <a href="/crm/<%= dockBase %>/calendar" <%- dockPage === 'calendar' ? 'aria-current="page"' : '' %>><%- icon.calendar %><span>Calendar</span></a>
+  <a href="/crm/inbox" <%- dockPage === 'inbox' ? 'aria-current="page"' : '' %>><% if (locals.inboxCount) { %><span class="dock-badge"><%= locals.inboxCount %></span><% } %><%- icon.inbox %><span>Inbox</span></a>
+  <a class="dock-fab" href="<%= dockAddHref %>" aria-label="<%= dockAddLabel %>" title="<%= dockAddLabel %>"><%- icon.plus %></a>
+</nav>
 <script src="/crm-enhance.js" defer></script>
 </body>
 </html>
